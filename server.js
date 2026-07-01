@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
-const fetch = require('node-fetch');
+const https = require('https');
 const path = require('path');
 
 const app = express();
@@ -123,23 +123,38 @@ app.post('/api/chat', async (req, res) => {
     let continueLoop = true;
 
     while (continueLoop) {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': process.env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
+      const data = await new Promise((resolve, reject) => {
+        const body = JSON.stringify({
           model: 'claude-sonnet-4-6',
           max_tokens: 4096,
           system: SYSTEM_PROMPT,
           tools: tools,
           messages: currentMessages
-        })
-      });
+        });
 
-      const data = await response.json();
+        const req = https.request({
+          hostname: 'api.anthropic.com',
+          path: '/v1/messages',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(body),
+            'x-api-key': process.env.ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01'
+          }
+        }, (res) => {
+          let raw = '';
+          res.on('data', chunk => raw += chunk);
+          res.on('end', () => {
+            try { resolve(JSON.parse(raw)); }
+            catch(e) { reject(new Error('JSON parse error: ' + raw.slice(0,200))); }
+          });
+        });
+
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+      });
 
       if (data.stop_reason === 'end_turn') {
         // Resposta final — envia pro cliente
