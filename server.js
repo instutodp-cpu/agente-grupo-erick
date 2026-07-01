@@ -8,10 +8,19 @@ const app = express();
 app.use(express.json());
 app.use(express.static('public'));
 
+// Timeout de 3 minutos para respostas longas
+app.use((req, res, next) => {
+  res.setTimeout(180000);
+  next();
+});
+
 // ── Conexão Supabase ──────────────────────────────────────────────────────────
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+  statement_timeout: 60000
 });
 
 // ── System prompt do agente ───────────────────────────────────────────────────
@@ -136,6 +145,7 @@ app.post('/api/chat', async (req, res) => {
           hostname: 'api.anthropic.com',
           path: '/v1/messages',
           method: 'POST',
+          timeout: 120000,
           headers: {
             'Content-Type': 'application/json',
             'Content-Length': Buffer.byteLength(body),
