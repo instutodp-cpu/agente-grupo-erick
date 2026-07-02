@@ -2,7 +2,6 @@
 
 
 
-
 ## 2026-07-02 — PR-004: Auditoria e preparação Supabase para IA analítica
 
 ### Adicionado
