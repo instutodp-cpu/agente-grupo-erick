@@ -5,6 +5,7 @@ const https = require('https');
 const crypto = require('crypto');
 const { buildTemplateExecution } = require('./src/hermes/sql-templates');
 const { createCacheKey, getCacheEntry, setCacheEntry } = require('./src/hermes/cache');
+const { validateSql, QUERY_TIMEOUT_MS } = require('./src/hermes/sql-guardrails');
 
 const app = express();
 app.use(express.json());
@@ -229,12 +230,29 @@ LIMITAÇÕES HONESTAS:
 - Pericles e Erick são os proprietários — trate-os com respeito e linguagem acessível`;
 
 // ── Função de query no Supabase ───────────────────────────────────────────────
-async function queryDatabase(sql, params = []) {
+async function queryDatabase(sql, params = [], { statementTimeoutMs } = {}) {
   const client = await pool.connect();
+  const useTimeout = Number.isInteger(statementTimeoutMs) && statementTimeoutMs > 0;
   try {
+    if (useTimeout) {
+      // Timeout específico para esta consulta. O valor é um inteiro validado,
+      // então é seguro interpolar (statement_timeout não aceita bind param).
+      await client.query(`SET statement_timeout TO ${statementTimeoutMs}`);
+    }
     const result = await client.query(sql, params);
     return { rows: result.rows, rowCount: result.rowCount };
   } finally {
+    if (useTimeout) {
+      // Reseta para o padrão da conexão antes de devolver ao pool, evitando
+      // que o timeout vaze para a próxima consulta que reutilizar o socket.
+      try {
+        await client.query('RESET statement_timeout');
+      } catch (resetError) {
+        // Se o reset falhar, descarta a conexão para não reaproveitar estado sujo.
+        client.release(resetError);
+        return;
+      }
+    }
     client.release();
   }
 }
@@ -537,17 +555,57 @@ app.post('/api/chat', async (req, res) => {
           const { sql, descricao } = toolUseBlock.input;
           sendEvent({ type: 'querying', content: descricao });
 
+          // ── Guardrail: valida o SQL livre gerado pela IA antes de executar ──
+          const guardrailStartedAt = Date.now();
+          const guardrail = validateSql(sql);
+          if (!guardrail.ok) {
+            logStructured('warn', 'sql_guardrail_block', {
+              requestId,
+              toolCallCount,
+              reason: guardrail.reason,
+              detail: guardrail.detail,
+              durationMs: Date.now() - guardrailStartedAt,
+              sqlLength: typeof sql === 'string' ? sql.length : 0
+            });
+            // Devolve mensagem amigável como resultado da tool para o Claude
+            // relatar ao usuário; o fluxo de fallback continua com segurança.
+            currentMessages = [
+              ...currentMessages,
+              { role: 'assistant', content: data.content },
+              {
+                role: 'user',
+                content: [{
+                  type: 'tool_result',
+                  tool_use_id: toolUseBlock.id,
+                  content: JSON.stringify({
+                    success: false,
+                    blocked: true,
+                    message: guardrail.message
+                  })
+                }]
+              }
+            ];
+            continue;
+          }
+          logStructured('info', 'sql_guardrail_pass', {
+            requestId,
+            toolCallCount,
+            appliedLimit: guardrail.appliedLimit,
+            durationMs: Date.now() - guardrailStartedAt
+          });
+          const safeSql = guardrail.sql;
+
           const sqlStartedAt = Date.now();
           logStructured('info', 'database_query_start', {
             requestId,
             toolCallCount,
             description: redactSensitive(descricao || ''),
-            sqlLength: typeof sql === 'string' ? sql.length : 0
+            sqlLength: safeSql.length
           });
 
           let toolResult;
           try {
-            const result = await queryDatabase(sql);
+            const result = await queryDatabase(safeSql, [], { statementTimeoutMs: QUERY_TIMEOUT_MS });
             logStructured('info', 'database_query_finish', {
               requestId,
               toolCallCount,

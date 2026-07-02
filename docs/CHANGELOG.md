@@ -2,6 +2,30 @@
 
 
 
+## 2026-07-02 — PR-05: Guardrails para SQL livre remanescente
+
+### Adicionado
+
+- Módulo `src/hermes/sql-guardrails/index.js` com `validateSql`, que valida o SQL livre gerado pela IA (tool `query_database`) antes da execução.
+- Permissão apenas para consultas de leitura (`SELECT`/`WITH`); bloqueio de `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `TRUNCATE`, `CREATE`, `GRANT`, `REVOKE` e outros comandos de alto risco.
+- Bloqueio de múltiplas statements, de comentários (`--`, `/* */`) e de schemas/tabelas fora da allowlist.
+- Allowlist de schemas (`public`, `softcom_import`) e das views/tabelas documentadas do agente.
+- `LIMIT` padrão aplicado quando a consulta não traz `LIMIT` (`SQL_GUARDRAIL_DEFAULT_LIMIT`, padrão 1000).
+- Timeout específico para o SQL livre via `statement_timeout` dedicado (`SQL_GUARDRAIL_QUERY_TIMEOUT_MS`, padrão 15000 ms), resetado antes de devolver a conexão ao pool.
+- Logs estruturados `sql_guardrail_pass` e `sql_guardrail_block` com motivo, `requestId` e duração.
+- Documentação em `docs/SQL_GUARDRAILS.md`.
+
+### Segurança
+
+- Quando o SQL é bloqueado, ele não é executado e o modelo recebe uma mensagem amigável para repassar ao usuário; o fallback Claude continua funcionando com segurança.
+- Guardrail é camada adicional (defense-in-depth) e não substitui usuário somente-leitura no Supabase.
+
+### Não alterado
+
+- Nenhuma regra de negócio foi modificada.
+- O frontend não foi alterado.
+- O fluxo de SQL Templates permanece inalterado (já seguro por construção).
+
 ## 2026-07-02 — PR-03: Cache para SQL Templates
 
 ### Adicionado
