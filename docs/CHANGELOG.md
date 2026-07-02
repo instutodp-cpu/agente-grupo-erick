@@ -2,6 +2,21 @@
 
 
 
+## 2026-07-02 — PR-004: Auditoria e preparação Supabase para IA analítica
+
+### Adicionado
+
+- Auditoria estática do Supabase em `docs/SUPABASE_AUDIT.md`.
+- Plano de performance em `docs/SUPABASE_PERFORMANCE.md`.
+- Índices candidatos documentados em `docs/sql/SUPABASE_INDEX_CANDIDATES.sql`, sem migration executável nesta PR.
+- Instruções para inventário real e `EXPLAIN ANALYZE` quando houver `DATABASE_URL` disponível.
+
+### Não alterado
+
+- Nenhuma regra de negócio foi alterada.
+- API, frontend, Claude, cache e SQL Templates permanecem inalterados.
+- Nenhum índice é aplicado automaticamente antes de validação real com `EXPLAIN ANALYZE`.
+
 ## 2026-07-02 — PR-03: Cache para SQL Templates
 
 ### Adicionado
