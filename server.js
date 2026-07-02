@@ -245,15 +245,18 @@ async function queryDatabase(sql, params = [], { statementTimeoutMs } = {}) {
     if (useTimeout) {
       // Reseta para o padrão da conexão antes de devolver ao pool, evitando
       // que o timeout vaze para a próxima consulta que reutilizar o socket.
+      // Sem `return` aqui: um `return` no finally engoliria o resultado/erro
+      // da consulta principal.
       try {
         await client.query('RESET statement_timeout');
+        client.release();
       } catch (resetError) {
         // Se o reset falhar, descarta a conexão para não reaproveitar estado sujo.
         client.release(resetError);
-        return;
       }
+    } else {
+      client.release();
     }
-    client.release();
   }
 }
 
