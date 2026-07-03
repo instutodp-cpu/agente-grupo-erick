@@ -1,71 +1,21 @@
 'use strict';
 
-// ── Validação real dos SQL Templates no Supabase/Railway ─────────────────────
-// Executa cada SQL Template contra o banco real, de forma SOMENTE-LEITURA, para
-// confirmar que as tabelas/views/colunas usadas existem e que as consultas
-// rodam. NÃO altera dados: cada template roda dentro de uma transação
-// `READ ONLY` que sempre termina em ROLLBACK.
+// ── Validação real dos SQL Templates no Supabase/Railway (CLI) ───────────────
+// Wrapper de linha de comando sobre a lógica reutilizável em
+// `src/hermes/template-validation.js`. Executa cada SQL Template contra o banco
+// real, SOMENTE-LEITURA, e imprime apenas metadados (nunca linhas do banco).
 //
 // Uso:
 //   DATABASE_URL=postgres://... node scripts/validate-templates.js
 //   (ou defina DATABASE_URL no .env)
-//
-// Saída: apenas nome do template, status, rowCount, tempo e erro (redigido).
-// Nunca imprime linhas/valores do banco.
 
 require('dotenv').config();
 const { Pool } = require('pg');
-const { templates } = require('../src/hermes/sql-templates');
-
-const STATEMENT_TIMEOUT_MS = (() => {
-  const v = Number(process.env.SQL_TEMPLATE_VALIDATION_TIMEOUT_MS);
-  return Number.isInteger(v) && v > 0 ? v : 30000;
-})();
-
-// Perguntas representativas (as mesmas da tela) para gerar parâmetros de teste.
-const SAMPLE_QUESTIONS = {
-  monthly_revenue_by_store: 'Qual foi o faturamento de cada loja em junho de 2026?',
-  recoverable_delinquency_by_store: 'Quanto cada loja tem de inadimplência recuperável agora?',
-  revenue_year_comparison_by_store: 'Compare o faturamento de 2025 vs 2024 por loja',
-  top_products_last_six_months: 'Quais os 10 produtos mais vendidos nos últimos 6 meses?',
-  top_salespeople_by_year: 'Quem foram os melhores vendedores em 2025?',
-  average_ticket_last_three_months: 'Qual o ticket médio de cada loja nos últimos 3 meses?'
-};
-
-// Redação básica de dados sensíveis em mensagens de erro (mesmo padrão do server).
-function redactSensitive(value = '') {
-  return String(value)
-    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
-    .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '[cpf]')
-    .replace(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g, '[cnpj]')
-    .replace(/(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?9?\d{4}[-\s]?\d{4}/g, '[telefone]')
-    .replace(/sk-ant-[A-Za-z0-9_-]+/g, '[anthropic_key]')
-    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, '[database_url]')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-async function validateTemplate(pool, template) {
-  const params = template.buildParams(SAMPLE_QUESTIONS[template.name] || '');
-  const values = template.values(params);
-  const startedAt = Date.now();
-  const client = await pool.connect();
-  try {
-    // Transação estritamente somente-leitura: qualquer escrita seria rejeitada,
-    // e o ROLLBACK garante que nada é persistido.
-    await client.query('BEGIN');
-    await client.query('SET TRANSACTION READ ONLY');
-    await client.query(`SET LOCAL statement_timeout TO ${STATEMENT_TIMEOUT_MS}`);
-    const result = await client.query(template.sql, values);
-    await client.query('ROLLBACK');
-    return { template: template.name, status: 'OK', rowCount: result.rowCount, durationMs: Date.now() - startedAt, error: null };
-  } catch (err) {
-    try { await client.query('ROLLBACK'); } catch (_) { /* ignore */ }
-    return { template: template.name, status: 'ERRO', rowCount: null, durationMs: Date.now() - startedAt, error: redactSensitive(err.message) };
-  } finally {
-    client.release();
-  }
-}
+const {
+  validateAllTemplates,
+  redactSensitive,
+  getValidationTimeoutMs
+} = require('../src/hermes/template-validation');
 
 function printReport(results) {
   const pad = (s, n) => String(s).padEnd(n);
@@ -91,19 +41,18 @@ async function main() {
     process.exit(1);
   }
 
+  const timeoutMs = getValidationTimeoutMs();
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false },
     connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000,
-    statement_timeout: STATEMENT_TIMEOUT_MS
+    statement_timeout: timeoutMs
   });
 
-  const results = [];
+  let results;
   try {
-    for (const template of Object.values(templates)) {
-      results.push(await validateTemplate(pool, template));
-    }
+    results = await validateAllTemplates(pool, { statementTimeoutMs: timeoutMs });
   } finally {
     await pool.end();
   }
