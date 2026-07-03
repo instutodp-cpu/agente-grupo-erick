@@ -2,6 +2,18 @@
 
 
 
+## 2026-07-03 — PR-20: Capability Resolver
+
+### Adicionado
+
+- `src/hermes/capabilities/capability-resolver.js` com `resolveCapability(question)`: descobre qual Capability atenderia a pergunta (HIL → intent dos mapas de domínio → Capability Registry) e retorna `{ capabilityId, confidence, reason, domain, status }` ou `null`.
+- Perguntas financeiras claras resolvem `finance.daily_revenue`; desconhecidas ou sem capability registrada retornam `null`.
+- Testes em `test/capability-resolver.test.js`; documentação em `docs/CAPABILITY_RESOLVER.md`; ARCHITECTURE e ROADMAP atualizados.
+
+### Não alterado
+
+- Apenas resolve: **não** executa capability, não chama handlers, e não altera o `/api/chat`, SQL, cache, Claude ou frontend. Nada removido.
+
 ## 2026-07-03 — PR-19: Capability Registry
 
 ### Adicionado
