@@ -67,6 +67,30 @@ Antes de chamar qualquer agente caro, o Hermes deve classificar intenção:
 - Pedido sensível que exige autorização ou aprovação.
 - Pergunta fora de escopo.
 
+O router de intenção é a porta de entrada da **Hermes Intelligence Layer (HIL)**
+(Fase 2), descrita em detalhe em `docs/HERMES_INTELLIGENCE_LAYER.md`.
+
+### 4.2.1 Hermes Intelligence Layer (HIL)
+
+A HIL orienta a orquestração a **reduzir o uso de IA**, tentando responder pela
+opção mais barata e rápida possível antes de recorrer ao modelo. Cascata de
+caminhos (mais barato → mais caro):
+
+```text
+response_library → semantic_cache → sql_template → workflow → knowledge → claude
+```
+
+Fundação (código em `src/hermes/intelligence/`):
+
+- `intent-classifier.js` — `classify(question)` → `{ intent, confidence,
+  complexity, estimatedCost, estimatedLatency, recommendedPath }`.
+- `response-library.js` — `findReusableResponse()` (interface; tabela em
+  `docs/sql/RESPONSE_LIBRARY.sql`).
+- `should-call-claude.js` — `shouldCallClaude()` → `true`/`false`.
+
+Nesta fundação a HIL **não** está integrada ao `/api/chat` e não altera o
+comportamento atual; apenas prepara a camada.
+
 ### 4.3 SQL Templates
 
 Camada prioritária para perguntas de dados estruturados.

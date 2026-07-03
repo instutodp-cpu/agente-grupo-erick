@@ -2,6 +2,23 @@
 
 
 
+## 2026-07-03 — PR-09: Fundação da Hermes Intelligence Layer (HIL)
+
+### Adicionado
+
+- Nova pasta `src/hermes/intelligence/` com a fundação da HIL (Fase 2), cujo objetivo é **reduzir o uso de IA** respondendo primeiro pelos caminhos mais baratos.
+- `intent-classifier.js` — `classify(question)` retorna `{ intent, confidence, complexity, estimatedCost, estimatedLatency, recommendedPath }`, com `recommendedPath` em `response_library | semantic_cache | sql_template | workflow | knowledge | claude`.
+- `response-library.js` — `findReusableResponse()` (interface apenas, sempre retorna `null`) e as colunas previstas; DDL documentada em `docs/sql/RESPONSE_LIBRARY.sql` (não aplicada automaticamente).
+- `should-call-claude.js` — `shouldCallClaude()` retorna apenas `true`/`false` com base na classificação.
+- Testes de unidade da fundação em `test/intelligence.test.js`.
+- Documentação em `docs/HERMES_INTELLIGENCE_LAYER.md`; ROADMAP e HERMES_ARCHITECTURE atualizados.
+
+### Não alterado
+
+- Nenhuma integração com o `/api/chat`: comportamento atual inalterado.
+- Nenhum código existente foi removido (SQL Templates, cache, guardrails, endpoints seguem iguais).
+- Nenhuma nova chamada ao Claude. Nenhuma alteração de frontend nem de regra de negócio.
+
 ## 2026-07-03 — PR-08: Endpoints administrativos do Hermes
 
 ### Adicionado
