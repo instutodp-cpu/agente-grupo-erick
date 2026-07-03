@@ -69,6 +69,11 @@ completas).
 }
 ```
 
+### `GET /admin/hil/metrics`
+
+Métricas agregadas das decisões da HIL em shadow mode (contadores em memória).
+**Nunca** expõe perguntas reais. Detalhes em `docs/HIL_ADMIN_METRICS.md`.
+
 ### `POST /admin/validate/templates`
 
 Executa a validação real (somente leitura) de cada template contra o banco,

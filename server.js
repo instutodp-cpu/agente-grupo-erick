@@ -9,6 +9,7 @@ const { validateSql, QUERY_TIMEOUT_MS } = require('./src/hermes/sql-guardrails')
 const { validateAllTemplates } = require('./src/hermes/template-validation');
 const { classify } = require('./src/hermes/intelligence/intent-classifier');
 const { simulateDecision } = require('./src/hermes/intelligence/shadow');
+const { recordDecision: recordHilDecision, snapshot: hilMetricsSnapshot } = require('./src/hermes/intelligence/metrics');
 
 const app = express();
 app.use(express.json());
@@ -372,6 +373,9 @@ app.post('/api/chat', async (req, res) => {
       wouldUseResponseLibrary: decision.wouldUseResponseLibrary,
       wouldUseKnowledge: decision.wouldUseKnowledge
     });
+
+    // Agrega a decisão nos contadores em memória (apenas rótulos, sem a pergunta).
+    recordHilDecision(hil, decision);
   } catch (hilError) {
     logStructured('warn', 'hil_classification_error', {
       requestId,
@@ -801,6 +805,13 @@ app.get('/admin/templates', (req, res) => {
     description: template.description
   }));
   res.json({ count: list.length, templates: list });
+});
+
+app.get('/admin/hil/metrics', (req, res) => {
+  if (!ensureAdmin(req, res)) return;
+  logStructured('info', 'admin_hil_metrics', { requestId: req.adminRequestId });
+  // Apenas contadores agregados da HIL em shadow mode — nunca perguntas reais.
+  res.json(hilMetricsSnapshot());
 });
 
 app.post('/admin/validate/templates', async (req, res) => {
