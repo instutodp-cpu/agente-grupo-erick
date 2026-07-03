@@ -77,7 +77,12 @@ Nada está integrado e o comportamento atual não muda:
 A primeira capacidade real está **integrada ao `/api/chat`**, de forma segura:
 
 - `financial-intent-map.js` detecta perguntas claras de faturamento diário
-  ("quanto vendemos hoje?", "faturamento de hoje", "como foram as vendas hoje?").
+  ("quanto vendemos hoje?", "quanto faturamos hoje", "faturamento de hoje",
+  "vendas de hoje", "resultado de hoje", "movimento de hoje", "como foi o dia").
+  Um **guarda de período** garante que perguntas com mês, ano, "semana",
+  "ontem", "dia N", "últimos ..." ou "passado" **não** disparem daily_revenue —
+  evitando falso-positivo (ex.: "faturamento do mês até hoje" segue para o fluxo
+  mensal/fallback, não para o diário).
 - `finance-execution.js` (`buildFinanceExecution`) produz uma execução
   **compatível com o motor de SQL Templates**, reaproveitando o **mesmo caminho
   seguro**: SQL parametrizado (`public.vw_itens_vendidos`, somente leitura),
