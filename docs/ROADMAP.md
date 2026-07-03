@@ -22,12 +22,18 @@ Critério de saída:
 - Nenhuma consulta crítica depende de SQL livre sem auditoria.
 - Toda interação tem `trace_id` e registro mínimo.
 
-## Fase 2 — Performance e custo
+## Fase 2 — Performance e custo (Hermes Intelligence Layer)
 
-Objetivo: reduzir latência e custo antes de ampliar canais.
+Objetivo: reduzir latência e custo antes de ampliar canais. Esta fase introduz a
+**Hermes Intelligence Layer (HIL)**, cujo objetivo é **reduzir o uso de IA**:
+responder primeiro pelos caminhos determinísticos e baratos, deixando o Claude
+como última opção. Cascata: `response_library → semantic_cache → sql_template →
+workflow → knowledge → claude`. Ver `docs/HERMES_INTELLIGENCE_LAYER.md`.
 
 Entregas:
 
+- **Fundação da HIL: classificador de intenção, interface da Response Library e decisão `shouldCallClaude` (sem integração).** ✅
+- Response Library (respostas prontas para perguntas recorrentes).
 - Cache exato para perguntas/templates.
 - Cache semântico para perguntas recorrentes.
 - Materialized views para KPIs principais.
