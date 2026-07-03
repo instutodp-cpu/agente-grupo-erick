@@ -182,6 +182,22 @@ Fundação (catálogo + mapeamento + interface; sem integração):
 A ativação (ligar capacidades a SQL Templates e formatar respostas) virá em PRs
 seguintes, reaproveitando SQL Templates, cache e guardrails já existentes.
 
+### 4.6 Capability Registry
+
+Registro central e padronizado das capacidades do Hermes
+(`src/hermes/capabilities/capability-registry.js`, ver
+`docs/CAPABILITY_REGISTRY.md`). Evita duplicação quando novos domínios entram
+(Financeiro, Compras, RH, Marketing, Diretoria, Auditoria, Base44 Hub) ao definir
+um **contrato único** — `id`, `domain`, `title`, `intents`, `status`,
+`riskLevel`, `requiresApproval`, `templateName`, `cacheProfile`, `permissions`,
+`handler`, `responseBuilder` — e funções para registrar (`registerCapability`,
+com validação e sem ids duplicados) e descobrir (`getCapability`,
+`listCapabilities`, `findCapabilitiesByDomain`, `findCapabilitiesByIntent`).
+
+`finance.daily_revenue` é a primeira capacidade registrada. Nesta fase o registry
+guarda metadados/referências e **não** está ligado ao `/api/chat`; a execução via
+registry será conectada em PRs seguintes.
+
 ### 4.5 Agent Runtime
 
 O runtime deve suportar:
