@@ -198,6 +198,15 @@ com validação e sem ids duplicados) e descobrir (`getCapability`,
 guarda metadados/referências e **não** está ligado ao `/api/chat`; a execução via
 registry será conectada em PRs seguintes.
 
+### 4.7 Capability Resolver
+
+Descobre **qual Capability** atenderia uma pergunta, sem executá-la
+(`src/hermes/capabilities/capability-resolver.js`, ver
+`docs/CAPABILITY_RESOLVER.md`). Pipeline: HIL (contexto) → intent (mapas de
+domínio) → Capability Registry (`findCapabilitiesByIntent`). `resolveCapability`
+retorna `{ capabilityId, confidence, reason, domain, status }` ou `null`. Ainda
+não executa handlers e não altera o `/api/chat`.
+
 ### 4.5 Agent Runtime
 
 O runtime deve suportar:
