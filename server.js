@@ -2,15 +2,178 @@ require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const https = require('https');
-const path = require('path');
+const crypto = require('crypto');
+const { buildTemplateExecution } = require('./src/hermes/sql-templates');
+const { createCacheKey, getCacheEntry, setCacheEntry } = require('./src/hermes/cache');
+const { validateFreeformSql } = require('./src/hermes/sql-guardrails');
+const { resolveCapability } = require('./src/hermes/capabilities/capability-resolver');
+const { executeCapability } = require('./src/hermes/capabilities/capability-executor');
 
 const app = express();
 app.use(express.json());
 app.use(express.static('public'));
 
+function getPositiveIntegerEnv(name, defaultValue) {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : defaultValue;
+}
+
+function getTimeZoneEnv(name, defaultValue) {
+  const value = process.env[name] || defaultValue;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format(new Date());
+    return value;
+  } catch (_) {
+    return defaultValue;
+  }
+}
+
+const CLAUDE_API_TIMEOUT_MS = getPositiveIntegerEnv('CLAUDE_API_TIMEOUT_MS', 120000);
+const CHAT_RESPONSE_TIMEOUT_MS = getPositiveIntegerEnv('CHAT_RESPONSE_TIMEOUT_MS', 180000);
+const MAX_TOOL_LOOPS = getPositiveIntegerEnv('MAX_TOOL_LOOPS', 6);
+const SQL_GUARDRAIL_DEFAULT_LIMIT = getPositiveIntegerEnv('SQL_GUARDRAIL_DEFAULT_LIMIT', 500);
+const SQL_GUARDRAIL_MAX_LIMIT = getPositiveIntegerEnv('SQL_GUARDRAIL_MAX_LIMIT', 1000);
+const SQL_QUERY_TIMEOUT_MS = getPositiveIntegerEnv('SQL_QUERY_TIMEOUT_MS', 45000);
+const HERMES_TIMEZONE = getTimeZoneEnv('HERMES_TIMEZONE', 'America/Recife');
+
+function logStructured(level, event, fields = {}) {
+  const payload = {
+    level,
+    event,
+    timestamp: new Date().toISOString(),
+    ...fields
+  };
+
+  const line = JSON.stringify(payload);
+  if (level === 'error') console.error(line);
+  else if (level === 'warn') console.warn(line);
+  else console.log(line);
+}
+
+function redactSensitive(value = '') {
+  return String(value)
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
+    .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '[cpf]')
+    .replace(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g, '[cnpj]')
+    .replace(/(?:\+?55\s?)?(?:\(?\d{2}\)?\s?)?9?\d{4}[-\s]?\d{4}/g, '[telefone]')
+    .replace(/sk-ant-[A-Za-z0-9_-]+/g, '[anthropic_key]')
+    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, '[database_url]');
+}
+
+function getLastUserQuestion(messages = []) {
+  const lastUserMessage = [...messages].reverse().find(message => message && message.role === 'user');
+  if (!lastUserMessage) return '';
+  if (typeof lastUserMessage.content === 'string') return lastUserMessage.content;
+  if (Array.isArray(lastUserMessage.content)) {
+    return lastUserMessage.content
+      .filter(block => block && block.type === 'text')
+      .map(block => block.text || '')
+      .join(' ');
+  }
+  return '';
+}
+
+function summarizeQuestionForLog(question) {
+  const clean = redactSensitive(question).replace(/\s+/g, ' ').trim();
+  return clean.length > 160 ? `${clean.slice(0, 157)}...` : clean;
+}
+
+function getErrorType(err) {
+  if (err && (err.code === 'CLAUDE_TIMEOUT' || err.code === 'ETIMEDOUT' || err.code === 'ESOCKETTIMEDOUT')) return 'timeout';
+  if (err && err.code === 'CLAUDE_HTTP_ERROR') return 'claude_http_error';
+  if (err && err.code === 'CLAUDE_INVALID_JSON') return 'claude_invalid_json';
+  if (err && err.code) return err.code;
+  return 'unexpected_error';
+}
+
+function getFriendlyErrorMessage(err) {
+  if (getErrorType(err) === 'timeout') {
+    return 'A consulta demorou mais do que o esperado e foi interrompida com segurança. Tente uma pergunta mais específica ou um período menor.';
+  }
+  return 'Não consegui concluir sua solicitação agora. Tente novamente em instantes ou reformule a pergunta.';
+}
+
+async function callClaude(currentMessages, requestId, loopNumber) {
+  const startedAt = Date.now();
+  logStructured('info', 'claude_call_start', { requestId, loopNumber, timeoutMs: CLAUDE_API_TIMEOUT_MS });
+
+  try {
+    const data = await new Promise((resolve, reject) => {
+      const body = JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 4096,
+        system: SYSTEM_PROMPT,
+        tools: tools,
+        messages: currentMessages
+      });
+
+      const apiReq = https.request({
+        hostname: 'api.anthropic.com',
+        path: '/v1/messages',
+        method: 'POST',
+        timeout: CLAUDE_API_TIMEOUT_MS,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01'
+        }
+      }, (apiRes) => {
+        let raw = '';
+        apiRes.on('data', chunk => raw += chunk);
+        apiRes.on('end', () => {
+          if (apiRes.statusCode < 200 || apiRes.statusCode >= 300) {
+            const error = new Error(`Claude HTTP ${apiRes.statusCode}`);
+            error.code = 'CLAUDE_HTTP_ERROR';
+            error.statusCode = apiRes.statusCode;
+            reject(error);
+            return;
+          }
+
+          try {
+            resolve(JSON.parse(raw));
+          } catch (parseError) {
+            const error = new Error('Claude returned invalid JSON');
+            error.code = 'CLAUDE_INVALID_JSON';
+            reject(error);
+          }
+        });
+      });
+
+      apiReq.on('timeout', () => {
+        const error = new Error(`Claude call timed out after ${CLAUDE_API_TIMEOUT_MS}ms`);
+        error.code = 'CLAUDE_TIMEOUT';
+        apiReq.destroy(error);
+      });
+      apiReq.on('error', reject);
+      apiReq.write(body);
+      apiReq.end();
+    });
+
+    logStructured('info', 'claude_call_finish', {
+      requestId,
+      loopNumber,
+      durationMs: Date.now() - startedAt,
+      stopReason: data.stop_reason || 'unknown',
+      contentBlocks: Array.isArray(data.content) ? data.content.length : 0
+    });
+
+    return data;
+  } catch (err) {
+    logStructured('error', 'claude_call_error', {
+      requestId,
+      loopNumber,
+      durationMs: Date.now() - startedAt,
+      errorType: getErrorType(err),
+      statusCode: err.statusCode
+    });
+    throw err;
+  }
+}
+
 // Timeout de 3 minutos para respostas longas
 app.use((req, res, next) => {
-  res.setTimeout(180000);
+  res.setTimeout(CHAT_RESPONSE_TIMEOUT_MS);
   next();
 });
 
@@ -83,12 +246,19 @@ LIMITAÇÕES HONESTAS:
 - Pericles e Erick são os proprietários — trate-os com respeito e linguagem acessível`;
 
 // ── Função de query no Supabase ───────────────────────────────────────────────
-async function queryDatabase(sql) {
+async function queryDatabase(sql, params = [], options = {}) {
   const client = await pool.connect();
   try {
-    const result = await client.query(sql);
+    if (options.statementTimeoutMs) {
+      await client.query("SELECT set_config('statement_timeout', $1, false)", [String(options.statementTimeoutMs)]);
+    }
+    const result = await client.query(sql, params);
     return { rows: result.rows, rowCount: result.rowCount };
   } finally {
+    if (options.statementTimeoutMs) {
+      try { await client.query('RESET statement_timeout'); }
+      catch (_) {}
+    }
     client.release();
   }
 }
@@ -117,81 +287,413 @@ const tools = [
 
 // ── Endpoint principal do agente ─────────────────────────────────────────────
 app.post('/api/chat', async (req, res) => {
-  const { messages } = req.body;
+  const requestId = crypto.randomUUID();
+  const startedAt = Date.now();
+  const { messages } = req.body || {};
+  const question = getLastUserQuestion(messages);
+  let responseStatus = 'started';
+  let responseBytes = 0;
+  let toolCallCount = 0;
+  let clientClosed = false;
+  let responseTimedOut = false;
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      clientClosed = true;
+      logStructured('warn', 'chat_client_closed', {
+        requestId,
+        durationMs: Date.now() - startedAt,
+        status: responseStatus
+      });
+    }
+  });
+
   const sendEvent = (data) => {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    if (res.writableEnded || clientClosed) return;
+    const payload = `data: ${JSON.stringify({ requestId, ...data })}\n\n`;
+    responseBytes += Buffer.byteLength(payload);
+    res.write(payload);
   };
+
+  res.setTimeout(CHAT_RESPONSE_TIMEOUT_MS, () => {
+    if (res.writableEnded) return;
+    responseTimedOut = true;
+    responseStatus = 'timeout';
+    logStructured('error', 'chat_response_timeout', {
+      requestId,
+      status: responseStatus,
+      timeoutMs: CHAT_RESPONSE_TIMEOUT_MS,
+      durationMs: Date.now() - startedAt
+    });
+    sendEvent({ type: 'error', content: getFriendlyErrorMessage({ code: 'CLAUDE_TIMEOUT' }) });
+    sendEvent({ type: 'done' });
+    res.end();
+  });
+
+  logStructured('info', 'chat_request_received', {
+    requestId,
+    messageCount: Array.isArray(messages) ? messages.length : 0,
+    questionLength: question.length,
+    questionPreview: summarizeQuestionForLog(question)
+  });
+
+  if (!Array.isArray(messages)) {
+    responseStatus = 'bad_request';
+    sendEvent({ type: 'error', content: 'Pedido inválido. Envie uma mensagem para continuar.' });
+    sendEvent({ type: 'done' });
+    res.end();
+    logStructured('warn', 'chat_request_finish', {
+      requestId,
+      status: responseStatus,
+      durationMs: Date.now() - startedAt,
+      responseBytes
+    });
+    return;
+  }
+
+  const capabilityMatch = resolveCapability(question, { timeZone: HERMES_TIMEZONE });
+  if (capabilityMatch.matched && capabilityMatch.matchType === 'clear') {
+    logStructured('info', 'capability_resolved', {
+      requestId,
+      capabilityId: capabilityMatch.capabilityId,
+      matchType: capabilityMatch.matchType
+    });
+
+    const capabilityStartedAt = Date.now();
+    logStructured('info', 'capability_execution_start', {
+      requestId,
+      capabilityId: capabilityMatch.capabilityId
+    });
+
+    try {
+      const capabilityResult = await executeCapability(capabilityMatch.capabilityId, {
+        requestId,
+        params: capabilityMatch.params,
+        queryDatabase,
+        log: logStructured,
+        queryTimeoutMs: SQL_QUERY_TIMEOUT_MS,
+        timeZone: HERMES_TIMEZONE
+      });
+
+      if (capabilityResult.success) {
+        responseStatus = 'success';
+        logStructured('info', 'capability_execution_finish', {
+          requestId,
+          capabilityId: capabilityMatch.capabilityId,
+          durationMs: Date.now() - capabilityStartedAt,
+          cacheStatus: capabilityResult.cacheStatus,
+          rowCount: capabilityResult.rowCount
+        });
+        sendEvent({ type: 'text', content: capabilityResult.text });
+        logStructured('info', 'chat_response_ready', {
+          requestId,
+          responseTextLength: capabilityResult.text.length,
+          approximateResponseBytes: Buffer.byteLength(capabilityResult.text),
+          source: 'capability',
+          capabilityId: capabilityMatch.capabilityId
+        });
+        sendEvent({ type: 'done' });
+        res.end();
+        logStructured('info', 'chat_request_finish', {
+          requestId,
+          status: responseStatus,
+          durationMs: Date.now() - startedAt,
+          responseBytes,
+          toolCallCount,
+          capabilityId: capabilityMatch.capabilityId,
+          cacheStatus: capabilityResult.cacheStatus
+        });
+        return;
+      }
+
+      logStructured('warn', 'capability_execution_error', {
+        requestId,
+        capabilityId: capabilityMatch.capabilityId,
+        durationMs: Date.now() - capabilityStartedAt,
+        reason: capabilityResult.reason || 'capability_fallback'
+      });
+    } catch (err) {
+      logStructured('error', 'capability_execution_error', {
+        requestId,
+        capabilityId: capabilityMatch.capabilityId,
+        durationMs: Date.now() - capabilityStartedAt,
+        errorType: getErrorType(err)
+      });
+    }
+  }
+
+  const templateExecution = buildTemplateExecution(question);
+  if (templateExecution) {
+    logStructured('info', 'intent_detected', {
+      requestId,
+      intent: templateExecution.intent,
+      templateName: templateExecution.templateName
+    });
+
+    const cacheKey = createCacheKey({
+      templateName: templateExecution.templateName,
+      templateVersion: templateExecution.templateVersion,
+      params: templateExecution.params
+    });
+    const cacheLookup = getCacheEntry(cacheKey);
+
+    if (cacheLookup.status === 'hit') {
+      responseStatus = 'success';
+      logStructured('info', 'cache_hit', {
+        requestId,
+        intent: templateExecution.intent,
+        templateName: templateExecution.templateName,
+        templateVersion: templateExecution.templateVersion,
+        cacheProfile: templateExecution.cacheProfile,
+        cacheKey,
+        ageMs: Date.now() - cacheLookup.entry.createdAt,
+        ttlMs: cacheLookup.entry.ttlMs,
+        rowCount: cacheLookup.entry.metadata.rowCount
+      });
+      sendEvent({ type: 'text', content: cacheLookup.entry.value });
+      sendEvent({ type: 'done' });
+      res.end();
+      logStructured('info', 'chat_request_finish', {
+        requestId,
+        status: responseStatus,
+        durationMs: Date.now() - startedAt,
+        responseBytes,
+        toolCallCount,
+        templateName: templateExecution.templateName,
+        cacheStatus: 'hit'
+      });
+      return;
+    }
+
+    logStructured('info', cacheLookup.status === 'expired' ? 'cache_expired' : 'cache_miss', {
+      requestId,
+      intent: templateExecution.intent,
+      templateName: templateExecution.templateName,
+      templateVersion: templateExecution.templateVersion,
+      cacheProfile: templateExecution.cacheProfile,
+      cacheKey
+    });
+
+    sendEvent({ type: 'querying', content: templateExecution.description });
+    const templateStartedAt = Date.now();
+
+    try {
+      logStructured('info', 'sql_template_query_start', {
+        requestId,
+        intent: templateExecution.intent,
+        templateName: templateExecution.templateName,
+        templateVersion: templateExecution.templateVersion,
+        parameterCount: templateExecution.values.length
+      });
+
+      const result = await queryDatabase(templateExecution.sql, templateExecution.values);
+      if (responseTimedOut) {
+        logStructured('warn', 'chat_request_finish', {
+          requestId,
+          status: responseStatus,
+          durationMs: Date.now() - startedAt,
+          responseBytes,
+          toolCallCount,
+          templateName: templateExecution.templateName
+        });
+        return;
+      }
+      const text = templateExecution.format(result.rows);
+      responseStatus = 'success';
+
+      logStructured('info', 'sql_template_query_finish', {
+        requestId,
+        intent: templateExecution.intent,
+        templateName: templateExecution.templateName,
+        templateVersion: templateExecution.templateVersion,
+        durationMs: Date.now() - templateStartedAt,
+        rowCount: result.rowCount
+      });
+
+      setCacheEntry(cacheKey, text, templateExecution.cacheTtlMs, {
+        intent: templateExecution.intent,
+        templateName: templateExecution.templateName,
+        templateVersion: templateExecution.templateVersion,
+        cacheProfile: templateExecution.cacheProfile,
+        rowCount: result.rowCount
+      });
+      logStructured('info', 'cache_write', {
+        requestId,
+        intent: templateExecution.intent,
+        templateName: templateExecution.templateName,
+        templateVersion: templateExecution.templateVersion,
+        cacheProfile: templateExecution.cacheProfile,
+        cacheKey,
+        ttlMs: templateExecution.cacheTtlMs,
+        rowCount: result.rowCount
+      });
+
+      sendEvent({ type: 'text', content: text });
+      logStructured('info', 'chat_response_ready', {
+        requestId,
+        responseTextLength: text.length,
+        approximateResponseBytes: Buffer.byteLength(text),
+        source: 'sql_template',
+        templateName: templateExecution.templateName
+      });
+      if (!res.writableEnded) {
+        sendEvent({ type: 'done' });
+        res.end();
+      }
+      logStructured('info', 'chat_request_finish', {
+        requestId,
+        status: responseStatus,
+        durationMs: Date.now() - startedAt,
+        responseBytes,
+        toolCallCount,
+        templateName: templateExecution.templateName
+      });
+      return;
+    } catch (err) {
+      if (responseTimedOut) {
+        logStructured('warn', 'chat_late_error_after_timeout', {
+          requestId,
+          status: responseStatus,
+          durationMs: Date.now() - startedAt,
+          errorType: getErrorType(err)
+        });
+        return;
+      }
+      responseStatus = getErrorType(err);
+      logStructured('error', 'sql_template_query_error', {
+        requestId,
+        intent: templateExecution.intent,
+        templateName: templateExecution.templateName,
+        durationMs: Date.now() - templateStartedAt,
+        errorType: getErrorType(err)
+      });
+      sendEvent({ type: 'error', content: 'Não consegui consultar esse relatório agora. Tente novamente em instantes.' });
+      sendEvent({ type: 'done' });
+      if (!res.writableEnded) res.end();
+      logStructured('warn', 'chat_request_finish', {
+        requestId,
+        status: responseStatus,
+        durationMs: Date.now() - startedAt,
+        responseBytes,
+        toolCallCount,
+        templateName: templateExecution.templateName
+      });
+      return;
+    }
+  }
+
+  logStructured('info', 'intent_fallback', {
+    requestId,
+    reason: 'no_template_match'
+  });
 
   try {
     let currentMessages = [...messages];
     let continueLoop = true;
+    let loopNumber = 0;
 
     while (continueLoop) {
-      const data = await new Promise((resolve, reject) => {
-        const body = JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 4096,
-          system: SYSTEM_PROMPT,
-          tools: tools,
-          messages: currentMessages
-        });
+      if (responseTimedOut) break;
+      loopNumber += 1;
+      if (loopNumber > MAX_TOOL_LOOPS) {
+        const error = new Error('Maximum tool loop count exceeded');
+        error.code = 'MAX_TOOL_LOOPS_EXCEEDED';
+        throw error;
+      }
 
-        const req = https.request({
-          hostname: 'api.anthropic.com',
-          path: '/v1/messages',
-          method: 'POST',
-          timeout: 120000,
-          headers: {
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(body),
-            'x-api-key': process.env.ANTHROPIC_API_KEY,
-            'anthropic-version': '2023-06-01'
-          }
-        }, (res) => {
-          let raw = '';
-          res.on('data', chunk => raw += chunk);
-          res.on('end', () => {
-            try { resolve(JSON.parse(raw)); }
-            catch(e) { reject(new Error('JSON parse error: ' + raw.slice(0,200))); }
-          });
-        });
-
-        req.on('error', reject);
-        req.write(body);
-        req.end();
-      });
+      const data = await callClaude(currentMessages, requestId, loopNumber);
+      if (responseTimedOut) break;
 
       if (data.stop_reason === 'end_turn') {
         // Resposta final — envia pro cliente
-        const text = data.content
+        const text = (data.content || [])
           .filter(b => b.type === 'text')
           .map(b => b.text)
           .join('');
         sendEvent({ type: 'text', content: text });
+        responseStatus = 'success';
+        logStructured('info', 'chat_response_ready', {
+          requestId,
+          responseTextLength: text.length,
+          approximateResponseBytes: Buffer.byteLength(text)
+        });
         continueLoop = false;
 
       } else if (data.stop_reason === 'tool_use') {
         // Agente quer consultar o banco
-        const toolUseBlock = data.content.find(b => b.type === 'tool_use');
+        const toolUseBlock = (data.content || []).find(b => b.type === 'tool_use');
 
         if (toolUseBlock && toolUseBlock.name === 'query_database') {
+          toolCallCount += 1;
           const { sql, descricao } = toolUseBlock.input;
           sendEvent({ type: 'querying', content: descricao });
 
+          const sqlStartedAt = Date.now();
+          logStructured('info', 'database_query_start', {
+            requestId,
+            toolCallCount,
+            description: redactSensitive(descricao || ''),
+            sqlLength: typeof sql === 'string' ? sql.length : 0
+          });
+
+          const guardrail = validateFreeformSql(sql, {
+            defaultLimit: SQL_GUARDRAIL_DEFAULT_LIMIT,
+            maxLimit: SQL_GUARDRAIL_MAX_LIMIT
+          });
+
+          if (!guardrail.allowed) {
+            responseStatus = 'sql_guardrail_blocked';
+            logStructured('warn', 'sql_guardrail_block', {
+              requestId,
+              toolCallCount,
+              reason: guardrail.reason,
+              relation: guardrail.relation,
+              durationMs: guardrail.durationMs,
+              sqlLength: guardrail.originalLength
+            });
+            sendEvent({
+              type: 'error',
+              content: 'Não consegui executar essa consulta com segurança. Posso tentar responder de outra forma ou pedir uma pergunta mais específica.'
+            });
+            continueLoop = false;
+            break;
+          }
+
+          logStructured('info', 'sql_guardrail_pass', {
+            requestId,
+            toolCallCount,
+            durationMs: guardrail.durationMs,
+            sqlLength: guardrail.originalLength,
+            relations: guardrail.relations,
+            defaultLimitApplied: guardrail.defaultLimitApplied,
+            timeoutMs: SQL_QUERY_TIMEOUT_MS
+          });
+
           let toolResult;
           try {
-            const result = await queryDatabase(sql);
+            const result = await queryDatabase(guardrail.sql, [], { statementTimeoutMs: SQL_QUERY_TIMEOUT_MS });
+            logStructured('info', 'database_query_finish', {
+              requestId,
+              toolCallCount,
+              durationMs: Date.now() - sqlStartedAt,
+              rowCount: result.rowCount
+            });
             toolResult = JSON.stringify({
               success: true,
               rowCount: result.rowCount,
               rows: result.rows
             });
           } catch (err) {
+            logStructured('error', 'database_query_error', {
+              requestId,
+              toolCallCount,
+              durationMs: Date.now() - sqlStartedAt,
+              errorType: getErrorType(err)
+            });
             toolResult = JSON.stringify({
               success: false,
               error: err.message
@@ -212,20 +714,48 @@ app.post('/api/chat', async (req, res) => {
             }
           ];
         } else {
+          responseStatus = 'unsupported_tool';
           continueLoop = false;
         }
       } else {
+        responseStatus = `stopped_${data.stop_reason || 'unknown'}`;
         continueLoop = false;
       }
     }
 
-    sendEvent({ type: 'done' });
-    res.end();
+    if (!res.writableEnded) {
+      sendEvent({ type: 'done' });
+      res.end();
+    }
 
   } catch (err) {
-    console.error('Erro no agente:', err);
-    sendEvent({ type: 'error', content: 'Erro ao processar sua pergunta. Tente novamente.' });
-    res.end();
+    if (responseTimedOut) {
+      logStructured('warn', 'chat_late_error_after_timeout', {
+        requestId,
+        status: responseStatus,
+        durationMs: Date.now() - startedAt,
+        errorType: getErrorType(err)
+      });
+    } else {
+      responseStatus = getErrorType(err);
+      logStructured('error', 'chat_request_error', {
+        requestId,
+        status: responseStatus,
+        durationMs: Date.now() - startedAt,
+        errorType: getErrorType(err)
+      });
+      sendEvent({ type: 'error', content: getFriendlyErrorMessage(err) });
+      sendEvent({ type: 'done' });
+      if (!res.writableEnded) res.end();
+    }
+  } finally {
+    logStructured(responseStatus === 'success' ? 'info' : 'warn', 'chat_request_finish', {
+      requestId,
+      status: responseStatus,
+      durationMs: Date.now() - startedAt,
+      responseBytes,
+      toolCallCount
+    });
   }
 });
 
