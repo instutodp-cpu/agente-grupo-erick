@@ -2,6 +2,30 @@
 
 
 
+## 2026-07-03 — PR-08: Endpoints administrativos do Hermes
+
+### Adicionado
+
+- Endpoints `/admin/*` protegidos por `ADMIN_SECRET` (header `x-admin-secret`), com comparação em tempo constante.
+- `GET /admin/health` — saúde do serviço e presença de configuração (apenas booleanos, nunca os valores dos segredos).
+- `GET /admin/templates` — metadados dos SQL Templates, sem o SQL completo.
+- `POST /admin/validate/templates` — validação somente-leitura dos templates, reutilizando `src/hermes/template-validation.js` (mesma lógica do script `scripts/validate-templates.js`, sem duplicação).
+- Módulo `src/hermes/template-validation.js` extraído do script para ser compartilhado por CLI e endpoint.
+- Logs estruturados `admin_auth_failed`, `admin_health_check`, `admin_template_validation_start` e `admin_template_validation_finish`.
+- Testes do módulo de validação com pool falso (`test/template-validation.test.js`).
+- Documentação em `docs/ADMIN_ENDPOINTS.md` e `ADMIN_SECRET` no `.env.example`.
+
+### Segurança
+
+- Sem `ADMIN_SECRET`, os endpoints admin ficam desabilitados (503); segredo ausente/errado retorna 401.
+- Nunca expõe `DATABASE_URL`, `ANTHROPIC_API_KEY`, SQL completo ou o resultado real das queries (apenas template, status, rowCount, durationMs e erro redigido).
+- O segredo nunca é registrado em log.
+
+### Não alterado
+
+- Nenhuma regra de negócio do chat foi modificada.
+- O frontend não foi alterado.
+
 ## 2026-07-02 — PR-07: Validação real dos SQL Templates no Supabase/Railway
 
 ### Adicionado

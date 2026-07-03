@@ -3,9 +3,10 @@ const express = require('express');
 const { Pool } = require('pg');
 const https = require('https');
 const crypto = require('crypto');
-const { buildTemplateExecution } = require('./src/hermes/sql-templates');
+const { buildTemplateExecution, templates } = require('./src/hermes/sql-templates');
 const { createCacheKey, getCacheEntry, setCacheEntry } = require('./src/hermes/cache');
 const { validateSql, QUERY_TIMEOUT_MS } = require('./src/hermes/sql-guardrails');
+const { validateAllTemplates } = require('./src/hermes/template-validation');
 
 const app = express();
 app.use(express.json());
@@ -694,6 +695,101 @@ app.post('/api/chat', async (req, res) => {
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+// ── Endpoints administrativos (protegidos por ADMIN_SECRET) ───────────────────
+// Permitem validar saúde, templates e rodar a validação sem depender do Console
+// do Railway. Nunca expõem segredos (DATABASE_URL, ANTHROPIC_API_KEY), SQL
+// completo ou resultado real das queries.
+const ADMIN_SECRET = process.env.ADMIN_SECRET || '';
+
+function timingSafeEqualStr(a, b) {
+  const ab = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  if (ab.length !== bb.length) return false;
+  return crypto.timingSafeEqual(ab, bb);
+}
+
+// Autoriza a requisição admin. Se ADMIN_SECRET não existir, os endpoints ficam
+// desabilitados (503). Segredo ausente/errado retorna 401. Envie o segredo no
+// header `x-admin-secret`.
+function ensureAdmin(req, res) {
+  req.adminRequestId = crypto.randomUUID();
+  if (!ADMIN_SECRET) {
+    res.status(503).json({ error: 'Endpoints administrativos desabilitados. Defina ADMIN_SECRET para habilitar.' });
+    return false;
+  }
+  const provided = req.get('x-admin-secret') || '';
+  if (!timingSafeEqualStr(provided, ADMIN_SECRET)) {
+    logStructured('warn', 'admin_auth_failed', {
+      requestId: req.adminRequestId,
+      route: req.path,
+      reason: provided ? 'invalid_secret' : 'missing_secret'
+    });
+    res.status(401).json({ error: 'Não autorizado.' });
+    return false;
+  }
+  return true;
+}
+
+app.get('/admin/health', (req, res) => {
+  if (!ensureAdmin(req, res)) return;
+  logStructured('info', 'admin_health_check', { requestId: req.adminRequestId });
+  res.json({
+    status: 'ok',
+    uptimeSeconds: Math.round(process.uptime()),
+    templateCount: Object.keys(templates).length,
+    // Apenas presença (booleano) — nunca os valores dos segredos.
+    config: {
+      hasDatabaseUrl: Boolean(process.env.DATABASE_URL),
+      hasAnthropicKey: Boolean(process.env.ANTHROPIC_API_KEY),
+      claudeTimeoutMs: CLAUDE_API_TIMEOUT_MS,
+      chatResponseTimeoutMs: CHAT_RESPONSE_TIMEOUT_MS,
+      maxToolLoops: MAX_TOOL_LOOPS
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/admin/templates', (req, res) => {
+  if (!ensureAdmin(req, res)) return;
+  // Metadados dos templates — sem o SQL, para não expor consultas completas.
+  const list = Object.values(templates).map(template => ({
+    name: template.name,
+    version: template.version,
+    cacheProfile: template.cacheProfile,
+    cacheTtlMs: template.cacheTtlMs,
+    description: template.description
+  }));
+  res.json({ count: list.length, templates: list });
+});
+
+app.post('/admin/validate/templates', async (req, res) => {
+  if (!ensureAdmin(req, res)) return;
+  const requestId = req.adminRequestId;
+  const startedAt = Date.now();
+  logStructured('info', 'admin_template_validation_start', { requestId });
+  try {
+    const results = await validateAllTemplates(pool);
+    const okCount = results.filter(result => result.status === 'OK').length;
+    logStructured('info', 'admin_template_validation_finish', {
+      requestId,
+      durationMs: Date.now() - startedAt,
+      total: results.length,
+      okCount,
+      errorCount: results.length - okCount
+    });
+    // results contém apenas metadados (template, status, rowCount, durationMs,
+    // erro redigido) — nunca linhas/valores do banco.
+    res.json({ total: results.length, okCount, errorCount: results.length - okCount, results });
+  } catch (err) {
+    logStructured('error', 'admin_template_validation_error', {
+      requestId,
+      durationMs: Date.now() - startedAt,
+      errorType: getErrorType(err)
+    });
+    res.status(500).json({ error: 'Falha ao validar templates.' });
+  }
+});
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => console.log(`Agente Grupo Erick rodando na porta ${PORT}`));
