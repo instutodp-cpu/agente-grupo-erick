@@ -89,7 +89,25 @@ Fundação (código em `src/hermes/intelligence/`):
 - `should-call-claude.js` — `shouldCallClaude()` → `true`/`false`.
 
 Nesta fundação a HIL **não** está integrada ao `/api/chat` e não altera o
-comportamento atual; apenas prepara a camada.
+comportamento atual; apenas prepara a camada. Em seguida ela passa a rodar em
+**modo observação** (loga `hil_classification` sem rotear).
+
+### 4.2.2 Camada de aprendizado (HIL Analytics)
+
+A HIL aprende com o uso real através da camada de aprendizado
+(`src/hermes/intelligence/statistics.js`, ver `docs/HIL_ANALYTICS.md`). Para
+cada pergunta respondida, mede qual caminho foi recomendado e qual foi de fato
+usado (SQL Template, cache, Claude), com custo, latência e sucesso, na tabela
+`question_statistics` (`docs/sql/QUESTION_STATISTICS.sql`).
+
+Interfaces (fundação, sem cálculo/integração ainda):
+
+- `recordQuestionStatistics()` — registra métricas por pergunta.
+- Agregadores — top intents, top perguntas, top templates, maior custo, maior
+  latência, mais cache hit, mais fallback Claude.
+
+Esses dados permitem, no futuro, calibrar as decisões da HIL e priorizar o que
+promover para caminhos baratos — reduzindo o uso de IA com base em evidência.
 
 ### 4.3 SQL Templates
 
