@@ -74,6 +74,12 @@ completas).
 Métricas agregadas das decisões da HIL em shadow mode (contadores em memória).
 **Nunca** expõe perguntas reais. Detalhes em `docs/HIL_ADMIN_METRICS.md`.
 
+### `GET /admin/hil/report`
+
+Relatório com percentuais por caminho + recomendação operacional (o Hermes está
+economizando IA?). Deriva das métricas agregadas; **nunca** expõe perguntas
+reais. Detalhes em `docs/HIL_DECISION_REPORT.md`.
+
 ### `POST /admin/validate/templates`
 
 Executa a validação real (somente leitura) de cada template contra o banco,
