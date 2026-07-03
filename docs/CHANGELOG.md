@@ -2,6 +2,23 @@
 
 
 
+## 2026-07-02 — PR-06: Testes automatizados mínimos
+
+### Adicionado
+
+- Estrutura de testes em `test/` usando o runner nativo `node --test` (sem novas dependências).
+- Testes do classificador de SQL Templates (`test/sql-templates.test.js`), incluindo regressão das 6 perguntas frequentes da tela.
+- Testes de cache (`test/cache.test.js`): chave estável, hit, miss, expired e não-cacheamento de erro/TTL inválido.
+- Testes de guardrails (`test/sql-guardrails.test.js`): SELECT/CTE/subquery permitidos; INSERT/UPDATE/DELETE, DROP/ALTER/TRUNCATE, CREATE/GRANT/REVOKE, múltiplas statements, comentários e schema não permitido bloqueados; LIMIT padrão aplicado/preservado.
+- Script `npm test` (`node --test`).
+- Documentação em `docs/TESTING.md`.
+
+### Não alterado
+
+- Nenhuma regra de negócio foi modificada.
+- O frontend não foi alterado.
+- Os testes não dependem de Supabase real nem de chaves reais.
+
 ## 2026-07-02 — PR-05: Guardrails para SQL livre remanescente
 
 ### Adicionado
