@@ -2,6 +2,22 @@
 
 
 
+## 2026-07-03 — PR-12: Fundação do Semantic Cache
+
+### Adicionado
+
+- Módulo `src/hermes/intelligence/semantic-cache.js` com `normalizeSemanticQuestion`, `canonicalTokenSignature`, `buildSemanticKey(classification, parameters)` e as interfaces no-op `findSemanticCacheEntry` (retorna `null`) e `saveSemanticCacheEntry` (retorna `false`).
+- Chave semântica léxica estável: por `intent + parâmetros` (params independem da ordem) ou tokens canônicos quando a intenção é desconhecida.
+- Tabela documentada `semantic_cache` em `docs/sql/SEMANTIC_CACHE.sql` (não aplicada; coluna `embedding` preparada para pgvector na fase futura).
+- Testes de unidade em `test/semantic-cache.test.js` (equivalência de perguntas, estabilidade por parâmetros, pergunta vazia, no-ops).
+- Documentação em `docs/SEMANTIC_CACHE.md`; ROADMAP e HERMES_ARCHITECTURE atualizados.
+
+### Não alterado
+
+- Sem embeddings e sem integração com o `/api/chat`: comportamento inalterado.
+- O cache exato atual (`src/hermes/cache.js`) permanece intacto (apenas reutilizado via `stableStringify`).
+- Nenhuma nova chamada ao Claude, nenhuma mudança de frontend, nada removido.
+
 ## 2026-07-03 — PR-11: Fundação da camada de aprendizado da HIL
 
 ### Adicionado
