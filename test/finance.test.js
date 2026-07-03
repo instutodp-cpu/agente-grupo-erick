@@ -63,6 +63,57 @@ test('classifyFinancialIntent: pergunta fora do escopo retorna null', () => {
   assert.strictEqual(classifyFinancialIntent(null), null);
 });
 
+// ── V3: reconhecimento ampliado de daily_revenue (sem falso-positivo) ─────────
+
+const DAILY_OK = [
+  'quanto faturamos hoje',
+  'vendas de hoje',
+  'resultado de hoje',
+  'movimento de hoje',
+  'como foi o dia',
+  'como foi o dia de hoje',
+  'faturamento do dia',
+  'movimento do dia',
+  'resultado do dia',
+  'qual a maior venda de hoje'
+];
+
+for (const q of DAILY_OK) {
+  test(`daily_revenue (V3) reconhece: "${q}"`, () => {
+    const r = classifyFinancialIntent(q);
+    assert.ok(r, 'deveria casar');
+    assert.strictEqual(r.capability, 'daily_revenue');
+  });
+}
+
+// Perguntas de outro período NÃO podem virar daily_revenue.
+const DAILY_NAO = [
+  'faturamento do mês',
+  'faturamento mensal',
+  'quanto faturamos em junho de 2026',
+  'resultado do mês',
+  'resultado do ano',
+  'vendas de ontem',
+  'faturamento da semana',
+  'como foi o dia 15 de junho',
+  'faturamento em maio',
+  'faturamento do mês até hoje',
+  'últimos 6 meses',
+  'no mês passado'
+];
+
+for (const q of DAILY_NAO) {
+  test(`daily_revenue (V3) NÃO dispara para outro período: "${q}"`, () => {
+    const r = classifyFinancialIntent(q);
+    assert.notStrictEqual(r && r.capability, 'daily_revenue');
+  });
+}
+
+test('daily_revenue (V3): sem "hoje"/"dia" não dispara', () => {
+  assert.notStrictEqual((classifyFinancialIntent('quanto vendemos') || {}).capability, 'daily_revenue');
+  assert.notStrictEqual((classifyFinancialIntent('qual o faturamento') || {}).capability, 'daily_revenue');
+});
+
 // ── Construtor de resposta (interface) ───────────────────────────────────────
 
 test('buildFinancialResponse: capacidade válida → interface segura, não implementada', () => {

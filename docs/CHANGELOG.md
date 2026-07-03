@@ -2,6 +2,21 @@
 
 
 
+## 2026-07-03 — Sprint 1 / PR-18: Hermes Financeiro V3 — reconhecimento de daily_revenue
+
+### Alterado
+
+- Ampliados os padrões de `daily_revenue` em `financial-intent-map.js`: além de "quanto vendemos hoje" / "faturamento de hoje", passa a reconhecer "quanto faturamos hoje", "vendas de hoje", "resultado de hoje", "movimento de hoje", "como foi o dia" (e variações "do dia").
+
+### Segurança / Não altera comportamento indevido
+
+- Adicionado **guarda de período**: perguntas com ano, "mês/mensal", "ano/anual", "semana", "ontem", "dia N", "últimos ...", "passado" ou nome de mês **não** disparam `daily_revenue` (evita falso-positivo). Nome de mês usa limites de palavra para não casar dentro de outras palavras (ex.: "maior").
+- Perguntas sem "hoje"/"dia" continuam sem daily; ambíguas continuam no fallback.
+
+### Não alterado
+
+- Nenhuma mudança em SQL, cache, frontend, `server.js` ou na formatação da resposta. Apenas o mapa de intenções e os testes.
+
 ## 2026-07-03 — Sprint 1 / PR-17: Hermes Financeiro V2 — Daily Revenue integrado
 
 ### Adicionado
