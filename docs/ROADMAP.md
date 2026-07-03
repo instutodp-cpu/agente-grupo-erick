@@ -174,3 +174,20 @@ Entregas:
 Critério de saída:
 
 - Hermes suporta centenas de milhares de consultas com custo previsível e auditoria completa.
+
+## Sprints de negócio
+
+Além das fases de plataforma, o Hermes evolui em sprints de capacidade de
+negócio sobre a base já construída.
+
+### Sprint 1 — Hermes Financeiro
+
+Objetivo: transformar o Hermes num analista financeiro corporativo (um único
+sistema, sem novos agentes e sem WhatsApp ainda).
+
+- **Fundação do módulo financeiro: catálogo de capacidades, mapa de intenções e interface do construtor de resposta (`src/hermes/finance/`), sem integração.** ✅
+- Ligar capacidades `available` a SQL Templates determinísticos.
+- Implementar a formatação de respostas por capacidade.
+- Integrar via HIL, preservando cache e guardrails.
+
+Ver `docs/HERMES_FINANCE.md`.

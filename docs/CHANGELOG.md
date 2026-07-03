@@ -2,6 +2,21 @@
 
 
 
+## 2026-07-03 — Sprint 1 / PR-16: Fundação do Hermes Financeiro
+
+### Adicionado
+
+- Nova pasta `src/hermes/finance/` — fundação do módulo financeiro (o Hermes segue sendo um único sistema; sem novos agentes e sem WhatsApp).
+- `finance-capabilities.js` — catálogo de 10 capacidades (`daily_revenue`, `monthly_revenue`, `accounts_receivable`, `accounts_payable`, `cash_flow`, `top_customers`, `store_comparison`, `ticket_average`, `payment_methods`, `financial_summary`) com fontes e `status`.
+- `financial-intent-map.js` — `classifyFinancialIntent(question)` mapeia perguntas financeiras para capacidades (léxico/determinístico).
+- `financial-response-builder.js` — `buildFinancialResponse(capability, data)` como interface (não implementada).
+- Testes em `test/finance.test.js`; documentação em `docs/HERMES_FINANCE.md`; ROADMAP e HERMES_ARCHITECTURE atualizados.
+
+### Não alterado
+
+- Não integra ao chat: sem alteração no `/api/chat`, nos SQL Templates, no cache ou no frontend.
+- Nenhuma consulta é executada; o construtor de resposta é interface (`implemented: false`). Nada removido.
+
 ## 2026-07-03 — PR-15: HIL Decision Report
 
 ### Adicionado
