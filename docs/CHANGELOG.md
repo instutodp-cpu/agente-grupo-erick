@@ -2,6 +2,21 @@
 
 
 
+## 2026-07-03 — PR-13: HIL Shadow Mode
+
+### Adicionado
+
+- `src/hermes/intelligence/shadow.js` com `simulateDecision(classification, question, context)` — função pura que retorna `{ recommendedPath, confidence, reason, wouldCallClaude, wouldUseTemplate, wouldUseSemanticCache, wouldUseResponseLibrary, wouldUseKnowledge }`.
+- Log estruturado `hil_shadow_decision` no `/api/chat` (após `hil_classification`), com `requestId`, `intent`, `recommendedPath`, `confidence`, `reason` e as flags `wouldUse*`/`wouldCallClaude`.
+- Testes de unidade em `test/hil-shadow.test.js`.
+- Documentação em `docs/HIL_SHADOW_MODE.md`; ROADMAP e HERMES_ARCHITECTURE atualizados.
+
+### Não alterado
+
+- A decisão simulada **não** é usada para rotear: o usuário recebe exatamente a mesma resposta de hoje.
+- Fluxo inalterado (SQL Templates → cache → fallback Claude); nenhuma chamada diferente ao Claude.
+- Semantic Cache e Response Library **não** integrados. Sem mudança de frontend, nada removido.
+
 ## 2026-07-03 — PR-12: Fundação do Semantic Cache
 
 ### Adicionado

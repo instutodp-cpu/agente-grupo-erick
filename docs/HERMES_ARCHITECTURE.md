@@ -90,7 +90,9 @@ Fundação (código em `src/hermes/intelligence/`):
 
 Nesta fundação a HIL **não** está integrada ao `/api/chat` e não altera o
 comportamento atual; apenas prepara a camada. Em seguida ela passa a rodar em
-**modo observação** (loga `hil_classification` sem rotear).
+**modo observação** (loga `hil_classification` sem rotear) e depois em **shadow
+mode**: `simulateDecision()` decide em paralelo e loga `hil_shadow_decision`,
+ainda sem alterar nenhuma resposta (ver `docs/HIL_SHADOW_MODE.md`).
 
 ### 4.2.2 Camada de aprendizado (HIL Analytics)
 

@@ -8,6 +8,7 @@ const { createCacheKey, getCacheEntry, setCacheEntry } = require('./src/hermes/c
 const { validateSql, QUERY_TIMEOUT_MS } = require('./src/hermes/sql-guardrails');
 const { validateAllTemplates } = require('./src/hermes/template-validation');
 const { classify } = require('./src/hermes/intelligence/intent-classifier');
+const { simulateDecision } = require('./src/hermes/intelligence/shadow');
 
 const app = express();
 app.use(express.json());
@@ -340,10 +341,11 @@ app.post('/api/chat', async (req, res) => {
     questionPreview: summarizeQuestionForLog(question)
   });
 
-  // ── HIL em modo OBSERVAÇÃO ──────────────────────────────────────────────────
-  // Classifica a pergunta apenas para observar/logar a decisão. NÃO altera o
-  // fluxo: recommendedPath não é usado para rotear nada nesta etapa. Envolto em
-  // try/catch para nunca impactar o /api/chat.
+  // ── HIL em modo OBSERVAÇÃO + SHADOW ─────────────────────────────────────────
+  // Classifica a pergunta e SIMULA a decisão de roteamento apenas para
+  // observar/logar. NÃO altera o fluxo: nada da decisão é usado para rotear. O
+  // usuário recebe exatamente a mesma resposta de hoje. Envolto em try/catch
+  // para nunca impactar o /api/chat.
   try {
     const hil = classify(question);
     logStructured('info', 'hil_classification', {
@@ -355,6 +357,20 @@ app.post('/api/chat', async (req, res) => {
       estimatedCost: hil.estimatedCost,
       estimatedLatency: hil.estimatedLatency,
       recommendedPath: hil.recommendedPath
+    });
+
+    const decision = simulateDecision(hil, question);
+    logStructured('info', 'hil_shadow_decision', {
+      requestId,
+      intent: hil.intent,
+      recommendedPath: decision.recommendedPath,
+      confidence: decision.confidence,
+      reason: decision.reason,
+      wouldCallClaude: decision.wouldCallClaude,
+      wouldUseTemplate: decision.wouldUseTemplate,
+      wouldUseSemanticCache: decision.wouldUseSemanticCache,
+      wouldUseResponseLibrary: decision.wouldUseResponseLibrary,
+      wouldUseKnowledge: decision.wouldUseKnowledge
     });
   } catch (hilError) {
     logStructured('warn', 'hil_classification_error', {
