@@ -165,6 +165,23 @@ Exemplos:
 
 Metabase deve ser considerado fonte complementar ou interface de validação para métricas já consolidadas.
 
+### 4.5 Módulos de domínio — Hermes Financeiro
+
+Primeiro módulo de domínio (Sprint 1), em `src/hermes/finance/`. Transforma o
+Hermes num analista financeiro corporativo, sem virar um agente separado — segue
+sendo um único sistema. Ver `docs/HERMES_FINANCE.md`.
+
+Fundação (catálogo + mapeamento + interface; sem integração):
+
+- `finance-capabilities.js` — catálogo de capacidades (faturamento diário/mensal,
+  contas a receber/pagar, fluxo de caixa, top clientes, comparação de lojas,
+  ticket médio, formas de pagamento, resumo financeiro), com fontes e `status`.
+- `financial-intent-map.js` — mapeia perguntas financeiras para capacidades.
+- `financial-response-builder.js` — contrato de formatação (interface).
+
+A ativação (ligar capacidades a SQL Templates e formatar respostas) virá em PRs
+seguintes, reaproveitando SQL Templates, cache e guardrails já existentes.
+
 ### 4.5 Agent Runtime
 
 O runtime deve suportar:
