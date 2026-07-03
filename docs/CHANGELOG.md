@@ -2,6 +2,25 @@
 
 
 
+## 2026-07-03 — Sprint 1 / PR-17: Hermes Financeiro V2 — Daily Revenue integrado
+
+### Adicionado
+
+- Primeira capacidade financeira real integrada ao `/api/chat`: **faturamento diário** (`daily_revenue`).
+- `src/hermes/finance/finance-execution.js` — `buildFinanceExecution(question)` produz uma execução **compatível com o motor de SQL Templates**, reaproveitando cache existente (perfil `current_day`, TTL 10 min), SQL parametrizado somente-leitura em `public.vw_itens_vendidos` e os logs já existentes.
+- Formatação de `daily_revenue` em `financial-response-builder.js` (`buildFinancialResponse`, agora `implemented`).
+- Logs estruturados `finance_capability_detected` e `finance_response_built`.
+- Testes em `test/finance-execution.test.js`; `docs/HERMES_FINANCE.md` atualizado.
+
+### Alterado
+
+- O `/api/chat` passa a rotear perguntas **claras** de faturamento diário ("quanto vendemos hoje?", "faturamento de hoje", "como foram as vendas hoje?") para o Hermes Financeiro, antes do fluxo de templates.
+
+### Não alterado
+
+- Perguntas ambíguas ou fora do escopo continuam no fallback atual (SQL Templates → Claude), inalterado.
+- Nenhuma nova chamada ao Claude (a resposta vem do banco/cache); SQL Templates existentes, cache e frontend não foram modificados.
+
 ## 2026-07-03 — Sprint 1 / PR-16: Fundação do Hermes Financeiro
 
 ### Adicionado

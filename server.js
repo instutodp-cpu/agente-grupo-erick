@@ -11,6 +11,7 @@ const { classify } = require('./src/hermes/intelligence/intent-classifier');
 const { simulateDecision } = require('./src/hermes/intelligence/shadow');
 const { recordDecision: recordHilDecision, snapshot: hilMetricsSnapshot } = require('./src/hermes/intelligence/metrics');
 const { buildDecisionReport } = require('./src/hermes/intelligence/report');
+const { buildFinanceExecution } = require('./src/hermes/finance/finance-execution');
 
 const app = express();
 app.use(express.json());
@@ -398,7 +399,20 @@ app.post('/api/chat', async (req, res) => {
     return;
   }
 
-  const templateExecution = buildTemplateExecution(question);
+  // Hermes Financeiro: quando o match é claro, usa uma execução compatível com
+  // o motor de templates (mesmo cache/query/logs). Caso contrário, financeExecution
+  // é null e o fluxo atual segue inalterado (templates → Claude).
+  const financeExecution = buildFinanceExecution(question);
+  if (financeExecution) {
+    logStructured('info', 'finance_capability_detected', {
+      requestId,
+      capability: financeExecution.capability,
+      templateName: financeExecution.templateName,
+      templateVersion: financeExecution.templateVersion
+    });
+  }
+
+  const templateExecution = financeExecution || buildTemplateExecution(question);
   if (templateExecution) {
     logStructured('info', 'intent_detected', {
       requestId,
@@ -476,6 +490,16 @@ app.post('/api/chat', async (req, res) => {
       }
       const text = templateExecution.format(result.rows);
       responseStatus = 'success';
+
+      if (financeExecution) {
+        logStructured('info', 'finance_response_built', {
+          requestId,
+          capability: financeExecution.capability,
+          templateName: financeExecution.templateName,
+          rowCount: result.rowCount,
+          responseTextLength: typeof text === 'string' ? text.length : 0
+        });
+      }
 
       logStructured('info', 'sql_template_query_finish', {
         requestId,
