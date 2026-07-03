@@ -55,10 +55,28 @@ chat e o comportamento atual não muda.
 > As heurísticas e os números de custo/latência são **placeholders**. Serão
 > substituídos por medições reais quando cada caminho for implementado.
 
+## Modo observação (integração inicial ao `/api/chat`)
+
+A HIL é integrada ao `/api/chat` em **modo observação** antes de rotear qualquer
+coisa. No início da requisição, o servidor chama `classify(question)` **apenas
+para registrar** a decisão que a HIL *tomaria*, sem usá-la para alterar o fluxo:
+
+- Emite o log estruturado `hil_classification` com `requestId`, `mode: "observe"`,
+  `intent`, `confidence`, `complexity`, `estimatedCost`, `estimatedLatency` e
+  `recommendedPath`.
+- O `recommendedPath` **não** é usado para decidir nada nesta etapa. O fluxo
+  atual continua idêntico: SQL Templates → cache → fallback Claude.
+- A chamada é envolvida em `try/catch` (`hil_classification_error`) para nunca
+  impactar o `/api/chat`.
+
+O objetivo do modo observação é **coletar dados reais**: comparar o que a HIL
+recomendaria com o que o fluxo atual efetivamente faz, para calibrar heurísticas,
+custos e latências antes de deixar a HIL rotear de fato (fases seguintes).
+
 ## O que esta camada NÃO faz (ainda)
 
 - Não chama o Claude de forma nova.
-- Não integra com o `/api/chat` (nenhuma alteração de comportamento).
+- Não usa o `recommendedPath` para rotear (apenas observa e loga).
 - Não popula nem lê a Response Library (só define a interface).
 - Não remove nada existente (SQL Templates, cache, guardrails seguem iguais).
 

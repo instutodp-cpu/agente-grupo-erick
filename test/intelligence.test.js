@@ -72,3 +72,31 @@ test('RESPONSE_LIBRARY_COLUMNS cobre os campos previstos', () => {
     assert.ok(RESPONSE_LIBRARY_COLUMNS.includes(col), `coluna ${col} listada`);
   }
 });
+
+// ── Robustez: classify não pode quebrar o /api/chat (modo observação) ─────────
+// O /api/chat chama classify(question) apenas para observar/logar. Estes testes
+// garantem que classify nunca lança e sempre devolve um recommendedPath válido,
+// mesmo para entradas inesperadas.
+
+test('classify: nunca lança para entradas estranhas e sempre retorna caminho válido', () => {
+  const validos = new Set(Object.values(PATHS));
+  const entradas = [
+    '',
+    '   ',
+    'a'.repeat(5000),
+    'DROP TABLE x; --',
+    'çãõ 你好 emoji 😀',
+    'SELECT 1',
+    '\n\t\n',
+    '123456',
+    'oi'
+  ];
+  for (const q of entradas) {
+    let r;
+    assert.doesNotThrow(() => { r = classify(q); }, `classify lançou para: ${JSON.stringify(q).slice(0, 30)}`);
+    assert.ok(validos.has(r.recommendedPath));
+    assert.strictEqual(typeof r.confidence, 'number');
+    assert.strictEqual(typeof r.estimatedCost, 'number');
+    assert.strictEqual(typeof r.estimatedLatency, 'number');
+  }
+});

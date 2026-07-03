@@ -7,6 +7,7 @@ const { buildTemplateExecution, templates } = require('./src/hermes/sql-template
 const { createCacheKey, getCacheEntry, setCacheEntry } = require('./src/hermes/cache');
 const { validateSql, QUERY_TIMEOUT_MS } = require('./src/hermes/sql-guardrails');
 const { validateAllTemplates } = require('./src/hermes/template-validation');
+const { classify } = require('./src/hermes/intelligence/intent-classifier');
 
 const app = express();
 app.use(express.json());
@@ -338,6 +339,29 @@ app.post('/api/chat', async (req, res) => {
     questionLength: question.length,
     questionPreview: summarizeQuestionForLog(question)
   });
+
+  // ── HIL em modo OBSERVAÇÃO ──────────────────────────────────────────────────
+  // Classifica a pergunta apenas para observar/logar a decisão. NÃO altera o
+  // fluxo: recommendedPath não é usado para rotear nada nesta etapa. Envolto em
+  // try/catch para nunca impactar o /api/chat.
+  try {
+    const hil = classify(question);
+    logStructured('info', 'hil_classification', {
+      requestId,
+      mode: 'observe',
+      intent: hil.intent,
+      confidence: hil.confidence,
+      complexity: hil.complexity,
+      estimatedCost: hil.estimatedCost,
+      estimatedLatency: hil.estimatedLatency,
+      recommendedPath: hil.recommendedPath
+    });
+  } catch (hilError) {
+    logStructured('warn', 'hil_classification_error', {
+      requestId,
+      errorType: getErrorType(hilError)
+    });
+  }
 
   if (!Array.isArray(messages)) {
     responseStatus = 'bad_request';
