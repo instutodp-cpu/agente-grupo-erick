@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "validate:templates": "node scripts/validate-templates.js"
   },
   "dependencies": {
     "express": "^4.18.2",

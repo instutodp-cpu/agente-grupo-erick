@@ -2,6 +2,23 @@
 
 
 
+## 2026-07-02 — PR-07: Validação real dos SQL Templates no Supabase/Railway
+
+### Adicionado
+
+- Script `scripts/validate-templates.js` que executa cada SQL Template contra o banco real, de forma somente-leitura, com parâmetros de teste.
+- Transação `READ ONLY` + `ROLLBACK` por template: nenhuma escrita é possível; timeout por consulta via `SQL_TEMPLATE_VALIDATION_TIMEOUT_MS` (padrão 30000 ms).
+- Saída apenas com metadados (template, status, rowCount, tempo e erro redigido) — nunca linhas/valores do banco.
+- Falha amigável (sem conectar) quando `DATABASE_URL` não está definido; código de saída `1` se algum template falhar.
+- Script npm `validate:templates`.
+- Documentação em `docs/SUPABASE_TEMPLATE_VALIDATION.md`, incluindo revisão estática de schema (sem divergências encontradas).
+
+### Não alterado
+
+- Nenhum template foi alterado: a revisão estática não encontrou divergência de tabela/view/coluna.
+- Nenhuma regra de negócio, comportamento do chat ou frontend foi modificado.
+- Nenhuma query de escrita é emitida.
+
 ## 2026-07-02 — PR-06: Testes automatizados mínimos
 
 ### Adicionado
