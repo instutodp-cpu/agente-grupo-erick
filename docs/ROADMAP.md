@@ -35,6 +35,7 @@ Entregas:
 - **Fundação da HIL: classificador de intenção, interface da Response Library e decisão `shouldCallClaude` (sem integração).** ✅
 - **HIL em modo observação no `/api/chat` (loga a decisão, sem rotear).** ✅
 - **Fundação da camada de aprendizado: `question_statistics`, `recordQuestionStatistics` e agregadores (interfaces, sem cálculo).** ✅
+- **Fundação do Semantic Cache: `buildSemanticKey`, `normalizeSemanticQuestion` e interfaces find/save (léxico, sem embeddings, sem integração).** ✅
 - Response Library (respostas prontas para perguntas recorrentes).
 - Cache exato para perguntas/templates.
 - Cache semântico para perguntas recorrentes.

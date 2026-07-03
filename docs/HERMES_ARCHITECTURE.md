@@ -109,6 +109,22 @@ Interfaces (fundação, sem cálculo/integração ainda):
 Esses dados permitem, no futuro, calibrar as decisões da HIL e priorizar o que
 promover para caminhos baratos — reduzindo o uso de IA com base em evidência.
 
+### 4.2.3 Semantic Cache
+
+Caminho nº 2 da cascata da HIL (após a Response Library). Reutiliza respostas
+equivalentes mesmo quando o texto da pergunta muda
+(`src/hermes/intelligence/semantic-cache.js`, ver `docs/SEMANTIC_CACHE.md`).
+
+Fundação (léxica, sem embeddings/integração ainda):
+
+- `buildSemanticKey(classification, parameters)` — chave estável por
+  `intent + parâmetros` (ou tokens canônicos quando a intenção é desconhecida).
+- `normalizeSemanticQuestion()` / `canonicalTokenSignature()` — normalização.
+- `findSemanticCacheEntry()` / `saveSemanticCacheEntry()` — interfaces no-op.
+
+Tabela documentada em `docs/sql/SEMANTIC_CACHE.sql`, com coluna `embedding`
+preparada para a fase com pgvector (busca por similaridade de significado).
+
 ### 4.3 SQL Templates
 
 Camada prioritária para perguntas de dados estruturados.
