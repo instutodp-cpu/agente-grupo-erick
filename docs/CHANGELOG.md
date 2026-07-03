@@ -2,6 +2,20 @@
 
 
 
+## 2026-07-03 — PR-19: Capability Registry
+
+### Adicionado
+
+- Nova pasta `src/hermes/capabilities/` com `capability-registry.js`: registro central e padronizado das capacidades do Hermes.
+- Funções `registerCapability`, `getCapability`, `listCapabilities`, `findCapabilitiesByDomain`, `findCapabilitiesByIntent` (+ `resetRegistry` para testes).
+- Contrato padrão de capability (`id`, `domain`, `title`, `intents`, `status`, `riskLevel`, `requiresApproval`, `templateName`, `cacheProfile`, `permissions`, `handler`, `responseBuilder`) com validação de campos obrigatórios e rejeição de ids duplicados.
+- `finance.daily_revenue` registrada como a primeira capacidade (referenciando `buildFinanceExecution`/`buildFinancialResponse`, sem invocá-los).
+- Testes em `test/capability-registry.test.js`; documentação em `docs/CAPABILITY_REGISTRY.md`; ARCHITECTURE e ROADMAP atualizados.
+
+### Não alterado
+
+- O registry ainda **não** está ligado ao `/api/chat`: sem alteração de comportamento do chat, SQL, cache, Claude ou frontend. Nada removido.
+
 ## 2026-07-03 — Sprint 1 / PR-18: Hermes Financeiro V3 — reconhecimento de daily_revenue
 
 ### Alterado

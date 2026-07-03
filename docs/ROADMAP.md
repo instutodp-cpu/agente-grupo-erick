@@ -186,6 +186,8 @@ Objetivo: transformar o Hermes num analista financeiro corporativo (um único
 sistema, sem novos agentes e sem WhatsApp ainda).
 
 - **Fundação do módulo financeiro: catálogo de capacidades, mapa de intenções e interface do construtor de resposta (`src/hermes/finance/`), sem integração.** ✅
+- **Daily Revenue integrado em modo seguro (reuso de cache/templates) + reconhecimento ampliado.** ✅
+- **Capability Registry: contrato único e registro central de capacidades (`src/hermes/capabilities/`), sem ligar ao chat ainda.** ✅
 - Ligar capacidades `available` a SQL Templates determinísticos.
 - Implementar a formatação de respostas por capacidade.
 - Integrar via HIL, preservando cache e guardrails.
