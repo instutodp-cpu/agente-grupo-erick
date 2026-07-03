@@ -33,7 +33,7 @@ Nada está integrado e o comportamento atual não muda:
 
 | Capacidade            | O que responde                                         | Status     |
 | --------------------- | ------------------------------------------------------ | ---------- |
-| `daily_revenue`       | Faturamento de hoje / de um dia.                       | available  |
+| `daily_revenue`       | Faturamento de hoje / de um dia.                       | **integrado** |
 | `monthly_revenue`     | Faturamento por loja e mês.                            | available  |
 | `accounts_receivable` | Contas a receber, vencidas e inadimplência.           | available  |
 | `accounts_payable`    | Contas a pagar.                                        | planned    |
@@ -71,6 +71,24 @@ Nada está integrado e o comportamento atual não muda:
   disponíveis até jan/2023).
 - Esta fundação não responde perguntas de fato — apenas classifica e define
   contratos.
+
+## Integração segura — `daily_revenue` (V2)
+
+A primeira capacidade real está **integrada ao `/api/chat`**, de forma segura:
+
+- `financial-intent-map.js` detecta perguntas claras de faturamento diário
+  ("quanto vendemos hoje?", "faturamento de hoje", "como foram as vendas hoje?").
+- `finance-execution.js` (`buildFinanceExecution`) produz uma execução
+  **compatível com o motor de SQL Templates**, reaproveitando o **mesmo caminho
+  seguro**: SQL parametrizado (`public.vw_itens_vendidos`, somente leitura),
+  **cache existente** (perfil `current_day`, TTL 10 min) e os logs já existentes.
+- `financial-response-builder.js` formata a resposta (`buildFinancialResponse`).
+- Só entra no fluxo quando o match é **claro**. Perguntas ambíguas ou fora do
+  escopo continuam no **fallback atual** (SQL Templates → Claude), inalterado.
+- Nenhuma nova chamada ao Claude: a resposta vem do banco (ou do cache).
+
+Logs estruturados: `finance_capability_detected` (match claro) e
+`finance_response_built` (resposta formatada), correlacionados por `requestId`.
 
 ## Roadmap do módulo
 
