@@ -2,6 +2,24 @@
 
 
 
+## 2026-07-03 — PR-14: HIL Admin Metrics
+
+### Adicionado
+
+- Contadores em memória das decisões da HIL em shadow mode em `src/hermes/intelligence/metrics.js` (`recordDecision`, `snapshot`, `resetHilMetrics`): total de classificações, `byRecommendedPath`, `wouldCallClaude`/`wouldUseTemplate`/`wouldUseSemanticCache` (true/false) e intents mais comuns.
+- Endpoint `GET /admin/hil/metrics` protegido por `ADMIN_SECRET`, retornando apenas métricas agregadas (log `admin_hil_metrics`).
+- Registro da decisão de shadow mode nos contadores, dentro do bloco HIL do `/api/chat` (sem alterar o chat).
+- Testes de unidade em `test/hil-metrics.test.js`; documentação em `docs/HIL_ADMIN_METRICS.md` e entrada em `docs/ADMIN_ENDPOINTS.md`.
+
+### Segurança
+
+- As métricas contêm apenas rótulos e contagens — **nunca** a pergunta real, parâmetros, SQL ou resposta.
+- O endpoint exige `ADMIN_SECRET` (503 sem segredo, 401 com segredo errado).
+
+### Não alterado
+
+- `/api/chat` continua idêntico; nenhuma resposta muda e nenhuma chamada nova ao Claude. Sem mudança de frontend, nada removido.
+
 ## 2026-07-03 — PR-13: HIL Shadow Mode
 
 ### Adicionado
