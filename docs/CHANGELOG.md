@@ -2,6 +2,24 @@
 
 
 
+## 2026-07-03 — PR-15: HIL Decision Report
+
+### Adicionado
+
+- `src/hermes/intelligence/report.js` com `buildDecisionReport(snapshot)` (função pura): percentuais por caminho recomendado, `topIntents` e uma recomendação operacional simples.
+- Endpoint `GET /admin/hil/report` protegido por `ADMIN_SECRET`, derivado das métricas já coletadas (log `admin_hil_report`).
+- Regras de recomendação: poucos dados → coletar mais; Claude > 50% → criar mais templates/respostas; SQL Template > 50% → otimizar cache/materialized views; Semantic Cache > 20% → priorizar semantic cache.
+- Testes de unidade em `test/hil-report.test.js`; documentação em `docs/HIL_DECISION_REPORT.md` e entrada em `docs/ADMIN_ENDPOINTS.md`.
+
+### Segurança
+
+- Endpoint exige `ADMIN_SECRET` (503 sem segredo, 401 com segredo errado).
+- Retorna apenas agregados/rótulos — **nunca** a pergunta real, parâmetros, SQL ou resposta.
+
+### Não alterado
+
+- `/api/chat` continua idêntico; nenhuma nova chamada ao Claude, sem frontend, nada removido.
+
 ## 2026-07-03 — PR-14: HIL Admin Metrics
 
 ### Adicionado

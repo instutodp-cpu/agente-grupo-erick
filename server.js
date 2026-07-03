@@ -10,6 +10,7 @@ const { validateAllTemplates } = require('./src/hermes/template-validation');
 const { classify } = require('./src/hermes/intelligence/intent-classifier');
 const { simulateDecision } = require('./src/hermes/intelligence/shadow');
 const { recordDecision: recordHilDecision, snapshot: hilMetricsSnapshot } = require('./src/hermes/intelligence/metrics');
+const { buildDecisionReport } = require('./src/hermes/intelligence/report');
 
 const app = express();
 app.use(express.json());
@@ -812,6 +813,13 @@ app.get('/admin/hil/metrics', (req, res) => {
   logStructured('info', 'admin_hil_metrics', { requestId: req.adminRequestId });
   // Apenas contadores agregados da HIL em shadow mode — nunca perguntas reais.
   res.json(hilMetricsSnapshot());
+});
+
+app.get('/admin/hil/report', (req, res) => {
+  if (!ensureAdmin(req, res)) return;
+  logStructured('info', 'admin_hil_report', { requestId: req.adminRequestId });
+  // Relatório derivado dos contadores agregados — sem perguntas reais.
+  res.json(buildDecisionReport(hilMetricsSnapshot()));
 });
 
 app.post('/admin/validate/templates', async (req, res) => {
