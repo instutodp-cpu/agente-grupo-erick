@@ -2,6 +2,20 @@
 
 
 
+## 2026-07-03 — PR-10: HIL em modo observação
+
+### Adicionado
+
+- Integração da HIL ao `/api/chat` em **modo observação**: `classify(question)` é chamado no início da requisição apenas para logar a decisão, sem alterar o fluxo.
+- Log estruturado `hil_classification` com `requestId`, `mode: "observe"`, `intent`, `confidence`, `complexity`, `estimatedCost`, `estimatedLatency` e `recommendedPath` (+ `hil_classification_error` defensivo).
+- Testes de robustez garantindo que `classify` nunca lança e sempre retorna um `recommendedPath` válido (não quebra o `/api/chat`).
+- Seção "Modo observação" em `docs/HERMES_INTELLIGENCE_LAYER.md`.
+
+### Não alterado
+
+- `recommendedPath` não é usado para rotear: o fluxo continua SQL Templates → cache → fallback Claude, idêntico ao anterior.
+- Nenhuma nova chamada ao Claude, nenhuma regra de negócio alterada, nenhum arquivo removido e nenhuma mudança de frontend.
+
 ## 2026-07-03 — PR-09: Fundação da Hermes Intelligence Layer (HIL)
 
 ### Adicionado
