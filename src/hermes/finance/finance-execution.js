@@ -14,8 +14,19 @@
 const { classifyFinancialIntent } = require('./financial-intent-map');
 const { buildFinancialResponse } = require('./financial-response-builder');
 
-function toDateOnly(date) {
-  return date.toISOString().slice(0, 10);
+// Fuso horário das lojas do Grupo Erick (Barreiros/Sirinhaém-PE): America/Recife
+// (UTC−3, sem horário de verão). Configurável por HERMES_TIMEZONE.
+const BUSINESS_TIMEZONE = process.env.HERMES_TIMEZONE || 'America/Recife';
+
+// "Hoje" no fuso do negócio — evita que, à noite (UTC já no dia seguinte),
+// "faturamento de hoje" consulte o dia errado. Retorna YYYY-MM-DD.
+function todayInBusinessTimezone(now = new Date()) {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: BUSINESS_TIMEZONE }).format(now);
+  } catch (_) {
+    // Fallback seguro se o fuso não for suportado no ambiente.
+    return now.toISOString().slice(0, 10);
+  }
 }
 
 // SQL seguro (SELECT parametrizado) para faturamento do dia por loja.
@@ -34,7 +45,7 @@ const DAILY_REVENUE_SQL = `
 `;
 
 function buildDailyRevenueExecution() {
-  const targetDate = toDateOnly(new Date());
+  const targetDate = todayInBusinessTimezone();
   const params = { targetDate, dateLabel: `hoje (${targetDate})` };
 
   return {

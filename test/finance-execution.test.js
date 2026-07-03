@@ -6,7 +6,8 @@ const assert = require('node:assert');
 const { buildFinanceExecution } = require('../src/hermes/finance/finance-execution');
 const { buildFinancialResponse } = require('../src/hermes/finance/financial-response-builder');
 
-const HOJE = new Date().toISOString().slice(0, 10);
+// "Hoje" no fuso do negócio (America/Recife), coerente com finance-execution.
+const HOJE = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Recife' }).format(new Date());
 
 // ── Detecção clara → execução daily_revenue ──────────────────────────────────
 
