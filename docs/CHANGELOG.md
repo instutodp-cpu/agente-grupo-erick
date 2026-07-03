@@ -2,6 +2,20 @@
 
 
 
+## 2026-07-03 — PR-11: Fundação da camada de aprendizado da HIL
+
+### Adicionado
+
+- Tabela documentada `question_statistics` em `docs/sql/QUESTION_STATISTICS.sql` (não aplicada automaticamente).
+- Módulo `src/hermes/intelligence/statistics.js` com `recordQuestionStatistics()` (interface, no-op) e os agregadores (interfaces): top intents, top perguntas, top templates, maior custo, maior latência, mais cache hit, mais fallback Claude.
+- Testes de unidade das interfaces em `test/statistics.test.js`.
+- Documentação em `docs/HIL_ANALYTICS.md`; ROADMAP e HERMES_ARCHITECTURE atualizados.
+
+### Não alterado
+
+- Interfaces apenas: `recordQuestionStatistics` retorna `false` e os agregadores retornam `[]` (nada é calculado, persistido ou integrado).
+- Nenhuma alteração no chat, frontend, SQL, cache, Claude ou na HIL. Nenhum arquivo removido.
+
 ## 2026-07-03 — PR-10: HIL em modo observação
 
 ### Adicionado
