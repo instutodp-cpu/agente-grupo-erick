@@ -58,6 +58,20 @@ curl localhost:8080/ready    # presença de config (booleanos)
 O `worker` emite `worker_heartbeat` no log a cada ~15s, com uma checagem de
 readiness (TCP) de postgres/redis/qdrant.
 
+## Enviar uma mensagem
+
+`POST /message` recebe `{ "message": "..." }` e classifica a intenção
+(`marketing`, `desenvolvimento` ou `desconhecido`):
+
+```bash
+curl -X POST localhost:8080/message \
+  -H "Content-Type: application/json" \
+  -d '{"message":"lançar campanha de marketing"}'
+# {"trace_id":"...","intent":"marketing","service":"hermes-api","version":"2.0.0-scaffold"}
+```
+
+Contrato completo em `docs/SPEC.md` (§3).
+
 ## Estrutura
 
 ```text
