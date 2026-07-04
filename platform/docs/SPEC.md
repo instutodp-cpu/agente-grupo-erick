@@ -84,10 +84,10 @@ Response `200 OK`:
 }
 ```
 
-`intent` é um de: `marketing`, `desenvolvimento`, `desconhecido` (fallback).
-Classificação por palavras-chave (case/acento-insensitive), implementada em
-`src/core/intent-router.js` — lógica de domínio pura, sem I/O, pronta para
-evoluir para um resolver mais sofisticado sem mudar o contrato.
+`intent` é um de: `marketing`, `desenvolvimento`, `compras`, `desconhecido`
+(fallback). Classificação por palavras-chave (case/acento-insensitive),
+implementada em `src/core/intent-router.js` — lógica de domínio pura, sem I/O,
+pronta para evoluir para um resolver mais sofisticado sem mudar o contrato.
 
 Response `400 Bad Request` (quando `message` está ausente, vazio, não é string,
 ou o corpo não é JSON válido):

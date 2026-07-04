@@ -7,6 +7,7 @@
 
 const INTENT_MARKETING = 'marketing';
 const INTENT_DESENVOLVIMENTO = 'desenvolvimento';
+const INTENT_COMPRAS = 'compras';
 const INTENT_UNKNOWN = 'desconhecido';
 
 const MARKETING_KEYWORDS = [
@@ -17,6 +18,11 @@ const MARKETING_KEYWORDS = [
 const DESENVOLVIMENTO_KEYWORDS = [
   'bug', 'deploy', 'codigo', 'api', 'erro', 'feature', 'commit', 'merge',
   'build', 'release', 'refactor', 'pull request', 'repositorio', 'servidor'
+];
+
+const COMPRAS_KEYWORDS = [
+  'compra', 'compras', 'comprar', 'pedido', 'fornecedor', 'cotacao',
+  'orcamento', 'nota fiscal', 'fatura', 'invoice', 'purchase order'
 ];
 
 const DIACRITICS_PATTERN = /[̀-ͯ]/g;
@@ -43,6 +49,10 @@ function classifyIntent(message) {
     return INTENT_DESENVOLVIMENTO;
   }
 
+  if (matchesAny(normalized, COMPRAS_KEYWORDS)) {
+    return INTENT_COMPRAS;
+  }
+
   return INTENT_UNKNOWN;
 }
 
@@ -50,5 +60,6 @@ module.exports = {
   classifyIntent,
   INTENT_MARKETING,
   INTENT_DESENVOLVIMENTO,
+  INTENT_COMPRAS,
   INTENT_UNKNOWN
 };

@@ -51,6 +51,23 @@ test('POST /message classifica intenção e retorna trace_id', async (t) => {
   assert.ok(typeof res.body.trace_id === 'string' && res.body.trace_id.length > 0);
 });
 
+test('POST /message classifica intenção de compras', async (t) => {
+  const server = createServer();
+  await new Promise((resolve) => server.listen(0, resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const { port } = server.address();
+  const res = await request(
+    port,
+    { method: 'POST', path: '/message', headers: { 'Content-Type': 'application/json' } },
+    JSON.stringify({ message: 'abrir pedido de compra com o fornecedor' })
+  );
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.intent, 'compras');
+  assert.ok(typeof res.body.trace_id === 'string' && res.body.trace_id.length > 0);
+});
+
 test('POST /message sem "message" retorna 400', async (t) => {
   const server = createServer();
   await new Promise((resolve) => server.listen(0, resolve));

@@ -7,6 +7,7 @@ const {
   classifyIntent,
   INTENT_MARKETING,
   INTENT_DESENVOLVIMENTO,
+  INTENT_COMPRAS,
   INTENT_UNKNOWN
 } = require('../src/core/intent-router');
 
@@ -18,6 +19,12 @@ test('classifica mensagem de marketing', () => {
 test('classifica mensagem de desenvolvimento', () => {
   assert.equal(classifyIntent('Encontrei um bug no deploy da API'), INTENT_DESENVOLVIMENTO);
   assert.equal(classifyIntent('preciso revisar o código antes do commit'), INTENT_DESENVOLVIMENTO);
+});
+
+test('classifica mensagem de compras', () => {
+  assert.equal(classifyIntent('preciso fazer uma cotação com o fornecedor'), INTENT_COMPRAS);
+  assert.equal(classifyIntent('abrir pedido de compra do material'), INTENT_COMPRAS);
+  assert.equal(classifyIntent('a nota fiscal chegou?'), INTENT_COMPRAS);
 });
 
 test('mensagem genérica cai em desconhecido', () => {

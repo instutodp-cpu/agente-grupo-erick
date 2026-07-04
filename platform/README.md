@@ -61,7 +61,7 @@ readiness (TCP) de postgres/redis/qdrant.
 ## Enviar uma mensagem
 
 `POST /message` recebe `{ "message": "..." }` e classifica a intenção
-(`marketing`, `desenvolvimento` ou `desconhecido`):
+(`marketing`, `desenvolvimento`, `compras` ou `desconhecido`):
 
 ```bash
 curl -X POST localhost:8080/message \
