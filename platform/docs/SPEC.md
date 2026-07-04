@@ -20,6 +20,8 @@ platform/
       package.json
       src/index.js
       src/core/intent-router.js  # classificação de intenção (sem I/O)
+      src/core/ports/index.js    # contratos (ports) — stubs "not_implemented"
+      src/capabilities/registry.js  # registro de capacidades por domínio (status "planned")
       test/
     worker/                 # Hermes Core — jobs/filas (scaffold)
       Dockerfile
@@ -31,12 +33,14 @@ Evolução prevista (não criada ainda, para não antecipar complexidade):
 
 ```text
 services/api/src/
-  core/            # orquestração: resolver, policy, runtime (ports) — intent-router.js já existe
-  adapters/        # postgres, redis, qdrant, mcp-gateway, model-providers
-  capabilities/    # registro e capacidades por domínio
+  adapters/        # postgres, redis, qdrant, mcp-gateway, model-providers —
+                    # implementações reais dos ports (ainda nenhuma existe)
   http/            # ingress/BFF, rotas
 packages/          # libs compartilhadas (contracts/tipos)
 ```
+
+`core/ports/` e `capabilities/registry.js` já existem como **contrato puro**:
+nenhum adapter real, nenhuma conexão externa, nenhuma execução — ver §5 e §5.1.
 
 ## 2. Serviços e portas
 
@@ -124,18 +128,43 @@ O consumo real de filas (Redis) será um **adapter** em etapa futura.
 
 ## 5. Contratos (ports) — direção
 
-O core define interfaces; adapters implementam. Exemplos de ports previstos:
+O core define interfaces; adapters implementam. Os ports abaixo já existem em
+`src/core/ports/index.js` como **stubs**: cada método lança
+`Error('not_implemented')` até que um adapter real seja injetado. Nenhuma
+conexão externa acontece nesses stubs.
 
-- `DataStore` (Postgres/Supabase): consultas parametrizadas, transações RO.
-- `Queue` (Redis): enfileirar/consumir jobs.
-- `SessionStore` (Redis): estado de sessão com TTL.
-- `VectorMemory` (Qdrant): upsert/search de embeddings.
-- `McpGateway`: `listTools`, `callTool` (sempre sob policy).
+- `DataStore` (Postgres/Supabase): `query(sql, params)`, `transaction(fn)`.
+- `Queue` (Redis): `enqueue(job)`, `consume(handler)`.
+- `SessionStore` (Redis): `get(sessionId)`, `set(sessionId, data, ttlSeconds)`.
+- `VectorMemory` (Qdrant): `upsert(vectors)`, `search(query, topK)`.
+- `McpGateway`: `listTools()`, `callTool(name, args)` (sempre sob policy).
 - `AgentRuntime`: `run(task, context)` — runtimes substituíveis.
-- `ModelProvider`: geração/embeddings, com budget e timeouts.
+- `ModelProvider`: `generate(prompt, options)`, `embed(text)`.
 
 Regra: o core importa **apenas** ports; `adapters/` provê implementações e são
-injetadas na composição (composition root).
+injetadas na composição (composition root) — ainda não criada.
+
+### 5.1 Capabilities registry
+
+`src/capabilities/registry.js` mapeia cada domínio já classificado pelo
+intent-router para metadados de execução futura — nenhuma capacidade está
+implementada ainda:
+
+```json
+{
+  "domain": "compras",
+  "description": "Consultas de compras e vencimentos (pedidos, fornecedores, duplicatas).",
+  "status": "planned",
+  "requiredAdapters": ["DataStore"]
+}
+```
+
+Todos os 6 domínios (`compras`, `financeiro`, `treinamento`, `marketing`,
+`desenvolvimento`, `desconhecido`) estão registrados com `status: "planned"`.
+`requiredAdapters` só documenta qual port cada domínio usará quando a execução
+real for implementada — não importa nem instancia o adapter. `POST /message`
+**não consulta este registro ainda**; a classificação e a resposta continuam
+como descrito em §3.1.
 
 ## 6. Configuração
 
