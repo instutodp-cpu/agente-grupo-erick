@@ -1,0 +1,64 @@
+# Hermes AI Platform v2 — ROADMAP
+
+Roadmap evolutivo. Cada fase entra em **PRs pequenas**, com documentação, testes
+e reversibilidade. A regra permanente: **não acoplar o core** a ferramentas
+específicas.
+
+## Fase 0 — Fundação desacoplada (esta etapa) ✅
+
+- Estrutura de repositório limpa (`platform/`) e documentação fonte da verdade
+  (Blueprint, PRD, SPEC, SECURITY, ROADMAP, CLAUDE.md).
+- `docker compose up` com `api`, `worker`, `redis`, `postgres`, `qdrant`.
+- Núcleo mínimo (health/readiness), sem acoplar ferramentas.
+
+Critério de saída: sobe local com um comando; nada específico acoplado ao core.
+
+## Fase 1 — Contratos e adaptadores
+
+- Definir ports (`DataStore`, `Queue`, `SessionStore`, `VectorMemory`,
+  `McpGateway`, `AgentRuntime`, `ModelProvider`).
+- Adaptadores: Postgres/Supabase, Redis, Qdrant (implementações injetáveis).
+- Composition root; configuração por ambiente.
+
+Critério: trocar uma implementação = trocar um adapter, sem tocar o core.
+
+## Fase 2 — AuthN/AuthZ e Policy Engine
+
+- Autenticação de usuários/serviços; autorização por papel/departamento/loja/
+  dado/ação; aprovação humana para ações sensíveis; auditoria com `trace_id`.
+
+## Fase 3 — Orquestração
+
+- Ingress/BFF multicanal; Intent Router; Capability Registry + Resolver +
+  Executor; caminhos determinísticos e cache antes de LLM.
+
+## Fase 4 — Memória
+
+- Sessão (Redis) com TTL; memória semântica (Qdrant) para RAG; classificação de
+  sensibilidade, expiração e curadoria.
+
+## Fase 5 — MCP Gateway
+
+- Gateway com policy layer, injeção de credenciais, rate limit, redaction e
+  auditoria; catálogo de MCPs habilitável por política.
+
+## Fase 6 — Agentes especialistas
+
+- Financeiro, Compras, RH, Marketing, Diretoria, Auditoria como capacidades
+  pluggables, com permissões e métricas próprias. Runtimes (MaxClaw/OpenClaw/
+  SDKs) atrás da porta `AgentRuntime`.
+
+## Fase 7 — Canais
+
+- WhatsApp (Evolution API), Base44 Apps e API externa reusando os mesmos use
+  cases, políticas e auditoria.
+
+## Fase 8 — Deploy 24/7 e operação
+
+- Railway como primeiro ambiente 24/7 (`api` + `worker`), Postgres via Supabase,
+  Redis e Qdrant gerenciados; observabilidade, custos e alertas.
+
+## Fase 9 — Escala
+
+- Filas e workers robustos, dead-letter, circuit breakers, read replicas/
+  materializações, SLOs por canal, continuidade e resposta a incidentes.

@@ -1,0 +1,10 @@
+{
+  "name": "hermes-worker",
+  "version": "2.0.0-scaffold",
+  "private": true,
+  "description": "Hermes Core — worker de jobs/filas (scaffold)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  }
+}
