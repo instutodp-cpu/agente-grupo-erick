@@ -5,6 +5,7 @@
   "description": "Hermes Core — API/orquestrador (scaffold)",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "test": "node --test test/intent-router.test.js test/message-endpoint.test.js"
   }
 }

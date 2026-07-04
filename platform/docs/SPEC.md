@@ -19,6 +19,8 @@ platform/
       Dockerfile
       package.json
       src/index.js
+      src/core/intent-router.js  # classificação de intenção (sem I/O)
+      test/
     worker/                 # Hermes Core — jobs/filas (scaffold)
       Dockerfile
       package.json
@@ -29,7 +31,7 @@ Evolução prevista (não criada ainda, para não antecipar complexidade):
 
 ```text
 services/api/src/
-  core/            # orquestração: router, resolver, policy, runtime (ports)
+  core/            # orquestração: resolver, policy, runtime (ports) — intent-router.js já existe
   adapters/        # postgres, redis, qdrant, mcp-gateway, model-providers
   capabilities/    # registro e capacidades por domínio
   http/            # ingress/BFF, rotas
@@ -53,7 +55,66 @@ Sem dependências npm (usa `http` nativo). Endpoints:
 - `GET /health` → `{ status:"ok", service:"hermes-api", version }` (liveness).
 - `GET /ready` → `{ status:"ready", config:{ database, redis, qdrant, mcpGateway } }`
   (readiness; **apenas booleanos** de presença de config, nunca valores).
+- `POST /message` → recebe uma mensagem e classifica a intenção (ver §3.1).
 - `GET /` → identidade do serviço e ponteiro para o blueprint.
+
+### 3.1 `POST /message` — contrato
+
+Request (`Content-Type: application/json`):
+
+```json
+{
+  "message": "lançar campanha de marketing",
+  "trace_id": "opcional — gerado pelo servidor se ausente"
+}
+```
+
+- `message` (string, obrigatório, não-vazia): texto a classificar.
+- `trace_id` (string, opcional): se enviado, é reaproveitado na resposta e nos
+  logs; caso contrário o servidor gera um novo (`crypto.randomUUID()`).
+
+Response `200 OK`:
+
+```json
+{
+  "trace_id": "a1b2c3d4-...",
+  "domain": "marketing",
+  "intent": "planejar_marketing",
+  "status": "planned",
+  "message": "Intenção identificada; execução ainda não implementada."
+}
+```
+
+- `domain` / `intent`: par classificado pelo roteador (ver tabela abaixo).
+- `status`: sempre `"planned"` nesta etapa — o roteador só classifica; a
+  execução real de cada domínio entra como **adapter**/capability em etapa
+  futura, sem mudar este contrato.
+- `message`: texto fixo de confirmação (não é eco do texto enviado).
+
+Classificação por palavras-chave (case/acento-insensitive), implementada em
+`src/core/intent-router.js` — lógica de domínio pura, sem I/O, pronta para
+evoluir para um resolver mais sofisticado sem mudar o contrato de
+`classifyIntent` (`{ domain, intent }`).
+
+| Domínio         | Intent                                          | Palavras-chave (exemplos)                                                              |
+| --------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `marketing`      | `planejar_marketing`                              | marketing, campanha, anúncio, propaganda, publicidade, venda, promoção, divulgação      |
+| `desenvolvimento`| `desenvolvimento`                                 | bug, deploy, código, api, erro, feature, commit, merge, build, release, refactor         |
+| `compras`        | `consultar_compras` ou `consultar_vencimentos`\*  | compra, comprar, pedido, fornecedor, cotação, orçamento, fatura, invoice, purchase order |
+| `financeiro`     | `consultar_financeiro`                            | financeiro, caixa, faturamento, lucro, despesa(s), dre, sangria, contas, pagamento       |
+| `treinamento`    | `consultar_treinamento`                           | treinamento, curso(s), módulo(s), certificado, quiz, capacitai, colaborador              |
+| `desconhecido`   | `desconhecido`                                    | fallback — nenhuma palavra-chave dos domínios acima encontrada                          |
+
+\* `compras` retorna `consultar_vencimentos` quando a mensagem menciona
+`vencimento`, `duplicata`, `prazo`, `boleto` ou `nota fiscal`; caso contrário
+retorna `consultar_compras`.
+
+Response `400 Bad Request` (quando `message` está ausente, vazio, não é string,
+ou o corpo não é JSON válido):
+
+```json
+{ "error": "invalid_request", "message": "'message' é obrigatório" }
+```
 
 ## 4. Worker (scaffold)
 
@@ -85,8 +146,10 @@ serviços internos. Segredos reais só em `.env`/Railway, nunca no repo.
 ## 7. Observabilidade
 
 Logs estruturados em JSON (evento + campos). Eventos iniciais: `api_started`,
-`api_shutdown`, `worker_started`, `worker_heartbeat`, `worker_shutdown`. Métricas
-e tracing entram junto com o pipeline de orquestração.
+`api_shutdown`, `worker_started`, `worker_heartbeat`, `worker_shutdown`,
+`message_received` (`trace_id`, `domain`, `intent`, `message_length` — nunca o
+conteúdo da mensagem), `message_invalid` (`trace_id`). Métricas e tracing
+entram junto com o pipeline de orquestração.
 
 ## 8. Testes e qualidade
 

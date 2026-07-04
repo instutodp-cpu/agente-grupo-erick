@@ -58,6 +58,28 @@ curl localhost:8080/ready    # presença de config (booleanos)
 O `worker` emite `worker_heartbeat` no log a cada ~15s, com uma checagem de
 readiness (TCP) de postgres/redis/qdrant.
 
+## Enviar uma mensagem
+
+`POST /message` recebe `{ "message": "..." }` e classifica **domínio + intenção**.
+Domínios: `marketing`, `desenvolvimento`, `compras`, `financeiro`, `treinamento`
+ou `desconhecido` (fallback). O `status` é sempre `"planned"` nesta etapa — o
+roteador só classifica, ainda não executa a ação.
+
+```bash
+curl -X POST localhost:8080/message \
+  -H "Content-Type: application/json" \
+  -d '{"message":"lançar campanha de marketing"}'
+# {
+#   "trace_id": "...",
+#   "domain": "marketing",
+#   "intent": "planejar_marketing",
+#   "status": "planned",
+#   "message": "Intenção identificada; execução ainda não implementada."
+# }
+```
+
+Contrato completo (todos os domínios/intents) em `docs/SPEC.md` (§3.1).
+
 ## Estrutura
 
 ```text
