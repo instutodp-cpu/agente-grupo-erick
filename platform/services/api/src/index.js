@@ -18,6 +18,7 @@ const SERVICE = 'hermes-api';
 const VERSION = process.env.HERMES_VERSION || '2.0.0-scaffold';
 const PORT = Number(process.env.API_PORT || process.env.PORT || 8080);
 const MAX_MESSAGE_BODY_BYTES = 1_000_000;
+const PLANNED_STATUS_MESSAGE = 'Intenção identificada; execução ainda não implementada.';
 
 // Presença de configuração — apenas booleanos, nunca os valores/segredos.
 function configPresence() {
@@ -76,9 +77,9 @@ function createServer() {
       return sendJson(res, 200, { status: 'ready', service: SERVICE, config: configPresence() });
     }
 
-    // Recebe uma mensagem e classifica a intenção (marketing/desenvolvimento/
-    // desconhecido). Sem acoplamento a runtime de agente ainda — apenas o
-    // roteador de intenção.
+    // Recebe uma mensagem e classifica domínio + intenção. Sem acoplamento a
+    // runtime de agente ainda — apenas o roteador de intenção; por isso o
+    // status da resposta é sempre "planned" (execução real entra depois).
     if (method === 'POST' && url === '/message') {
       return readJsonBody(req)
         .then((body) => {
@@ -90,16 +91,23 @@ function createServer() {
             return sendJson(res, 400, { error: 'invalid_request', message: "'message' é obrigatório" });
           }
 
-          const intent = classifyIntent(message);
+          const { domain, intent } = classifyIntent(message);
           console.log(JSON.stringify({
             level: 'info',
             event: 'message_received',
             trace_id: traceId,
+            domain,
             intent,
             message_length: message.length
           }));
 
-          return sendJson(res, 200, { trace_id: traceId, intent, service: SERVICE, version: VERSION });
+          return sendJson(res, 200, {
+            trace_id: traceId,
+            domain,
+            intent,
+            status: 'planned',
+            message: PLANNED_STATUS_MESSAGE
+          });
         })
         .catch(() => {
           console.log(JSON.stringify({ level: 'warn', event: 'message_invalid', trace_id: randomUUID() }));

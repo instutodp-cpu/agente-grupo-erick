@@ -60,17 +60,25 @@ readiness (TCP) de postgres/redis/qdrant.
 
 ## Enviar uma mensagem
 
-`POST /message` recebe `{ "message": "..." }` e classifica a intenção
-(`marketing`, `desenvolvimento`, `compras` ou `desconhecido`):
+`POST /message` recebe `{ "message": "..." }` e classifica **domínio + intenção**.
+Domínios: `marketing`, `desenvolvimento`, `compras`, `financeiro`, `treinamento`
+ou `desconhecido` (fallback). O `status` é sempre `"planned"` nesta etapa — o
+roteador só classifica, ainda não executa a ação.
 
 ```bash
 curl -X POST localhost:8080/message \
   -H "Content-Type: application/json" \
   -d '{"message":"lançar campanha de marketing"}'
-# {"trace_id":"...","intent":"marketing","service":"hermes-api","version":"2.0.0-scaffold"}
+# {
+#   "trace_id": "...",
+#   "domain": "marketing",
+#   "intent": "planejar_marketing",
+#   "status": "planned",
+#   "message": "Intenção identificada; execução ainda não implementada."
+# }
 ```
 
-Contrato completo em `docs/SPEC.md` (§3).
+Contrato completo (todos os domínios/intents) em `docs/SPEC.md` (§3.1).
 
 ## Estrutura
 

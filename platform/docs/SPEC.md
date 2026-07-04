@@ -78,16 +78,36 @@ Response `200 OK`:
 ```json
 {
   "trace_id": "a1b2c3d4-...",
-  "intent": "marketing",
-  "service": "hermes-api",
-  "version": "2.0.0-scaffold"
+  "domain": "marketing",
+  "intent": "planejar_marketing",
+  "status": "planned",
+  "message": "Intenção identificada; execução ainda não implementada."
 }
 ```
 
-`intent` é um de: `marketing`, `desenvolvimento`, `compras`, `desconhecido`
-(fallback). Classificação por palavras-chave (case/acento-insensitive),
-implementada em `src/core/intent-router.js` — lógica de domínio pura, sem I/O,
-pronta para evoluir para um resolver mais sofisticado sem mudar o contrato.
+- `domain` / `intent`: par classificado pelo roteador (ver tabela abaixo).
+- `status`: sempre `"planned"` nesta etapa — o roteador só classifica; a
+  execução real de cada domínio entra como **adapter**/capability em etapa
+  futura, sem mudar este contrato.
+- `message`: texto fixo de confirmação (não é eco do texto enviado).
+
+Classificação por palavras-chave (case/acento-insensitive), implementada em
+`src/core/intent-router.js` — lógica de domínio pura, sem I/O, pronta para
+evoluir para um resolver mais sofisticado sem mudar o contrato de
+`classifyIntent` (`{ domain, intent }`).
+
+| Domínio         | Intent                                          | Palavras-chave (exemplos)                                                              |
+| --------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `marketing`      | `planejar_marketing`                              | marketing, campanha, anúncio, propaganda, publicidade, venda, promoção, divulgação      |
+| `desenvolvimento`| `desenvolvimento`                                 | bug, deploy, código, api, erro, feature, commit, merge, build, release, refactor         |
+| `compras`        | `consultar_compras` ou `consultar_vencimentos`\*  | compra, comprar, pedido, fornecedor, cotação, orçamento, fatura, invoice, purchase order |
+| `financeiro`     | `consultar_financeiro`                            | financeiro, caixa, faturamento, lucro, despesa(s), dre, sangria, contas, pagamento       |
+| `treinamento`    | `consultar_treinamento`                           | treinamento, curso(s), módulo(s), certificado, quiz, capacitai, colaborador              |
+| `desconhecido`   | `desconhecido`                                    | fallback — nenhuma palavra-chave dos domínios acima encontrada                          |
+
+\* `compras` retorna `consultar_vencimentos` quando a mensagem menciona
+`vencimento`, `duplicata`, `prazo`, `boleto` ou `nota fiscal`; caso contrário
+retorna `consultar_compras`.
 
 Response `400 Bad Request` (quando `message` está ausente, vazio, não é string,
 ou o corpo não é JSON válido):
@@ -127,9 +147,9 @@ serviços internos. Segredos reais só em `.env`/Railway, nunca no repo.
 
 Logs estruturados em JSON (evento + campos). Eventos iniciais: `api_started`,
 `api_shutdown`, `worker_started`, `worker_heartbeat`, `worker_shutdown`,
-`message_received` (`trace_id`, `intent`, `message_length` — nunca o conteúdo da
-mensagem), `message_invalid` (`trace_id`). Métricas e tracing entram junto com o
-pipeline de orquestração.
+`message_received` (`trace_id`, `domain`, `intent`, `message_length` — nunca o
+conteúdo da mensagem), `message_invalid` (`trace_id`). Métricas e tracing
+entram junto com o pipeline de orquestração.
 
 ## 8. Testes e qualidade
 
