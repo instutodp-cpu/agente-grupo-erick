@@ -1,0 +1,95 @@
+# Hermes AI Platform v2 — ambiente de desenvolvimento local.
+#
+# Sobe o núcleo (api + worker) e as dependências de infraestrutura
+# (postgres, redis, qdrant). Use:
+#
+#   cd platform
+#   docker compose up --build
+#
+# As variáveis usam defaults inline (${VAR:-default}), então funciona mesmo sem
+# um arquivo .env. Para customizar, copie .env.example para .env.
+
+name: hermes-platform
+
+services:
+  api:
+    build: ./services/api
+    restart: unless-stopped
+    environment:
+      HERMES_VERSION: ${HERMES_VERSION:-2.0.0-scaffold}
+      API_PORT: 8080
+      DATABASE_URL: postgres://${POSTGRES_USER:-hermes}:${POSTGRES_PASSWORD:-hermes}@postgres:5432/${POSTGRES_DB:-hermes}
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+      MCP_GATEWAY_URL: ${MCP_GATEWAY_URL:-http://mcp-gateway:8081}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  worker:
+    build: ./services/worker
+    restart: unless-stopped
+    environment:
+      HERMES_VERSION: ${HERMES_VERSION:-2.0.0-scaffold}
+      WORKER_HEARTBEAT_MS: ${WORKER_HEARTBEAT_MS:-15000}
+      DATABASE_URL: postgres://${POSTGRES_USER:-hermes}:${POSTGRES_PASSWORD:-hermes}@postgres:5432/${POSTGRES_DB:-hermes}
+      REDIS_URL: redis://redis:6379
+      QDRANT_URL: http://qdrant:6333
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hermes}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hermes}
+      POSTGRES_DB: ${POSTGRES_DB:-hermes}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hermes} -d ${POSTGRES_DB:-hermes}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrantdata:/qdrant/storage
+
+volumes:
+  pgdata:
+  redisdata:
+  qdrantdata:
