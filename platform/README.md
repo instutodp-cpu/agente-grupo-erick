@@ -98,7 +98,9 @@ Contrato completo (todos os domínios/intents) em `docs/SPEC.md` (§3.1).
 `POST /confirm` recebe uma resposta do usuário para uma confirmação pendente,
 valida o `confirmation_id` no store em memória local e classifica a decisão como
 `approved`, `rejected` ou `unknown`. O endpoint não executa adapters, não
-persiste em banco e sempre retorna `executed: false`.
+persiste em banco e sempre retorna `executed: false`. Quando a confirmação é
+aprovada e válida, o core registra apenas um placeholder interno de execução
+com `execution_status: "disabled"`; nada real é disparado.
 
 ```bash
 curl -X POST localhost:8080/confirm \
@@ -109,6 +111,7 @@ curl -X POST localhost:8080/confirm \
 #   "decision": "approved",
 #   "status": "received",
 #   "confirmation_status": "approved",
+#   "execution_status": "disabled",
 #   "executed": false,
 #   "message": "Confirmacao recebida; execucao real ainda nao esta habilitada."
 # }

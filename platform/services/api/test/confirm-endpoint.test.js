@@ -60,14 +60,15 @@ async function createConfirmationViaMessage(port) {
   return res.body.confirmation.id;
 }
 
-function assertPublicConfirmResponse(body, decision, confirmationStatus) {
+function assertPublicConfirmResponse(body, decision, confirmationStatus, executionStatus = 'not_requested') {
   assert.deepEqual(
     Object.keys(body).sort(),
-    ['confirmation_id', 'confirmation_status', 'decision', 'executed', 'message', 'status'].sort()
+    ['confirmation_id', 'confirmation_status', 'decision', 'execution_status', 'executed', 'message', 'status'].sort()
   );
   assert.equal(body.decision, decision);
   assert.equal(body.status, 'received');
   assert.equal(body.confirmation_status, confirmationStatus);
+  assert.equal(body.execution_status, executionStatus);
   assert.equal(body.executed, false);
   assert.equal(Object.hasOwn(body, 'requiredAdapters'), false);
   assert.ok(typeof body.message === 'string' && body.message.length > 0);
@@ -75,46 +76,97 @@ function assertPublicConfirmResponse(body, decision, confirmationStatus) {
 
 test('POST /confirm aprova confirmacao existente com sim', withServer(async (port) => {
   resetConfirmationStore();
-  const confirmationId = await createConfirmationViaMessage(port);
-  const res = await postConfirm(port, { confirmation_id: confirmationId, message: 'sim' });
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (line) => { logs.push(JSON.parse(line)); };
 
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.body.confirmation_id, confirmationId);
-  assertPublicConfirmResponse(res.body, 'approved', 'approved');
-  assert.match(res.body.message, /execucao real ainda nao esta habilitada/i);
+  try {
+    const confirmationId = await createConfirmationViaMessage(port);
+    const res = await postConfirm(port, { confirmation_id: confirmationId, message: 'sim' });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.confirmation_id, confirmationId);
+    assertPublicConfirmResponse(res.body, 'approved', 'approved', 'disabled');
+    assert.match(res.body.message, /execucao real ainda nao esta habilitada/i);
+
+    const planned = logs.find((log) => log.event === 'adapter_execution_planned');
+    assert.deepEqual(planned, {
+      level: 'info',
+      event: 'adapter_execution_planned',
+      confirmation_id: confirmationId,
+      decision: 'approved',
+      execution_allowed: false,
+      executed: false,
+      reason: 'adapter_execution_disabled',
+      required_adapters_count: 1
+    });
+    assert.equal(JSON.stringify(logs).includes('sim'), false);
+  } finally {
+    console.log = originalLog;
+  }
 }));
 
 test('POST /confirm rejeita confirmacao existente com nao', withServer(async (port) => {
   resetConfirmationStore();
-  const confirmationId = await createConfirmationViaMessage(port);
-  const res = await postConfirm(port, { confirmation_id: confirmationId, message: 'nao' });
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (line) => { logs.push(JSON.parse(line)); };
 
-  assert.equal(res.statusCode, 200);
-  assertPublicConfirmResponse(res.body, 'rejected', 'rejected');
-  assert.match(res.body.message, /cancelada/i);
+  try {
+    const confirmationId = await createConfirmationViaMessage(port);
+    const res = await postConfirm(port, { confirmation_id: confirmationId, message: 'nao' });
+
+    assert.equal(res.statusCode, 200);
+    assertPublicConfirmResponse(res.body, 'rejected', 'rejected');
+    assert.match(res.body.message, /cancelada/i);
+    assert.equal(logs.some((log) => log.event === 'adapter_execution_planned'), false);
+    assert.equal(JSON.stringify(logs).includes('nao'), false);
+  } finally {
+    console.log = originalLog;
+  }
 }));
 
 test('POST /confirm mantem pending para texto ambiguo', withServer(async (port) => {
   resetConfirmationStore();
-  const confirmationId = await createConfirmationViaMessage(port);
-  const res = await postConfirm(port, { confirmation_id: confirmationId, message: 'talvez' });
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (line) => { logs.push(JSON.parse(line)); };
 
-  assert.equal(res.statusCode, 200);
-  assertPublicConfirmResponse(res.body, 'unknown', 'pending');
-  assert.match(res.body.message, /sim ou nao/i);
+  try {
+    const confirmationId = await createConfirmationViaMessage(port);
+    const res = await postConfirm(port, { confirmation_id: confirmationId, message: 'talvez' });
+
+    assert.equal(res.statusCode, 200);
+    assertPublicConfirmResponse(res.body, 'unknown', 'pending');
+    assert.match(res.body.message, /sim ou nao/i);
+    assert.equal(logs.some((log) => log.event === 'adapter_execution_planned'), false);
+    assert.equal(JSON.stringify(logs).includes('talvez'), false);
+  } finally {
+    console.log = originalLog;
+  }
 }));
 
 test('POST /confirm com id inexistente retorna not_found', withServer(async (port) => {
   resetConfirmationStore();
-  const res = await postConfirm(port, { confirmation_id: 'confirm_missing', message: 'sim' });
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (line) => { logs.push(JSON.parse(line)); };
 
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.body.confirmation_id, 'confirm_missing');
-  assert.equal(res.body.decision, 'approved');
-  assert.equal(res.body.status, 'not_found');
-  assert.equal(res.body.confirmation_status, 'not_found');
-  assert.equal(res.body.executed, false);
-  assert.equal(Object.hasOwn(res.body, 'requiredAdapters'), false);
+  try {
+    const res = await postConfirm(port, { confirmation_id: 'confirm_missing', message: 'sim' });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.confirmation_id, 'confirm_missing');
+    assert.equal(res.body.decision, 'approved');
+    assert.equal(res.body.status, 'not_found');
+    assert.equal(res.body.confirmation_status, 'not_found');
+    assert.equal(res.body.execution_status, 'not_requested');
+    assert.equal(res.body.executed, false);
+    assert.equal(Object.hasOwn(res.body, 'requiredAdapters'), false);
+    assert.equal(logs.some((log) => log.event === 'adapter_execution_planned'), false);
+  } finally {
+    console.log = originalLog;
+  }
 }));
 
 test('POST /confirm com id expirado retorna expired', withServer(async (port) => {
@@ -132,6 +184,7 @@ test('POST /confirm com id expirado retorna expired', withServer(async (port) =>
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.status, 'expired');
   assert.equal(res.body.confirmation_status, 'expired');
+  assert.equal(res.body.execution_status, 'not_requested');
   assert.equal(res.body.executed, false);
 }));
 

@@ -163,6 +163,7 @@ Response `200 OK`:
   "decision": "approved",
   "status": "received",
   "confirmation_status": "approved",
+  "execution_status": "disabled",
   "executed": false,
   "message": "Confirmacao recebida; execucao real ainda nao esta habilitada."
 }
@@ -175,6 +176,9 @@ Response `200 OK`:
 - `confirmation_status`: estado seguro no store em memória (`pending`,
   `approved`, `rejected`, `expired` ou `not_found`). `unknown` mantém a
   confirmação como `pending`.
+- `execution_status`: `disabled` quando a confirmação existe, foi aprovada e o
+  placeholder interno de execução foi planejado; `not_requested` nos demais
+  casos.
 - `executed`: sempre `false` nesta etapa. O endpoint não chama adapters, não
   persiste em banco e não conecta serviços reais.
 - `message`: mensagem pública segura. Não ecoa a resposta enviada.
@@ -338,6 +342,15 @@ endpoint `POST /confirm` usa essa decisão apenas para registrar recebimento e
 retornar um contrato público seguro. `approved` e `rejected` resolvem o registro
 em memória; `unknown` mantém `pending`. Nenhuma execução real é habilitada.
 
+### 5.6 Adapter execution placeholder
+
+`src/core/adapter-execution.js` expõe um contrato interno puro para planejar a
+execução futura de adapters. Nesta etapa ele sempre retorna
+`execution_allowed: false` e `executed: false`, com `reason:
+"adapter_execution_disabled"`. O `POST /confirm` só chama esse placeholder
+quando a confirmação existe e a decisão é `approved`, para registrar intenção
+sem executar nada.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -356,7 +369,9 @@ conteúdo da mensagem), `capability_planned` (`trace_id`, `domain`, `intent`,
 `confirmation_store_created` (`trace_id`, `domain`, `intent`,
 `confirmation_id`, `expires_at`), `confirmation_response_received`
 (`confirmation_id`, `decision`, `message_length`), `confirmation_store_resolved`
-(`confirmation_id`, `decision`, `confirmation_status`),
+(`confirmation_id`, `decision`, `confirmation_status`), `adapter_execution_planned`
+(`confirmation_id`, `decision`, `execution_allowed`, `executed`, `reason`,
+`required_adapters_count`),
 `confirmation_store_miss` (`confirmation_id`), `message_invalid` (`trace_id`).
 Métricas e tracing entram junto com o pipeline de orquestração.
 
