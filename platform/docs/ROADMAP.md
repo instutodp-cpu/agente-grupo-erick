@@ -22,6 +22,9 @@ específicas.
   banco ou execução real.
 - Adapter execution placeholder planeja execução futura de adapters sem ligar
   qualquer integração real e mantendo `executed: false`.
+- Execution policy com kill switch mantém a execução bloqueada por padrão,
+  mesmo quando `HERMES_EXECUTION_ENABLED=true`, até que adaptadores reais
+  existam.
 
 Critério de saída: sobe local com um comando; nada específico acoplado ao core.
 

@@ -9,14 +9,21 @@ test('planeja execucao sem habilitar adapters', () => {
   const result = planAdapterExecution({
     confirmation: { confirmation_id: 'confirm_123' },
     decision: 'approved',
-    capability: { requiredAdapters: ['DataStore', 'ModelProvider'] }
+    capability: { requiredAdapters: ['DataStore', 'ModelProvider'] },
+    env: {}
   });
 
   assert.deepEqual(result, {
     execution_allowed: false,
     executed: false,
-    reason: 'adapter_execution_disabled',
-    required_adapters_count: 2
+    reason: 'execution_disabled_by_policy',
+    required_adapters_count: 2,
+    execution_policy: 'disabled',
+    execution_policy_evaluation: {
+      execution_enabled: false,
+      kill_switch_active: false,
+      reason: 'execution_disabled_by_default'
+    }
   });
 });
 
@@ -24,13 +31,42 @@ test('planeja execucao com zero adapters quando capability nao tem lista', () =>
   const result = planAdapterExecution({
     confirmation: { confirmation_id: 'confirm_123' },
     decision: 'approved',
-    capability: {}
+    capability: {},
+    env: { HERMES_EXECUTION_ENABLED: 'true' }
   });
 
   assert.deepEqual(result, {
     execution_allowed: false,
     executed: false,
-    reason: 'adapter_execution_disabled',
-    required_adapters_count: 0
+    reason: 'adapter_execution_not_implemented',
+    required_adapters_count: 0,
+    execution_policy: 'not_implemented',
+    execution_policy_evaluation: {
+      execution_enabled: true,
+      kill_switch_active: false,
+      reason: 'execution_enabled_by_env'
+    }
+  });
+});
+
+test('kill switch bloqueia tudo', () => {
+  const result = planAdapterExecution({
+    confirmation: { confirmation_id: 'confirm_123' },
+    decision: 'approved',
+    capability: { requiredAdapters: ['DataStore'] },
+    env: { HERMES_EXECUTION_ENABLED: 'true', HERMES_EXECUTION_KILL_SWITCH: 'true' }
+  });
+
+  assert.deepEqual(result, {
+    execution_allowed: false,
+    executed: false,
+    reason: 'execution_kill_switch_active',
+    required_adapters_count: 1,
+    execution_policy: 'kill_switch_active',
+    execution_policy_evaluation: {
+      execution_enabled: false,
+      kill_switch_active: true,
+      reason: 'execution_kill_switch_active'
+    }
   });
 });

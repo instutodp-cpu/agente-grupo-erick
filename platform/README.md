@@ -100,7 +100,10 @@ valida o `confirmation_id` no store em memória local e classifica a decisão co
 `approved`, `rejected` ou `unknown`. O endpoint não executa adapters, não
 persiste em banco e sempre retorna `executed: false`. Quando a confirmação é
 aprovada e válida, o core registra apenas um placeholder interno de execução
-com `execution_status: "disabled"`; nada real é disparado.
+com `execution_status: "disabled"`; nada real é disparado. A política de
+execução fica bloqueada por padrão: `HERMES_EXECUTION_ENABLED=false` e
+`HERMES_EXECUTION_KILL_SWITCH=true` por segurança; mesmo com a variável de
+execução habilitada, nenhum adapter real executa nesta fase.
 
 ```bash
 curl -X POST localhost:8080/confirm \
@@ -112,6 +115,7 @@ curl -X POST localhost:8080/confirm \
 #   "status": "received",
 #   "confirmation_status": "approved",
 #   "execution_status": "disabled",
+#   "execution_policy": "disabled",
 #   "executed": false,
 #   "message": "Confirmacao recebida; execucao real ainda nao esta habilitada."
 # }
