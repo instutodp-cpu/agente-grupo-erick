@@ -166,6 +166,8 @@ Response `200 OK`:
   "execution_status": "simulated",
   "execution_policy": "not_implemented",
   "simulated": true,
+  "adapter_id": "mock-financeiro",
+  "adapter_mode": "mock",
   "executed": false,
   "message": "Confirmacao recebida; execucao real ainda nao esta habilitada."
 }
@@ -179,13 +181,16 @@ Response `200 OK`:
   `approved`, `rejected`, `expired` ou `not_found`). `unknown` mantém a
   confirmação como `pending`.
 - `execution_status`: `simulated` quando a confirmação aprovada passa pelo
-  mock adapter local; `disabled` quando a policy bloqueia; `not_requested` nos
-  demais casos.
+  mock adapter local; `not_available` quando o domínio não possui mock;
+  `disabled` quando a policy bloqueia; `not_requested` nos demais casos.
 - `execution_policy`: `disabled`, `kill_switch_active` ou `not_implemented`
   quando uma confirmação aprovada passa pela policy de execução; ausente nos
   demais casos.
 - `simulated`: `true` somente quando o mock adapter roda localmente; não
   significa execução real.
+- `adapter_id` / `adapter_mode`: identificadores públicos seguros do mock
+  selecionado, presentes apenas quando o domínio possui mock e a simulação
+  local roda.
 - `executed`: sempre `false` nesta etapa. O endpoint não chama adapters, não
   persiste em banco e não conecta serviços reais.
 - `message`: mensagem pública segura. Não ecoa a resposta enviada.
@@ -357,15 +362,22 @@ Operação manual, limites e checklist de segurança ficam documentados em
 `src/core/adapter-execution.js` expõe um contrato interno puro para planejar a
 execução futura de adapters. Nesta etapa ele sempre retorna
 `execution_allowed: false` e `executed: false`, com `reason:
-"execution_disabled_by_policy"`, `execution_kill_switch_active` ou
-`adapter_execution_simulated`, conforme a política de execução. Quando a
-policy permite planejamento, ele chama `src/core/mock-adapter-runner.js`, que
-simula localmente sem qualquer efeito real. O `POST /confirm` só chama esse
-fluxo quando a confirmação existe e a decisão é `approved`.
+"execution_disabled_by_policy"`, `execution_kill_switch_active`,
+`adapter_execution_simulated` ou `adapter_execution_not_available`, conforme a
+política e a presença de mock por domínio. Quando a policy permite
+planejamento, ele chama `src/core/mock-adapter-runner.js`, que usa o registry
+de domínio para simular localmente sem qualquer efeito real. O `POST /confirm`
+só chama esse fluxo quando a confirmação existe e a decisão é `approved`.
+
+`src/core/domain-mock-adapter-registry.js` mapeia os domínios conhecidos para
+mocks públicos seguros: `mock-compras`, `mock-financeiro`,
+`mock-treinamento`, `mock-marketing` e `mock-desenvolvimento`. Domínio sem
+mock retorna um status seguro e não simula nada.
 
 `src/core/mock-adapter-runner.js` é um mock puro que retorna um resultado
-simulado com `adapter_mode: "mock"`, `simulated: true`, `executed: false` e
-`status: "simulated"`. Isso é somente simulação local.
+simulado com `adapter_id`, `adapter_mode: "mock"`, `simulated: true`,
+`executed: false` e `status: "simulated"`. Quando não há mock para o domínio,
+ele retorna `status: "not_available"` sem efeito real.
 
 ## 6. Configuração
 
@@ -376,7 +388,8 @@ serviços internos. Segredos reais só em `.env`/Railway, nunca no repo.
 - `HERMES_EXECUTION_ENABLED=false` por padrão.
 - `HERMES_EXECUTION_KILL_SWITCH=true` bloqueia qualquer execução futura.
 - Mesmo com `HERMES_EXECUTION_ENABLED=true`, nenhum adapter real executa nesta
-  fase; o máximo que acontece é uma simulação local via mock adapter.
+  fase; o máximo que acontece é uma simulação local via mock adapter por
+  domínio.
 - Consulte `docs/OPERATOR_RUNBOOK.md` para o procedimento operacional
   detalhado, incluindo validação manual, rollback e regras para PRs futuras de
   adapter.
@@ -395,7 +408,10 @@ conteúdo da mensagem), `capability_planned` (`trace_id`, `domain`, `intent`,
 (`confirmation_id`, `decision`, `message_length`), `confirmation_store_resolved`
 (`confirmation_id`, `decision`, `confirmation_status`), `adapter_execution_planned`
 (`confirmation_id`, `decision`, `execution_allowed`, `executed`, `reason`,
-`required_adapters_count`, `execution_status`, `simulated`),
+`required_adapters_count`, `execution_status`, `simulated`, `adapter_id`,
+`adapter_mode`), `domain_mock_adapter_selected` (`confirmation_id`, `domain`,
+`adapter_id`, `adapter_mode`), `domain_mock_adapter_missing` (`confirmation_id`,
+`domain`),
 `mock_adapter_simulated` (`confirmation_id`, `domain`, `intent`,
 `adapter_mode`, `simulated`, `executed`), `execution_policy_evaluated`
 (`execution_enabled`, `kill_switch_active`, `reason`),

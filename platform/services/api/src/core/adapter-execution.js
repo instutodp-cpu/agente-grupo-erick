@@ -14,30 +14,35 @@ function planAdapterExecution({ confirmation, decision, capability, env = proces
     decision === 'approved' &&
     confirmation
   );
-  const simulation = canSimulate ? runMockAdapter({ confirmation, capability }) : null;
+  const simulation = canSimulate ? runMockAdapter({ domain: capability && capability.domain }) : null;
   const reason = policy.kill_switch_active
     ? 'execution_kill_switch_active'
     : policy.execution_enabled
-      ? (canSimulate ? 'adapter_execution_simulated' : 'adapter_execution_not_implemented')
+      ? (simulation && simulation.status === 'simulated' ? 'adapter_execution_simulated' : 'adapter_execution_not_available')
       : 'execution_disabled_by_policy';
   const executionStatus = policy.kill_switch_active || !policy.execution_enabled
     ? 'disabled'
-    : canSimulate
+    : simulation && simulation.status === 'simulated'
       ? 'simulated'
+      : simulation && simulation.status === 'not_available'
+        ? 'not_available'
       : 'not_requested';
+  const executionPolicy = policy.kill_switch_active
+    ? 'kill_switch_active'
+    : policy.execution_enabled
+      ? 'not_implemented'
+      : 'disabled';
 
   return {
     execution_allowed: false,
     executed: false,
     reason,
     required_adapters_count: requiredAdaptersCount,
-    execution_policy: policy.kill_switch_active
-      ? 'kill_switch_active'
-      : policy.execution_enabled
-        ? 'not_implemented'
-        : 'disabled',
+    execution_policy: executionPolicy,
     execution_status: executionStatus,
-    simulated: Boolean(simulation),
+    simulated: Boolean(simulation && simulation.status === 'simulated'),
+    adapter_id: simulation && simulation.status === 'simulated' ? simulation.adapter_id : null,
+    adapter_mode: simulation && simulation.status === 'simulated' ? simulation.adapter_mode : null,
     mock_adapter: simulation,
     execution_policy_evaluation: policy
   };

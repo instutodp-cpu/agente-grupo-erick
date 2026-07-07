@@ -283,6 +283,8 @@ function createServer() {
           let executionStatus = 'not_requested';
           let executionPolicy = null;
           let simulated = false;
+          let adapterId = null;
+          let adapterMode = null;
 
           if (decision === 'approved') {
             const executionPlan = planAdapterExecution({
@@ -294,6 +296,8 @@ function createServer() {
             executionStatus = executionPlan.execution_status;
             executionPolicy = executionPlan.execution_policy;
             simulated = executionPlan.simulated;
+            adapterId = executionPlan.adapter_id;
+            adapterMode = executionPlan.adapter_mode;
             const policyEvaluation = executionPlan.execution_policy_evaluation;
             console.log(JSON.stringify({
               level: 'info',
@@ -302,7 +306,15 @@ function createServer() {
               kill_switch_active: policyEvaluation.kill_switch_active,
               reason: policyEvaluation.reason
             }));
-            if (executionPlan.simulated && executionPlan.mock_adapter) {
+            if (executionPlan.mock_adapter && executionPlan.mock_adapter.status === 'simulated') {
+              console.log(JSON.stringify({
+                level: 'info',
+                event: 'domain_mock_adapter_selected',
+                confirmation_id: confirmationId,
+                domain: resolvedConfirmation.domain,
+                adapter_id: executionPlan.mock_adapter.adapter_id,
+                adapter_mode: executionPlan.mock_adapter.adapter_mode
+              }));
               console.log(JSON.stringify({
                 level: 'info',
                 event: 'mock_adapter_simulated',
@@ -312,6 +324,13 @@ function createServer() {
                 adapter_mode: executionPlan.mock_adapter.adapter_mode,
                 simulated: executionPlan.mock_adapter.simulated,
                 executed: executionPlan.mock_adapter.executed
+              }));
+            } else if (executionPlan.mock_adapter && executionPlan.mock_adapter.status === 'not_available') {
+              console.log(JSON.stringify({
+                level: 'info',
+                event: 'domain_mock_adapter_missing',
+                confirmation_id: confirmationId,
+                domain: resolvedConfirmation.domain
               }));
             }
             console.log(JSON.stringify({
@@ -324,7 +343,9 @@ function createServer() {
               reason: executionPlan.reason,
               required_adapters_count: executionPlan.required_adapters_count,
               execution_status: executionPlan.execution_status,
-              simulated: executionPlan.simulated
+              simulated: executionPlan.simulated,
+              ...(executionPlan.adapter_id ? { adapter_id: executionPlan.adapter_id } : {}),
+              ...(executionPlan.adapter_mode ? { adapter_mode: executionPlan.adapter_mode } : {})
             }));
           }
 
@@ -344,6 +365,8 @@ function createServer() {
             execution_status: executionStatus,
             ...(executionPolicy ? { execution_policy: executionPolicy } : {}),
             ...(simulated ? { simulated: true } : {}),
+            ...(adapterId ? { adapter_id: adapterId } : {}),
+            ...(adapterMode ? { adapter_mode: adapterMode } : {}),
             executed: false,
             message: CONFIRMATION_RESPONSE_MESSAGES[decision]
           });

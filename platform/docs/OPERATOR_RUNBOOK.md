@@ -19,6 +19,9 @@ planejamento seguro e contratos públicos estáveis.
 Quando a policy permite, o core pode acionar um mock adapter local para
 simulação controlada. `simulated: true` significa apenas que a simulação rodou;
 não há execução real, side effect ou integração externa.
+Os mock adapters são por domínio e expõem `adapter_id` público seguro como
+`mock-compras`, `mock-financeiro`, `mock-treinamento`, `mock-marketing` e
+`mock-desenvolvimento`.
 
 ## Regras invariantes
 
@@ -28,6 +31,7 @@ não há execução real, side effect ou integração externa.
 - Nenhuma persistência durável é usada.
 - O kill switch bloqueia qualquer evolução de execução futura.
 - `simulated: true` nunca equivale a execução real.
+- `adapter_id` público só pode apontar para um mock seguro de domínio.
 
 ## Como testar localmente
 
@@ -112,6 +116,10 @@ O retorno deve ser seguro e continuar com `executed:false`.
 - `execution_policy_evaluated`
 - `adapter_execution_planned`
 - `mock_adapter_simulated`
+- `domain_mock_adapter_selected`
+- `domain_mock_adapter_missing`
+- `domain_mock_adapter_selected`
+- `domain_mock_adapter_missing`
 
 ## Logs proibidos
 
@@ -129,6 +137,7 @@ O retorno deve ser seguro e continuar com `executed:false`.
 - Segredos.
 - Variáveis de ambiente completas.
 - Qualquer dado que revele execução real ou integração externa.
+- `adapter_id` fora da lista de mocks seguros por domínio.
 
 ## Checklist antes de qualquer PR futura de adapter real
 
@@ -137,6 +146,7 @@ O retorno deve ser seguro e continuar com `executed:false`.
 - Confirmar que o kill switch foi testado.
 - Confirmar que `executed:false` continua obrigatório.
 - Confirmar que o mock adapter continua local e não chama serviço real.
+- Confirmar que o `adapter_id` público segue o domínio mock correto.
 - Confirmar que nenhum serviço real foi conectado.
 - Confirmar que o adapter inicial pode ser mock/fake.
 - Confirmar que a documentação foi atualizada.
@@ -148,6 +158,7 @@ O retorno deve ser seguro e continuar com `executed:false`.
 - Confirmar que o kill switch continua bloqueando.
 - Validar `/health`, `POST /message`, `POST /confirm` e `GET /confirm/:id`.
 - Validar que `simulated:true` aparece apenas em simulação local.
+- Validar que `adapter_id` aparece apenas em simulação local e por domínio.
 
 ## Checklist de validação local
 
@@ -159,6 +170,7 @@ O retorno deve ser seguro e continuar com `executed:false`.
 - `curl GET /confirm/:id`.
 - Validar `executed:false` em todos os caminhos.
 - Validar que `simulated:true` só aparece quando o mock roda localmente.
+- Validar que `adapter_id` público corresponde ao domínio.
 
 ## Rules for future adapter PRs
 
@@ -168,6 +180,7 @@ O retorno deve ser seguro e continuar com `executed:false`.
 - Requer kill switch testado.
 - Requer `executed:false` até liberação explícita em PR separada.
 - Requer mock adapter inicial antes de qualquer adapter real.
+- Requer registry por domínio aprovado antes de ampliar o escopo.
 - Nunca conectar serviço real sem variável de ambiente e documentação.
 - Nunca logar payload sensível.
 - Nunca expor `requiredAdapters` ou segredos em response público.
