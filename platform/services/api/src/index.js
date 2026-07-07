@@ -14,6 +14,7 @@ const http = require('http');
 const { randomUUID } = require('crypto');
 const { getCapability } = require('./capabilities/registry');
 const { evaluateConfirmationGate } = require('./core/confirmation-gate');
+const { classifyConfirmationResponse } = require('./core/confirmation-response');
 const { classifyIntent } = require('./core/intent-router');
 const { createPendingConfirmation } = require('./core/pending-confirmation');
 
@@ -25,6 +26,11 @@ const FALLBACK_CAPABILITY = {
   status: 'planned',
   publicMessage: 'Nao encontrei uma capacidade especifica para essa mensagem; nenhuma acao foi executada.',
   requiredAdapters: []
+};
+const CONFIRMATION_RESPONSE_MESSAGES = {
+  approved: 'Confirmacao recebida; execucao real ainda nao esta habilitada.',
+  rejected: 'Acao cancelada pelo usuario; nenhuma execucao foi realizada.',
+  unknown: 'Resposta recebida, mas preciso de uma resposta clara como sim ou nao.'
 };
 
 // Presença de configuração — apenas booleanos, nunca os valores/segredos.
@@ -156,6 +162,41 @@ function createServer() {
         .catch(() => {
           console.log(JSON.stringify({ level: 'warn', event: 'message_invalid', trace_id: randomUUID() }));
           return sendJson(res, 400, { error: 'invalid_request', message: 'corpo JSON inválido' });
+        });
+    }
+
+    if (method === 'POST' && url === '/confirm') {
+      return readJsonBody(req)
+        .then((body) => {
+          const confirmationId = typeof body.confirmation_id === 'string' ? body.confirmation_id.trim() : body.confirmation_id;
+          const message = body.message;
+
+          if (typeof confirmationId !== 'string' || confirmationId.trim() === '') {
+            console.log(JSON.stringify({ level: 'warn', event: 'confirmation_response_invalid' }));
+            return sendJson(res, 400, { error: 'invalid_request', message: "'confirmation_id' e obrigatorio" });
+          }
+
+          const decision = classifyConfirmationResponse(message);
+          const messageLength = typeof message === 'string' ? message.length : 0;
+          console.log(JSON.stringify({
+            level: 'info',
+            event: 'confirmation_response_received',
+            confirmation_id: confirmationId,
+            decision,
+            message_length: messageLength
+          }));
+
+          return sendJson(res, 200, {
+            confirmation_id: confirmationId,
+            decision,
+            status: 'received',
+            executed: false,
+            message: CONFIRMATION_RESPONSE_MESSAGES[decision]
+          });
+        })
+        .catch(() => {
+          console.log(JSON.stringify({ level: 'warn', event: 'confirmation_response_invalid' }));
+          return sendJson(res, 400, { error: 'invalid_request', message: 'corpo JSON invalido' });
         });
     }
 
