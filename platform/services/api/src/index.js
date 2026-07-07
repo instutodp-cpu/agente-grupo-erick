@@ -12,13 +12,18 @@
 
 const http = require('http');
 const { randomUUID } = require('crypto');
+const { getCapability } = require('./capabilities/registry');
 const { classifyIntent } = require('./core/intent-router');
 
 const SERVICE = 'hermes-api';
 const VERSION = process.env.HERMES_VERSION || '2.0.0-scaffold';
 const PORT = Number(process.env.API_PORT || process.env.PORT || 8080);
 const MAX_MESSAGE_BODY_BYTES = 1_000_000;
-const PLANNED_STATUS_MESSAGE = 'Intenção identificada; execução ainda não implementada.';
+const FALLBACK_CAPABILITY = {
+  status: 'planned',
+  publicMessage: 'Nao encontrei uma capacidade especifica para essa mensagem; nenhuma acao foi executada.',
+  requiredAdapters: []
+};
 
 // Presença de configuração — apenas booleanos, nunca os valores/segredos.
 function configPresence() {
@@ -92,6 +97,7 @@ function createServer() {
           }
 
           const { domain, intent } = classifyIntent(message);
+          const capability = getCapability(domain) || FALLBACK_CAPABILITY;
           console.log(JSON.stringify({
             level: 'info',
             event: 'message_received',
@@ -100,13 +106,22 @@ function createServer() {
             intent,
             message_length: message.length
           }));
+          console.log(JSON.stringify({
+            level: 'info',
+            event: 'capability_planned',
+            trace_id: traceId,
+            domain,
+            intent,
+            status: capability.status,
+            required_adapters_count: capability.requiredAdapters.length
+          }));
 
           return sendJson(res, 200, {
             trace_id: traceId,
             domain,
             intent,
-            status: 'planned',
-            message: PLANNED_STATUS_MESSAGE
+            status: capability.status,
+            message: capability.publicMessage
           });
         })
         .catch(() => {

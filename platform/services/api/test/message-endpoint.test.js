@@ -39,6 +39,15 @@ function postMessage(port, message, extra) {
   );
 }
 
+function assertPublicMessageResponse(body) {
+  assert.deepEqual(
+    Object.keys(body).sort(),
+    ['domain', 'intent', 'message', 'status', 'trace_id'].sort()
+  );
+  assert.equal(body.status, 'planned');
+  assert.ok(typeof body.message === 'string' && body.message.length > 0);
+}
+
 test('GET /health responde 200', withServer(async (port) => {
   const res = await request(port, { method: 'GET', path: '/health' });
 
@@ -54,8 +63,7 @@ test('POST /message retorna trace_id, domain, intent, status e message', withSer
   assert.ok(typeof res.body.trace_id === 'string' && res.body.trace_id.length > 0);
   assert.equal(res.body.domain, 'marketing');
   assert.equal(res.body.intent, 'planejar_marketing');
-  assert.equal(res.body.status, 'planned');
-  assert.ok(typeof res.body.message === 'string' && res.body.message.length > 0);
+  assertPublicMessageResponse(res.body);
 }));
 
 test('POST /message classifica compras', withServer(async (port) => {
@@ -64,6 +72,7 @@ test('POST /message classifica compras', withServer(async (port) => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.domain, 'compras');
   assert.equal(res.body.intent, 'consultar_compras');
+  assertPublicMessageResponse(res.body);
 }));
 
 test('POST /message classifica compras (vencimentos)', withServer(async (port) => {
@@ -72,6 +81,7 @@ test('POST /message classifica compras (vencimentos)', withServer(async (port) =
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.domain, 'compras');
   assert.equal(res.body.intent, 'consultar_vencimentos');
+  assertPublicMessageResponse(res.body);
 }));
 
 test('POST /message classifica financeiro', withServer(async (port) => {
@@ -80,6 +90,7 @@ test('POST /message classifica financeiro', withServer(async (port) => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.domain, 'financeiro');
   assert.equal(res.body.intent, 'consultar_financeiro');
+  assertPublicMessageResponse(res.body);
 }));
 
 test('POST /message classifica treinamento', withServer(async (port) => {
@@ -88,6 +99,7 @@ test('POST /message classifica treinamento', withServer(async (port) => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.domain, 'treinamento');
   assert.equal(res.body.intent, 'consultar_treinamento');
+  assertPublicMessageResponse(res.body);
 }));
 
 test('POST /message classifica desenvolvimento e reaproveita trace_id enviado pelo cliente', withServer(async (port) => {
@@ -97,6 +109,7 @@ test('POST /message classifica desenvolvimento e reaproveita trace_id enviado pe
   assert.equal(res.body.trace_id, 'trace-123');
   assert.equal(res.body.domain, 'desenvolvimento');
   assert.equal(res.body.intent, 'desenvolvimento');
+  assertPublicMessageResponse(res.body);
 }));
 
 test('POST /message mensagem genérica cai em desconhecido', withServer(async (port) => {
@@ -105,6 +118,43 @@ test('POST /message mensagem genérica cai em desconhecido', withServer(async (p
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.domain, 'desconhecido');
   assert.equal(res.body.intent, 'desconhecido');
+  assertPublicMessageResponse(res.body);
+  assert.match(res.body.message, /nenhuma acao foi executada/i);
+}));
+
+test('POST /message registra capability_planned sem mensagem crua', withServer(async (port) => {
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (line) => { logs.push(JSON.parse(line)); };
+
+  try {
+    const res = await postMessage(port, 'segredo interno de caixa', { trace_id: 'trace-log' });
+
+    assert.equal(res.statusCode, 200);
+    const received = logs.find((log) => log.event === 'message_received');
+    const planned = logs.find((log) => log.event === 'capability_planned');
+
+    assert.deepEqual(received, {
+      level: 'info',
+      event: 'message_received',
+      trace_id: 'trace-log',
+      domain: 'financeiro',
+      intent: 'consultar_financeiro',
+      message_length: 'segredo interno de caixa'.length
+    });
+    assert.deepEqual(planned, {
+      level: 'info',
+      event: 'capability_planned',
+      trace_id: 'trace-log',
+      domain: 'financeiro',
+      intent: 'consultar_financeiro',
+      status: 'planned',
+      required_adapters_count: 1
+    });
+    assert.equal(JSON.stringify(logs).includes('segredo interno de caixa'), false);
+  } finally {
+    console.log = originalLog;
+  }
 }));
 
 test('POST /message sem "message" retorna 400', withServer(async (port) => {

@@ -20,6 +20,7 @@ test('cada capacidade está em status "planned" com metadados válidos', () => {
     assert.equal(capability.domain, domain);
     assert.equal(capability.status, 'planned');
     assert.ok(typeof capability.description === 'string' && capability.description.length > 0);
+    assert.ok(typeof capability.publicMessage === 'string' && capability.publicMessage.length > 0);
     assert.ok(Array.isArray(capability.requiredAdapters));
   }
 });

@@ -10,6 +10,8 @@ específicas.
   (Blueprint, PRD, SPEC, SECURITY, ROADMAP, CLAUDE.md).
 - `docker compose up` com `api`, `worker`, `redis`, `postgres`, `qdrant`.
 - Núcleo mínimo (health/readiness), sem acoplar ferramentas.
+- `POST /message` classifica domain/intent, consulta o capability registry e
+  retorna apenas um plano público seguro, sem executar adapters reais.
 
 Critério de saída: sobe local com um comando; nada específico acoplado ao core.
 
@@ -29,8 +31,9 @@ Critério: trocar uma implementação = trocar um adapter, sem tocar o core.
 
 ## Fase 3 — Orquestração
 
-- Ingress/BFF multicanal; Intent Router; Capability Registry + Resolver +
-  Executor; caminhos determinísticos e cache antes de LLM.
+- Ingress/BFF multicanal; Resolver + Executor; caminhos determinísticos e cache
+  antes de LLM. Intent Router e Capability Registry já existem como fundação
+  planejada, sem execução real.
 
 ## Fase 4 — Memória
 
