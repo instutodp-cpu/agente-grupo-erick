@@ -163,8 +163,9 @@ Response `200 OK`:
   "decision": "approved",
   "status": "received",
   "confirmation_status": "approved",
-  "execution_status": "disabled",
-  "execution_policy": "disabled",
+  "execution_status": "simulated",
+  "execution_policy": "not_implemented",
+  "simulated": true,
   "executed": false,
   "message": "Confirmacao recebida; execucao real ainda nao esta habilitada."
 }
@@ -177,12 +178,14 @@ Response `200 OK`:
 - `confirmation_status`: estado seguro no store em memória (`pending`,
   `approved`, `rejected`, `expired` ou `not_found`). `unknown` mantém a
   confirmação como `pending`.
-- `execution_status`: `disabled` quando a confirmação existe, foi aprovada e o
-  placeholder interno de execução foi planejado; `not_requested` nos demais
-  casos.
-- `execution_policy`: `disabled`, `kill_switch_active` ou `not_implemented`
-  quando uma confirmação aprovada passa pela política de execução; ausente nos
+- `execution_status`: `simulated` quando a confirmação aprovada passa pelo
+  mock adapter local; `disabled` quando a policy bloqueia; `not_requested` nos
   demais casos.
+- `execution_policy`: `disabled`, `kill_switch_active` ou `not_implemented`
+  quando uma confirmação aprovada passa pela policy de execução; ausente nos
+  demais casos.
+- `simulated`: `true` somente quando o mock adapter roda localmente; não
+  significa execução real.
 - `executed`: sempre `false` nesta etapa. O endpoint não chama adapters, não
   persiste em banco e não conecta serviços reais.
 - `message`: mensagem pública segura. Não ecoa a resposta enviada.
@@ -355,9 +358,14 @@ Operação manual, limites e checklist de segurança ficam documentados em
 execução futura de adapters. Nesta etapa ele sempre retorna
 `execution_allowed: false` e `executed: false`, com `reason:
 "execution_disabled_by_policy"`, `execution_kill_switch_active` ou
-`adapter_execution_not_implemented`, conforme a política de execução. O
-`POST /confirm` só chama esse placeholder quando a confirmação existe e a
-decisão é `approved`, para registrar intenção sem executar nada.
+`adapter_execution_simulated`, conforme a política de execução. Quando a
+policy permite planejamento, ele chama `src/core/mock-adapter-runner.js`, que
+simula localmente sem qualquer efeito real. O `POST /confirm` só chama esse
+fluxo quando a confirmação existe e a decisão é `approved`.
+
+`src/core/mock-adapter-runner.js` é um mock puro que retorna um resultado
+simulado com `adapter_mode: "mock"`, `simulated: true`, `executed: false` e
+`status: "simulated"`. Isso é somente simulação local.
 
 ## 6. Configuração
 
@@ -368,7 +376,7 @@ serviços internos. Segredos reais só em `.env`/Railway, nunca no repo.
 - `HERMES_EXECUTION_ENABLED=false` por padrão.
 - `HERMES_EXECUTION_KILL_SWITCH=true` bloqueia qualquer execução futura.
 - Mesmo com `HERMES_EXECUTION_ENABLED=true`, nenhum adapter real executa nesta
-  fase; a política só prepara o contrato para uma etapa posterior.
+  fase; o máximo que acontece é uma simulação local via mock adapter.
 - Consulte `docs/OPERATOR_RUNBOOK.md` para o procedimento operacional
   detalhado, incluindo validação manual, rollback e regras para PRs futuras de
   adapter.
@@ -387,7 +395,9 @@ conteúdo da mensagem), `capability_planned` (`trace_id`, `domain`, `intent`,
 (`confirmation_id`, `decision`, `message_length`), `confirmation_store_resolved`
 (`confirmation_id`, `decision`, `confirmation_status`), `adapter_execution_planned`
 (`confirmation_id`, `decision`, `execution_allowed`, `executed`, `reason`,
-`required_adapters_count`), `execution_policy_evaluated`
+`required_adapters_count`, `execution_status`, `simulated`),
+`mock_adapter_simulated` (`confirmation_id`, `domain`, `intent`,
+`adapter_mode`, `simulated`, `executed`), `execution_policy_evaluated`
 (`execution_enabled`, `kill_switch_active`, `reason`),
 `confirmation_store_miss` (`confirmation_id`), `message_invalid` (`trace_id`).
 Métricas e tracing entram junto com o pipeline de orquestração.

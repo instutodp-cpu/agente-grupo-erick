@@ -25,6 +25,8 @@ específicas.
 - Execution policy com kill switch mantém a execução bloqueada por padrão,
   mesmo quando `HERMES_EXECUTION_ENABLED=true`, até que adaptadores reais
   existam.
+- Mock adapter harness só simula localmente; `simulated: true` nunca significa
+  execução real.
 - Runbook operacional de segurança documenta o fluxo atual, validação manual e
   regras para PRs futuras de adapter.
 
