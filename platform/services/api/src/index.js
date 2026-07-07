@@ -282,6 +282,7 @@ function createServer() {
           const capability = getCapability(resolvedConfirmation.domain) || FALLBACK_CAPABILITY;
           let executionStatus = 'not_requested';
           let executionPolicy = null;
+          let simulated = false;
 
           if (decision === 'approved') {
             const executionPlan = planAdapterExecution({
@@ -290,8 +291,9 @@ function createServer() {
               capability
             });
 
-            executionStatus = 'disabled';
+            executionStatus = executionPlan.execution_status;
             executionPolicy = executionPlan.execution_policy;
+            simulated = executionPlan.simulated;
             const policyEvaluation = executionPlan.execution_policy_evaluation;
             console.log(JSON.stringify({
               level: 'info',
@@ -300,6 +302,18 @@ function createServer() {
               kill_switch_active: policyEvaluation.kill_switch_active,
               reason: policyEvaluation.reason
             }));
+            if (executionPlan.simulated && executionPlan.mock_adapter) {
+              console.log(JSON.stringify({
+                level: 'info',
+                event: 'mock_adapter_simulated',
+                confirmation_id: confirmationId,
+                domain: resolvedConfirmation.domain,
+                intent: resolvedConfirmation.intent,
+                adapter_mode: executionPlan.mock_adapter.adapter_mode,
+                simulated: executionPlan.mock_adapter.simulated,
+                executed: executionPlan.mock_adapter.executed
+              }));
+            }
             console.log(JSON.stringify({
               level: 'info',
               event: 'adapter_execution_planned',
@@ -308,7 +322,9 @@ function createServer() {
               execution_allowed: executionPlan.execution_allowed,
               executed: executionPlan.executed,
               reason: executionPlan.reason,
-              required_adapters_count: executionPlan.required_adapters_count
+              required_adapters_count: executionPlan.required_adapters_count,
+              execution_status: executionPlan.execution_status,
+              simulated: executionPlan.simulated
             }));
           }
 
@@ -327,6 +343,7 @@ function createServer() {
             confirmation_status: resolvedConfirmation.status,
             execution_status: executionStatus,
             ...(executionPolicy ? { execution_policy: executionPolicy } : {}),
+            ...(simulated ? { simulated: true } : {}),
             executed: false,
             message: CONFIRMATION_RESPONSE_MESSAGES[decision]
           });

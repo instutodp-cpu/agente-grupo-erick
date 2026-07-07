@@ -104,7 +104,9 @@ aprovada e válida, o core registra apenas um placeholder interno de execução
 com `execution_status: "disabled"`; nada real é disparado. A política de
 execução fica bloqueada por padrão: `HERMES_EXECUTION_ENABLED=false` e
 `HERMES_EXECUTION_KILL_SWITCH=true` por segurança; mesmo com a variável de
-execução habilitada, nenhum adapter real executa nesta fase.
+execução habilitada, nenhum adapter real executa nesta fase. Quando a policy
+permite planejamento, o core pode rodar um mock adapter local para simulação
+controlada; `simulated: true` significa apenas isso, nunca execução real.
 
 ```bash
 curl -X POST localhost:8080/confirm \
@@ -115,8 +117,9 @@ curl -X POST localhost:8080/confirm \
 #   "decision": "approved",
 #   "status": "received",
 #   "confirmation_status": "approved",
-#   "execution_status": "disabled",
-#   "execution_policy": "disabled",
+#   "execution_status": "simulated",
+#   "execution_policy": "not_implemented",
+#   "simulated": true,
 #   "executed": false,
 #   "message": "Confirmacao recebida; execucao real ainda nao esta habilitada."
 # }
