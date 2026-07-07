@@ -15,8 +15,13 @@ const { randomUUID } = require('crypto');
 const { getCapability } = require('./capabilities/registry');
 const { evaluateConfirmationGate } = require('./core/confirmation-gate');
 const { classifyConfirmationResponse } = require('./core/confirmation-response');
+const {
+  createPendingConfirmation: storePendingConfirmation,
+  getPendingConfirmation,
+  resolvePendingConfirmation
+} = require('./core/confirmation-store');
 const { classifyIntent } = require('./core/intent-router');
-const { createPendingConfirmation } = require('./core/pending-confirmation');
+const { createPendingConfirmation: createPublicPendingConfirmation } = require('./core/pending-confirmation');
 
 const SERVICE = 'hermes-api';
 const VERSION = process.env.HERMES_VERSION || '2.0.0-scaffold';
@@ -108,7 +113,7 @@ function createServer() {
           const capability = getCapability(domain) || FALLBACK_CAPABILITY;
           const confirmationGate = evaluateConfirmationGate({ domain, capability });
           const confirmation = confirmationGate.confirmationRequired
-            ? createPendingConfirmation({ traceId, randomId: randomUUID() })
+            ? createPublicPendingConfirmation({ traceId, randomId: randomUUID() })
             : null;
           console.log(JSON.stringify({
             level: 'info',
@@ -136,6 +141,13 @@ function createServer() {
             confirmation_required: confirmationGate.confirmationRequired
           }));
           if (confirmation) {
+            const storedConfirmation = storePendingConfirmation({
+              confirmation_id: confirmation.id,
+              trace_id: traceId,
+              domain,
+              intent,
+              expires_in_seconds: confirmation.expires_in_seconds
+            });
             console.log(JSON.stringify({
               level: 'info',
               event: 'confirmation_created',
@@ -144,6 +156,15 @@ function createServer() {
               intent,
               confirmation_id: confirmation.id,
               expires_in_seconds: confirmation.expires_in_seconds
+            }));
+            console.log(JSON.stringify({
+              level: 'info',
+              event: 'confirmation_store_created',
+              trace_id: traceId,
+              domain,
+              intent,
+              confirmation_id: confirmation.id,
+              expires_at: storedConfirmation.expires_at
             }));
           }
 
@@ -178,6 +199,7 @@ function createServer() {
 
           const decision = classifyConfirmationResponse(message);
           const messageLength = typeof message === 'string' ? message.length : 0;
+          const storedConfirmation = getPendingConfirmation(confirmationId);
           console.log(JSON.stringify({
             level: 'info',
             event: 'confirmation_response_received',
@@ -186,10 +208,52 @@ function createServer() {
             message_length: messageLength
           }));
 
+          if (!storedConfirmation) {
+            console.log(JSON.stringify({
+              level: 'info',
+              event: 'confirmation_store_miss',
+              confirmation_id: confirmationId
+            }));
+            return sendJson(res, 200, {
+              confirmation_id: confirmationId,
+              decision,
+              status: 'not_found',
+              confirmation_status: 'not_found',
+              executed: false,
+              message: 'Confirmacao nao encontrada ou expirada; nenhuma execucao foi realizada.'
+            });
+          }
+
+          if (storedConfirmation.status === 'expired') {
+            console.log(JSON.stringify({
+              level: 'info',
+              event: 'confirmation_store_miss',
+              confirmation_id: confirmationId
+            }));
+            return sendJson(res, 200, {
+              confirmation_id: confirmationId,
+              decision,
+              status: 'expired',
+              confirmation_status: 'expired',
+              executed: false,
+              message: 'Confirmacao expirada; nenhuma execucao foi realizada.'
+            });
+          }
+
+          const resolvedConfirmation = resolvePendingConfirmation(confirmationId, decision);
+          console.log(JSON.stringify({
+            level: 'info',
+            event: 'confirmation_store_resolved',
+            confirmation_id: confirmationId,
+            decision,
+            confirmation_status: resolvedConfirmation.status
+          }));
+
           return sendJson(res, 200, {
             confirmation_id: confirmationId,
             decision,
             status: 'received',
+            confirmation_status: resolvedConfirmation.status,
             executed: false,
             message: CONFIRMATION_RESPONSE_MESSAGES[decision]
           });
