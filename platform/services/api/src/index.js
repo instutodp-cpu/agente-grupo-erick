@@ -15,6 +15,7 @@ const { randomUUID } = require('crypto');
 const { getCapability } = require('./capabilities/registry');
 const { evaluateConfirmationGate } = require('./core/confirmation-gate');
 const { classifyConfirmationResponse } = require('./core/confirmation-response');
+const { planAdapterExecution } = require('./core/adapter-execution');
 const {
   createPendingConfirmation: storePendingConfirmation,
   getPendingConfirmation,
@@ -254,6 +255,7 @@ function createServer() {
               decision,
               status: 'not_found',
               confirmation_status: 'not_found',
+              execution_status: 'not_requested',
               executed: false,
               message: 'Confirmacao nao encontrada ou expirada; nenhuma execucao foi realizada.'
             });
@@ -270,12 +272,36 @@ function createServer() {
               decision,
               status: 'expired',
               confirmation_status: 'expired',
+              execution_status: 'not_requested',
               executed: false,
               message: 'Confirmacao expirada; nenhuma execucao foi realizada.'
             });
           }
 
           const resolvedConfirmation = resolvePendingConfirmation(confirmationId, decision);
+          const capability = getCapability(resolvedConfirmation.domain) || FALLBACK_CAPABILITY;
+          let executionStatus = 'not_requested';
+
+          if (decision === 'approved') {
+            const executionPlan = planAdapterExecution({
+              confirmation: resolvedConfirmation,
+              decision,
+              capability
+            });
+
+            executionStatus = 'disabled';
+            console.log(JSON.stringify({
+              level: 'info',
+              event: 'adapter_execution_planned',
+              confirmation_id: confirmationId,
+              decision,
+              execution_allowed: executionPlan.execution_allowed,
+              executed: executionPlan.executed,
+              reason: executionPlan.reason,
+              required_adapters_count: executionPlan.required_adapters_count
+            }));
+          }
+
           console.log(JSON.stringify({
             level: 'info',
             event: 'confirmation_store_resolved',
@@ -289,6 +315,7 @@ function createServer() {
             decision,
             status: 'received',
             confirmation_status: resolvedConfirmation.status,
+            execution_status: executionStatus,
             executed: false,
             message: CONFIRMATION_RESPONSE_MESSAGES[decision]
           });

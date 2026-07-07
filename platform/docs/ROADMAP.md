@@ -20,6 +20,8 @@ específicas.
   `unknown`) sem executar adapters.
 - Store em memória local valida confirmações pendentes/expiradas sem Redis,
   banco ou execução real.
+- Adapter execution placeholder planeja execução futura de adapters sem ligar
+  qualquer integração real e mantendo `executed: false`.
 
 Critério de saída: sobe local com um comando; nada específico acoplado ao core.
 
