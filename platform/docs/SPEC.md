@@ -88,7 +88,12 @@ Response `200 OK`:
   "intent": "planejar_marketing",
   "status": "planned",
   "message": "Intencao identificada; execucao ainda nao implementada.",
-  "confirmation_required": true
+  "confirmation_required": true,
+  "confirmation": {
+    "id": "confirm_0123456789abcdef0123456789abcdef",
+    "status": "pending",
+    "expires_in_seconds": 900
+  }
 }
 ```
 
@@ -100,6 +105,9 @@ Response `200 OK`:
 - `confirmation_required`: decisão do confirmation gate para execução futura.
   `compras`, `financeiro`, `treinamento`, `marketing` e `desenvolvimento`
   retornam `true`; `desconhecido` retorna `false` e mantém fallback seguro.
+- `confirmation`: presente somente quando `confirmation_required` é `true`.
+  Contém apenas `id`, `status: "pending"` e `expires_in_seconds`; não persiste
+  nada em banco nesta etapa e não inclui payload interno nem mensagem crua.
 - Campos internos do registry, como `requiredAdapters`, não fazem parte da
   resposta pública.
 
@@ -190,6 +198,24 @@ no fallback seguro.
 O gate não chama adapters, não conecta serviços reais e não autoriza execução;
 ele apenas expõe `confirmation_required` no contrato público de `POST /message`.
 
+### 5.3 Pending confirmation
+
+`src/core/pending-confirmation.js` é um módulo puro que monta o objeto público
+mínimo de confirmação pendente quando `confirmation_required` é `true`:
+
+```json
+{
+  "id": "confirm_0123456789abcdef0123456789abcdef",
+  "status": "pending",
+  "expires_in_seconds": 900
+}
+```
+
+O `id` é derivado de forma segura a partir de `trace_id` e um UUID aleatório,
+sem expor o `trace_id` bruto. Nada é persistido, enfileirado ou executado nesta
+etapa. Para `desconhecido`, `confirmation_required` é `false` e o campo
+`confirmation` não é retornado.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -203,8 +229,10 @@ Logs estruturados em JSON (evento + campos). Eventos iniciais: `api_started`,
 `message_received` (`trace_id`, `domain`, `intent`, `message_length` — nunca o
 conteúdo da mensagem), `capability_planned` (`trace_id`, `domain`, `intent`,
 `status`, `required_adapters_count`), `confirmation_gate_evaluated` (`trace_id`,
-`domain`, `intent`, `confirmation_required`), `message_invalid` (`trace_id`).
-Métricas e tracing entram junto com o pipeline de orquestração.
+`domain`, `intent`, `confirmation_required`), `confirmation_created`
+(`trace_id`, `domain`, `intent`, `confirmation_id`, `expires_in_seconds`),
+`message_invalid` (`trace_id`). Métricas e tracing entram junto com o pipeline
+de orquestração.
 
 ## 8. Testes e qualidade
 

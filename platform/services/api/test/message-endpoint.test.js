@@ -39,13 +39,26 @@ function postMessage(port, message, extra) {
   );
 }
 
-function assertPublicMessageResponse(body) {
+function assertPublicMessageResponse(body, expectsConfirmation = false) {
+  const expectedKeys = ['confirmation_required', 'domain', 'intent', 'message', 'status', 'trace_id'];
+  if (expectsConfirmation) expectedKeys.push('confirmation');
+
   assert.deepEqual(
     Object.keys(body).sort(),
-    ['confirmation_required', 'domain', 'intent', 'message', 'status', 'trace_id'].sort()
+    expectedKeys.sort()
   );
   assert.equal(body.status, 'planned');
   assert.ok(typeof body.message === 'string' && body.message.length > 0);
+  assert.equal(Object.hasOwn(body, 'requiredAdapters'), false);
+
+  if (expectsConfirmation) {
+    assert.deepEqual(Object.keys(body.confirmation).sort(), ['expires_in_seconds', 'id', 'status'].sort());
+    assert.match(body.confirmation.id, /^confirm_[a-f0-9]{32}$/);
+    assert.equal(body.confirmation.status, 'pending');
+    assert.equal(body.confirmation.expires_in_seconds, 900);
+  } else {
+    assert.equal(Object.hasOwn(body, 'confirmation'), false);
+  }
 }
 
 test('GET /health responde 200', withServer(async (port) => {
@@ -64,7 +77,7 @@ test('POST /message retorna trace_id, domain, intent, status e message', withSer
   assert.equal(res.body.domain, 'marketing');
   assert.equal(res.body.intent, 'planejar_marketing');
   assert.equal(res.body.confirmation_required, true);
-  assertPublicMessageResponse(res.body);
+  assertPublicMessageResponse(res.body, true);
 }));
 
 test('POST /message classifica compras', withServer(async (port) => {
@@ -74,7 +87,7 @@ test('POST /message classifica compras', withServer(async (port) => {
   assert.equal(res.body.domain, 'compras');
   assert.equal(res.body.intent, 'consultar_compras');
   assert.equal(res.body.confirmation_required, true);
-  assertPublicMessageResponse(res.body);
+  assertPublicMessageResponse(res.body, true);
 }));
 
 test('POST /message classifica compras (vencimentos)', withServer(async (port) => {
@@ -84,7 +97,7 @@ test('POST /message classifica compras (vencimentos)', withServer(async (port) =
   assert.equal(res.body.domain, 'compras');
   assert.equal(res.body.intent, 'consultar_vencimentos');
   assert.equal(res.body.confirmation_required, true);
-  assertPublicMessageResponse(res.body);
+  assertPublicMessageResponse(res.body, true);
 }));
 
 test('POST /message classifica financeiro', withServer(async (port) => {
@@ -94,7 +107,7 @@ test('POST /message classifica financeiro', withServer(async (port) => {
   assert.equal(res.body.domain, 'financeiro');
   assert.equal(res.body.intent, 'consultar_financeiro');
   assert.equal(res.body.confirmation_required, true);
-  assertPublicMessageResponse(res.body);
+  assertPublicMessageResponse(res.body, true);
 }));
 
 test('POST /message classifica treinamento', withServer(async (port) => {
@@ -104,7 +117,7 @@ test('POST /message classifica treinamento', withServer(async (port) => {
   assert.equal(res.body.domain, 'treinamento');
   assert.equal(res.body.intent, 'consultar_treinamento');
   assert.equal(res.body.confirmation_required, true);
-  assertPublicMessageResponse(res.body);
+  assertPublicMessageResponse(res.body, true);
 }));
 
 test('POST /message classifica desenvolvimento e reaproveita trace_id enviado pelo cliente', withServer(async (port) => {
@@ -115,7 +128,7 @@ test('POST /message classifica desenvolvimento e reaproveita trace_id enviado pe
   assert.equal(res.body.domain, 'desenvolvimento');
   assert.equal(res.body.intent, 'desenvolvimento');
   assert.equal(res.body.confirmation_required, true);
-  assertPublicMessageResponse(res.body);
+  assertPublicMessageResponse(res.body, true);
 }));
 
 test('POST /message mensagem genérica cai em desconhecido', withServer(async (port) => {
@@ -141,6 +154,7 @@ test('POST /message registra capability_planned sem mensagem crua', withServer(a
     const received = logs.find((log) => log.event === 'message_received');
     const planned = logs.find((log) => log.event === 'capability_planned');
     const confirmation = logs.find((log) => log.event === 'confirmation_gate_evaluated');
+    const created = logs.find((log) => log.event === 'confirmation_created');
 
     assert.deepEqual(received, {
       level: 'info',
@@ -167,7 +181,33 @@ test('POST /message registra capability_planned sem mensagem crua', withServer(a
       intent: 'consultar_financeiro',
       confirmation_required: true
     });
+    assert.equal(created.level, 'info');
+    assert.equal(created.event, 'confirmation_created');
+    assert.equal(created.trace_id, 'trace-log');
+    assert.equal(created.domain, 'financeiro');
+    assert.equal(created.intent, 'consultar_financeiro');
+    assert.match(created.confirmation_id, /^confirm_[a-f0-9]{32}$/);
+    assert.equal(created.expires_in_seconds, 900);
     assert.equal(JSON.stringify(logs).includes('segredo interno de caixa'), false);
+  } finally {
+    console.log = originalLog;
+  }
+}));
+
+test('POST /message desconhecido nao cria confirmation_created', withServer(async (port) => {
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (line) => { logs.push(JSON.parse(line)); };
+
+  try {
+    const res = await postMessage(port, 'mensagem sem dominio', { trace_id: 'trace-unknown' });
+
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.domain, 'desconhecido');
+    assert.equal(res.body.confirmation_required, false);
+    assertPublicMessageResponse(res.body, false);
+    assert.equal(logs.some((log) => log.event === 'confirmation_created'), false);
+    assert.equal(JSON.stringify(logs).includes('mensagem sem dominio'), false);
   } finally {
     console.log = originalLog;
   }

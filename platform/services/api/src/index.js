@@ -15,6 +15,7 @@ const { randomUUID } = require('crypto');
 const { getCapability } = require('./capabilities/registry');
 const { evaluateConfirmationGate } = require('./core/confirmation-gate');
 const { classifyIntent } = require('./core/intent-router');
+const { createPendingConfirmation } = require('./core/pending-confirmation');
 
 const SERVICE = 'hermes-api';
 const VERSION = process.env.HERMES_VERSION || '2.0.0-scaffold';
@@ -100,6 +101,9 @@ function createServer() {
           const { domain, intent } = classifyIntent(message);
           const capability = getCapability(domain) || FALLBACK_CAPABILITY;
           const confirmationGate = evaluateConfirmationGate({ domain, capability });
+          const confirmation = confirmationGate.confirmationRequired
+            ? createPendingConfirmation({ traceId, randomId: randomUUID() })
+            : null;
           console.log(JSON.stringify({
             level: 'info',
             event: 'message_received',
@@ -125,15 +129,29 @@ function createServer() {
             intent,
             confirmation_required: confirmationGate.confirmationRequired
           }));
+          if (confirmation) {
+            console.log(JSON.stringify({
+              level: 'info',
+              event: 'confirmation_created',
+              trace_id: traceId,
+              domain,
+              intent,
+              confirmation_id: confirmation.id,
+              expires_in_seconds: confirmation.expires_in_seconds
+            }));
+          }
 
-          return sendJson(res, 200, {
+          const responseBody = {
             trace_id: traceId,
             domain,
             intent,
             status: capability.status,
             message: capability.publicMessage,
             confirmation_required: confirmationGate.confirmationRequired
-          });
+          };
+          if (confirmation) responseBody.confirmation = confirmation;
+
+          return sendJson(res, 200, responseBody);
         })
         .catch(() => {
           console.log(JSON.stringify({ level: 'warn', event: 'message_invalid', trace_id: randomUUID() }));

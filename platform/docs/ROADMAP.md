@@ -14,6 +14,8 @@ específicas.
   retorna apenas um plano público seguro, sem executar adapters reais.
 - Confirmation gate puro indica quando confirmação será necessária antes de
   qualquer execução futura por adapter.
+- Pending confirmation contract público (`id`, `status`, `expires_in_seconds`)
+  preparado sem persistência, fila ou execução real.
 
 Critério de saída: sobe local com um comando; nada específico acoplado ao core.
 
@@ -30,15 +32,16 @@ Critério: trocar uma implementação = trocar um adapter, sem tocar o core.
 
 - Autenticação de usuários/serviços; autorização por papel/departamento/loja/
   dado/ação; fluxo completo de aprovação humana para ações sensíveis; auditoria
-  com `trace_id`. O confirmation gate inicial já existe como contrato seguro,
-  ainda sem execução real.
+  com `trace_id`. O confirmation gate inicial e o contrato de confirmação
+  pendente já existem como base segura, ainda sem execução real.
 
 ## Fase 3 — Orquestração
 
 - Ingress/BFF multicanal; Resolver + Executor; caminhos determinísticos e cache
   antes de LLM. Intent Router e Capability Registry já existem como fundação
   planejada, sem execução real; qualquer executor futuro deve respeitar o
-  confirmation gate antes de chamar adapters.
+  confirmation gate e consumir uma confirmação pendente válida antes de chamar
+  adapters.
 
 ## Fase 4 — Memória
 
