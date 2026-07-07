@@ -13,6 +13,7 @@
 const http = require('http');
 const { randomUUID } = require('crypto');
 const { getCapability } = require('./capabilities/registry');
+const { evaluateConfirmationGate } = require('./core/confirmation-gate');
 const { classifyIntent } = require('./core/intent-router');
 
 const SERVICE = 'hermes-api';
@@ -98,6 +99,7 @@ function createServer() {
 
           const { domain, intent } = classifyIntent(message);
           const capability = getCapability(domain) || FALLBACK_CAPABILITY;
+          const confirmationGate = evaluateConfirmationGate({ domain, capability });
           console.log(JSON.stringify({
             level: 'info',
             event: 'message_received',
@@ -115,13 +117,22 @@ function createServer() {
             status: capability.status,
             required_adapters_count: capability.requiredAdapters.length
           }));
+          console.log(JSON.stringify({
+            level: 'info',
+            event: 'confirmation_gate_evaluated',
+            trace_id: traceId,
+            domain,
+            intent,
+            confirmation_required: confirmationGate.confirmationRequired
+          }));
 
           return sendJson(res, 200, {
             trace_id: traceId,
             domain,
             intent,
             status: capability.status,
-            message: capability.publicMessage
+            message: capability.publicMessage,
+            confirmation_required: confirmationGate.confirmationRequired
           });
         })
         .catch(() => {

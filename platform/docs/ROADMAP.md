@@ -12,6 +12,8 @@ específicas.
 - Núcleo mínimo (health/readiness), sem acoplar ferramentas.
 - `POST /message` classifica domain/intent, consulta o capability registry e
   retorna apenas um plano público seguro, sem executar adapters reais.
+- Confirmation gate puro indica quando confirmação será necessária antes de
+  qualquer execução futura por adapter.
 
 Critério de saída: sobe local com um comando; nada específico acoplado ao core.
 
@@ -27,13 +29,16 @@ Critério: trocar uma implementação = trocar um adapter, sem tocar o core.
 ## Fase 2 — AuthN/AuthZ e Policy Engine
 
 - Autenticação de usuários/serviços; autorização por papel/departamento/loja/
-  dado/ação; aprovação humana para ações sensíveis; auditoria com `trace_id`.
+  dado/ação; fluxo completo de aprovação humana para ações sensíveis; auditoria
+  com `trace_id`. O confirmation gate inicial já existe como contrato seguro,
+  ainda sem execução real.
 
 ## Fase 3 — Orquestração
 
 - Ingress/BFF multicanal; Resolver + Executor; caminhos determinísticos e cache
   antes de LLM. Intent Router e Capability Registry já existem como fundação
-  planejada, sem execução real.
+  planejada, sem execução real; qualquer executor futuro deve respeitar o
+  confirmation gate antes de chamar adapters.
 
 ## Fase 4 — Memória
 

@@ -59,8 +59,9 @@ Sem dependências npm (usa `http` nativo). Endpoints:
 - `GET /health` → `{ status:"ok", service:"hermes-api", version }` (liveness).
 - `GET /ready` → `{ status:"ready", config:{ database, redis, qdrant, mcpGateway } }`
   (readiness; **apenas booleanos** de presença de config, nunca valores).
-- `POST /message` → recebe uma mensagem, classifica a intenção e consulta o
-  capability registry para planejar a resposta segura (ver §3.1).
+- `POST /message` → recebe uma mensagem, classifica a intenção, consulta o
+  capability registry e passa pelo confirmation gate para planejar a resposta
+  segura (ver §3.1).
 - `GET /` → identidade do serviço e ponteiro para o blueprint.
 
 ### 3.1 `POST /message` — contrato
@@ -86,7 +87,8 @@ Response `200 OK`:
   "domain": "marketing",
   "intent": "planejar_marketing",
   "status": "planned",
-  "message": "Intencao identificada; execucao ainda nao implementada."
+  "message": "Intencao identificada; execucao ainda nao implementada.",
+  "confirmation_required": true
 }
 ```
 
@@ -95,6 +97,9 @@ Response `200 OK`:
   sempre `"planned"`; nenhuma ação real é executada.
 - `message`: mensagem pública segura definida pelo plano da capability. Não é
   eco do texto enviado.
+- `confirmation_required`: decisão do confirmation gate para execução futura.
+  `compras`, `financeiro`, `treinamento`, `marketing` e `desenvolvimento`
+  retornam `true`; `desconhecido` retorna `false` e mantém fallback seguro.
 - Campos internos do registry, como `requiredAdapters`, não fazem parte da
   resposta pública.
 
@@ -173,6 +178,18 @@ instancia o adapter.
 capability para montar `status` e `message`. A resposta pública nunca inclui
 `requiredAdapters` nem qualquer campo de confirmação interna.
 
+### 5.2 Confirmation gate
+
+`src/core/confirmation-gate.js` é um módulo puro, sem I/O, que decide se uma
+capability exigirá confirmação antes de qualquer execução futura por adapter.
+Nesta etapa, todos os domínios com capacidade planejada (`compras`,
+`financeiro`, `treinamento`, `marketing`, `desenvolvimento`) exigem confirmação.
+`desconhecido` não exige confirmação porque não há execução possível e continua
+no fallback seguro.
+
+O gate não chama adapters, não conecta serviços reais e não autoriza execução;
+ele apenas expõe `confirmation_required` no contrato público de `POST /message`.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -185,8 +202,9 @@ Logs estruturados em JSON (evento + campos). Eventos iniciais: `api_started`,
 `api_shutdown`, `worker_started`, `worker_heartbeat`, `worker_shutdown`,
 `message_received` (`trace_id`, `domain`, `intent`, `message_length` — nunca o
 conteúdo da mensagem), `capability_planned` (`trace_id`, `domain`, `intent`,
-`status`, `required_adapters_count`), `message_invalid` (`trace_id`). Métricas e
-tracing entram junto com o pipeline de orquestração.
+`status`, `required_adapters_count`), `confirmation_gate_evaluated` (`trace_id`,
+`domain`, `intent`, `confirmation_required`), `message_invalid` (`trace_id`).
+Métricas e tracing entram junto com o pipeline de orquestração.
 
 ## 8. Testes e qualidade
 

@@ -42,7 +42,7 @@ function postMessage(port, message, extra) {
 function assertPublicMessageResponse(body) {
   assert.deepEqual(
     Object.keys(body).sort(),
-    ['domain', 'intent', 'message', 'status', 'trace_id'].sort()
+    ['confirmation_required', 'domain', 'intent', 'message', 'status', 'trace_id'].sort()
   );
   assert.equal(body.status, 'planned');
   assert.ok(typeof body.message === 'string' && body.message.length > 0);
@@ -63,6 +63,7 @@ test('POST /message retorna trace_id, domain, intent, status e message', withSer
   assert.ok(typeof res.body.trace_id === 'string' && res.body.trace_id.length > 0);
   assert.equal(res.body.domain, 'marketing');
   assert.equal(res.body.intent, 'planejar_marketing');
+  assert.equal(res.body.confirmation_required, true);
   assertPublicMessageResponse(res.body);
 }));
 
@@ -72,6 +73,7 @@ test('POST /message classifica compras', withServer(async (port) => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.domain, 'compras');
   assert.equal(res.body.intent, 'consultar_compras');
+  assert.equal(res.body.confirmation_required, true);
   assertPublicMessageResponse(res.body);
 }));
 
@@ -81,6 +83,7 @@ test('POST /message classifica compras (vencimentos)', withServer(async (port) =
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.domain, 'compras');
   assert.equal(res.body.intent, 'consultar_vencimentos');
+  assert.equal(res.body.confirmation_required, true);
   assertPublicMessageResponse(res.body);
 }));
 
@@ -90,6 +93,7 @@ test('POST /message classifica financeiro', withServer(async (port) => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.domain, 'financeiro');
   assert.equal(res.body.intent, 'consultar_financeiro');
+  assert.equal(res.body.confirmation_required, true);
   assertPublicMessageResponse(res.body);
 }));
 
@@ -99,6 +103,7 @@ test('POST /message classifica treinamento', withServer(async (port) => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.domain, 'treinamento');
   assert.equal(res.body.intent, 'consultar_treinamento');
+  assert.equal(res.body.confirmation_required, true);
   assertPublicMessageResponse(res.body);
 }));
 
@@ -109,6 +114,7 @@ test('POST /message classifica desenvolvimento e reaproveita trace_id enviado pe
   assert.equal(res.body.trace_id, 'trace-123');
   assert.equal(res.body.domain, 'desenvolvimento');
   assert.equal(res.body.intent, 'desenvolvimento');
+  assert.equal(res.body.confirmation_required, true);
   assertPublicMessageResponse(res.body);
 }));
 
@@ -118,6 +124,7 @@ test('POST /message mensagem genérica cai em desconhecido', withServer(async (p
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.domain, 'desconhecido');
   assert.equal(res.body.intent, 'desconhecido');
+  assert.equal(res.body.confirmation_required, false);
   assertPublicMessageResponse(res.body);
   assert.match(res.body.message, /nenhuma acao foi executada/i);
 }));
@@ -133,6 +140,7 @@ test('POST /message registra capability_planned sem mensagem crua', withServer(a
     assert.equal(res.statusCode, 200);
     const received = logs.find((log) => log.event === 'message_received');
     const planned = logs.find((log) => log.event === 'capability_planned');
+    const confirmation = logs.find((log) => log.event === 'confirmation_gate_evaluated');
 
     assert.deepEqual(received, {
       level: 'info',
@@ -150,6 +158,14 @@ test('POST /message registra capability_planned sem mensagem crua', withServer(a
       intent: 'consultar_financeiro',
       status: 'planned',
       required_adapters_count: 1
+    });
+    assert.deepEqual(confirmation, {
+      level: 'info',
+      event: 'confirmation_gate_evaluated',
+      trace_id: 'trace-log',
+      domain: 'financeiro',
+      intent: 'consultar_financeiro',
+      confirmation_required: true
     });
     assert.equal(JSON.stringify(logs).includes('segredo interno de caixa'), false);
   } finally {
