@@ -160,6 +160,7 @@ Response `200 OK`:
   "confirmation_id": "confirm_0123456789abcdef0123456789abcdef",
   "decision": "approved",
   "status": "received",
+  "confirmation_status": "approved",
   "executed": false,
   "message": "Confirmacao recebida; execucao real ainda nao esta habilitada."
 }
@@ -167,8 +168,13 @@ Response `200 OK`:
 
 - `decision`: `approved`, `rejected` ou `unknown`, classificado por
   `src/core/confirmation-response.js`.
+- `status`: `received` quando o `confirmation_id` existe e ainda não expirou;
+  `not_found` quando não existe; `expired` quando já expirou.
+- `confirmation_status`: estado seguro no store em memória (`pending`,
+  `approved`, `rejected`, `expired` ou `not_found`). `unknown` mantém a
+  confirmação como `pending`.
 - `executed`: sempre `false` nesta etapa. O endpoint não chama adapters, não
-  persiste estado e não conecta serviços reais.
+  persiste em banco e não conecta serviços reais.
 - `message`: mensagem pública segura. Não ecoa a resposta enviada.
 
 Exemplos de classificação:
@@ -266,12 +272,35 @@ sem expor o `trace_id` bruto. Nada é persistido, enfileirado ou executado nesta
 etapa. Para `desconhecido`, `confirmation_required` é `false` e o campo
 `confirmation` não é retornado.
 
-### 5.4 Confirmation response
+### 5.4 In-memory confirmation store
+
+`src/core/confirmation-store.js` mantém confirmações pendentes em memória para o
+MVP local. O store não usa banco, Redis, filas nem serviços externos. Ele guarda
+somente metadados seguros:
+
+```json
+{
+  "confirmation_id": "confirm_0123456789abcdef0123456789abcdef",
+  "trace_id": "a1b2c3d4-...",
+  "domain": "financeiro",
+  "intent": "consultar_financeiro",
+  "status": "pending",
+  "expires_at": "2026-01-01T00:15:00.000Z"
+}
+```
+
+Não salva mensagem crua, `requiredAdapters`, payload interno ou segredos.
+`POST /message` cria registro somente quando `confirmation_required` é `true`.
+`POST /confirm` consulta esse store; se o id não existir ou estiver expirado,
+responde de forma segura com `executed: false`.
+
+### 5.5 Confirmation response
 
 `src/core/confirmation-response.js` é um módulo puro que normaliza a resposta do
 usuário e classifica a decisão como `approved`, `rejected` ou `unknown`. O
 endpoint `POST /confirm` usa essa decisão apenas para registrar recebimento e
-retornar um contrato público seguro; nenhuma execução real é habilitada.
+retornar um contrato público seguro. `approved` e `rejected` resolvem o registro
+em memória; `unknown` mantém `pending`. Nenhuma execução real é habilitada.
 
 ## 6. Configuração
 
@@ -288,9 +317,12 @@ conteúdo da mensagem), `capability_planned` (`trace_id`, `domain`, `intent`,
 `status`, `required_adapters_count`), `confirmation_gate_evaluated` (`trace_id`,
 `domain`, `intent`, `confirmation_required`), `confirmation_created`
 (`trace_id`, `domain`, `intent`, `confirmation_id`, `expires_in_seconds`),
-`confirmation_response_received` (`confirmation_id`, `decision`,
-`message_length`), `message_invalid` (`trace_id`). Métricas e tracing entram
-junto com o pipeline de orquestração.
+`confirmation_store_created` (`trace_id`, `domain`, `intent`,
+`confirmation_id`, `expires_at`), `confirmation_response_received`
+(`confirmation_id`, `decision`, `message_length`), `confirmation_store_resolved`
+(`confirmation_id`, `decision`, `confirmation_status`),
+`confirmation_store_miss` (`confirmation_id`), `message_invalid` (`trace_id`).
+Métricas e tracing entram junto com o pipeline de orquestração.
 
 ## 8. Testes e qualidade
 

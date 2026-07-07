@@ -95,9 +95,10 @@ Contrato completo (todos os domínios/intents) em `docs/SPEC.md` (§3.1).
 
 ## Responder confirmação
 
-`POST /confirm` recebe uma resposta do usuário para uma confirmação pendente e
-classifica a decisão como `approved`, `rejected` ou `unknown`. O endpoint não
-executa adapters, não persiste confirmação e sempre retorna `executed: false`.
+`POST /confirm` recebe uma resposta do usuário para uma confirmação pendente,
+valida o `confirmation_id` no store em memória local e classifica a decisão como
+`approved`, `rejected` ou `unknown`. O endpoint não executa adapters, não
+persiste em banco e sempre retorna `executed: false`.
 
 ```bash
 curl -X POST localhost:8080/confirm \
@@ -107,6 +108,7 @@ curl -X POST localhost:8080/confirm \
 #   "confirmation_id": "confirm_...",
 #   "decision": "approved",
 #   "status": "received",
+#   "confirmation_status": "approved",
 #   "executed": false,
 #   "message": "Confirmacao recebida; execucao real ainda nao esta habilitada."
 # }

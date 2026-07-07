@@ -18,6 +18,8 @@ específicas.
   preparado sem persistência, fila ou execução real.
 - Confirmation response contract classifica respostas (`approved`, `rejected`,
   `unknown`) sem executar adapters.
+- Store em memória local valida confirmações pendentes/expiradas sem Redis,
+  banco ou execução real.
 
 Critério de saída: sobe local com um comando; nada específico acoplado ao core.
 
@@ -34,8 +36,9 @@ Critério: trocar uma implementação = trocar um adapter, sem tocar o core.
 
 - Autenticação de usuários/serviços; autorização por papel/departamento/loja/
   dado/ação; fluxo completo de aprovação humana para ações sensíveis; auditoria
-  com `trace_id`. O confirmation gate inicial, a confirmação pendente e a
-  resposta de confirmação já existem como base segura, ainda sem execução real.
+  com `trace_id`. O confirmation gate inicial, a confirmação pendente, a
+  resposta de confirmação e o store em memória já existem como base segura,
+  ainda sem execução real ou persistência durável.
 
 ## Fase 3 — Orquestração
 
@@ -43,7 +46,8 @@ Critério: trocar uma implementação = trocar um adapter, sem tocar o core.
   antes de LLM. Intent Router e Capability Registry já existem como fundação
   planejada, sem execução real; qualquer executor futuro deve respeitar o
   confirmation gate e consumir uma confirmação pendente válida antes de chamar
-  adapters. A decisão `approved` em `POST /confirm` ainda não executa nada.
+  adapters. A decisão `approved` em `POST /confirm` atualiza apenas o store em
+  memória e ainda não executa nada.
 
 ## Fase 4 — Memória
 

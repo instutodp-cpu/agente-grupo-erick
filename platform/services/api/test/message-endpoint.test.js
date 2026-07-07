@@ -5,6 +5,10 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 
 const { createServer } = require('../src/index');
+const {
+  getPendingConfirmation,
+  resetConfirmationStore
+} = require('../src/core/confirmation-store');
 
 function request(port, options, body) {
   return new Promise((resolve, reject) => {
@@ -70,6 +74,7 @@ test('GET /health responde 200', withServer(async (port) => {
 }));
 
 test('POST /message retorna trace_id, domain, intent, status e message', withServer(async (port) => {
+  resetConfirmationStore();
   const res = await postMessage(port, 'lançar campanha de marketing');
 
   assert.equal(res.statusCode, 200);
@@ -78,6 +83,15 @@ test('POST /message retorna trace_id, domain, intent, status e message', withSer
   assert.equal(res.body.intent, 'planejar_marketing');
   assert.equal(res.body.confirmation_required, true);
   assertPublicMessageResponse(res.body, true);
+
+  const stored = getPendingConfirmation(res.body.confirmation.id);
+  assert.equal(stored.confirmation_id, res.body.confirmation.id);
+  assert.equal(stored.trace_id, res.body.trace_id);
+  assert.equal(stored.domain, 'marketing');
+  assert.equal(stored.intent, 'planejar_marketing');
+  assert.equal(stored.status, 'pending');
+  assert.equal(Object.hasOwn(stored, 'message'), false);
+  assert.equal(Object.hasOwn(stored, 'requiredAdapters'), false);
 }));
 
 test('POST /message classifica compras', withServer(async (port) => {
@@ -155,6 +169,7 @@ test('POST /message registra capability_planned sem mensagem crua', withServer(a
     const planned = logs.find((log) => log.event === 'capability_planned');
     const confirmation = logs.find((log) => log.event === 'confirmation_gate_evaluated');
     const created = logs.find((log) => log.event === 'confirmation_created');
+    const storeCreated = logs.find((log) => log.event === 'confirmation_store_created');
 
     assert.deepEqual(received, {
       level: 'info',
@@ -188,6 +203,13 @@ test('POST /message registra capability_planned sem mensagem crua', withServer(a
     assert.equal(created.intent, 'consultar_financeiro');
     assert.match(created.confirmation_id, /^confirm_[a-f0-9]{32}$/);
     assert.equal(created.expires_in_seconds, 900);
+    assert.equal(storeCreated.level, 'info');
+    assert.equal(storeCreated.event, 'confirmation_store_created');
+    assert.equal(storeCreated.trace_id, 'trace-log');
+    assert.equal(storeCreated.domain, 'financeiro');
+    assert.equal(storeCreated.intent, 'consultar_financeiro');
+    assert.equal(storeCreated.confirmation_id, created.confirmation_id);
+    assert.ok(typeof storeCreated.expires_at === 'string' && storeCreated.expires_at.length > 0);
     assert.equal(JSON.stringify(logs).includes('segredo interno de caixa'), false);
   } finally {
     console.log = originalLog;
