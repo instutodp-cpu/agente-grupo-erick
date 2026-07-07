@@ -37,6 +37,13 @@ const CONFIRMATION_RESPONSE_MESSAGES = {
   rejected: 'Acao cancelada pelo usuario; nenhuma execucao foi realizada.',
   unknown: 'Resposta recebida, mas preciso de uma resposta clara como sim ou nao.'
 };
+const CONFIRMATION_STATUS_MESSAGES = {
+  pending: 'Confirmacao pendente; nenhuma execucao foi realizada.',
+  approved: 'Confirmacao aprovada; execucao real ainda nao esta habilitada.',
+  rejected: 'Confirmacao rejeitada; nenhuma execucao foi realizada.',
+  expired: 'Confirmacao expirada; nenhuma execucao foi realizada.',
+  not_found: 'Confirmacao nao encontrada; nenhuma execucao foi realizada.'
+};
 
 // Presença de configuração — apenas booleanos, nunca os valores/segredos.
 function configPresence() {
@@ -55,6 +62,34 @@ function sendJson(res, statusCode, body) {
     'Content-Length': Buffer.byteLength(payload)
   });
   res.end(payload);
+}
+
+function getConfirmationIdFromUrl(url) {
+  const match = url.match(/^\/confirm\/([^/]+)$/);
+  return match ? match[1] : null;
+}
+
+function buildConfirmationStatusResponse(confirmationId, confirmation) {
+  if (!confirmation) {
+    return {
+      confirmation_id: confirmationId,
+      status: 'not_found',
+      executed: false,
+      message: CONFIRMATION_STATUS_MESSAGES.not_found
+    };
+  }
+
+  const response = {
+    confirmation_id: confirmation.confirmation_id,
+    status: confirmation.status,
+    executed: false,
+    message: CONFIRMATION_STATUS_MESSAGES[confirmation.status] || CONFIRMATION_STATUS_MESSAGES.not_found,
+    domain: confirmation.domain,
+    intent: confirmation.intent,
+    expires_at: confirmation.expires_at
+  };
+
+  return response;
 }
 
 // Lê e faz parse do corpo JSON, com limite de tamanho para evitar payloads
@@ -262,6 +297,23 @@ function createServer() {
           console.log(JSON.stringify({ level: 'warn', event: 'confirmation_response_invalid' }));
           return sendJson(res, 400, { error: 'invalid_request', message: 'corpo JSON invalido' });
         });
+    }
+
+    if (method === 'GET') {
+      const confirmationId = getConfirmationIdFromUrl(url);
+      if (confirmationId) {
+        const confirmation = getPendingConfirmation(confirmationId);
+        const confirmationStatus = confirmation ? confirmation.status : 'not_found';
+
+        console.log(JSON.stringify({
+          level: 'info',
+          event: 'confirmation_status_checked',
+          confirmation_id: confirmationId,
+          confirmation_status: confirmationStatus
+        }));
+
+        return sendJson(res, 200, buildConfirmationStatusResponse(confirmationId, confirmation));
+      }
     }
 
     if (method === 'GET' && url === '/') {

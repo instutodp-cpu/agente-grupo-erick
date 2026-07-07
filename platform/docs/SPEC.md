@@ -64,6 +64,8 @@ Sem dependências npm (usa `http` nativo). Endpoints:
   segura (ver §3.1).
 - `POST /confirm` → recebe uma resposta de confirmação e classifica a decisão
   sem executar adapters (ver §3.2).
+- `GET /confirm/:confirmation_id` → consulta o status público de uma
+  confirmação no store em memória (ver §3.3).
 - `GET /` → identidade do serviço e ponteiro para o blueprint.
 
 ### 3.1 `POST /message` — contrato
@@ -190,6 +192,40 @@ string, ou o corpo não é JSON válido):
 
 ```json
 { "error": "invalid_request", "message": "'confirmation_id' e obrigatorio" }
+```
+
+### 3.3 `GET /confirm/:confirmation_id` — contrato
+
+Response `200 OK`:
+
+```json
+{
+  "confirmation_id": "confirm_0123456789abcdef0123456789abcdef",
+  "status": "pending",
+  "executed": false,
+  "message": "Confirmacao pendente; nenhuma execucao foi realizada.",
+  "domain": "financeiro",
+  "intent": "consultar_financeiro",
+  "expires_at": "2026-01-01T00:15:00.000Z"
+}
+```
+
+- `status`: `pending`, `approved`, `rejected`, `expired` ou `not_found`.
+- `executed`: sempre `false`.
+- `message`: mensagem pública segura baseada no status.
+- `domain`, `intent` e `expires_at`: metadados seguros opcionais quando a
+  confirmação existe no store.
+- `requiredAdapters`, payload interno, mensagem crua e segredos não aparecem.
+
+Para `not_found`, a resposta pública retorna apenas:
+
+```json
+{
+  "confirmation_id": "confirm_missing",
+  "status": "not_found",
+  "executed": false,
+  "message": "Confirmacao nao encontrada; nenhuma execucao foi realizada."
+}
 ```
 
 ## 4. Worker (scaffold)

@@ -114,6 +114,10 @@ curl -X POST localhost:8080/confirm \
 # }
 ```
 
+`GET /confirm/:confirmation_id` consulta o status atual no store em memória e
+retorna `pending`, `approved`, `rejected`, `expired` ou `not_found`, sempre com
+`executed: false`.
+
 ## Estrutura
 
 ```text
