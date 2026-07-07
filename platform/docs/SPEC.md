@@ -62,6 +62,8 @@ Sem dependências npm (usa `http` nativo). Endpoints:
 - `POST /message` → recebe uma mensagem, classifica a intenção, consulta o
   capability registry e passa pelo confirmation gate para planejar a resposta
   segura (ver §3.1).
+- `POST /confirm` → recebe uma resposta de confirmação e classifica a decisão
+  sem executar adapters (ver §3.2).
 - `GET /` → identidade do serviço e ponteiro para o blueprint.
 
 ### 3.1 `POST /message` — contrato
@@ -134,6 +136,54 @@ ou o corpo não é JSON válido):
 
 ```json
 { "error": "invalid_request", "message": "'message' é obrigatório" }
+```
+
+### 3.2 `POST /confirm` — contrato
+
+Request (`Content-Type: application/json`):
+
+```json
+{
+  "confirmation_id": "confirm_0123456789abcdef0123456789abcdef",
+  "message": "sim"
+}
+```
+
+- `confirmation_id` (string, obrigatório): identificador público recebido em
+  `POST /message`.
+- `message` (string): resposta do usuário. O conteúdo não é logado.
+
+Response `200 OK`:
+
+```json
+{
+  "confirmation_id": "confirm_0123456789abcdef0123456789abcdef",
+  "decision": "approved",
+  "status": "received",
+  "executed": false,
+  "message": "Confirmacao recebida; execucao real ainda nao esta habilitada."
+}
+```
+
+- `decision`: `approved`, `rejected` ou `unknown`, classificado por
+  `src/core/confirmation-response.js`.
+- `executed`: sempre `false` nesta etapa. O endpoint não chama adapters, não
+  persiste estado e não conecta serviços reais.
+- `message`: mensagem pública segura. Não ecoa a resposta enviada.
+
+Exemplos de classificação:
+
+| Decision | Exemplos |
+| -------- | -------- |
+| `approved` | sim, confirmar, confirma, pode executar, aprovado, ok, yes |
+| `rejected` | não, cancelar, cancela, rejeitar, rejeitado, não executar, no |
+| `unknown` | qualquer texto ambíguo |
+
+Response `400 Bad Request` (quando `confirmation_id` está ausente, vazio, não é
+string, ou o corpo não é JSON válido):
+
+```json
+{ "error": "invalid_request", "message": "'confirmation_id' e obrigatorio" }
 ```
 
 ## 4. Worker (scaffold)
@@ -216,6 +266,13 @@ sem expor o `trace_id` bruto. Nada é persistido, enfileirado ou executado nesta
 etapa. Para `desconhecido`, `confirmation_required` é `false` e o campo
 `confirmation` não é retornado.
 
+### 5.4 Confirmation response
+
+`src/core/confirmation-response.js` é um módulo puro que normaliza a resposta do
+usuário e classifica a decisão como `approved`, `rejected` ou `unknown`. O
+endpoint `POST /confirm` usa essa decisão apenas para registrar recebimento e
+retornar um contrato público seguro; nenhuma execução real é habilitada.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -231,8 +288,9 @@ conteúdo da mensagem), `capability_planned` (`trace_id`, `domain`, `intent`,
 `status`, `required_adapters_count`), `confirmation_gate_evaluated` (`trace_id`,
 `domain`, `intent`, `confirmation_required`), `confirmation_created`
 (`trace_id`, `domain`, `intent`, `confirmation_id`, `expires_in_seconds`),
-`message_invalid` (`trace_id`). Métricas e tracing entram junto com o pipeline
-de orquestração.
+`confirmation_response_received` (`confirmation_id`, `decision`,
+`message_length`), `message_invalid` (`trace_id`). Métricas e tracing entram
+junto com o pipeline de orquestração.
 
 ## 8. Testes e qualidade
 
