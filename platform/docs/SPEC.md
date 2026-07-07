@@ -59,7 +59,8 @@ Sem dependências npm (usa `http` nativo). Endpoints:
 - `GET /health` → `{ status:"ok", service:"hermes-api", version }` (liveness).
 - `GET /ready` → `{ status:"ready", config:{ database, redis, qdrant, mcpGateway } }`
   (readiness; **apenas booleanos** de presença de config, nunca valores).
-- `POST /message` → recebe uma mensagem e classifica a intenção (ver §3.1).
+- `POST /message` → recebe uma mensagem, classifica a intenção e consulta o
+  capability registry para planejar a resposta segura (ver §3.1).
 - `GET /` → identidade do serviço e ponteiro para o blueprint.
 
 ### 3.1 `POST /message` — contrato
@@ -85,15 +86,17 @@ Response `200 OK`:
   "domain": "marketing",
   "intent": "planejar_marketing",
   "status": "planned",
-  "message": "Intenção identificada; execução ainda não implementada."
+  "message": "Intencao identificada; execucao ainda nao implementada."
 }
 ```
 
 - `domain` / `intent`: par classificado pelo roteador (ver tabela abaixo).
-- `status`: sempre `"planned"` nesta etapa — o roteador só classifica; a
-  execução real de cada domínio entra como **adapter**/capability em etapa
-  futura, sem mudar este contrato.
-- `message`: texto fixo de confirmação (não é eco do texto enviado).
+- `status`: vem do plano da capability registrada para o domínio. Nesta etapa é
+  sempre `"planned"`; nenhuma ação real é executada.
+- `message`: mensagem pública segura definida pelo plano da capability. Não é
+  eco do texto enviado.
+- Campos internos do registry, como `requiredAdapters`, não fazem parte da
+  resposta pública.
 
 Classificação por palavras-chave (case/acento-insensitive), implementada em
 `src/core/intent-router.js` — lógica de domínio pura, sem I/O, pronta para
@@ -155,16 +158,20 @@ implementada ainda:
   "domain": "compras",
   "description": "Consultas de compras e vencimentos (pedidos, fornecedores, duplicatas).",
   "status": "planned",
+  "publicMessage": "Intencao identificada; execucao ainda nao implementada.",
   "requiredAdapters": ["DataStore"]
 }
 ```
 
 Todos os 6 domínios (`compras`, `financeiro`, `treinamento`, `marketing`,
-`desenvolvimento`, `desconhecido`) estão registrados com `status: "planned"`.
-`requiredAdapters` só documenta qual port cada domínio usará quando a execução
-real for implementada — não importa nem instancia o adapter. `POST /message`
-**não consulta este registro ainda**; a classificação e a resposta continuam
-como descrito em §3.1.
+`desenvolvimento`, `desconhecido`) estão registrados com `status: "planned"` e
+uma `publicMessage` segura. `requiredAdapters` só documenta qual port cada
+domínio usará quando a execução real for implementada — não importa nem
+instancia o adapter.
+
+`POST /message` consulta este registro depois do intent-router e usa o plano da
+capability para montar `status` e `message`. A resposta pública nunca inclui
+`requiredAdapters` nem qualquer campo de confirmação interna.
 
 ## 6. Configuração
 
@@ -177,8 +184,9 @@ serviços internos. Segredos reais só em `.env`/Railway, nunca no repo.
 Logs estruturados em JSON (evento + campos). Eventos iniciais: `api_started`,
 `api_shutdown`, `worker_started`, `worker_heartbeat`, `worker_shutdown`,
 `message_received` (`trace_id`, `domain`, `intent`, `message_length` — nunca o
-conteúdo da mensagem), `message_invalid` (`trace_id`). Métricas e tracing
-entram junto com o pipeline de orquestração.
+conteúdo da mensagem), `capability_planned` (`trace_id`, `domain`, `intent`,
+`status`, `required_adapters_count`), `message_invalid` (`trace_id`). Métricas e
+tracing entram junto com o pipeline de orquestração.
 
 ## 8. Testes e qualidade
 

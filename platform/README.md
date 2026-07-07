@@ -60,10 +60,15 @@ readiness (TCP) de postgres/redis/qdrant.
 
 ## Enviar uma mensagem
 
-`POST /message` recebe `{ "message": "..." }` e classifica **domínio + intenção**.
+`POST /message` recebe `{ "message": "..." }`, classifica **domínio + intenção**
+e consulta o capability registry para planejar a capacidade correspondente.
 Domínios: `marketing`, `desenvolvimento`, `compras`, `financeiro`, `treinamento`
 ou `desconhecido` (fallback). O `status` é sempre `"planned"` nesta etapa — o
-roteador só classifica, ainda não executa a ação.
+core só planeja, ainda não executa a ação nem conecta serviços reais.
+
+A resposta pública expõe apenas `trace_id`, `domain`, `intent`, `status` e
+`message`. Metadados internos do registry, como adapters requeridos, ficam fora
+do contrato público.
 
 ```bash
 curl -X POST localhost:8080/message \
@@ -74,7 +79,7 @@ curl -X POST localhost:8080/message \
 #   "domain": "marketing",
 #   "intent": "planejar_marketing",
 #   "status": "planned",
-#   "message": "Intenção identificada; execução ainda não implementada."
+#   "message": "Intencao identificada; execucao ainda nao implementada."
 # }
 ```
 
