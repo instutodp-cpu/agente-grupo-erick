@@ -346,6 +346,9 @@ endpoint `POST /confirm` usa essa decisão apenas para registrar recebimento e
 retornar um contrato público seguro. `approved` e `rejected` resolvem o registro
 em memória; `unknown` mantém `pending`. Nenhuma execução real é habilitada.
 
+Operação manual, limites e checklist de segurança ficam documentados em
+`docs/OPERATOR_RUNBOOK.md`.
+
 ### 5.6 Adapter execution placeholder
 
 `src/core/adapter-execution.js` expõe um contrato interno puro para planejar a
@@ -366,6 +369,9 @@ serviços internos. Segredos reais só em `.env`/Railway, nunca no repo.
 - `HERMES_EXECUTION_KILL_SWITCH=true` bloqueia qualquer execução futura.
 - Mesmo com `HERMES_EXECUTION_ENABLED=true`, nenhum adapter real executa nesta
   fase; a política só prepara o contrato para uma etapa posterior.
+- Consulte `docs/OPERATOR_RUNBOOK.md` para o procedimento operacional
+  detalhado, incluindo validação manual, rollback e regras para PRs futuras de
+  adapter.
 
 ## 7. Observabilidade
 
