@@ -68,8 +68,9 @@ ou `desconhecido` (fallback). O `status` é sempre `"planned"` nesta etapa — o
 core só planeja, ainda não executa a ação nem conecta serviços reais.
 
 A resposta pública expõe apenas `trace_id`, `domain`, `intent`, `status`,
-`message` e `confirmation_required`. Metadados internos do registry, como
-adapters requeridos, ficam fora do contrato público.
+`message`, `confirmation_required` e, quando a confirmação for necessária,
+`confirmation` com `id`, `status` e `expires_in_seconds`. Metadados internos do
+registry, como adapters requeridos, ficam fora do contrato público.
 
 ```bash
 curl -X POST localhost:8080/message \
@@ -81,7 +82,12 @@ curl -X POST localhost:8080/message \
 #   "intent": "planejar_marketing",
 #   "status": "planned",
 #   "message": "Intencao identificada; execucao ainda nao implementada.",
-#   "confirmation_required": true
+#   "confirmation_required": true,
+#   "confirmation": {
+#     "id": "confirm_...",
+#     "status": "pending",
+#     "expires_in_seconds": 900
+#   }
 # }
 ```
 
