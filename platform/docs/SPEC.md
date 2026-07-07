@@ -164,6 +164,7 @@ Response `200 OK`:
   "status": "received",
   "confirmation_status": "approved",
   "execution_status": "disabled",
+  "execution_policy": "disabled",
   "executed": false,
   "message": "Confirmacao recebida; execucao real ainda nao esta habilitada."
 }
@@ -179,6 +180,9 @@ Response `200 OK`:
 - `execution_status`: `disabled` quando a confirmação existe, foi aprovada e o
   placeholder interno de execução foi planejado; `not_requested` nos demais
   casos.
+- `execution_policy`: `disabled`, `kill_switch_active` ou `not_implemented`
+  quando uma confirmação aprovada passa pela política de execução; ausente nos
+  demais casos.
 - `executed`: sempre `false` nesta etapa. O endpoint não chama adapters, não
   persiste em banco e não conecta serviços reais.
 - `message`: mensagem pública segura. Não ecoa a resposta enviada.
@@ -347,15 +351,21 @@ em memória; `unknown` mantém `pending`. Nenhuma execução real é habilitada.
 `src/core/adapter-execution.js` expõe um contrato interno puro para planejar a
 execução futura de adapters. Nesta etapa ele sempre retorna
 `execution_allowed: false` e `executed: false`, com `reason:
-"adapter_execution_disabled"`. O `POST /confirm` só chama esse placeholder
-quando a confirmação existe e a decisão é `approved`, para registrar intenção
-sem executar nada.
+"execution_disabled_by_policy"`, `execution_kill_switch_active` ou
+`adapter_execution_not_implemented`, conforme a política de execução. O
+`POST /confirm` só chama esse placeholder quando a confirmação existe e a
+decisão é `approved`, para registrar intenção sem executar nada.
 
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
 `DATABASE_URL`, `REDIS_URL`, `QDRANT_URL`, `MCP_GATEWAY_URL` apontando para os
 serviços internos. Segredos reais só em `.env`/Railway, nunca no repo.
+
+- `HERMES_EXECUTION_ENABLED=false` por padrão.
+- `HERMES_EXECUTION_KILL_SWITCH=true` bloqueia qualquer execução futura.
+- Mesmo com `HERMES_EXECUTION_ENABLED=true`, nenhum adapter real executa nesta
+  fase; a política só prepara o contrato para uma etapa posterior.
 
 ## 7. Observabilidade
 
@@ -371,7 +381,8 @@ conteúdo da mensagem), `capability_planned` (`trace_id`, `domain`, `intent`,
 (`confirmation_id`, `decision`, `message_length`), `confirmation_store_resolved`
 (`confirmation_id`, `decision`, `confirmation_status`), `adapter_execution_planned`
 (`confirmation_id`, `decision`, `execution_allowed`, `executed`, `reason`,
-`required_adapters_count`),
+`required_adapters_count`), `execution_policy_evaluated`
+(`execution_enabled`, `kill_switch_active`, `reason`),
 `confirmation_store_miss` (`confirmation_id`), `message_invalid` (`trace_id`).
 Métricas e tracing entram junto com o pipeline de orquestração.
 

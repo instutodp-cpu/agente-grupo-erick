@@ -35,6 +35,32 @@ function withServer(fn) {
   };
 }
 
+function withEnv(overrides, fn) {
+  return async (t) => {
+    const previous = {};
+    for (const [key, value] of Object.entries(overrides)) {
+      previous[key] = process.env[key];
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+
+    t.after(() => {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+    });
+
+    await fn(t);
+  };
+}
+
 function postConfirm(port, body) {
   return request(
     port,
@@ -60,15 +86,18 @@ async function createConfirmationViaMessage(port) {
   return res.body.confirmation.id;
 }
 
-function assertPublicConfirmResponse(body, decision, confirmationStatus, executionStatus = 'not_requested') {
+function assertPublicConfirmResponse(body, decision, confirmationStatus, executionStatus = 'not_requested', executionPolicy = null) {
+  const expectedKeys = ['confirmation_id', 'confirmation_status', 'decision', 'execution_status', 'executed', 'message', 'status'];
+  if (executionPolicy) expectedKeys.push('execution_policy');
   assert.deepEqual(
     Object.keys(body).sort(),
-    ['confirmation_id', 'confirmation_status', 'decision', 'execution_status', 'executed', 'message', 'status'].sort()
+    expectedKeys.sort()
   );
   assert.equal(body.decision, decision);
   assert.equal(body.status, 'received');
   assert.equal(body.confirmation_status, confirmationStatus);
   assert.equal(body.execution_status, executionStatus);
+  if (executionPolicy) assert.equal(body.execution_policy, executionPolicy);
   assert.equal(body.executed, false);
   assert.equal(Object.hasOwn(body, 'requiredAdapters'), false);
   assert.ok(typeof body.message === 'string' && body.message.length > 0);
@@ -86,10 +115,18 @@ test('POST /confirm aprova confirmacao existente com sim', withServer(async (por
 
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.confirmation_id, confirmationId);
-    assertPublicConfirmResponse(res.body, 'approved', 'approved', 'disabled');
+    assertPublicConfirmResponse(res.body, 'approved', 'approved', 'disabled', 'disabled');
     assert.match(res.body.message, /execucao real ainda nao esta habilitada/i);
 
+    const policy = logs.find((log) => log.event === 'execution_policy_evaluated');
     const planned = logs.find((log) => log.event === 'adapter_execution_planned');
+    assert.deepEqual(policy, {
+      level: 'info',
+      event: 'execution_policy_evaluated',
+      execution_enabled: false,
+      kill_switch_active: false,
+      reason: 'execution_disabled_by_default'
+    });
     assert.deepEqual(planned, {
       level: 'info',
       event: 'adapter_execution_planned',
@@ -97,7 +134,7 @@ test('POST /confirm aprova confirmacao existente com sim', withServer(async (por
       decision: 'approved',
       execution_allowed: false,
       executed: false,
-      reason: 'adapter_execution_disabled',
+      reason: 'execution_disabled_by_policy',
       required_adapters_count: 1
     });
     assert.equal(JSON.stringify(logs).includes('sim'), false);
@@ -119,6 +156,7 @@ test('POST /confirm rejeita confirmacao existente com nao', withServer(async (po
     assert.equal(res.statusCode, 200);
     assertPublicConfirmResponse(res.body, 'rejected', 'rejected');
     assert.match(res.body.message, /cancelada/i);
+    assert.equal(Object.hasOwn(res.body, 'execution_policy'), false);
     assert.equal(logs.some((log) => log.event === 'adapter_execution_planned'), false);
     assert.equal(JSON.stringify(logs).includes('nao'), false);
   } finally {
@@ -139,6 +177,7 @@ test('POST /confirm mantem pending para texto ambiguo', withServer(async (port) 
     assert.equal(res.statusCode, 200);
     assertPublicConfirmResponse(res.body, 'unknown', 'pending');
     assert.match(res.body.message, /sim ou nao/i);
+    assert.equal(Object.hasOwn(res.body, 'execution_policy'), false);
     assert.equal(logs.some((log) => log.event === 'adapter_execution_planned'), false);
     assert.equal(JSON.stringify(logs).includes('talvez'), false);
   } finally {
@@ -161,6 +200,7 @@ test('POST /confirm com id inexistente retorna not_found', withServer(async (por
     assert.equal(res.body.status, 'not_found');
     assert.equal(res.body.confirmation_status, 'not_found');
     assert.equal(res.body.execution_status, 'not_requested');
+    assert.equal(Object.hasOwn(res.body, 'execution_policy'), false);
     assert.equal(res.body.executed, false);
     assert.equal(Object.hasOwn(res.body, 'requiredAdapters'), false);
     assert.equal(logs.some((log) => log.event === 'adapter_execution_planned'), false);
@@ -185,6 +225,7 @@ test('POST /confirm com id expirado retorna expired', withServer(async (port) =>
   assert.equal(res.body.status, 'expired');
   assert.equal(res.body.confirmation_status, 'expired');
   assert.equal(res.body.execution_status, 'not_requested');
+  assert.equal(Object.hasOwn(res.body, 'execution_policy'), false);
   assert.equal(res.body.executed, false);
 }));
 
@@ -256,3 +297,84 @@ test('POST /confirm loga miss sem mensagem crua', withServer(async (port) => {
     console.log = originalLog;
   }
 }));
+
+test('POST /confirm com policy habilitada continua sem executar adapter real', withEnv({
+  HERMES_EXECUTION_ENABLED: 'true',
+  HERMES_EXECUTION_KILL_SWITCH: undefined
+}, withServer(async (port) => {
+  resetConfirmationStore();
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (line) => { logs.push(JSON.parse(line)); };
+
+  try {
+    const confirmationId = await createConfirmationViaMessage(port);
+    const res = await postConfirm(port, { confirmation_id: confirmationId, message: 'sim' });
+
+    assert.equal(res.statusCode, 200);
+    assertPublicConfirmResponse(res.body, 'approved', 'approved', 'disabled', 'not_implemented');
+    assert.equal(logs.some((log) => log.event === 'execution_policy_evaluated'), true);
+    const policy = logs.find((log) => log.event === 'execution_policy_evaluated');
+    assert.deepEqual(policy, {
+      level: 'info',
+      event: 'execution_policy_evaluated',
+      execution_enabled: true,
+      kill_switch_active: false,
+      reason: 'execution_enabled_by_env'
+    });
+    const planned = logs.find((log) => log.event === 'adapter_execution_planned');
+    assert.deepEqual(planned, {
+      level: 'info',
+      event: 'adapter_execution_planned',
+      confirmation_id: confirmationId,
+      decision: 'approved',
+      execution_allowed: false,
+      executed: false,
+      reason: 'adapter_execution_not_implemented',
+      required_adapters_count: 1
+    });
+    assert.equal(JSON.stringify(logs).includes('sim'), false);
+  } finally {
+    console.log = originalLog;
+  }
+})));
+
+test('POST /confirm com kill switch bloqueia tudo', withEnv({
+  HERMES_EXECUTION_ENABLED: 'true',
+  HERMES_EXECUTION_KILL_SWITCH: 'true'
+}, withServer(async (port) => {
+  resetConfirmationStore();
+  const originalLog = console.log;
+  const logs = [];
+  console.log = (line) => { logs.push(JSON.parse(line)); };
+
+  try {
+    const confirmationId = await createConfirmationViaMessage(port);
+    const res = await postConfirm(port, { confirmation_id: confirmationId, message: 'sim' });
+
+    assert.equal(res.statusCode, 200);
+    assertPublicConfirmResponse(res.body, 'approved', 'approved', 'disabled', 'kill_switch_active');
+    const policy = logs.find((log) => log.event === 'execution_policy_evaluated');
+    assert.deepEqual(policy, {
+      level: 'info',
+      event: 'execution_policy_evaluated',
+      execution_enabled: false,
+      kill_switch_active: true,
+      reason: 'execution_kill_switch_active'
+    });
+    const planned = logs.find((log) => log.event === 'adapter_execution_planned');
+    assert.deepEqual(planned, {
+      level: 'info',
+      event: 'adapter_execution_planned',
+      confirmation_id: confirmationId,
+      decision: 'approved',
+      execution_allowed: false,
+      executed: false,
+      reason: 'execution_kill_switch_active',
+      required_adapters_count: 1
+    });
+    assert.equal(JSON.stringify(logs).includes('sim'), false);
+  } finally {
+    console.log = originalLog;
+  }
+})));

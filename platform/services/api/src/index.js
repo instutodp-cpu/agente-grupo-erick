@@ -281,6 +281,7 @@ function createServer() {
           const resolvedConfirmation = resolvePendingConfirmation(confirmationId, decision);
           const capability = getCapability(resolvedConfirmation.domain) || FALLBACK_CAPABILITY;
           let executionStatus = 'not_requested';
+          let executionPolicy = null;
 
           if (decision === 'approved') {
             const executionPlan = planAdapterExecution({
@@ -290,6 +291,15 @@ function createServer() {
             });
 
             executionStatus = 'disabled';
+            executionPolicy = executionPlan.execution_policy;
+            const policyEvaluation = executionPlan.execution_policy_evaluation;
+            console.log(JSON.stringify({
+              level: 'info',
+              event: 'execution_policy_evaluated',
+              execution_enabled: policyEvaluation.execution_enabled,
+              kill_switch_active: policyEvaluation.kill_switch_active,
+              reason: policyEvaluation.reason
+            }));
             console.log(JSON.stringify({
               level: 'info',
               event: 'adapter_execution_planned',
@@ -316,6 +326,7 @@ function createServer() {
             status: 'received',
             confirmation_status: resolvedConfirmation.status,
             execution_status: executionStatus,
+            ...(executionPolicy ? { execution_policy: executionPolicy } : {}),
             executed: false,
             message: CONFIRMATION_RESPONSE_MESSAGES[decision]
           });
