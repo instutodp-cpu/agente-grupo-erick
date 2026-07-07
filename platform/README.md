@@ -17,6 +17,7 @@ repositório.
 - **PRD**: `docs/PRD.md`
 - **SPEC técnica**: `docs/SPEC.md`
 - **Segurança**: `docs/SECURITY.md`
+- **Runbook operacional**: `docs/OPERATOR_RUNBOOK.md`
 - **Roadmap**: `docs/ROADMAP.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
@@ -124,6 +125,8 @@ curl -X POST localhost:8080/confirm \
 `GET /confirm/:confirmation_id` consulta o status atual no store em memória e
 retorna `pending`, `approved`, `rejected`, `expired` ou `not_found`, sempre com
 `executed: false`.
+
+Para operação segura, veja `docs/OPERATOR_RUNBOOK.md`.
 
 ## Estrutura
 
