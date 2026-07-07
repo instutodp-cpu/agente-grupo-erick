@@ -100,13 +100,17 @@ Contrato completo (todos os domínios/intents) em `docs/SPEC.md` (§3.1).
 valida o `confirmation_id` no store em memória local e classifica a decisão como
 `approved`, `rejected` ou `unknown`. O endpoint não executa adapters, não
 persiste em banco e sempre retorna `executed: false`. Quando a confirmação é
-aprovada e válida, o core registra apenas um placeholder interno de execução
-com `execution_status: "disabled"`; nada real é disparado. A política de
-execução fica bloqueada por padrão: `HERMES_EXECUTION_ENABLED=false` e
-`HERMES_EXECUTION_KILL_SWITCH=true` por segurança; mesmo com a variável de
-execução habilitada, nenhum adapter real executa nesta fase. Quando a policy
-permite planejamento, o core pode rodar um mock adapter local para simulação
-controlada; `simulated: true` significa apenas isso, nunca execução real.
+aprovada e válida, o core pode registrar um mock adapter local ou manter a
+execução bloqueada, sempre com `executed: false`; nada real é disparado. A
+política de execução fica bloqueada por padrão:
+`HERMES_EXECUTION_ENABLED=false` e `HERMES_EXECUTION_KILL_SWITCH=true` por
+segurança; mesmo com a variável de execução habilitada, nenhum adapter real
+executa nesta fase. Quando a policy permite planejamento, o core pode rodar um
+mock adapter local para simulação controlada; `simulated: true` significa
+apenas isso, nunca execução real.
+Os mock adapters são por domínio e usam `adapter_id` público seguro como
+`mock-compras`, `mock-financeiro`, `mock-treinamento`, `mock-marketing` e
+`mock-desenvolvimento`.
 
 ```bash
 curl -X POST localhost:8080/confirm \
@@ -120,6 +124,8 @@ curl -X POST localhost:8080/confirm \
 #   "execution_status": "simulated",
 #   "execution_policy": "not_implemented",
 #   "simulated": true,
+#   "adapter_id": "mock-financeiro",
+#   "adapter_mode": "mock",
 #   "executed": false,
 #   "message": "Confirmacao recebida; execucao real ainda nao esta habilitada."
 # }
