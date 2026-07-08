@@ -110,3 +110,8 @@ mock-first; nenhuma skill candidata pode virar execução real nesta fase.
 Para memória futura, consulte `docs/MEMORY_POLICY.md`. A política define
 camadas, thresholds e campos proibidos sem criar storage real, RAG ou segundo
 cérebro real nesta PR.
+
+## User Peer Memory Scopes
+
+`docs/USER_PEER_MEMORY_SCOPES.md` detalha a camada `user_peer` para papéis,
+escopo de acesso, isolamento e campos permitidos, sem alterar runtime.
