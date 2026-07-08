@@ -19,6 +19,7 @@ services:
       HERMES_VERSION: ${HERMES_VERSION:-2.0.0-scaffold}
       API_PORT: 8080
       DATABASE_URL: postgres://${POSTGRES_USER:-hermes}:${POSTGRES_PASSWORD:-hermes}@postgres:5432/${POSTGRES_DB:-hermes}
+      HERMES_EXECUTION_ENABLED: true
       REDIS_URL: redis://redis:6379
       QDRANT_URL: http://qdrant:6333
       MCP_GATEWAY_URL: ${MCP_GATEWAY_URL:-http://mcp-gateway:8081}

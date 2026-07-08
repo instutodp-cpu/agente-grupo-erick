@@ -146,6 +146,23 @@ retorna `pending`, `approved`, `rejected`, `expired` ou `not_found`, sempre com
 
 Para operação segura, veja `docs/OPERATOR_RUNBOOK.md`.
 
+## Smoke test end-to-end
+
+O `docker compose` local sobe a API com `HERMES_EXECUTION_ENABLED=true` para
+permitir a validação da simulação mock sem execução real. Depois de subir o
+stack, rode:
+
+```bash
+bash scripts/hermes-smoke-test.sh
+```
+
+O script usa `API_BASE_URL=http://localhost:8080` por padrão. Se a API estiver
+em outra porta ou host, ajuste `API_BASE_URL`. Sucesso significa que `GET
+/health`, `POST /message`, `GET /confirm/:id` e `POST /confirm` passaram sem
+expor `requiredAdapters`, payload interno, `rawMessage`, `userMessage` ou
+segredos. Falha significa que algum contrato seguro foi quebrado; o script sai
+com código diferente de zero.
+
 ## Estrutura
 
 ```text
