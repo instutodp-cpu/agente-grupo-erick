@@ -220,6 +220,8 @@ Regras centrais:
 - memória não cria segundo cérebro real nesta fase
 - `docs/USER_PEER_MEMORY_SCOPES.md` detalha a camada `user_peer` sem alterar o
   contrato de runtime.
+- `docs/SECOND_BRAIN_INBOX_CONTRACT.md` define o inbox futuro do segundo
+  cérebro sem storage real, RAG real ou execução real.
 
 ## Kill switch
 
@@ -322,3 +324,8 @@ Regras centrais:
 escopos por papel, campos permitidos, campos proibidos, isolamento por usuário
 e relação com Permission Matrix, Skill Candidate Registry e segundo cérebro
 futuro.
+
+## Second Brain Inbox Contract
+
+`docs/SECOND_BRAIN_INBOX_CONTRACT.md` define o contrato oficial do inbox do
+futuro segundo cérebro, sem storage real, RAG real ou execução real.
