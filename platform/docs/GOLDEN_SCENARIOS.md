@@ -89,3 +89,6 @@ garantir consistência com Permission Matrix, mock adapter e review humana.
 Se o cenário representar um padrão reutilizável de tarefa, registre também o
 alvo em `docs/SKILL_CANDIDATE_REGISTRY.md` sem alterar runtime.
 
+Se o cenário exigir contexto persistido no futuro, consulte
+`docs/MEMORY_POLICY.md` para manter isolamento, thresholds e campos proibidos
+sem implementar memória real nesta PR.
