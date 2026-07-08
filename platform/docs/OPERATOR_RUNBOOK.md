@@ -27,6 +27,10 @@ O Adapter Result Contract público mantém apenas `adapter_id`, `adapter_mode`,
 `requiredAdapters`, `payload`, `rawMessage`, `userMessage`, `secret`, `token`,
 `env`, `internal` e `credentials` devem ser removidos antes de qualquer
 resposta pública.
+O Adapter Audit Event Contract segue o mesmo princípio: eventos são apenas logs
+seguros, com `event_type`, `trace_id`, `confirmation_id`, `domain`, `intent`,
+`adapter_id`, `adapter_mode`, `status`, `executed`, `simulated` e
+`timestamp`. Nenhum audit event é persistido em banco nesta PR.
 
 ## Regras invariantes
 
@@ -125,6 +129,9 @@ O retorno deve ser seguro e continuar com `executed:false`.
 - `domain_mock_adapter_missing`
 - `adapter_result_sanitized`
 - `adapter_result_validated`
+- `adapter_audit_event_created`
+- `adapter_audit_event_sanitized`
+- `adapter_audit_event_validated`
 - `domain_mock_adapter_selected`
 - `domain_mock_adapter_missing`
 

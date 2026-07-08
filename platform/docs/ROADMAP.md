@@ -32,6 +32,9 @@ específicas.
   `status`, `simulated`, `executed` e `message`; `executed:false` continua
   obrigatório e campos proibidos são removidos antes de qualquer resposta
   pública.
+- Adapter Audit Event Contract padroniza os eventos seguros do fluxo de
+  adapter/mock execution; audit events ficam somente em log nesta fase, sem
+  persistência em banco e sem campos sensíveis.
 - Runbook operacional de segurança documenta o fluxo atual, validação manual e
   regras para PRs futuras de adapter.
 

@@ -116,6 +116,10 @@ O resultado público segue o Adapter Result Contract: `adapter_id`,
 Campos como `requiredAdapters`, `payload`, `rawMessage`, `userMessage`,
 `secret`, `token`, `env`, `internal` e `credentials` nunca aparecem na
 resposta pública.
+O fluxo também emite Adapter Audit Event Contract somente como logs seguros;
+eventos auditáveis usam `event_type`, `trace_id`, `confirmation_id`, `domain`,
+`intent`, `adapter_id`, `adapter_mode`, `status`, `executed`, `simulated` e
+`timestamp`, sem persistência em banco.
 
 ```bash
 curl -X POST localhost:8080/confirm \

@@ -121,6 +121,8 @@ function assertPublicConfirmResponse(body, decision, confirmationStatus, options
   assert.equal(Object.hasOwn(body, 'env'), false);
   assert.equal(Object.hasOwn(body, 'internal'), false);
   assert.equal(Object.hasOwn(body, 'credentials'), false);
+  assert.equal(Object.hasOwn(body, 'audit_event'), false);
+  assert.equal(Object.hasOwn(body, 'audit_events'), false);
   assert.ok(typeof body.message === 'string' && body.message.length > 0);
 }
 
