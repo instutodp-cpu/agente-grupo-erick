@@ -5,8 +5,8 @@ automações, dados, WhatsApp, Base44, Supabase, GitHub, Claude Code, MCPs e
 agentes especialistas.
 
 > **Hermes é o núcleo.** Nenhuma ferramenta específica (runtime de agente, DB,
-fila, vetor, MCP) fica acoplada ao núcleo — tudo entra por adaptadores
-substituíveis. Ver `docs/HERMES_AI_PLATFORM_V2_BLUEPRINT.md`.
+> fila, vetor, MCP) fica acoplada ao núcleo — tudo entra por adaptadores
+> substituíveis. Ver `docs/HERMES_AI_PLATFORM_V2_BLUEPRINT.md`.
 
 Esta pasta (`platform/`) é a **base v2**, independente do Hermes v1 na raiz do
 repositório.
@@ -24,8 +24,6 @@ repositório.
 - **Domain Onboarding**: `docs/DOMAIN_ONBOARDING.md`
 - **Skill Candidate Registry**: `docs/SKILL_CANDIDATE_REGISTRY.md`
 - **Memory Policy**: `docs/MEMORY_POLICY.md`
-- **User Peer Memory Scopes**: `docs/USER_PEER_MEMORY_SCOPES.md`
-- **Second Brain Inbox Contract**: `docs/SECOND_BRAIN_INBOX_CONTRACT.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -226,15 +224,3 @@ nunca no repositório. Ver `docs/ROADMAP.md` (Fase 8).
 Fundação (Fase 0): estrutura, documentação e núcleo mínimo. **Sem** funcionalidades
 complexas ainda — a base é desacoplada e pronta para evoluir sem retrabalho.
 
-## User Peer Memory Scopes
-
-`docs/USER_PEER_MEMORY_SCOPES.md` detalha a camada `user_peer`, cobrindo
-escopos por papel, campos permitidos, campos proibidos, isolamento por usuário
-e relação com Permission Matrix, Skill Candidate Registry e segundo cérebro
-futuro.
-
-## Second Brain Inbox Contract
-
-`docs/SECOND_BRAIN_INBOX_CONTRACT.md` define o contrato oficial do inbox do
-futuro segundo cérebro: tipos de entrada, estados, roteamento, sanitização e
-regras de isolamento, sem storage real, RAG real ou execução real.
