@@ -57,3 +57,8 @@ mock-first.
 Para política de memória futura, consulte `docs/MEMORY_POLICY.md`; ela não
 autoriza storage real nem execução real nesta fase.
 
+## Governance Check Report
+
+`docs/GOVERNANCE_CHECK_REPORT.md` uses this matrix as one of its primary
+checks. The governance report does not replace this matrix and cannot loosen
+`executed:false`, mock-first or human review requirements.

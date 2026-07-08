@@ -115,3 +115,9 @@ Nenhuma camada de memória pode armazenar ou expor:
 - `docs/GOLDEN_SCENARIOS.md`
 - `docs/DOMAIN_ONBOARDING.md`
 - `docs/SKILL_CANDIDATE_REGISTRY.md`
+
+## Governance Check Report
+
+`docs/GOVERNANCE_CHECK_REPORT.md` checks that memory policy remains safe. It
+cannot create memory storage, RAG, vector DB or second brain behavior by
+itself.

@@ -147,3 +147,9 @@ Antes de promover qualquer skill candidata:
 Se um padrão de tarefa recorrente depender de contexto persistido no futuro,
 consulte `docs/MEMORY_POLICY.md`. A política de memória não cria execução real
 nem storage real; ela apenas orienta limites, isolamento e campos proibidos.
+
+## Governance Check Report
+
+`docs/GOVERNANCE_CHECK_REPORT.md` can surface skill candidate risk and missing
+contract references. It does not approve a skill and does not change the draft,
+mock-first or `executed:false` rules.

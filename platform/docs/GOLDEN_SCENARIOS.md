@@ -93,3 +93,8 @@ Se o cenário exigir contexto persistido no futuro, consulte
 `docs/MEMORY_POLICY.md` para manter isolamento, thresholds e campos proibidos
 sem implementar memória real nesta PR.
 
+## Governance Check Report
+
+`docs/GOVERNANCE_CHECK_REPORT.md` treats these scenarios as a critical check
+area. Governance can flag missing or regressed scenarios, but it does not
+substitute for them and does not authorize real execution.

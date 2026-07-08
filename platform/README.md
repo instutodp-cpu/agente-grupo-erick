@@ -24,6 +24,7 @@ repositório.
 - **Domain Onboarding**: `docs/DOMAIN_ONBOARDING.md`
 - **Skill Candidate Registry**: `docs/SKILL_CANDIDATE_REGISTRY.md`
 - **Memory Policy**: `docs/MEMORY_POLICY.md`
+- **Governance Check Report**: `docs/GOVERNANCE_CHECK_REPORT.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos

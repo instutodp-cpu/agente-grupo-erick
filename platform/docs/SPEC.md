@@ -471,6 +471,14 @@ isolamento, campos proibidos e `executed:false` como regra operacional. A
 política existe para orientar a evolução futura de memória, não para habilitar
 RAG, banco, vector DB ou segundo cérebro real nesta PR.
 
+### 5.10 Governance Check Report
+
+`docs/GOVERNANCE_CHECK_REPORT.md` define o contrato oficial do relatório de
+governança do Hermes Core. O documento lista áreas de checagem, status,
+severidades, achados e bloqueios, mas não implementa scanner real, CI gate
+novo, auditoria automatica real ou qualquer mudanca de runtime. O reporte
+continua sem autorizar `executed:true` ou execucao real.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -537,3 +545,6 @@ Métricas e tracing entram junto com o pipeline de orquestração.
   `POST /message`, `GET /confirm/:id` e `POST /confirm` sem expor campos
   proibidos. Para observar `simulated:true`, a API local sobe com
   `HERMES_EXECUTION_ENABLED=true` apenas no ambiente de desenvolvimento.
+- O contrato de governança futura fica em `docs/GOVERNANCE_CHECK_REPORT.md`;
+  ele serve para revisar a saude dos contratos e bloquear regressões
+  sensiveis, sem virar scanner real.

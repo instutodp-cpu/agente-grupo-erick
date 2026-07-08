@@ -1,0 +1,329 @@
+{
+  "check_areas": [
+    {
+      "id": "permission_matrix",
+      "risk_level": "high",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "golden_scenarios",
+      "risk_level": "high",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "domain_onboarding",
+      "risk_level": "high",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "capability_registry",
+      "risk_level": "high",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "confirmation_gate",
+      "risk_level": "critical",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "execution_policy",
+      "risk_level": "critical",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "kill_switch",
+      "risk_level": "critical",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "mock_adapters",
+      "risk_level": "medium",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "adapter_result_contract",
+      "risk_level": "medium",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "adapter_audit_event_contract",
+      "risk_level": "medium",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "skill_candidate_registry",
+      "risk_level": "medium",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "memory_policy",
+      "risk_level": "medium",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "user_peer_memory_scopes",
+      "risk_level": "medium",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "second_brain_inbox",
+      "risk_level": "medium",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "quality_score_feedback_loop",
+      "risk_level": "medium",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "forbidden_fields",
+      "risk_level": "critical",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "operator_runbook",
+      "risk_level": "high",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "runtime_safety",
+      "risk_level": "critical",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    }
+  ],
+  "allowed_statuses": [
+    "pass",
+    "warning",
+    "blocked",
+    "not_applicable",
+    "needs_human_review"
+  ],
+  "severity_levels": [
+    "low",
+    "medium",
+    "high",
+    "critical"
+  ],
+  "finding_types": [
+    {
+      "id": "missing_contract_reference",
+      "severity": "medium",
+      "blocks_sensitive_change": false,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "forbidden_field_detected",
+      "severity": "critical",
+      "blocks_sensitive_change": true,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "unsafe_runtime_change",
+      "severity": "critical",
+      "blocks_sensitive_change": true,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "missing_confirmation_gate",
+      "severity": "critical",
+      "blocks_sensitive_change": true,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "missing_kill_switch_reference",
+      "severity": "critical",
+      "blocks_sensitive_change": true,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "missing_permission_matrix_entry",
+      "severity": "high",
+      "blocks_sensitive_change": true,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "missing_golden_scenario",
+      "severity": "high",
+      "blocks_sensitive_change": true,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "missing_domain_onboarding",
+      "severity": "high",
+      "blocks_sensitive_change": true,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "adapter_not_mock_first",
+      "severity": "high",
+      "blocks_sensitive_change": true,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "executed_true_detected",
+      "severity": "critical",
+      "blocks_sensitive_change": true,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "storage_added_without_contract",
+      "severity": "critical",
+      "blocks_sensitive_change": true,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "external_service_added_without_contract",
+      "severity": "critical",
+      "blocks_sensitive_change": true,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "sensitive_log_risk",
+      "severity": "high",
+      "blocks_sensitive_change": true,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "docs_regression",
+      "severity": "medium",
+      "blocks_sensitive_change": false,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "fixture_regression",
+      "severity": "medium",
+      "blocks_sensitive_change": false,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "test_gap",
+      "severity": "medium",
+      "blocks_sensitive_change": false,
+      "requires_human_review": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "duplicate_doc_section",
+      "severity": "low",
+      "blocks_sensitive_change": false,
+      "requires_human_review": false,
+      "can_trigger_real_execution": false
+    }
+  ],
+  "required_report_fields": [
+    "report_id",
+    "generated_at",
+    "report_type",
+    "target_scope",
+    "target_branch",
+    "target_pr",
+    "overall_status",
+    "check_areas",
+    "findings",
+    "blocked_reasons",
+    "warnings",
+    "human_review_required",
+    "can_trigger_real_execution",
+    "executed",
+    "runtime_changed",
+    "storage_changed",
+    "external_services_added",
+    "forbidden_fields_detected",
+    "recommended_next_steps",
+    "reviewer_notes"
+  ],
+  "blocking_rules": [
+    "executed_true_detected",
+    "adapter_real_without_approved_pr",
+    "storage_real_without_contract_and_review",
+    "rag_without_contract_and_review",
+    "vector_database_without_contract_and_review",
+    "llm_scoring_without_contract_and_review",
+    "secrets_or_tokens_or_env_or_credentials_in_docs_fixtures_or_logs",
+    "removed_confirmation_gate",
+    "removed_kill_switch",
+    "removed_permission_matrix",
+    "removed_golden_scenarios",
+    "removed_forbidden_fields",
+    "tenant_user_domain_leakage",
+    "any_real_action_execution"
+  ],
+  "default_rules": {
+    "executed": false,
+    "can_trigger_real_execution": false,
+    "scanner_implemented": false,
+    "ci_gate_implemented": false,
+    "storage_implemented": false,
+    "external_services_added": false,
+    "runtime_changed": false,
+    "human_review_required_for_blocked": true,
+    "mock_first": true
+  },
+  "forbidden_fields": [
+    "token",
+    "secret",
+    "env",
+    "headers",
+    "cookies",
+    "credentials",
+    "payload",
+    "rawPayload",
+    "rawMessage",
+    "userMessage",
+    "requiredAdapters",
+    "authorization",
+    "password",
+    "stackTrace"
+  ]
+}

@@ -11,7 +11,7 @@ operacional, mas **não implementa memória real** nesta PR.
 - Deve ajudar o Hermes a adaptar tom, permissões, preferências e escopo.
 - Não substitui a Permission Matrix.
 - Não autoriza execução real.
-- Não ignora confirmação humana.
+- Não ignora confirmation humana.
 
 ## Escopos oficiais
 
@@ -139,3 +139,9 @@ Nenhuma memória de usuário/peer pode armazenar ou expor:
 - `docs/DOMAIN_ONBOARDING.md`
 - `docs/SKILL_CANDIDATE_REGISTRY.md`
 - `docs/SECOND_BRAIN_INBOX_CONTRACT.md`
+
+## Governance Check Report
+
+`docs/GOVERNANCE_CHECK_REPORT.md` verifies that user/peer memory scopes stay
+isolated and do not leak across users or tenants. It does not change the scope
+contract.

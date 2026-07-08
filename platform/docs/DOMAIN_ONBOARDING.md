@@ -110,3 +110,9 @@ mock-first; nenhuma skill candidata pode virar execução real nesta fase.
 Para memória futura, consulte `docs/MEMORY_POLICY.md`. A política define
 camadas, thresholds e campos proibidos sem criar storage real, RAG ou segundo
 cérebro real nesta PR.
+
+## Governance Check Report
+
+`docs/GOVERNANCE_CHECK_REPORT.md` can block domain expansion when onboarding is
+missing, incomplete or unsafe. It does not replace onboarding and does not
+permit execution real.
