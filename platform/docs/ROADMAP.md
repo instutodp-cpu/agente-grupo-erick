@@ -47,6 +47,10 @@ específicas.
   viagens, saude_fitness e apps_projetos.
 - Domain Onboarding Preview fica documentado como checklist para uma PR futura
   específica de onboarding de novos domínios.
+- Skill Candidate Registry formaliza padrões de tarefa em draft, sempre
+  ligados a domínio existente e `executed:false`.
+- `docs/SKILL_CANDIDATE_REGISTRY.md` é o contrato oficial para esses padrões
+  e não habilita execução real.
 - `executed:false` continua obrigatório em qualquer expansão.
 - Runbook operacional de segurança documenta o fluxo atual, validação manual e
   regras para PRs futuras de adapter.

@@ -50,3 +50,7 @@ mínimo antes de ampliar o core:
 O processo oficial já foi documentado em `docs/DOMAIN_ONBOARDING.md`; use esse
 guia antes de qualquer expansão.
 
+Quando a expansão estiver ligada a padrões de tarefa, consulte também
+`docs/SKILL_CANDIDATE_REGISTRY.md` para manter o contrato em draft e
+mock-first.
+

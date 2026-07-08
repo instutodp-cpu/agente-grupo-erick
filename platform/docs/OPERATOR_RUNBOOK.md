@@ -190,6 +190,20 @@ O checklist mínimo cobre:
 
 Sem esse guia aprovado, o domínio não deve avançar para adapter real.
 
+## 12. Skill Candidate Registry
+
+`docs/SKILL_CANDIDATE_REGISTRY.md` é o contrato oficial para skills candidatas.
+Ele existe só como base documental nesta fase:
+
+- começa em `draft`
+- permanece mock-first
+- exige revisão humana
+- exige `executed:false`
+- não cria skill executável real
+
+Antes de promover uma skill candidata, valide o domínio, a Permission Matrix,
+os Golden Scenarios e o rollback plan.
+
 ## Kill switch
 
 - `HERMES_EXECUTION_KILL_SWITCH=true` bloqueia qualquer execução futura.
