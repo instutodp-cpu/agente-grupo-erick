@@ -90,6 +90,8 @@ Critério: trocar uma implementação = trocar um adapter, sem tocar o core.
 - `docs/MEMORY_POLICY.md` formaliza a política de memória sem storage real.
 - `docs/USER_PEER_MEMORY_SCOPES.md` detalha a camada `user_peer` por papel e
   isolamento.
+- `docs/SECOND_BRAIN_INBOX_CONTRACT.md` define o inbox futuro do segundo
+  cérebro, sem storage real, RAG real ou execução real.
 
 ## Fase 5 — MCP Gateway
 

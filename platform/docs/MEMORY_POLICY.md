@@ -98,6 +98,7 @@ Nenhuma camada de memória pode armazenar ou expor:
 - memória não pode promover skill para produção
 - toda skill candidate continua com `draft` primeiro, `mock-first`,
   `human-review` e `executed:false`
+- inbox futuro do segundo cérebro deve respeitar `docs/SECOND_BRAIN_INBOX_CONTRACT.md`.
 
 ## Segundo cérebro futuro
 
@@ -116,3 +117,4 @@ Nenhuma camada de memória pode armazenar ou expor:
 - `docs/DOMAIN_ONBOARDING.md`
 - `docs/SKILL_CANDIDATE_REGISTRY.md`
 - `docs/USER_PEER_MEMORY_SCOPES.md`
+- `docs/SECOND_BRAIN_INBOX_CONTRACT.md`

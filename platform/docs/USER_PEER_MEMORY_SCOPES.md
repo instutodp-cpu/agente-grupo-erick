@@ -138,3 +138,4 @@ Nenhuma memória de usuário/peer pode armazenar ou expor:
 - `docs/GOLDEN_SCENARIOS.md`
 - `docs/DOMAIN_ONBOARDING.md`
 - `docs/SKILL_CANDIDATE_REGISTRY.md`
+- `docs/SECOND_BRAIN_INBOX_CONTRACT.md`
