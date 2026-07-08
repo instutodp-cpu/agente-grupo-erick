@@ -112,7 +112,9 @@ test('planeja not_available para dominio desconhecido', () => {
     execution_status: 'not_available',
     simulated: false,
     mock_adapter: {
+      adapter_id: null,
       adapter_mode: 'mock',
+      domain: 'desconhecido',
       simulated: false,
       executed: false,
       status: 'not_available',

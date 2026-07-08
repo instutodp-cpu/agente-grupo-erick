@@ -28,6 +28,10 @@ específicas.
 - Mock adapter harness e registry por domínio só simulam localmente;
   `simulated: true` nunca significa execução real e `adapter_id` segue seguro e
   público.
+- Adapter Result Contract padroniza `adapter_id`, `adapter_mode`, `domain`,
+  `status`, `simulated`, `executed` e `message`; `executed:false` continua
+  obrigatório e campos proibidos são removidos antes de qualquer resposta
+  pública.
 - Runbook operacional de segurança documenta o fluxo atual, validação manual e
   regras para PRs futuras de adapter.
 
