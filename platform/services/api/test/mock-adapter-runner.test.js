@@ -20,6 +20,9 @@ test('mock runner simula compras sem side effects', () => {
       status: 'simulated',
       message: 'Mock adapter simulation completed without real execution.'
     });
+    assert.equal(logs.filter((log) => log.event === 'adapter_audit_event_created').length, 2);
+    assert.equal(logs.filter((log) => log.event === 'adapter_audit_event_sanitized').length, 2);
+    assert.equal(logs.filter((log) => log.event === 'adapter_audit_event_validated').length, 2);
     assert.equal(logs.some((log) => log.event === 'adapter_result_sanitized'), true);
     assert.equal(logs.some((log) => log.event === 'adapter_result_validated'), true);
     assert.equal(JSON.stringify(logs).includes('mensagem'), false);

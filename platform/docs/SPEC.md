@@ -407,6 +407,42 @@ resultados de adapters nesta fase. O formato permitido é restrito a:
 - `buildAdapterResult` compõe um resultado público seguro e cai para
   `status: "failed"` se a validação não passar.
 
+### 5.8 Adapter Audit Event Contract
+
+`src/core/adapter-audit-event.js` define o contrato seguro de eventos de
+auditoria para o fluxo de adapter/mock execution. Os campos públicos permitidos
+nesta fase são:
+
+```json
+{
+  "event_type": "adapter_simulation_started",
+  "trace_id": "trace-123",
+  "confirmation_id": "confirm-123",
+  "domain": "compras",
+  "intent": "registrar_compra",
+  "adapter_id": "mock-compras",
+  "adapter_mode": "mock",
+  "status": "simulated",
+  "executed": false,
+  "simulated": true,
+  "timestamp": "2026-01-01T00:00:00.000Z"
+}
+```
+
+- `event_type` aceita apenas `adapter_simulation_started`,
+  `adapter_simulation_completed`, `adapter_execution_blocked`,
+  `adapter_result_sanitized` e `adapter_result_validated`.
+- `adapter_mode` é sempre `"mock"`.
+- `executed` é sempre `false`.
+- `sanitizeAdapterAuditEvent` remove campos proibidos como `rawMessage`,
+  `userMessage`, `requiredAdapters`, `payload`, `internal`, `env`, `token`,
+  `secret`, `credentials`, `headers`, `authorization`, `cookie`, `stack` e o
+  corpo completo da requisição.
+- `validateAdapterAuditEvent` rejeita `executed: true`, `adapter_mode` diferente
+  de `mock` e eventos sem `event_type`, `trace_id` ou `confirmation_id`.
+- Estes eventos são somente logs seguros nesta fase; nenhum audit event é
+  persistido em banco.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -444,7 +480,14 @@ conteúdo da mensagem), `capability_planned` (`trace_id`, `domain`, `intent`,
 `adapter_mode`, `simulated`, `executed`), `adapter_result_sanitized`
 (`adapter_id`, `domain`, `removed_fields_count`), `adapter_result_validated`
 (`adapter_id`, `domain`, `status`, `executed`), `execution_policy_evaluated`
-(`execution_enabled`, `kill_switch_active`, `reason`),
+(`execution_enabled`, `kill_switch_active`, `reason`), `adapter_audit_event_created`
+(`event_type`, `trace_id`, `confirmation_id`, `domain`, `intent`, `adapter_id`,
+`adapter_mode`, `status`, `executed`, `simulated`, `timestamp`),
+`adapter_audit_event_sanitized` (`event_type`, `trace_id`, `confirmation_id`,
+`domain`, `intent`, `adapter_id`, `adapter_mode`, `status`, `executed`,
+`simulated`, `removed_fields_count`), `adapter_audit_event_validated`
+(`event_type`, `trace_id`, `confirmation_id`, `domain`, `intent`, `adapter_id`,
+`adapter_mode`, `status`, `executed`, `simulated`, `valid`),
 `confirmation_store_miss` (`confirmation_id`), `message_invalid` (`trace_id`).
 Métricas e tracing entram junto com o pipeline de orquestração.
 
