@@ -115,3 +115,8 @@ cérebro real nesta PR.
 
 `docs/USER_PEER_MEMORY_SCOPES.md` detalha a camada `user_peer` para papéis,
 escopo de acesso, isolamento e campos permitidos, sem alterar runtime.
+
+## Second Brain Inbox Contract
+
+`docs/SECOND_BRAIN_INBOX_CONTRACT.md` define o contrato do inbox do futuro
+segundo cérebro sem storage real, RAG real ou execução real.
