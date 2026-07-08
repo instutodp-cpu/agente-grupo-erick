@@ -1,0 +1,167 @@
+{
+  "source_types": [
+    {
+      "id": "user_note",
+      "risk_level": "low",
+      "requires_sanitization": true,
+      "human_review_required": false,
+      "can_create_skill_candidate": true,
+      "can_update_memory": false,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "meeting_transcript",
+      "risk_level": "medium",
+      "requires_sanitization": true,
+      "human_review_required": true,
+      "can_create_skill_candidate": true,
+      "can_update_memory": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "document_summary",
+      "risk_level": "medium",
+      "requires_sanitization": true,
+      "human_review_required": true,
+      "can_create_skill_candidate": true,
+      "can_update_memory": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "support_ticket",
+      "risk_level": "medium",
+      "requires_sanitization": true,
+      "human_review_required": true,
+      "can_create_skill_candidate": true,
+      "can_update_memory": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "operational_report",
+      "risk_level": "medium",
+      "requires_sanitization": true,
+      "human_review_required": true,
+      "can_create_skill_candidate": true,
+      "can_update_memory": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "audit_event",
+      "risk_level": "medium",
+      "requires_sanitization": true,
+      "human_review_required": true,
+      "can_create_skill_candidate": true,
+      "can_update_memory": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "skill_candidate_signal",
+      "risk_level": "medium",
+      "requires_sanitization": true,
+      "human_review_required": true,
+      "can_create_skill_candidate": true,
+      "can_update_memory": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "domain_context_update",
+      "risk_level": "high",
+      "requires_sanitization": true,
+      "human_review_required": true,
+      "can_create_skill_candidate": true,
+      "can_update_memory": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "external_source_summary",
+      "risk_level": "high",
+      "requires_sanitization": true,
+      "human_review_required": true,
+      "can_create_skill_candidate": true,
+      "can_update_memory": true,
+      "can_trigger_real_execution": false
+    }
+  ],
+  "allowed_statuses": [
+    "received",
+    "sanitized",
+    "classified",
+    "needs_human_review",
+    "approved_for_memory_candidate",
+    "approved_for_skill_candidate_signal",
+    "rejected",
+    "expired"
+  ],
+  "forbidden_statuses": [
+    "executed",
+    "active_real",
+    "production_autonomous",
+    "adapter_executed",
+    "memory_written_real"
+  ],
+  "required_fields": [
+    "inbox_item_id",
+    "source_type",
+    "source_label",
+    "tenant_scope",
+    "user_scope",
+    "domain",
+    "risk_level",
+    "confidence_threshold",
+    "sanitized_summary",
+    "classification_status",
+    "human_review_required",
+    "can_create_skill_candidate",
+    "can_update_memory",
+    "can_trigger_real_execution",
+    "forbidden_fields_removed",
+    "created_at",
+    "retention_policy",
+    "notes"
+  ],
+  "forbidden_fields": [
+    "token",
+    "secret",
+    "env",
+    "headers",
+    "cookies",
+    "credentials",
+    "payload",
+    "rawPayload",
+    "rawMessage",
+    "userMessage",
+    "requiredAdapters",
+    "authorization",
+    "password"
+  ],
+  "routing_rules": {
+    "financeiro": {
+      "high": ["needs_human_review"],
+      "medium": ["needs_human_review"]
+    },
+    "compras": {
+      "high": ["needs_human_review"],
+      "medium": ["needs_human_review"]
+    },
+    "marketing": {
+      "low": ["approved_for_memory_candidate"],
+      "medium": ["needs_human_review"]
+    },
+    "treinamento": {
+      "medium": ["approved_for_memory_candidate"]
+    },
+    "desenvolvimento": {
+      "high": ["needs_human_review"]
+    }
+  },
+  "default_rules": {
+    "executed": false,
+    "real_execution_allowed": false,
+    "storage_implemented": false,
+    "rag_implemented": false,
+    "vector_database_implemented": false,
+    "human_review_required_for_sensitive_context": true,
+    "cross_user_leakage_allowed": false,
+    "cross_tenant_leakage_allowed": false
+  }
+}
