@@ -147,3 +147,9 @@ Antes de promover qualquer skill candidata:
 Se um padrão de tarefa recorrente depender de contexto persistido no futuro,
 consulte `docs/MEMORY_POLICY.md`. A política de memória não cria execução real
 nem storage real; ela apenas orienta limites, isolamento e campos proibidos.
+
+## User Peer Memory Scopes
+
+Se um padrão de tarefa estiver ligado a papéis ou perfis de usuário, consulte
+`docs/USER_PEER_MEMORY_SCOPES.md` para manter isolamento, allowed domains e
+review humana antes de promover qualquer skill candidate.

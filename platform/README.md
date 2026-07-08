@@ -23,6 +23,7 @@ repositório.
 - **Golden Scenarios**: `docs/GOLDEN_SCENARIOS.md`
 - **Domain Onboarding**: `docs/DOMAIN_ONBOARDING.md`
 - **Skill Candidate Registry**: `docs/SKILL_CANDIDATE_REGISTRY.md`
+- **Memory Policy**: `docs/MEMORY_POLICY.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -222,3 +223,10 @@ nunca no repositório. Ver `docs/ROADMAP.md` (Fase 8).
 
 Fundação (Fase 0): estrutura, documentação e núcleo mínimo. **Sem** funcionalidades
 complexas ainda — a base é desacoplada e pronta para evoluir sem retrabalho.
+
+## User Peer Memory Scopes
+
+`docs/USER_PEER_MEMORY_SCOPES.md` detalha a camada `user_peer`, cobrindo
+escopos por papel, campos permitidos, campos proibidos, isolamento por usuário
+e relação com Permission Matrix, Skill Candidate Registry e segundo cérebro
+futuro.

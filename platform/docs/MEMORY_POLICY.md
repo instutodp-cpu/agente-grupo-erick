@@ -22,6 +22,8 @@ nesta PR.
 - Uso: preferências, tom, papel, permissões e histórico aprovado.
 - Deve ser isolada por usuário.
 - Não pode ser compartilhada entre usuários sem regra explícita.
+- Consulte `docs/USER_PEER_MEMORY_SCOPES.md` para o contrato detalhado dessa
+  camada.
 
 ### Domain / Company Memory
 
@@ -113,3 +115,4 @@ Nenhuma camada de memória pode armazenar ou expor:
 - `docs/GOLDEN_SCENARIOS.md`
 - `docs/DOMAIN_ONBOARDING.md`
 - `docs/SKILL_CANDIDATE_REGISTRY.md`
+- `docs/USER_PEER_MEMORY_SCOPES.md`

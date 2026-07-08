@@ -218,6 +218,8 @@ Regras centrais:
 - memória não pode guardar `token`, `secret`, `env`, `headers`, `cookies`,
   `credentials`, `payload`, `rawMessage`, `userMessage` ou `requiredAdapters`
 - memória não cria segundo cérebro real nesta fase
+- `docs/USER_PEER_MEMORY_SCOPES.md` detalha a camada `user_peer` sem alterar o
+  contrato de runtime.
 
 ## Kill switch
 
@@ -313,3 +315,10 @@ Regras centrais:
 - Nunca conectar serviço real sem variável de ambiente e documentação.
 - Nunca logar payload sensível.
 - Nunca expor `requiredAdapters` ou segredos em response público.
+
+## User Peer Memory Scopes
+
+`docs/USER_PEER_MEMORY_SCOPES.md` detalha a camada `user_peer`, cobrindo
+escopos por papel, campos permitidos, campos proibidos, isolamento por usuário
+e relação com Permission Matrix, Skill Candidate Registry e segundo cérebro
+futuro.
