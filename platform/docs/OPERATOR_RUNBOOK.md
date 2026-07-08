@@ -146,6 +146,32 @@ O workflow `.github/workflows/hermes-core-smoke.yml` roda em `pull_request` e
 Esse workflow não usa segredos, não chama serviços externos e não altera o
 contrato de `executed:false`.
 
+## 10. Permission Matrix e Golden Scenarios
+
+Antes de criar um domínio novo, consulte `docs/PERMISSION_MATRIX.md` e
+`docs/GOLDEN_SCENARIOS.md`. Eles funcionam como contrato prévio para decidir:
+
+- se o domínio pode ler contexto
+- se pode planejar
+- se pode solicitar confirmação
+- se pode rodar mock adapter
+- se continua proibido de executar ação real
+
+Checklist mínimo para domínio novo:
+
+- declarar domínio na matriz
+- definir `risk_level`
+- definir capabilities
+- criar mock adapter
+- criar golden scenarios
+- adicionar testes
+- atualizar smoke/CI se necessário
+- manter `executed:false`
+- revisar por humano
+
+Esses documentos devem ser atualizados antes de qualquer PR futura de adapter
+real.
+
 ## Kill switch
 
 - `HERMES_EXECUTION_KILL_SWITCH=true` bloqueia qualquer execução futura.
