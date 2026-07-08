@@ -41,6 +41,9 @@ packages/          # libs compartilhadas (contracts/tipos)
 
 `core/ports/` e `capabilities/registry.js` já existem como **contrato puro**:
 nenhum adapter real, nenhuma conexão externa, nenhuma execução — ver §5 e §5.1.
+O processo oficial para novos domínios fica em `docs/DOMAIN_ONBOARDING.md` e
+deve ser seguido junto com `docs/PERMISSION_MATRIX.md` e
+`docs/GOLDEN_SCENARIOS.md`.
 
 ## 2. Serviços e portas
 
@@ -246,6 +249,7 @@ Para `not_found`, a resposta pública retorna apenas:
 
 ### 3.4 Referências de expansão por domínio
 
+- `docs/DOMAIN_ONBOARDING.md` descreve o processo oficial para novos domínios.
 - `docs/PERMISSION_MATRIX.md` descreve permissões, risco e modo de adapter por
   domínio.
 - `docs/GOLDEN_SCENARIOS.md` descreve os cenários oficiais de validação antes

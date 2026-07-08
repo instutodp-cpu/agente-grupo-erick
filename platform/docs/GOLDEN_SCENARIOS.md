@@ -83,3 +83,6 @@ não habilitam execução real.
 - no raw payload.
 - CI/smoke obrigatório.
 
+Antes de registrar novos cenários, siga `docs/DOMAIN_ONBOARDING.md` para
+garantir consistência com Permission Matrix, mock adapter e review humana.
+
