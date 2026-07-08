@@ -86,3 +86,6 @@ não habilitam execução real.
 Antes de registrar novos cenários, siga `docs/DOMAIN_ONBOARDING.md` para
 garantir consistência com Permission Matrix, mock adapter e review humana.
 
+Se o cenário representar um padrão reutilizável de tarefa, registre também o
+alvo em `docs/SKILL_CANDIDATE_REGISTRY.md` sem alterar runtime.
+

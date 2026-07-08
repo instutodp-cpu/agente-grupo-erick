@@ -98,3 +98,9 @@ Antes de criar qualquer PR de domínio novo:
 - forbidden fields incluem `requiredAdapters`, `payload`, `rawMessage`,
   `userMessage`, `segredos`, `tokens`, `env`, `headers`, `cookies` e
   `credentials`.
+
+## Skill Candidate Registry
+
+Para padrões de tarefa recorrentes, consulte
+`docs/SKILL_CANDIDATE_REGISTRY.md`. O processo continua em draft e
+mock-first; nenhuma skill candidata pode virar execução real nesta fase.

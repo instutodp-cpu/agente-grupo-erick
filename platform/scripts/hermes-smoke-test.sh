@@ -21,13 +21,9 @@ resolve_binary() {
   return 1
 }
 
-NODE_BIN="$(resolve_binary \
-  node \
-  node.exe \
-  "/mnt/c/Program Files/nodejs/node.exe" \
-  "/mnt/c/Program Files (x86)/nodejs/node.exe" \
-  "/c/Program Files/nodejs/node.exe" \
-  "/c/Program Files (x86)/nodejs/node.exe")"
+PYTHON_BIN="$(resolve_binary \
+  python3 \
+  python)"
 
 CURL_BIN="$(resolve_binary \
   curl \
@@ -35,8 +31,8 @@ CURL_BIN="$(resolve_binary \
   "/mnt/c/Windows/System32/curl.exe" \
   "/c/Windows/System32/curl.exe")"
 
-if [[ -z "$NODE_BIN" ]]; then
-  printf 'smoke test failed: node runtime not found\n' >&2
+if [[ -z "$PYTHON_BIN" ]]; then
+  printf 'smoke test failed: python runtime not found\n' >&2
   exit 1
 fi
 
@@ -69,54 +65,55 @@ json_get() {
   local json="$1"
   local path="$2"
 
-  printf '%s' "$json" | "$NODE_BIN" -e '
-    const fs = require("node:fs");
-    const path = process.argv[1].split(".");
-    let value = JSON.parse(fs.readFileSync(0, "utf8"));
-    for (const key of path) {
-      if (value == null || !Object.hasOwn(value, key)) {
-        process.exit(2);
-      }
-      value = value[key];
-    }
-    if (value === null) {
-      process.stdout.write("null");
-    } else if (typeof value === "object") {
-      process.stdout.write(JSON.stringify(value));
-    } else {
-      process.stdout.write(String(value));
-    }
-  ' "$path"
+  printf '%s' "$json" | "$PYTHON_BIN" - "$path" <<'PY'
+import json
+import sys
+
+path = sys.argv[1].split(".")
+value = json.load(sys.stdin)
+for key in path:
+    if not isinstance(value, dict) or key not in value:
+        sys.exit(2)
+    value = value[key]
+
+if value is None:
+    sys.stdout.write("null")
+elif isinstance(value, (dict, list)):
+    sys.stdout.write(json.dumps(value, separators=(",", ":")))
+else:
+    sys.stdout.write(str(value))
+PY
 }
 
 assert_has_field() {
   local json="$1"
   local field="$2"
-  printf '%s' "$json" | "$NODE_BIN" -e '
-    const fs = require("node:fs");
-    const field = process.argv[1];
-    const data = JSON.parse(fs.readFileSync(0, "utf8"));
-    if (!Object.hasOwn(data, field)) {
-      process.exit(3);
-    }
-  ' "$field"
+  printf '%s' "$json" | "$PYTHON_BIN" - "$field" <<'PY'
+import json
+import sys
+
+field = sys.argv[1]
+data = json.load(sys.stdin)
+if field not in data:
+    sys.exit(3)
+PY
 }
 
 assert_missing_fields() {
   local json="$1"
   local fields="$2"
 
-  printf '%s' "$json" | "$NODE_BIN" -e '
-    const fs = require("node:fs");
-    const forbidden = process.argv[1].split(",").filter(Boolean);
-    const data = JSON.parse(fs.readFileSync(0, "utf8"));
-    for (const field of forbidden) {
-      if (Object.hasOwn(data, field)) {
-        console.error(`Forbidden field present: ${field}`);
-        process.exit(4);
-      }
-    }
-  ' "$fields"
+  printf '%s' "$json" | "$PYTHON_BIN" - "$fields" <<'PY'
+import json
+import sys
+
+forbidden = [field for field in sys.argv[1].split(",") if field]
+data = json.load(sys.stdin)
+for field in forbidden:
+    if field in data:
+        print(f"Forbidden field present: {field}", file=sys.stderr)
+        sys.exit(4)
+PY
 }
 
 assert_equal() {

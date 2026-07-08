@@ -44,6 +44,8 @@ nenhum adapter real, nenhuma conexão externa, nenhuma execução — ver §5 e 
 O processo oficial para novos domínios fica em `docs/DOMAIN_ONBOARDING.md` e
 deve ser seguido junto com `docs/PERMISSION_MATRIX.md` e
 `docs/GOLDEN_SCENARIOS.md`.
+O catálogo de padrões de tarefa para evoluções futuras fica em
+`docs/SKILL_CANDIDATE_REGISTRY.md`; ele documenta drafts, não execução real.
 
 ## 2. Serviços e portas
 
@@ -254,6 +256,8 @@ Para `not_found`, a resposta pública retorna apenas:
   domínio.
 - `docs/GOLDEN_SCENARIOS.md` descreve os cenários oficiais de validação antes
   de qualquer adapter real.
+- `docs/SKILL_CANDIDATE_REGISTRY.md` descreve o contrato oficial de skills
+  candidatas em draft, sempre mock-first.
 - Qualquer domínio novo deve preservar `executed:false`, `mock first` e
   confirmação humana quando aplicável.
 

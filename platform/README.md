@@ -22,6 +22,7 @@ repositório.
 - **Permission Matrix**: `docs/PERMISSION_MATRIX.md`
 - **Golden Scenarios**: `docs/GOLDEN_SCENARIOS.md`
 - **Domain Onboarding**: `docs/DOMAIN_ONBOARDING.md`
+- **Skill Candidate Registry**: `docs/SKILL_CANDIDATE_REGISTRY.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -188,6 +189,11 @@ obrigatória.
 Para novos domínios, use `docs/DOMAIN_ONBOARDING.md` como guia oficial: ele
 amarra `mock-first`, `executed:false`, revisão humana e os artefatos de
 permissão/cenário antes de qualquer expansão.
+
+Para padrões de tarefa que podem virar contratos futuros, consulte
+`docs/SKILL_CANDIDATE_REGISTRY.md`. Skills candidatas continuam em draft,
+ligadas a um domínio existente, com mock-first, revisão humana e
+`executed:false` obrigatório.
 
 ## Estrutura
 
