@@ -37,6 +37,9 @@ específicas.
   persistência em banco e sem campos sensíveis.
 - Smoke test end-to-end local (`scripts/hermes-smoke-test.sh`) valida o fluxo
   completo sem curl manual e mantém `executed:false` como regra permanente.
+- Workflow de CI (`.github/workflows/hermes-core-smoke.yml`) roda as validações
+  e o smoke test automaticamente em `pull_request` e `push` para `main`, sem
+  execução real.
 - Runbook operacional de segurança documenta o fluxo atual, validação manual e
   regras para PRs futuras de adapter.
 
