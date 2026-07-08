@@ -47,3 +47,6 @@ mínimo antes de ampliar o core:
 - manter `executed:false`
 - revisar por humano
 
+O processo oficial já foi documentado em `docs/DOMAIN_ONBOARDING.md`; use esse
+guia antes de qualquer expansão.
+

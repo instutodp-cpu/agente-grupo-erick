@@ -21,6 +21,7 @@ repositório.
 - **Roadmap**: `docs/ROADMAP.md`
 - **Permission Matrix**: `docs/PERMISSION_MATRIX.md`
 - **Golden Scenarios**: `docs/GOLDEN_SCENARIOS.md`
+- **Domain Onboarding**: `docs/DOMAIN_ONBOARDING.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -183,6 +184,10 @@ Antes de criar qualquer adapter real, valide `docs/GOLDEN_SCENARIOS.md` e a
 fixture `services/api/test/fixtures/hermes-golden-scenarios.json`. Os cenários
 servem como contrato de comportamento e mantêm `executed:false` como regra
 obrigatória.
+
+Para novos domínios, use `docs/DOMAIN_ONBOARDING.md` como guia oficial: ele
+amarra `mock-first`, `executed:false`, revisão humana e os artefatos de
+permissão/cenário antes de qualquer expansão.
 
 ## Estrutura
 

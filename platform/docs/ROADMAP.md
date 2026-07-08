@@ -42,8 +42,12 @@ específicas.
   execução real.
 - Permission Matrix e Golden Scenarios formalizam o contrato de expansão por
   domínio antes de qualquer adapter real.
+- Domain Onboarding Guide formaliza o fluxo oficial para novos domínios como
+  estoque, rh, juridico, atendimento, vendas, logistica, agente_pessoal,
+  viagens, saude_fitness e apps_projetos.
 - Domain Onboarding Preview fica documentado como checklist para uma PR futura
   específica de onboarding de novos domínios.
+- `executed:false` continua obrigatório em qualquer expansão.
 - Runbook operacional de segurança documenta o fluxo atual, validação manual e
   regras para PRs futuras de adapter.
 

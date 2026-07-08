@@ -172,6 +172,24 @@ Checklist mínimo para domínio novo:
 Esses documentos devem ser atualizados antes de qualquer PR futura de adapter
 real.
 
+## 11. Domain Onboarding Guide
+
+`docs/DOMAIN_ONBOARDING.md` é o guia oficial para qualquer domínio novo. Ele
+exige `mock-first`, `executed:false`, revisão humana, `mock-*` adapter id,
+Permission Matrix e Golden Scenarios atualizados antes de qualquer promoção.
+
+O checklist mínimo cobre:
+
+- nome canônico do domínio
+- escopo e intents
+- `risk_level`
+- capabilities
+- fixture e testes contratuais
+- smoke/CI quando o domínio entrar no fluxo end-to-end
+- verificação de forbidden fields e segredos
+
+Sem esse guia aprovado, o domínio não deve avançar para adapter real.
+
 ## Kill switch
 
 - `HERMES_EXECUTION_KILL_SWITCH=true` bloqueia qualquer execução futura.
