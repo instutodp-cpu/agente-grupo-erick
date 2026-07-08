@@ -163,6 +163,13 @@ expor `requiredAdapters`, payload interno, `rawMessage`, `userMessage` ou
 segredos. Falha significa que algum contrato seguro foi quebrado; o script sai
 com código diferente de zero.
 
+O mesmo fluxo roda automaticamente em GitHub Actions no workflow
+`.github/workflows/hermes-core-smoke.yml`, em `pull_request` e `push` para
+`main`. O job faz checkout, instala dependências em
+`platform/services/api`, executa `node --check`, `npm test`,
+`docker compose config`, sobe a stack local e roda o smoke test antes do
+`docker compose down`.
+
 ## Estrutura
 
 ```text

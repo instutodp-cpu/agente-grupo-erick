@@ -1,0 +1,51 @@
+name: Hermes Core smoke test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: platform
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
+
+      - name: Node syntax check
+        run: find services/api -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: API tests
+        working-directory: platform/services/api
+        run: npm test
+
+      - name: Docker compose config
+        run: docker compose config
+
+      - name: Start local stack
+        run: docker compose up --build -d
+
+      - name: End-to-end smoke test
+        run: bash scripts/hermes-smoke-test.sh
+
+      - name: Stop local stack
+        if: always()
+        run: docker compose down

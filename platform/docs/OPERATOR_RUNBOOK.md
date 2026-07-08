@@ -128,6 +128,24 @@ payload interno, `rawMessage`, `userMessage`, tokens ou segredos. Falha no
 script significa que algum contrato seguro foi quebrado e a PR deve ser
 ajustada antes de seguir.
 
+## 9. CI smoke workflow
+
+O workflow `.github/workflows/hermes-core-smoke.yml` roda em `pull_request` e
+`push` para `main`. Ele executa as mesmas validações básicas do fluxo local:
+
+- checkout do repositório
+- setup de Node compatível
+- `npm install` em `platform/services/api`
+- `node --check` nos JS de `platform/services/api`
+- `npm test` em `platform/services/api`
+- `docker compose config`
+- `docker compose up --build -d`
+- `bash scripts/hermes-smoke-test.sh`
+- `docker compose down` no final, mesmo se houver falha
+
+Esse workflow não usa segredos, não chama serviços externos e não altera o
+contrato de `executed:false`.
+
 ## Kill switch
 
 - `HERMES_EXECUTION_KILL_SWITCH=true` bloqueia qualquer execução futura.
