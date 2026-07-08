@@ -11,7 +11,7 @@ operacional, mas **não implementa memória real** nesta PR.
 - Deve ajudar o Hermes a adaptar tom, permissões, preferências e escopo.
 - Não substitui a Permission Matrix.
 - Não autoriza execução real.
-- Não ignora confirmation humana.
+- Não ignora confirmação humana.
 
 ## Escopos oficiais
 
