@@ -118,3 +118,4 @@ Critério: trocar uma implementação = trocar um adapter, sem tocar o core.
 
 - Filas e workers robustos, dead-letter, circuit breakers, read replicas/
   materializações, SLOs por canal, continuidade e resposta a incidentes.
+
