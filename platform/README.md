@@ -111,6 +111,11 @@ apenas isso, nunca execução real.
 Os mock adapters são por domínio e usam `adapter_id` público seguro como
 `mock-compras`, `mock-financeiro`, `mock-treinamento`, `mock-marketing` e
 `mock-desenvolvimento`.
+O resultado público segue o Adapter Result Contract: `adapter_id`,
+`adapter_mode`, `domain`, `status`, `simulated`, `executed` e `message`.
+Campos como `requiredAdapters`, `payload`, `rawMessage`, `userMessage`,
+`secret`, `token`, `env`, `internal` e `credentials` nunca aparecem na
+resposta pública.
 
 ```bash
 curl -X POST localhost:8080/confirm \

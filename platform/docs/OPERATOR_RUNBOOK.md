@@ -22,6 +22,11 @@ não há execução real, side effect ou integração externa.
 Os mock adapters são por domínio e expõem `adapter_id` público seguro como
 `mock-compras`, `mock-financeiro`, `mock-treinamento`, `mock-marketing` e
 `mock-desenvolvimento`.
+O Adapter Result Contract público mantém apenas `adapter_id`, `adapter_mode`,
+`domain`, `status`, `simulated`, `executed` e `message`; campos internos como
+`requiredAdapters`, `payload`, `rawMessage`, `userMessage`, `secret`, `token`,
+`env`, `internal` e `credentials` devem ser removidos antes de qualquer
+resposta pública.
 
 ## Regras invariantes
 
@@ -118,6 +123,8 @@ O retorno deve ser seguro e continuar com `executed:false`.
 - `mock_adapter_simulated`
 - `domain_mock_adapter_selected`
 - `domain_mock_adapter_missing`
+- `adapter_result_sanitized`
+- `adapter_result_validated`
 - `domain_mock_adapter_selected`
 - `domain_mock_adapter_missing`
 

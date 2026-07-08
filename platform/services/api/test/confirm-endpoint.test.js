@@ -113,6 +113,14 @@ function assertPublicConfirmResponse(body, decision, confirmationStatus, options
   if (adapterMode) assert.equal(body.adapter_mode, adapterMode);
   assert.equal(body.executed, false);
   assert.equal(Object.hasOwn(body, 'requiredAdapters'), false);
+  assert.equal(Object.hasOwn(body, 'payload'), false);
+  assert.equal(Object.hasOwn(body, 'rawMessage'), false);
+  assert.equal(Object.hasOwn(body, 'userMessage'), false);
+  assert.equal(Object.hasOwn(body, 'secret'), false);
+  assert.equal(Object.hasOwn(body, 'token'), false);
+  assert.equal(Object.hasOwn(body, 'env'), false);
+  assert.equal(Object.hasOwn(body, 'internal'), false);
+  assert.equal(Object.hasOwn(body, 'credentials'), false);
   assert.ok(typeof body.message === 'string' && body.message.length > 0);
 }
 
@@ -155,6 +163,8 @@ test('POST /confirm aprova confirmacao existente com sim', withServer(async (por
       execution_status: 'disabled',
       simulated: false
     });
+    assert.equal(logs.some((log) => log.event === 'adapter_result_sanitized'), false);
+    assert.equal(logs.some((log) => log.event === 'adapter_result_validated'), false);
     assert.equal(JSON.stringify(logs).includes('yes'), false);
   } finally {
     console.log = originalLog;
@@ -177,6 +187,8 @@ test('POST /confirm rejeita confirmacao existente com nao', withServer(async (po
     assert.equal(Object.hasOwn(res.body, 'execution_policy'), false);
     assert.equal(Object.hasOwn(res.body, 'simulated'), false);
     assert.equal(logs.some((log) => log.event === 'adapter_execution_planned'), false);
+    assert.equal(logs.some((log) => log.event === 'adapter_result_sanitized'), false);
+    assert.equal(logs.some((log) => log.event === 'adapter_result_validated'), false);
     assert.equal(JSON.stringify(logs).includes('nao'), false);
   } finally {
     console.log = originalLog;
@@ -199,6 +211,8 @@ test('POST /confirm mantem pending para texto ambiguo', withServer(async (port) 
     assert.equal(Object.hasOwn(res.body, 'execution_policy'), false);
     assert.equal(Object.hasOwn(res.body, 'simulated'), false);
     assert.equal(logs.some((log) => log.event === 'adapter_execution_planned'), false);
+    assert.equal(logs.some((log) => log.event === 'adapter_result_sanitized'), false);
+    assert.equal(logs.some((log) => log.event === 'adapter_result_validated'), false);
     assert.equal(JSON.stringify(logs).includes('talvez'), false);
   } finally {
     console.log = originalLog;
@@ -225,6 +239,8 @@ test('POST /confirm com id inexistente retorna not_found', withServer(async (por
     assert.equal(res.body.executed, false);
     assert.equal(Object.hasOwn(res.body, 'requiredAdapters'), false);
     assert.equal(logs.some((log) => log.event === 'adapter_execution_planned'), false);
+    assert.equal(logs.some((log) => log.event === 'adapter_result_sanitized'), false);
+    assert.equal(logs.some((log) => log.event === 'adapter_result_validated'), false);
   } finally {
     console.log = originalLog;
   }
@@ -370,6 +386,23 @@ test('POST /confirm com policy habilitada continua sem executar adapter real', w
       simulated: true,
       executed: false
     });
+    const sanitized = logs.find((log) => log.event === 'adapter_result_sanitized');
+    assert.deepEqual(sanitized, {
+      level: 'info',
+      event: 'adapter_result_sanitized',
+      adapter_id: 'mock-financeiro',
+      domain: 'financeiro',
+      removed_fields_count: 0
+    });
+    const validated = logs.find((log) => log.event === 'adapter_result_validated');
+    assert.deepEqual(validated, {
+      level: 'info',
+      event: 'adapter_result_validated',
+      adapter_id: 'mock-financeiro',
+      domain: 'financeiro',
+      status: 'simulated',
+      executed: false
+    });
     const planned = logs.find((log) => log.event === 'adapter_execution_planned');
     assert.deepEqual(planned, {
       level: 'info',
@@ -413,6 +446,8 @@ test('POST /confirm com kill switch bloqueia tudo', withEnv({
     assert.equal(Object.hasOwn(res.body, 'adapter_id'), false);
     assert.equal(Object.hasOwn(res.body, 'adapter_mode'), false);
     const policy = logs.find((log) => log.event === 'execution_policy_evaluated');
+    assert.equal(logs.some((log) => log.event === 'adapter_result_sanitized'), false);
+    assert.equal(logs.some((log) => log.event === 'adapter_result_validated'), false);
     assert.deepEqual(policy, {
       level: 'info',
       event: 'execution_policy_evaluated',
@@ -468,6 +503,23 @@ test('POST /confirm aprovado com dominio desconhecido nao roda mock', withEnv({
     assert.equal(Object.hasOwn(res.body, 'adapter_id'), false);
     assert.equal(Object.hasOwn(res.body, 'adapter_mode'), false);
     assert.equal(logs.some((log) => log.event === 'domain_mock_adapter_selected'), false);
+    const sanitized = logs.find((log) => log.event === 'adapter_result_sanitized');
+    const validated = logs.find((log) => log.event === 'adapter_result_validated');
+    assert.deepEqual(sanitized, {
+      level: 'info',
+      event: 'adapter_result_sanitized',
+      adapter_id: null,
+      domain: 'desconhecido',
+      removed_fields_count: 0
+    });
+    assert.deepEqual(validated, {
+      level: 'info',
+      event: 'adapter_result_validated',
+      adapter_id: null,
+      domain: 'desconhecido',
+      status: 'not_available',
+      executed: false
+    });
     const missing = logs.find((log) => log.event === 'domain_mock_adapter_missing');
     assert.deepEqual(missing, {
       level: 'info',

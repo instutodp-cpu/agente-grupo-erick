@@ -379,6 +379,34 @@ simulado com `adapter_id`, `adapter_mode: "mock"`, `simulated: true`,
 `executed: false` e `status: "simulated"`. Quando não há mock para o domínio,
 ele retorna `status: "not_available"` sem efeito real.
 
+### 5.7 Adapter Result Contract
+
+`src/core/adapter-result-contract.js` define o contrato público seguro para
+resultados de adapters nesta fase. O formato permitido é restrito a:
+
+```json
+{
+  "adapter_id": "mock-compras",
+  "adapter_mode": "mock",
+  "domain": "compras",
+  "status": "simulated",
+  "simulated": true,
+  "executed": false,
+  "message": "Mock adapter simulation completed without real execution."
+}
+```
+
+- `adapter_mode` é sempre `"mock"` nesta etapa.
+- `executed` é sempre `false`.
+- `simulated` só pode ser `true` quando o resultado é de mock.
+- `status` aceita apenas `simulated`, `disabled`, `not_available` ou `failed`.
+- `sanitizeAdapterResult` remove `requiredAdapters`, `payload`, `rawMessage`,
+  `userMessage`, `secret`, `token`, `env`, `internal` e `credentials` de
+  qualquer objeto de entrada antes de produzir o resultado público.
+- `validateAdapterResult` rejeita qualquer resultado com `executed: true`.
+- `buildAdapterResult` compõe um resultado público seguro e cai para
+  `status: "failed"` se a validação não passar.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -413,7 +441,9 @@ conteúdo da mensagem), `capability_planned` (`trace_id`, `domain`, `intent`,
 `adapter_id`, `adapter_mode`), `domain_mock_adapter_missing` (`confirmation_id`,
 `domain`),
 `mock_adapter_simulated` (`confirmation_id`, `domain`, `intent`,
-`adapter_mode`, `simulated`, `executed`), `execution_policy_evaluated`
+`adapter_mode`, `simulated`, `executed`), `adapter_result_sanitized`
+(`adapter_id`, `domain`, `removed_fields_count`), `adapter_result_validated`
+(`adapter_id`, `domain`, `status`, `executed`), `execution_policy_evaluated`
 (`execution_enabled`, `kill_switch_active`, `reason`),
 `confirmation_store_miss` (`confirmation_id`), `message_invalid` (`trace_id`).
 Métricas e tracing entram junto com o pipeline de orquestração.
