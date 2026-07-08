@@ -244,6 +244,15 @@ Para `not_found`, a resposta pública retorna apenas:
 }
 ```
 
+### 3.4 Referências de expansão por domínio
+
+- `docs/PERMISSION_MATRIX.md` descreve permissões, risco e modo de adapter por
+  domínio.
+- `docs/GOLDEN_SCENARIOS.md` descreve os cenários oficiais de validação antes
+  de qualquer adapter real.
+- Qualquer domínio novo deve preservar `executed:false`, `mock first` e
+  confirmação humana quando aplicável.
+
 ## 4. Worker (scaffold)
 
 Sem dependências npm (usa `net`/`url`). Emite `worker_heartbeat` a cada
