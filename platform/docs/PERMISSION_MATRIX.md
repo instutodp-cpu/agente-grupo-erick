@@ -59,3 +59,5 @@ autoriza storage real nem execução real nesta fase.
 
 Para memória por usuário/peer, consulte `docs/USER_PEER_MEMORY_SCOPES.md` para
 regras de isolamento, papel e campos permitidos.
+
+Para o futuro inbox do segundo cérebro, consulte `docs/SECOND_BRAIN_INBOX_CONTRACT.md`.
