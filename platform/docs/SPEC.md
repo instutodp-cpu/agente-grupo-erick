@@ -504,3 +504,8 @@ Métricas e tracing entram junto com o pipeline de orquestração.
 - Nenhuma ferramenta específica acoplada ao core.
 - Documentação explica Core, agentes, MCP Gateway, memória, permissões, deploy,
   roadmap.
+- O smoke test end-to-end local fica em `scripts/hermes-smoke-test.sh`; ele usa
+  `API_BASE_URL=http://localhost:8080` por padrão e valida `GET /health`,
+  `POST /message`, `GET /confirm/:id` e `POST /confirm` sem expor campos
+  proibidos. Para observar `simulated:true`, a API local sobe com
+  `HERMES_EXECUTION_ENABLED=true` apenas no ambiente de desenvolvimento.

@@ -35,6 +35,8 @@ específicas.
 - Adapter Audit Event Contract padroniza os eventos seguros do fluxo de
   adapter/mock execution; audit events ficam somente em log nesta fase, sem
   persistência em banco e sem campos sensíveis.
+- Smoke test end-to-end local (`scripts/hermes-smoke-test.sh`) valida o fluxo
+  completo sem curl manual e mantém `executed:false` como regra permanente.
 - Runbook operacional de segurança documenta o fluxo atual, validação manual e
   regras para PRs futuras de adapter.
 

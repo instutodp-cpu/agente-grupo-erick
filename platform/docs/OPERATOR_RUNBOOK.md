@@ -104,6 +104,30 @@ curl localhost:8080/confirm/confirm_inexistente
 
 O retorno deve ser seguro e continuar com `executed:false`.
 
+### 8. Rodar o smoke test end-to-end
+
+```bash
+cd platform
+docker compose up --build -d
+bash scripts/hermes-smoke-test.sh
+```
+
+O `docker compose` local sobe a API com `HERMES_EXECUTION_ENABLED=true` para
+permitir a validação do caminho `simulated:true` sem execução real. O script usa
+`API_BASE_URL=http://localhost:8080` por padrão e cobre:
+
+- `GET /health`
+- `POST /message` para compras, financeiro, treinamento, marketing e
+  desenvolvimento
+- `GET /confirm/:confirmation_id`
+- `POST /confirm` com `sim`
+- `POST /confirm` com `confirmation_id` inexistente
+
+Sucesso significa que o fluxo completo respondeu sem expor `requiredAdapters`,
+payload interno, `rawMessage`, `userMessage`, tokens ou segredos. Falha no
+script significa que algum contrato seguro foi quebrado e a PR deve ser
+ajustada antes de seguir.
+
 ## Kill switch
 
 - `HERMES_EXECUTION_KILL_SWITCH=true` bloqueia qualquer execução futura.
