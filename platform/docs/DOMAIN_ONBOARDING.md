@@ -104,3 +104,9 @@ Antes de criar qualquer PR de domínio novo:
 Para padrões de tarefa recorrentes, consulte
 `docs/SKILL_CANDIDATE_REGISTRY.md`. O processo continua em draft e
 mock-first; nenhuma skill candidata pode virar execução real nesta fase.
+
+## Memory Policy
+
+Para memória futura, consulte `docs/MEMORY_POLICY.md`. A política define
+camadas, thresholds e campos proibidos sem criar storage real, RAG ou segundo
+cérebro real nesta PR.
