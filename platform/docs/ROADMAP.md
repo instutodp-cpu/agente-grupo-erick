@@ -113,3 +113,10 @@ Critério: trocar uma implementação = trocar um adapter, sem tocar o core.
 
 - Filas e workers robustos, dead-letter, circuit breakers, read replicas/
   materializações, SLOs por canal, continuidade e resposta a incidentes.
+
+## Memory Policy
+
+`docs/MEMORY_POLICY.md` formaliza a política de memória sem criar storage real,
+RAG real ou segundo cérebro real nesta fase. A memória futura deve respeitar
+isolamento por usuário/empresa/domínio, thresholds e campos proibidos antes de
+qualquer PR de implementação.

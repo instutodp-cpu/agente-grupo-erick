@@ -54,3 +54,5 @@ Quando a expansão estiver ligada a padrões de tarefa, consulte também
 `docs/SKILL_CANDIDATE_REGISTRY.md` para manter o contrato em draft e
 mock-first.
 
+Para política de memória futura, consulte `docs/MEMORY_POLICY.md`; ela não
+autoriza storage real nem execução real nesta fase.

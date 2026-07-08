@@ -46,6 +46,8 @@ deve ser seguido junto com `docs/PERMISSION_MATRIX.md` e
 `docs/GOLDEN_SCENARIOS.md`.
 O catálogo de padrões de tarefa para evoluções futuras fica em
 `docs/SKILL_CANDIDATE_REGISTRY.md`; ele documenta drafts, não execução real.
+A política oficial de memória fica em `docs/MEMORY_POLICY.md`; ela documenta
+camadas e thresholds sem criar storage real nesta PR.
 
 ## 2. Serviços e portas
 
@@ -459,6 +461,15 @@ nesta fase são:
   de `mock` e eventos sem `event_type`, `trace_id` ou `confirmation_id`.
 - Estes eventos são somente logs seguros nesta fase; nenhum audit event é
   persistido em banco.
+
+### 5.9 Memory Policy
+
+`docs/MEMORY_POLICY.md` define o contrato oficial de memória do Hermes Core
+sem implementar storage real. As camadas documentadas são `session`,
+`user_peer`, `domain_company` e `audit_learning`; todas devem respeitar
+isolamento, campos proibidos e `executed:false` como regra operacional. A
+política existe para orientar a evolução futura de memória, não para habilitar
+RAG, banco, vector DB ou segundo cérebro real nesta PR.
 
 ## 6. Configuração
 
