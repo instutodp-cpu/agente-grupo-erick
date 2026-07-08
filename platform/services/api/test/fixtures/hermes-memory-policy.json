@@ -1,0 +1,63 @@
+{
+  "memory_layers": [
+    {
+      "id": "session",
+      "name": "Session Memory",
+      "persistent": false,
+      "requires_tenant_isolation": false,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "user_peer",
+      "name": "User / Peer Memory",
+      "persistent": true,
+      "requires_tenant_isolation": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "domain_company",
+      "name": "Domain / Company Memory",
+      "persistent": true,
+      "requires_tenant_isolation": true,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "audit_learning",
+      "name": "Audit / Learning Memory",
+      "persistent": true,
+      "requires_tenant_isolation": true,
+      "can_trigger_real_execution": false
+    }
+  ],
+  "allowed_scopes": [
+    "session",
+    "user_peer",
+    "domain_company",
+    "audit_learning"
+  ],
+  "domain_thresholds": {
+    "compras": 0.85,
+    "financeiro": 0.9,
+    "treinamento": 0.75,
+    "marketing": 0.7,
+    "desenvolvimento": 0.8
+  },
+  "default_rules": {
+    "executed": false,
+    "real_execution_allowed": false,
+    "human_review_required": true,
+    "mock_first": true
+  },
+  "forbidden_fields": [
+    "token",
+    "secret",
+    "env",
+    "headers",
+    "cookies",
+    "credentials",
+    "payload",
+    "rawMessage",
+    "userMessage",
+    "requiredAdapters"
+  ]
+}
