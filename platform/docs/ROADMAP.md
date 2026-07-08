@@ -52,6 +52,8 @@ específicas.
 - `docs/SKILL_CANDIDATE_REGISTRY.md` é o contrato oficial para esses padrões
   e não habilita execução real.
 - `executed:false` continua obrigatório em qualquer expansão.
+- `docs/MEMORY_POLICY.md` formaliza camadas e thresholds de memória sem criar
+  storage real, RAG ou segundo cérebro nesta fase.
 - Runbook operacional de segurança documenta o fluxo atual, validação manual e
   regras para PRs futuras de adapter.
 

@@ -93,8 +93,3 @@ Se o cenário exigir contexto persistido no futuro, consulte
 `docs/MEMORY_POLICY.md` para manter isolamento, thresholds e campos proibidos
 sem implementar memória real nesta PR.
 
-Para memória por usuário/peer, consulte `docs/USER_PEER_MEMORY_SCOPES.md` ao
-avaliar contexto individual, papel e isolamento.
-
-Para o futuro inbox do segundo cérebro, consulte
-`docs/SECOND_BRAIN_INBOX_CONTRACT.md`.

@@ -22,8 +22,6 @@ nesta PR.
 - Uso: preferências, tom, papel, permissões e histórico aprovado.
 - Deve ser isolada por usuário.
 - Não pode ser compartilhada entre usuários sem regra explícita.
-- Consulte `docs/USER_PEER_MEMORY_SCOPES.md` para o contrato detalhado dessa
-  camada.
 
 ### Domain / Company Memory
 
@@ -98,7 +96,8 @@ Nenhuma camada de memória pode armazenar ou expor:
 - memória não pode promover skill para produção
 - toda skill candidate continua com `draft` primeiro, `mock-first`,
   `human-review` e `executed:false`
-- inbox futuro do segundo cérebro deve respeitar `docs/SECOND_BRAIN_INBOX_CONTRACT.md`.
+- quando houver risco sensível, a revisão humana deve ocorrer com human review
+  explícito antes de qualquer uso futuro
 
 ## Segundo cérebro futuro
 
@@ -116,5 +115,3 @@ Nenhuma camada de memória pode armazenar ou expor:
 - `docs/GOLDEN_SCENARIOS.md`
 - `docs/DOMAIN_ONBOARDING.md`
 - `docs/SKILL_CANDIDATE_REGISTRY.md`
-- `docs/USER_PEER_MEMORY_SCOPES.md`
-- `docs/SECOND_BRAIN_INBOX_CONTRACT.md`

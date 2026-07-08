@@ -471,13 +471,6 @@ isolamento, campos proibidos e `executed:false` como regra operacional. A
 política existe para orientar a evolução futura de memória, não para habilitar
 RAG, banco, vector DB ou segundo cérebro real nesta PR.
 
-### 5.10 User / Peer Memory Scopes
-
-`docs/USER_PEER_MEMORY_SCOPES.md` detalha a camada `user_peer` sem alterar o
-contrato de runtime. Ela documenta escopos por papel, campos permitidos,
-campos proibidos, isolamento por usuário e relação com Permission Matrix,
-Skill Candidate Registry e segundo cérebro futuro.
-
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
