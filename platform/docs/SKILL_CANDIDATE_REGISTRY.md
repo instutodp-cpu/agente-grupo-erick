@@ -141,3 +141,9 @@ Antes de promover qualquer skill candidata:
 - Skills candidatas não alteram runtime nesta PR.
 - Skills candidatas não habilitam execução real.
 - Skills candidatas continuam mock-first.
+
+## Memory Policy
+
+Se um padrão de tarefa recorrente depender de contexto persistido no futuro,
+consulte `docs/MEMORY_POLICY.md`. A política de memória não cria execução real
+nem storage real; ela apenas orienta limites, isolamento e campos proibidos.
