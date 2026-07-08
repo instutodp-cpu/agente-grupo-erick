@@ -1,0 +1,140 @@
+# Hermes Core User / Peer Memory Scopes
+
+Este documento detalha a camada `user_peer` da política de memória do Hermes
+Core. Ele define contratos e limites para contexto por pessoa, papel e relação
+operacional, mas **não implementa memória real** nesta PR.
+
+## O que é User / Peer Memory
+
+- Memória associada a uma pessoa, papel ou relacionamento operacional.
+- Deve guardar apenas contexto aprovado, seguro e útil.
+- Deve ajudar o Hermes a adaptar tom, permissões, preferências e escopo.
+- Não substitui a Permission Matrix.
+- Não autoriza execução real.
+- Não ignora confirmação humana.
+
+## Escopos oficiais
+
+### `personal_user`
+
+- Para agente pessoal.
+- Exemplos: preferências pessoais, agenda, viagens, projetos, saúde/fitness.
+- Não misturar com dados corporativos sem autorização explícita.
+
+### `owner_director`
+
+- Para dono/diretor.
+- Exemplos: visão multi-loja, estratégia, indicadores, aprovações.
+- Escopo alto, mas ainda com confirmação para ações sensíveis.
+
+### `finance_user`
+
+- Para financeiro.
+- Exemplos: caixa, vencimentos, duplicatas, conciliação.
+- Threshold alto, dados sensíveis, nunca executar real nesta fase.
+
+### `manager_user`
+
+- Para gerente/supervisor.
+- Exemplos: loja vinculada, equipe, metas, treinamento, operação.
+- Escopo limitado por loja/tenant no futuro.
+
+### `buyer_user`
+
+- Para comprador.
+- Exemplos: fornecedores, compras, prazos, produtos.
+- Exige confirmação em ações de compra.
+
+### `collaborator_user`
+
+- Para colaborador.
+- Exemplos: treinamentos, tarefas, comunicados.
+- Escopo restrito.
+
+### `external_client_user`
+
+- Para possível cliente externo no futuro.
+- Exemplo: uso SaaS/multiempresa.
+- Deve ter isolamento rígido por `tenant_id`, `client_id` ou `company_id`.
+
+## Campos permitidos
+
+Campos seguros que podem aparecer em memória por usuário/peer:
+
+- `user_scope`
+- `role`
+- `preferred_tone`
+- `allowed_domains`
+- `denied_domains`
+- `risk_profile`
+- `confirmation_policy`
+- `preferred_language`
+- `store_scope`
+- `tenant_scope`
+- `approved_preferences`
+- `reviewed_notes`
+
+## Campos proibidos
+
+Nenhuma memória de usuário/peer pode armazenar ou expor:
+
+- `token`
+- `secret`
+- `env`
+- `headers`
+- `cookies`
+- `credentials`
+- `password`
+- `authorization`
+- `payload`
+- `rawPayload`
+- `rawMessage`
+- `userMessage`
+- `requiredAdapters`
+- stack trace completo
+- request body completo
+- dados pessoais sensíveis sem base legal ou consentimento
+- CPF/CNPJ completo sem necessidade operacional e política clara
+- dados financeiros sensíveis sem escopo e autorização
+
+## Regras obrigatórias
+
+- Memória por usuário deve ser isolada por `user_id` no futuro.
+- Memória corporativa deve respeitar `tenant_id`, `client_id` e `company_id` no futuro.
+- Memória de usuário não pode vazar entre usuários.
+- Memória pessoal não pode vazar para empresa.
+- Memória de empresa não pode vazar para agente pessoal.
+- Memória de um cliente externo não pode vazar para outro cliente.
+- Memória de usuário não pode promover skill.
+- Memória de usuário não pode executar adapter.
+- Memória de usuário não pode alterar Permission Matrix.
+- Memória de usuário não pode autorizar `executed:true`.
+- `executed:false` continua obrigatório nesta fase.
+
+## Relação com Permission Matrix
+
+- `allowed_domains` do usuário precisa ser compatível com `docs/PERMISSION_MATRIX.md`.
+- `role` nunca concede execução real sozinho.
+- domínio sensível sempre exige confirmação.
+- financeiro e compras críticas exigem threshold mais alto.
+
+## Relação com Skill Candidate Registry
+
+- user/peer memory pode ajudar a sugerir skill candidate.
+- não pode criar skill executável.
+- não pode aprovar skill.
+- toda skill continua `draft`, `mock-first` e `human-review`.
+
+## Relação com segundo cérebro futuro
+
+- esta PR não implementa segundo cérebro.
+- peer memory no futuro poderá apontar para um segundo cérebro autorizado.
+- todo acesso futuro deve respeitar escopo, tenant, domínio e papel.
+
+## Referências
+
+- `docs/MEMORY_POLICY.md`
+- `docs/PERMISSION_MATRIX.md`
+- `docs/GOLDEN_SCENARIOS.md`
+- `docs/DOMAIN_ONBOARDING.md`
+- `docs/SKILL_CANDIDATE_REGISTRY.md`
