@@ -87,6 +87,9 @@ Critério: trocar uma implementação = trocar um adapter, sem tocar o core.
 
 - Sessão (Redis) com TTL; memória semântica (Qdrant) para RAG; classificação de
   sensibilidade, expiração e curadoria.
+- `docs/MEMORY_POLICY.md` formaliza a política de memória sem storage real.
+- `docs/USER_PEER_MEMORY_SCOPES.md` detalha a camada `user_peer` por papel e
+  isolamento.
 
 ## Fase 5 — MCP Gateway
 
@@ -113,10 +116,3 @@ Critério: trocar uma implementação = trocar um adapter, sem tocar o core.
 
 - Filas e workers robustos, dead-letter, circuit breakers, read replicas/
   materializações, SLOs por canal, continuidade e resposta a incidentes.
-
-## Memory Policy
-
-`docs/MEMORY_POLICY.md` formaliza a política de memória sem criar storage real,
-RAG real ou segundo cérebro real nesta fase. A memória futura deve respeitar
-isolamento por usuário/empresa/domínio, thresholds e campos proibidos antes de
-qualquer PR de implementação.
