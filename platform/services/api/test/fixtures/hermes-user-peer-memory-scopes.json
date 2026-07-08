@@ -1,0 +1,140 @@
+{
+  "scopes": [
+    {
+      "id": "personal_user",
+      "name": "Personal User",
+      "can_trigger_real_execution": false,
+      "requires_human_confirmation": true,
+      "requires_tenant_isolation": false,
+      "allowed_domains": ["marketing", "desenvolvimento", "treinamento"],
+      "risk_profile": "medium"
+    },
+    {
+      "id": "owner_director",
+      "name": "Owner / Director",
+      "can_trigger_real_execution": false,
+      "requires_human_confirmation": true,
+      "requires_tenant_isolation": true,
+      "allowed_domains": ["compras", "financeiro", "treinamento", "marketing", "desenvolvimento"],
+      "risk_profile": "high"
+    },
+    {
+      "id": "finance_user",
+      "name": "Finance User",
+      "can_trigger_real_execution": false,
+      "requires_human_confirmation": true,
+      "requires_tenant_isolation": true,
+      "allowed_domains": ["financeiro", "compras"],
+      "risk_profile": "high"
+    },
+    {
+      "id": "manager_user",
+      "name": "Manager User",
+      "can_trigger_real_execution": false,
+      "requires_human_confirmation": true,
+      "requires_tenant_isolation": true,
+      "allowed_domains": ["treinamento", "marketing", "desenvolvimento", "compras"],
+      "risk_profile": "medium"
+    },
+    {
+      "id": "buyer_user",
+      "name": "Buyer User",
+      "can_trigger_real_execution": false,
+      "requires_human_confirmation": true,
+      "requires_tenant_isolation": true,
+      "allowed_domains": ["compras", "financeiro"],
+      "risk_profile": "high"
+    },
+    {
+      "id": "collaborator_user",
+      "name": "Collaborator User",
+      "can_trigger_real_execution": false,
+      "requires_human_confirmation": true,
+      "requires_tenant_isolation": true,
+      "allowed_domains": ["treinamento", "marketing"],
+      "risk_profile": "low"
+    },
+    {
+      "id": "external_client_user",
+      "name": "External Client User",
+      "can_trigger_real_execution": false,
+      "requires_human_confirmation": true,
+      "requires_tenant_isolation": true,
+      "allowed_domains": ["marketing", "treinamento", "desenvolvimento"],
+      "risk_profile": "high"
+    }
+  ],
+  "allowed_fields": [
+    "user_scope",
+    "role",
+    "preferred_tone",
+    "allowed_domains",
+    "denied_domains",
+    "risk_profile",
+    "confirmation_policy",
+    "preferred_language",
+    "store_scope",
+    "tenant_scope",
+    "approved_preferences",
+    "reviewed_notes"
+  ],
+  "forbidden_fields": [
+    "token",
+    "secret",
+    "env",
+    "headers",
+    "cookies",
+    "credentials",
+    "payload",
+    "rawMessage",
+    "userMessage",
+    "requiredAdapters",
+    "authorization",
+    "password"
+  ],
+  "role_domain_rules": {
+    "personal_user": {
+      "allowed_domains": ["marketing", "desenvolvimento", "treinamento"],
+      "confirmation_required": true,
+      "real_execution_allowed": false
+    },
+    "owner_director": {
+      "allowed_domains": ["compras", "financeiro", "treinamento", "marketing", "desenvolvimento"],
+      "confirmation_required": true,
+      "real_execution_allowed": false
+    },
+    "finance_user": {
+      "allowed_domains": ["financeiro", "compras"],
+      "confirmation_required": true,
+      "real_execution_allowed": false
+    },
+    "manager_user": {
+      "allowed_domains": ["treinamento", "marketing", "desenvolvimento", "compras"],
+      "confirmation_required": true,
+      "real_execution_allowed": false
+    },
+    "buyer_user": {
+      "allowed_domains": ["compras", "financeiro"],
+      "confirmation_required": true,
+      "real_execution_allowed": false
+    },
+    "collaborator_user": {
+      "allowed_domains": ["treinamento", "marketing"],
+      "confirmation_required": true,
+      "real_execution_allowed": false
+    },
+    "external_client_user": {
+      "allowed_domains": ["marketing", "treinamento", "desenvolvimento"],
+      "confirmation_required": true,
+      "real_execution_allowed": false
+    }
+  },
+  "default_rules": {
+    "executed": false,
+    "real_execution_allowed": false,
+    "human_review_required": true,
+    "mock_first": true,
+    "cross_user_leakage_allowed": false,
+    "cross_tenant_leakage_allowed": false
+  }
+}
