@@ -5,8 +5,8 @@ automações, dados, WhatsApp, Base44, Supabase, GitHub, Claude Code, MCPs e
 agentes especialistas.
 
 > **Hermes é o núcleo.** Nenhuma ferramenta específica (runtime de agente, DB,
-> fila, vetor, MCP) fica acoplada ao núcleo — tudo entra por adaptadores
-> substituíveis. Ver `docs/HERMES_AI_PLATFORM_V2_BLUEPRINT.md`.
+fila, vetor, MCP) fica acoplada ao núcleo — tudo entra por adaptadores
+substituíveis. Ver `docs/HERMES_AI_PLATFORM_V2_BLUEPRINT.md`.
 
 Esta pasta (`platform/`) é a **base v2**, independente do Hermes v1 na raiz do
 repositório.
@@ -194,6 +194,10 @@ Para padrões de tarefa que podem virar contratos futuros, consulte
 `docs/SKILL_CANDIDATE_REGISTRY.md`. Skills candidatas continuam em draft,
 ligadas a um domínio existente, com mock-first, revisão humana e
 `executed:false` obrigatório.
+
+Para memória futura, consulte `docs/MEMORY_POLICY.md`. A política define as
+camadas oficiais, thresholds por domínio e campos proibidos, sem implementar
+storage real nesta fase.
 
 ## Estrutura
 
