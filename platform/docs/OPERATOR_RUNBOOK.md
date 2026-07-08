@@ -204,6 +204,21 @@ Ele existe só como base documental nesta fase:
 Antes de promover uma skill candidata, valide o domínio, a Permission Matrix,
 os Golden Scenarios e o rollback plan.
 
+## 13. Memory Policy
+
+`docs/MEMORY_POLICY.md` documenta as camadas oficiais de memória sem criar
+storage real nesta PR. Ela cobre session, user/peer, domain/company e
+audit/learning memory, thresholds por domínio e forbidden fields.
+
+Regras centrais:
+
+- memória não autoriza `executed:true`
+- memória não substitui confirmação humana
+- memória não pode misturar usuários, empresas ou domínios
+- memória não pode guardar `token`, `secret`, `env`, `headers`, `cookies`,
+  `credentials`, `payload`, `rawMessage`, `userMessage` ou `requiredAdapters`
+- memória não cria segundo cérebro real nesta fase
+
 ## Kill switch
 
 - `HERMES_EXECUTION_KILL_SWITCH=true` bloqueia qualquer execução futura.
