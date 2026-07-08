@@ -19,6 +19,8 @@ repositório.
 - **Segurança**: `docs/SECURITY.md`
 - **Runbook operacional**: `docs/OPERATOR_RUNBOOK.md`
 - **Roadmap**: `docs/ROADMAP.md`
+- **Permission Matrix**: `docs/PERMISSION_MATRIX.md`
+- **Golden Scenarios**: `docs/GOLDEN_SCENARIOS.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -169,6 +171,18 @@ O mesmo fluxo roda automaticamente em GitHub Actions no workflow
 `platform/services/api`, executa `node --check`, `npm test`,
 `docker compose config`, sobe a stack local e roda o smoke test antes do
 `docker compose down`.
+
+## Permission Matrix e Golden Scenarios
+
+Antes de adicionar um novo domínio, consulte `docs/PERMISSION_MATRIX.md`. Ela
+define `can_read_context`, `can_plan`, `can_request_confirmation`,
+`can_run_mock_adapter`, `can_execute_real_action`, `requires_confirmation`,
+`requires_human_review`, `allowed_adapter_mode` e `risk_level` por domínio.
+
+Antes de criar qualquer adapter real, valide `docs/GOLDEN_SCENARIOS.md` e a
+fixture `services/api/test/fixtures/hermes-golden-scenarios.json`. Os cenários
+servem como contrato de comportamento e mantêm `executed:false` como regra
+obrigatória.
 
 ## Estrutura
 

@@ -40,6 +40,10 @@ específicas.
 - Workflow de CI (`.github/workflows/hermes-core-smoke.yml`) roda as validações
   e o smoke test automaticamente em `pull_request` e `push` para `main`, sem
   execução real.
+- Permission Matrix e Golden Scenarios formalizam o contrato de expansão por
+  domínio antes de qualquer adapter real.
+- Domain Onboarding Preview fica documentado como checklist para uma PR futura
+  específica de onboarding de novos domínios.
 - Runbook operacional de segurança documenta o fluxo atual, validação manual e
   regras para PRs futuras de adapter.
 

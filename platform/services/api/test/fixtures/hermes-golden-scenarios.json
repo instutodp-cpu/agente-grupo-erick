@@ -1,0 +1,191 @@
+[
+  {
+    "name": "compras registra compra de fornecedor",
+    "domain": "compras",
+    "input": "registrar compra de fornecedor ficticio com prazo de entrega",
+    "expected_adapter_id": "mock-compras",
+    "expected_simulated": true,
+    "expected_executed": false,
+    "requires_confirmation": true,
+    "forbidden_fields": [
+      "requiredAdapters",
+      "payload",
+      "rawMessage",
+      "userMessage",
+      "secret",
+      "token",
+      "env",
+      "headers",
+      "cookies",
+      "credentials"
+    ]
+  },
+  {
+    "name": "financeiro consulta analise",
+    "domain": "financeiro",
+    "input": "fazer analise financeira ficticia sem dados sensiveis",
+    "expected_adapter_id": "mock-financeiro",
+    "expected_simulated": true,
+    "expected_executed": false,
+    "requires_confirmation": true,
+    "forbidden_fields": [
+      "requiredAdapters",
+      "payload",
+      "rawMessage",
+      "userMessage",
+      "secret",
+      "token",
+      "env",
+      "headers",
+      "cookies",
+      "credentials"
+    ]
+  },
+  {
+    "name": "treinamento cria modulo",
+    "domain": "treinamento",
+    "input": "criar modulo de treinamento ficticio",
+    "expected_adapter_id": "mock-treinamento",
+    "expected_simulated": true,
+    "expected_executed": false,
+    "requires_confirmation": true,
+    "forbidden_fields": [
+      "requiredAdapters",
+      "payload",
+      "rawMessage",
+      "userMessage",
+      "secret",
+      "token",
+      "env",
+      "headers",
+      "cookies",
+      "credentials"
+    ]
+  },
+  {
+    "name": "marketing sugere campanha",
+    "domain": "marketing",
+    "input": "criar campanha de marketing ficticia",
+    "expected_adapter_id": "mock-marketing",
+    "expected_simulated": true,
+    "expected_executed": false,
+    "requires_confirmation": true,
+    "forbidden_fields": [
+      "requiredAdapters",
+      "payload",
+      "rawMessage",
+      "userMessage",
+      "secret",
+      "token",
+      "env",
+      "headers",
+      "cookies",
+      "credentials"
+    ]
+  },
+  {
+    "name": "desenvolvimento pede plano tecnico",
+    "domain": "desenvolvimento",
+    "input": "planejar tarefa tecnica ficticia",
+    "expected_adapter_id": "mock-desenvolvimento",
+    "expected_simulated": true,
+    "expected_executed": false,
+    "requires_confirmation": true,
+    "forbidden_fields": [
+      "requiredAdapters",
+      "payload",
+      "rawMessage",
+      "userMessage",
+      "secret",
+      "token",
+      "env",
+      "headers",
+      "cookies",
+      "credentials"
+    ]
+  },
+  {
+    "name": "ambigua nao executa",
+    "domain": "desconhecido",
+    "input": "coisa qualquer talvez",
+    "expected_adapter_id": null,
+    "expected_simulated": false,
+    "expected_executed": false,
+    "requires_confirmation": false,
+    "forbidden_fields": [
+      "requiredAdapters",
+      "payload",
+      "rawMessage",
+      "userMessage",
+      "secret",
+      "token",
+      "env",
+      "headers",
+      "cookies",
+      "credentials"
+    ]
+  },
+  {
+    "name": "confirmacao nao nao roda mock",
+    "domain": "compras",
+    "input": "nao",
+    "expected_adapter_id": null,
+    "expected_simulated": false,
+    "expected_executed": false,
+    "requires_confirmation": false,
+    "forbidden_fields": [
+      "requiredAdapters",
+      "payload",
+      "rawMessage",
+      "userMessage",
+      "secret",
+      "token",
+      "env",
+      "headers",
+      "cookies",
+      "credentials"
+    ]
+  },
+  {
+    "name": "confirmacao ambigua nao roda mock",
+    "domain": "compras",
+    "input": "talvez",
+    "expected_adapter_id": null,
+    "expected_simulated": false,
+    "expected_executed": false,
+    "requires_confirmation": false,
+    "forbidden_fields": [
+      "requiredAdapters",
+      "payload",
+      "rawMessage",
+      "userMessage",
+      "secret",
+      "token",
+      "env",
+      "headers",
+      "cookies",
+      "credentials"
+    ]
+  },
+  {
+    "name": "confirmation id inexistente retorna not found",
+    "domain": "desconhecido",
+    "input": "confirm_missing",
+    "expected_adapter_id": null,
+    "expected_simulated": false,
+    "expected_executed": false,
+    "requires_confirmation": false,
+    "forbidden_fields": [
+      "requiredAdapters",
+      "payload",
+      "rawMessage",
+      "userMessage",
+      "secret",
+      "token",
+      "env",
+      "headers",
+      "cookies",
+      "credentials"
+    ]
+  }
+]
