@@ -328,6 +328,9 @@ Devem bloquear qualquer evolucao sensivel:
   dominio e capability pode avancar como mock/read-only/draft candidate.
 - External Provider Mock Adapter Harness define como provider candidates podem
   ser simulados com fixtures sinteticas e sem chamadas externas.
+- External Provider Audit, Cost and Rate Limit define audit fields, cost/rate
+  risks, budget scopes, fallback policies and stop conditions before sandbox or
+  provider work.
 - Second Brain Inbox pode gerar itens de auditoria no futuro, mas nao grava
   memoria real nesta PR.
 - Memory Policy e User / Peer Memory Scopes continuam obrigatorios para

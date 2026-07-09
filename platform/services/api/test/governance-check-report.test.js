@@ -28,6 +28,7 @@ const REQUIRED_CHECK_AREAS = [
   'integration_security_boundary',
   'external_provider_permission_overlay',
   'external_provider_mock_adapter_harness',
+  'external_provider_audit_cost_rate_limit',
   'forbidden_fields',
   'operator_runbook',
   'runtime_safety',

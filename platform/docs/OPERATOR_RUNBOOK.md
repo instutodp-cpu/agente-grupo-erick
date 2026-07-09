@@ -383,3 +383,13 @@ externa, nao cria adapter real, nao cria OAuth/secrets, nao grava storage, nao
 altera runtime e nao autoriza `executed:true`. Todo exemplo deve manter
 `simulated:true`, `executed:false`, `real_provider_called:false`,
 `write_allowed:false` e `action_allowed:false`.
+
+## External Provider Audit, Cost and Rate Limit
+
+`docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` documenta auditoria, custo,
+rate limit, fallback e stop conditions para provedores externos futuros.
+
+Nesta fase o contrato nao implementa provider real, adapter real, OAuth,
+secrets, rate limiter, budget tracker, scheduler, storage, MCP ou chamadas
+externas. Ele nao autoriza `executed:true` nem `real_provider_called:true`; todo
+fluxo futuro continua mock-first, human-review e governance-review.

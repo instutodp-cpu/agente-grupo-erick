@@ -29,6 +29,7 @@ repositório.
 - **Integration Security Boundary**: `docs/INTEGRATION_SECURITY_BOUNDARY.md`
 - **External Provider Permission Overlay**: `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`
 - **External Provider Mock Adapter Harness**: `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`
+- **External Provider Audit, Cost and Rate Limit**: `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -225,6 +226,12 @@ Para simular provedores externos antes de qualquer integracao real, consulte
 `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`. O harness usa apenas fixtures
 seguras e dados sinteticos; nao chama APIs externas, nao cria adapters reais e
 mantem `executed:false`.
+
+Para controlar auditoria, custo, rate limit, fallback e stop conditions de
+provedores externos futuros, consulte
+`docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`. Este contrato nao cria rate
+limiter real, budget tracker, scheduler, provider real ou adapter real, e
+mantem `real_provider_called:false` e `executed:false`.
 
 ## Estrutura
 

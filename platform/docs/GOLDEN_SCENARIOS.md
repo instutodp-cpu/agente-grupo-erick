@@ -123,3 +123,10 @@ usage mock/read-only/draft only and does not authorize real API calls.
 Provider-related golden scenarios can use
 `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` as the safe fixture contract.
 Mock examples remain synthetic and cannot call real providers.
+
+## External Provider Audit, Cost and Rate Limit
+
+Provider-related scenarios should reference
+`docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` when future cost, rate limit,
+fallback or stop-condition behavior is relevant. The contract does not permit
+real provider calls.

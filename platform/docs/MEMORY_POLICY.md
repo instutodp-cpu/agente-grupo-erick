@@ -146,3 +146,9 @@ overlay does not authorize storage or raw data retention.
 `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` can produce only synthetic mock
 output. Mock output does not become memory automatically and does not authorize
 storage, raw content retention or real provider calls.
+
+## External Provider Audit, Cost and Rate Limit
+
+`docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` defines safe provider audit
+fields and stop conditions. Audit output cannot become memory without future
+sanitization, retention policy and human review.

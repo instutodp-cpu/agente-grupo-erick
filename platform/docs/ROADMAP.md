@@ -54,6 +54,9 @@ específicas.
 - External Provider Mock Adapter Harness documenta como provedores externos
   futuros devem ser simulados com fixtures seguras antes de qualquer sandbox,
   provider real ou adapter real.
+- External Provider Audit, Cost and Rate Limit documenta campos de auditoria,
+  riscos de custo/rate limit, budget scopes, fallback policies e stop
+  conditions antes de qualquer provider real, rate limiter ou budget tracker.
 - Permission Matrix e Golden Scenarios formalizam o contrato de expansão por
   domínio antes de qualquer adapter real.
 - Domain Onboarding Guide formaliza o fluxo oficial para novos domínios como

@@ -87,3 +87,9 @@ capabilities and cannot authorize writes, actions or `executed:true`.
 `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` can simulate provider behavior
 only after this matrix and the provider overlay keep the domain/capability safe.
 Mock simulation does not expand permissions and does not authorize real calls.
+
+## External Provider Audit, Cost and Rate Limit
+
+`docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` must be satisfied before any
+future provider sandbox. Cost, rate limit, fallback and stop conditions cannot
+expand this matrix or authorize real provider calls.

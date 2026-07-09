@@ -266,6 +266,8 @@ Future PRs must be blocked when they:
   work.
 - `EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`: mock provider requests and
   responses must remain synthetic, sanitized and inside this boundary.
+- `EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`: provider audit, cost, rate
+  limit, fallback and stop-condition metadata must stay inside this boundary.
 
 ## Security And LGPD
 

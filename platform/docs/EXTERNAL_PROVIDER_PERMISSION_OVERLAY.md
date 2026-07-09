@@ -350,6 +350,9 @@ These are blocked:
 - `EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`: allowed provider/domain/capability
   combinations may be simulated with synthetic fixtures before any sandbox or
   real provider work.
+- `EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`: allowed provider/domain/capability
+  combinations still need audit, cost, rate limit, fallback and stop-condition
+  contracts before any sandbox work.
 
 ## Security And LGPD
 

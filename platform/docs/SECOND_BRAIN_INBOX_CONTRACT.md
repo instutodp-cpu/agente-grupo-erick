@@ -272,3 +272,9 @@ overlay does not authorize raw content storage or real provider calls.
 `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` may provide synthetic examples
 for future inbox candidates. Mock output does not write inbox storage and cannot
 include raw provider content.
+
+## External Provider Audit, Cost and Rate Limit
+
+`docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` can produce only sanitized
+audit/cost/rate-limit candidates for future inbox review. It does not write
+inbox storage and cannot include raw provider content.
