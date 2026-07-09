@@ -27,6 +27,7 @@ consistencia do Hermes Core antes de evolucoes sensiveis. Ele pode avaliar:
 - Quality Score + Feedback Loop
 - External Integration Provider Registry
 - Integration Security Boundary
+- External Provider Permission Overlay
 - Forbidden Fields
 - Operator Runbook
 - Runtime Safety
@@ -165,6 +166,13 @@ nao autoriza `executed:true` e nao habilita execucao real.
 ### integration_security_boundary
 
 - risk_level: critical
+- required_for_sensitive_changes: true
+- can_block_release: true
+- can_trigger_real_execution: false
+
+### external_provider_permission_overlay
+
+- risk_level: high
 - required_for_sensitive_changes: true
 - can_block_release: true
 - can_trigger_real_execution: false
@@ -308,6 +316,8 @@ Devem bloquear qualquer evolucao sensivel:
   nao substitui governanca.
 - Integration Security Boundary define os limites que qualquer provider futuro
   deve respeitar antes de mock, sandbox ou adapter.
+- External Provider Permission Overlay define se uma combinacao de provider,
+  dominio e capability pode avancar como mock/read-only/draft candidate.
 - Second Brain Inbox pode gerar itens de auditoria no futuro, mas nao grava
   memoria real nesta PR.
 - Memory Policy e User / Peer Memory Scopes continuam obrigatorios para

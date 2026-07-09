@@ -134,3 +134,9 @@ content and does not permit real execution.
 `docs/INTEGRATION_SECURITY_BOUNDARY.md` defines the boundary that provider
 output must cross before any future inbox or memory candidate. Raw payloads,
 raw transcripts, secrets and cross-user or cross-tenant leakage remain blocked.
+
+## External Provider Permission Overlay
+
+`docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md` must allow the provider/domain
+combination before provider output can become a future memory candidate. The
+overlay does not authorize storage or raw data retention.

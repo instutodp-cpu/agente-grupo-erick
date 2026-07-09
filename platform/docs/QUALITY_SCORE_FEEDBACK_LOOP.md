@@ -129,3 +129,9 @@ or `executed:true`.
 `docs/INTEGRATION_SECURITY_BOUNDARY.md` applies before provider-related quality
 signals can influence future work. Quality scores cannot loosen boundary rules,
 approve secrets, approve writes or authorize `executed:true`.
+
+## External Provider Permission Overlay
+
+`docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md` applies before quality or
+feedback signals can suggest future provider work. Scores cannot override the
+overlay or approve writes, actions or `executed:true`.

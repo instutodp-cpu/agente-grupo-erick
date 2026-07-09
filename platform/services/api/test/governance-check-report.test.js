@@ -26,6 +26,7 @@ const REQUIRED_CHECK_AREAS = [
   'quality_score_feedback_loop',
   'external_integration_provider_registry',
   'integration_security_boundary',
+  'external_provider_permission_overlay',
   'forbidden_fields',
   'operator_runbook',
   'runtime_safety',

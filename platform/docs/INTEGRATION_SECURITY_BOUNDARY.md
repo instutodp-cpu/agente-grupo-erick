@@ -261,6 +261,9 @@ Future PRs must be blocked when they:
   provider automations.
 - `OPERATOR_RUNBOOK.md`: operators must use the runbook for validation, rollback
   and future adapter PR rules.
+- `EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`: provider/domain/capability
+  combinations must pass the overlay before any future mock, sandbox or adapter
+  work.
 
 ## Security And LGPD
 

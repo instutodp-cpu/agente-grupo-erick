@@ -130,3 +130,9 @@ New domains that involve future integrations must also reference
 `docs/INTEGRATION_SECURITY_BOUNDARY.md`. Domain onboarding cannot bypass the
 security boundary, cannot allow raw payload logging and cannot permit
 `executed:true`.
+
+## External Provider Permission Overlay
+
+New domains that use future external providers must also update
+`docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`. The overlay does not replace
+Domain Onboarding and does not allow real execution.

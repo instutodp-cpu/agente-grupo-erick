@@ -509,6 +509,18 @@ permitidos/proibidos, regras default, blocking rules e provider type rules. A
 fronteira nao substitui Permission Matrix, confirmacao humana ou governance
 review, e nao autoriza `executed:true`.
 
+### 5.14 External Provider Permission Overlay
+
+`docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md` define o overlay oficial entre a
+Permission Matrix e provedores externos futuros. Ele cruza `provider_id`,
+`provider_type`, dominio, capability, risco, permissoes, human review,
+governance review e security boundary.
+
+Nesta fase o overlay nao implementa provider real, adapter real, OAuth,
+secrets, storage, MCP ou chamadas externas. Ele nao substitui Permission
+Matrix, Integration Security Boundary, confirmacao humana ou governance review,
+e nao autoriza escrita real, acao real ou `executed:true`.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -581,3 +593,6 @@ Métricas e tracing entram junto com o pipeline de orquestração.
 - O contrato de fronteira de integracao fica em
   `docs/INTEGRATION_SECURITY_BOUNDARY.md`; ele define limites para qualquer
   provider futuro sem alterar runtime ou permitir `executed:true`.
+- O overlay de permissao para providers externos fica em
+  `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`; ele cruza provider, dominio e
+  capability sem habilitar provider real ou `executed:true`.

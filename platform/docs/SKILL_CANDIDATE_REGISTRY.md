@@ -166,3 +166,9 @@ calls.
 Skill candidates that mention future integrations must respect
 `docs/INTEGRATION_SECURITY_BOUNDARY.md`. A skill candidate cannot approve OAuth,
 secrets, provider calls, writes, cross-tenant access or `executed:true`.
+
+## External Provider Permission Overlay
+
+Skill candidates that depend on a future external provider must reference
+`docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`. The overlay cannot turn a skill
+candidate into an executable provider automation.

@@ -48,6 +48,9 @@ específicas.
 - Integration Security Boundary documenta as camadas de seguranca para qualquer
   integracao futura, bloqueando secrets, raw payload, cross-tenant leakage,
   escrita real e `executed:true`.
+- External Provider Permission Overlay cruza provider_id/provider_type com
+  dominio, capability, risco e permissoes sem habilitar provider real,
+  adapter real, escrita real ou `executed:true`.
 - Permission Matrix e Golden Scenarios formalizam o contrato de expansão por
   domínio antes de qualquer adapter real.
 - Domain Onboarding Guide formaliza o fluxo oficial para novos domínios como

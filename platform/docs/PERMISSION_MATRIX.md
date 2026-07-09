@@ -75,3 +75,9 @@ real writes, real actions or `executed:true`.
 `docs/INTEGRATION_SECURITY_BOUNDARY.md` defines the safety boundary that every
 future integration must respect. The boundary cannot loosen this matrix, cannot
 grant cross-domain access and cannot authorize real execution.
+
+## External Provider Permission Overlay
+
+`docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md` overlays provider-specific rules
+on top of this matrix. It does not replace this matrix, cannot expand domain
+capabilities and cannot authorize writes, actions or `executed:true`.
