@@ -190,3 +190,9 @@ promote a skill or authorize provider execution.
 Skill candidates that depend on future memory, inbox, provider or business data
 must reference `docs/TENANT_WORKSPACE_ISOLATION.md`. Skills cannot bypass
 tenant/workspace isolation.
+
+## Public Web Data Read-Only Sandbox
+
+Skill candidates that depend on public web research must reference
+`docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`. Skills cannot become executable web
+crawlers or scraping automations in this phase.

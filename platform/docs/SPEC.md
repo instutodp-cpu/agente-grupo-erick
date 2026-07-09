@@ -558,6 +558,19 @@ storage, memoria real, cache, RAG/vector DB, MCP ou runtime novo. Ele nao
 autoriza `executed:true` e nao substitui Permission Matrix, Memory Policy,
 Integration Security Boundary, confirmacao humana ou governance review.
 
+### 5.18 Public Web Data Read-Only Sandbox
+
+`docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` define o contrato oficial para leitura
+futura de dados publicos da web em modo read-only sandbox. Ele cobre sandbox
+modes, source types permitidos/bloqueados, request/response fields, statuses,
+outputs sanitizados, provider candidates, tenant rules, audit/cost/rate-limit
+rules e blocking rules.
+
+Nesta fase o contrato nao implementa Firecrawl, Bright Data, Scrapeless,
+crawler, scraping, provider real, adapter real, OAuth, secrets, storage,
+RAG/vector DB, scheduler, cron ou runtime novo. Ele nao autoriza
+`real_provider_called:true`, `executed:true`, escrita ou acao real.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -643,3 +656,6 @@ Métricas e tracing entram junto com o pipeline de orquestração.
 - O contrato de isolamento por tenant/workspace fica em
   `docs/TENANT_WORKSPACE_ISOLATION.md`; ele separa Hermes Pessoal, Grupo Erick
   e clientes externos sem implementar auth real, RLS, Supabase ou storage.
+- O contrato de leitura publica da web fica em
+  `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`; ele prepara public web read-only com
+  fixtures seguras sem provider real, scraping real ou storage.

@@ -355,6 +355,9 @@ These are blocked:
   contracts before any sandbox work.
 - `TENANT_WORKSPACE_ISOLATION.md`: provider/domain/capability combinations must
   also stay inside the selected workspace and tenant.
+- `PUBLIC_WEB_READ_ONLY_SANDBOX.md`: public web provider combinations must
+  remain read-only candidates and cannot allow login, checkout, form submit or
+  real provider calls.
 
 ## Security And LGPD
 

@@ -159,3 +159,9 @@ sanitization, retention policy and human review.
 before any memory becomes real. Future memory must include `workspace_type`,
 `tenant_id` and `user_id`, and cannot cross personal, Grupo Erick or external
 client workspaces.
+
+## Public Web Data Read-Only Sandbox
+
+`docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` can only produce sanitized public web
+summaries in this phase. Public web output cannot become memory without tenant
+scope, retention policy and human/governance review.

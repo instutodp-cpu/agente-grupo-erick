@@ -99,3 +99,9 @@ expand this matrix or authorize real provider calls.
 `docs/TENANT_WORKSPACE_ISOLATION.md` scopes this matrix by workspace and tenant.
 Workspace isolation cannot expand domain permissions and domain permissions
 cannot override tenant isolation.
+
+## Public Web Data Read-Only Sandbox
+
+`docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` defines future public web reads as
+read-only candidates. Public web read permissions cannot override this matrix,
+tenant isolation or `executed:false`.

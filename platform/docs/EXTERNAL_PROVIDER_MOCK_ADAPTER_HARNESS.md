@@ -262,6 +262,8 @@ Mock must return blocked when:
   provider calls, retries, rate limiters or budget trackers.
 - `TENANT_WORKSPACE_ISOLATION.md`: mock requests and responses must remain
   synthetic and scoped to a single workspace and tenant.
+- `PUBLIC_WEB_READ_ONLY_SANDBOX.md`: public web mock examples must remain
+  synthetic, public-only and free of raw HTML or real provider calls.
 - `OPERATOR_RUNBOOK.md`: operators must use the runbook for validation,
   rollback and future adapter PR rules.
 

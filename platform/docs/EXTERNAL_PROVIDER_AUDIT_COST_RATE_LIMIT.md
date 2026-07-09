@@ -298,6 +298,8 @@ Future PRs must be blocked when they:
   rollback and future provider PR rules.
 - `TENANT_WORKSPACE_ISOLATION.md`: provider audit, cost and rate-limit metadata
   must include workspace/tenant scope before any future sandbox.
+- `PUBLIC_WEB_READ_ONLY_SANDBOX.md`: public web sandbox events must include
+  audit/cost/rate-limit metadata before any future read-only provider work.
 
 ## Security And LGPD
 

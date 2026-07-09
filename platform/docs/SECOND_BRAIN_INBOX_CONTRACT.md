@@ -284,3 +284,9 @@ inbox storage and cannot include raw provider content.
 `docs/TENANT_WORKSPACE_ISOLATION.md` defines the tenant/workspace requirements
 for any future inbox item. The inbox cannot mix personal, Grupo Erick or
 external client context.
+
+## Public Web Data Read-Only Sandbox
+
+`docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` can produce only sanitized public web
+candidates for future inbox review. It does not write inbox storage or store
+raw page content.

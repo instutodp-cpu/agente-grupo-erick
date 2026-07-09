@@ -340,3 +340,9 @@ Future PRs must be blocked when they:
 - External clients require strict isolation.
 - Retention must be defined before real storage.
 - Sensitive data requires a clear policy.
+
+## Public Web Data Read-Only Sandbox
+
+`docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` defines how future public web reads must
+stay inside `workspace_type`, `tenant_id` and `user_id`. Public web output
+cannot cross Hermes Pessoal, Grupo Erick or external client boundaries.

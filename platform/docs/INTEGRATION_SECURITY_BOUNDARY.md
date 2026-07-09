@@ -270,6 +270,8 @@ Future PRs must be blocked when they:
   limit, fallback and stop-condition metadata must stay inside this boundary.
 - `TENANT_WORKSPACE_ISOLATION.md`: provider, MCP, memory, cache and audit
   metadata must stay inside the authenticated workspace and tenant boundary.
+- `PUBLIC_WEB_READ_ONLY_SANDBOX.md`: future public web reads must stay
+  read-only, public-only, tenant-scoped and free of raw HTML or private data.
 
 ## Security And LGPD
 

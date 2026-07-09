@@ -153,3 +153,9 @@ provider calls.
 `docs/TENANT_WORKSPACE_ISOLATION.md` keeps future feedback and learning signals
 scoped by workspace and tenant. Quality scores cannot approve cross-tenant
 context use.
+
+## Public Web Data Read-Only Sandbox
+
+`docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` may provide synthetic public web outputs
+for future quality review. Quality scores cannot approve real scraping, provider
+calls, checkout, form submit or raw storage.
