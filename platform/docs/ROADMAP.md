@@ -45,6 +45,9 @@ específicas.
 - External Integration Provider Registry documenta provider types, candidatos,
   riscos, bloqueios, OAuth/secrets, compliance e review de governanca antes de
   qualquer integracao externa real.
+- Integration Security Boundary documenta as camadas de seguranca para qualquer
+  integracao futura, bloqueando secrets, raw payload, cross-tenant leakage,
+  escrita real e `executed:true`.
 - Permission Matrix e Golden Scenarios formalizam o contrato de expansão por
   domínio antes de qualquer adapter real.
 - Domain Onboarding Guide formaliza o fluxo oficial para novos domínios como

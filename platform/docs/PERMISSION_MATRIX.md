@@ -69,3 +69,9 @@ checks. The governance report does not replace this matrix and cannot loosen
 future external provider is connected to a domain. A provider entry does not
 expand domain permissions, does not replace this matrix and cannot authorize
 real writes, real actions or `executed:true`.
+
+## Integration Security Boundary
+
+`docs/INTEGRATION_SECURITY_BOUNDARY.md` defines the safety boundary that every
+future integration must respect. The boundary cannot loosen this matrix, cannot
+grant cross-domain access and cannot authorize real execution.

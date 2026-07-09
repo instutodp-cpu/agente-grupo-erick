@@ -346,3 +346,15 @@ OAuth/secrets, não altera runtime, não persiste dados e não autoriza
 `executed:true`. Qualquer provider futuro precisa manter `write_allowed:false`,
 `action_allowed:false`, `can_trigger_real_execution:false`, human review e
 governance review antes de avançar.
+
+## Integration Security Boundary
+
+`docs/INTEGRATION_SECURITY_BOUNDARY.md` define a fronteira de seguranca para
+qualquer integracao externa futura. Ele cobre identity, secrets, payloads,
+actions, providers, dominios, custos, compliance, audit e sandbox.
+
+Nesta fase o boundary nao implementa provider real, nao implementa adapter
+real, nao chama API externa, nao cria OAuth/secrets, nao altera runtime e nao
+autoriza `executed:true`. Ele preserva `mock-first`, human review, governance
+review, kill switch, rollback e logs sanitizados como requisitos para qualquer
+evolucao futura.

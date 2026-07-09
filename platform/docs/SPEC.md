@@ -497,6 +497,18 @@ API real. Também não cria scanner, adapter, storage, OAuth, secrets ou runtime
 novo. `write_allowed`, `action_allowed`, `can_trigger_real_execution` e
 `executed` continuam `false`.
 
+### 5.13 Integration Security Boundary
+
+`docs/INTEGRATION_SECURITY_BOUNDARY.md` define a fronteira de seguranca para
+qualquer integracao externa futura. O boundary cobre identity, secrets,
+payloads, actions, providers, dominios, custos, compliance, audit e sandbox.
+
+Nesta fase o boundary nao implementa provider real, adapter real, OAuth,
+secrets, storage, MCP ou chamadas externas. Ele apenas documenta campos
+permitidos/proibidos, regras default, blocking rules e provider type rules. A
+fronteira nao substitui Permission Matrix, confirmacao humana ou governance
+review, e nao autoriza `executed:true`.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -566,3 +578,6 @@ Métricas e tracing entram junto com o pipeline de orquestração.
 - O contrato de governança futura fica em `docs/GOVERNANCE_CHECK_REPORT.md`;
   ele serve para revisar a saude dos contratos e bloquear regressões
   sensiveis, sem virar scanner real.
+- O contrato de fronteira de integracao fica em
+  `docs/INTEGRATION_SECURITY_BOUNDARY.md`; ele define limites para qualquer
+  provider futuro sem alterar runtime ou permitir `executed:true`.

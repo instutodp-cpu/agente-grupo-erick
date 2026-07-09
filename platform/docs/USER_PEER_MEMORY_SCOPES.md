@@ -152,3 +152,9 @@ External providers that depend on user, role or tenant scope must be documented
 in `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`. Provider registry entries
 do not bypass user isolation, tenant isolation, confirmation or
 `executed:false`.
+
+## Integration Security Boundary
+
+`docs/INTEGRATION_SECURITY_BOUNDARY.md` keeps user, tenant, role, store and
+company scopes inside the identity boundary. Future integrations cannot use
+peer memory to bypass scope, confirmation, governance or `executed:false`.

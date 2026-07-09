@@ -128,3 +128,9 @@ Future provider output can become a memory candidate only after the provider is
 documented in `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md` and sanitized.
 The registry does not create memory storage, does not retain raw provider
 content and does not permit real execution.
+
+## Integration Security Boundary
+
+`docs/INTEGRATION_SECURITY_BOUNDARY.md` defines the boundary that provider
+output must cross before any future inbox or memory candidate. Raw payloads,
+raw transcripts, secrets and cross-user or cross-tenant leakage remain blocked.

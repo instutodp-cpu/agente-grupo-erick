@@ -1,0 +1,220 @@
+{
+  "boundary_layers": [
+    {
+      "id": "identity_boundary",
+      "risk_level": "critical",
+      "can_trigger_real_execution": false,
+      "required": true
+    },
+    {
+      "id": "secret_boundary",
+      "risk_level": "critical",
+      "can_trigger_real_execution": false,
+      "required": true
+    },
+    {
+      "id": "payload_boundary",
+      "risk_level": "critical",
+      "can_trigger_real_execution": false,
+      "required": true
+    },
+    {
+      "id": "action_boundary",
+      "risk_level": "critical",
+      "can_trigger_real_execution": false,
+      "required": true
+    },
+    {
+      "id": "provider_boundary",
+      "risk_level": "high",
+      "can_trigger_real_execution": false,
+      "required": true
+    },
+    {
+      "id": "domain_boundary",
+      "risk_level": "high",
+      "can_trigger_real_execution": false,
+      "required": true
+    },
+    {
+      "id": "cost_boundary",
+      "risk_level": "medium",
+      "can_trigger_real_execution": false,
+      "required": true
+    },
+    {
+      "id": "compliance_boundary",
+      "risk_level": "high",
+      "can_trigger_real_execution": false,
+      "required": true
+    },
+    {
+      "id": "audit_boundary",
+      "risk_level": "high",
+      "can_trigger_real_execution": false,
+      "required": true
+    },
+    {
+      "id": "sandbox_boundary",
+      "risk_level": "high",
+      "can_trigger_real_execution": false,
+      "required": true
+    }
+  ],
+  "allowed_audit_fields": [
+    "trace_id",
+    "provider_id",
+    "provider_type",
+    "domain",
+    "intent",
+    "risk_level",
+    "status",
+    "simulated",
+    "executed",
+    "adapter_mode",
+    "confirmation_required",
+    "confirmation_id",
+    "blocked_reason",
+    "timestamp",
+    "cost_risk",
+    "rate_limit_risk"
+  ],
+  "forbidden_fields": [
+    "token",
+    "secret",
+    "env",
+    "headers",
+    "cookies",
+    "credentials",
+    "payload",
+    "rawPayload",
+    "rawMessage",
+    "userMessage",
+    "requiredAdapters",
+    "authorization",
+    "password",
+    "stackTrace",
+    "apiKey",
+    "accessToken",
+    "refreshToken",
+    "requestBody",
+    "responseBody",
+    "rawTranscript",
+    "rawAudio",
+    "privateUrl",
+    "webhookSecret"
+  ],
+  "default_rules": {
+    "executed": false,
+    "can_trigger_real_execution": false,
+    "write_allowed": false,
+    "action_allowed": false,
+    "real_provider_calls_allowed": false,
+    "secrets_allowed_in_docs": false,
+    "secrets_allowed_in_fixtures": false,
+    "raw_payload_logging_allowed": false,
+    "raw_message_logging_allowed": false,
+    "cross_tenant_access_allowed": false,
+    "cross_user_access_allowed": false,
+    "cross_domain_access_allowed": false,
+    "mock_first": true,
+    "human_review_required": true,
+    "governance_review_required": true,
+    "kill_switch_required_for_high_critical": true,
+    "rollback_plan_required_for_high_critical": true
+  },
+  "blocking_rules": [
+    "real_oauth_added",
+    "real_secret_added",
+    "real_env_key_added",
+    "external_api_called",
+    "external_write_attempted",
+    "social_post_attempted",
+    "email_send_attempted",
+    "calendar_modify_attempted",
+    "money_movement_attempted",
+    "erp_mutation_attempted",
+    "action_mcp_tool_enabled",
+    "raw_transcript_stored",
+    "raw_audio_stored",
+    "raw_scraping_stored_without_policy",
+    "secret_exposed",
+    "raw_payload_exposed",
+    "cross_tenant_leakage",
+    "cross_user_leakage",
+    "confirmation_gate_removed",
+    "kill_switch_removed",
+    "executed_true_detected"
+  ],
+  "provider_type_rules": [
+    {
+      "id": "public_web_scraping",
+      "mock_only": true,
+      "write_allowed": false,
+      "action_allowed": false,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "app_integration_hub",
+      "mock_only": true,
+      "write_allowed": false,
+      "action_allowed": false,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "transcription_provider",
+      "mock_only": true,
+      "write_allowed": false,
+      "action_allowed": false,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "social_media_provider",
+      "mock_only": true,
+      "write_allowed": false,
+      "action_allowed": false,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "direct_platform_api",
+      "mock_only": true,
+      "write_allowed": false,
+      "action_allowed": false,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "internal_business_api",
+      "mock_only": true,
+      "write_allowed": false,
+      "action_allowed": false,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "internal_mcp_server",
+      "mock_only": true,
+      "write_allowed": false,
+      "action_allowed": false,
+      "can_trigger_real_execution": false
+    },
+    {
+      "id": "developer_platform",
+      "mock_only": true,
+      "write_allowed": false,
+      "action_allowed": false,
+      "can_trigger_real_execution": false
+    }
+  ],
+  "required_contract_references": [
+    "EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md",
+    "GOVERNANCE_CHECK_REPORT.md",
+    "PERMISSION_MATRIX.md",
+    "GOLDEN_SCENARIOS.md",
+    "DOMAIN_ONBOARDING.md",
+    "MEMORY_POLICY.md",
+    "USER_PEER_MEMORY_SCOPES.md",
+    "SECOND_BRAIN_INBOX_CONTRACT.md",
+    "QUALITY_SCORE_FEEDBACK_LOOP.md",
+    "SKILL_CANDIDATE_REGISTRY.md",
+    "OPERATOR_RUNBOOK.md"
+  ]
+}

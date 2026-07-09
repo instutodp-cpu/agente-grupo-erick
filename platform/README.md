@@ -26,6 +26,7 @@ repositório.
 - **Memory Policy**: `docs/MEMORY_POLICY.md`
 - **Governance Check Report**: `docs/GOVERNANCE_CHECK_REPORT.md`
 - **External Integration Provider Registry**: `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`
+- **Integration Security Boundary**: `docs/INTEGRATION_SECURITY_BOUNDARY.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -207,6 +208,11 @@ Para provedores externos futuros, consulte
 provider types, candidatos, riscos, bloqueios, OAuth/secrets e revisão de
 governança antes de qualquer integração real; ele não chama APIs externas, não
 cria adapter real e não autoriza `executed:true`.
+
+Para a fronteira de seguranca de qualquer integracao futura, consulte
+`docs/INTEGRATION_SECURITY_BOUNDARY.md`. O boundary define camadas, campos
+permitidos/proibidos, regras default e bloqueios antes de provider real,
+adapter real, OAuth/secrets ou qualquer chamada externa.
 
 ## Estrutura
 
