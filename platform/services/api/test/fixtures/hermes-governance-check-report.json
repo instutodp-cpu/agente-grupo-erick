@@ -148,6 +148,13 @@
       "can_trigger_real_execution": false
     },
     {
+      "id": "public_web_read_only_sandbox",
+      "risk_level": "high",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
       "id": "forbidden_fields",
       "risk_level": "critical",
       "required_for_sensitive_changes": true,

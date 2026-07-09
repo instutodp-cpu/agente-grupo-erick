@@ -60,6 +60,9 @@ específicas.
 - Tenant and Workspace Isolation documenta a separacao entre Hermes Pessoal,
   Grupo Erick e clientes externos antes de auth real, storage, RLS, Supabase,
   memoria real, RAG, MCP ou SaaS multiempresa.
+- Public Web Data Read-Only Sandbox documenta leitura futura de dados publicos
+  da web em modo mock/read-only, sem Firecrawl real, crawler, scraping,
+  storage, provider real ou `executed:true`.
 - Permission Matrix e Golden Scenarios formalizam o contrato de expansão por
   domínio antes de qualquer adapter real.
 - Domain Onboarding Guide formaliza o fluxo oficial para novos domínios como

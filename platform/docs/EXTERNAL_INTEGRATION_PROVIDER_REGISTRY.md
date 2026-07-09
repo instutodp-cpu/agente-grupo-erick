@@ -266,6 +266,12 @@ scopes, fallback policies e stop conditions antes de qualquer sandbox.
 respeitar `workspace_type`, `tenant_id` e `user_id`. Provider externo nao pode
 inferir, alterar ou atravessar tenant/workspace.
 
+## Relacao com Public Web Data Read-Only Sandbox
+
+`docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` define o contrato read-only para futuros
+providers de dados publicos da web. Firecrawl, Bright Data e Scrapeless
+continuam apenas candidatos documentados nesta fase.
+
 ## Relacao com Permission Matrix e Domain Onboarding
 
 Provider nao libera dominio novo. Dominio novo ainda precisa Domain Onboarding.

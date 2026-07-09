@@ -31,6 +31,7 @@ repositório.
 - **External Provider Mock Adapter Harness**: `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`
 - **External Provider Audit, Cost and Rate Limit**: `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`
 - **Tenant and Workspace Isolation**: `docs/TENANT_WORKSPACE_ISOLATION.md`
+- **Public Web Read-Only Sandbox**: `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -238,6 +239,11 @@ Para separar Hermes Pessoal, Grupo Erick e clientes externos SaaS, consulte
 `docs/TENANT_WORKSPACE_ISOLATION.md`. Este contrato nao implementa auth real,
 tenant resolver, storage, RLS, Supabase, memoria real, cache, RAG, MCP ou
 runtime novo, e mantem `executed:false`.
+
+Para futura leitura segura de dados publicos da web, consulte
+`docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`. Este contrato nao implementa Firecrawl,
+Bright Data, Scrapeless, crawler, scraping, provider real, storage ou runtime,
+e mantem `real_provider_called:false` e `executed:false`.
 
 ## Estrutura
 

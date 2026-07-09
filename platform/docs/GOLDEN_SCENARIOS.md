@@ -136,3 +136,9 @@ real provider calls.
 Tenant-related scenarios should reference `docs/TENANT_WORKSPACE_ISOLATION.md`.
 Future scenarios that use memory, inbox, providers, MCP or business data must
 declare workspace and tenant scope.
+
+## Public Web Data Read-Only Sandbox
+
+Public web scenarios should reference `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`.
+Scenarios may use only synthetic public web examples in this phase and cannot
+expect real provider calls.

@@ -334,6 +334,9 @@ Devem bloquear qualquer evolucao sensivel:
 - Tenant and Workspace Isolation define como Hermes Pessoal, Grupo Erick e
   clientes externos devem permanecer separados antes de storage, auth, RLS,
   Supabase, RAG, MCP ou SaaS real.
+- Public Web Data Read-Only Sandbox define como dados publicos da web podem ser
+  tratados futuramente como mock/read-only sem provider real, scraping real ou
+  storage bruto.
 - Second Brain Inbox pode gerar itens de auditoria no futuro, mas nao grava
   memoria real nesta PR.
 - Memory Policy e User / Peer Memory Scopes continuam obrigatorios para

@@ -403,3 +403,14 @@ resolver, storage, RLS, Supabase, memoria real, cache, RAG, MCP ou runtime.
 Nesta fase o contrato e apenas documentacao, fixture e teste. Ele nao autoriza
 `executed:true`, nao permite dados cross-tenant e nao substitui Permission
 Matrix, Memory Policy, Integration Security Boundary ou governance review.
+
+## Public Web Data Read-Only Sandbox
+
+`docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` documenta leitura futura de dados
+publicos da web em modo read-only sandbox para pesquisa, resumo e comparacao.
+
+Nesta fase o contrato nao implementa Firecrawl, Bright Data, Scrapeless,
+crawler, scraping, provider real, adapter real, OAuth/secrets, storage,
+RAG/vector DB, scheduler, cron ou runtime. Ele nao autoriza
+`real_provider_called:true`, `executed:true`, escrita, checkout, formulario,
+compra, reserva ou pagamento.

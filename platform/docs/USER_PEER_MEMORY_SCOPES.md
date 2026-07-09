@@ -182,3 +182,9 @@ role boundaries.
 `docs/TENANT_WORKSPACE_ISOLATION.md` defines how user/peer memory must be scoped
 by `workspace_type`, `tenant_id` and `user_id`. Peer memory cannot cross
 personal, Grupo Erick or external client workspaces.
+
+## Public Web Data Read-Only Sandbox
+
+`docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` must respect user/peer memory boundaries.
+Public web summaries cannot use personal memory as corporate context or client
+memory across tenants.

@@ -154,3 +154,9 @@ and stop conditions are required before sandbox or provider work.
 New domains that touch memory, providers, MCP, inbox, cache or business data
 must account for `docs/TENANT_WORKSPACE_ISOLATION.md`. Domain onboarding cannot
 create cross-workspace access.
+
+## Public Web Data Read-Only Sandbox
+
+New domains that need public web research must account for
+`docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`. Domain onboarding cannot add real
+scraping, crawler, provider calls or raw web storage in this phase.
