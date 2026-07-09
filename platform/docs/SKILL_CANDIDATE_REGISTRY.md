@@ -196,3 +196,9 @@ tenant/workspace isolation.
 Skill candidates that depend on public web research must reference
 `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`. Skills cannot become executable web
 crawlers or scraping automations in this phase.
+
+## Transcription Intake Sandbox
+
+Skill candidates that depend on audio, video or transcript intake must reference
+`docs/TRANSCRIPTION_INTAKE_SANDBOX.md`. Skills cannot become executable
+transcription agents, upload processors or raw transcript stores in this phase.

@@ -378,3 +378,9 @@ Future PRs must be blocked when they:
 - External clients remain isolated.
 - Grupo Erick remains isolated.
 - Hermes Pessoal remains isolated.
+
+## Transcription Intake Sandbox
+
+`docs/TRANSCRIPTION_INTAKE_SANDBOX.md` covers future audio, video and transcript
+intake. Public web sandbox work does not authorize transcription providers,
+uploads, audio processing, raw transcript storage or real provider calls.

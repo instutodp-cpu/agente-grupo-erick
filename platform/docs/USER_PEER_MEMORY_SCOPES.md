@@ -188,3 +188,9 @@ personal, Grupo Erick or external client workspaces.
 `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` must respect user/peer memory boundaries.
 Public web summaries cannot use personal memory as corporate context or client
 memory across tenants.
+
+## Transcription Intake Sandbox
+
+`docs/TRANSCRIPTION_INTAKE_SANDBOX.md` must respect user/peer memory
+boundaries. Transcription summaries cannot use personal audio as corporate
+context or client content across tenants.

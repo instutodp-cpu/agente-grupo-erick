@@ -159,3 +159,10 @@ context use.
 `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` may provide synthetic public web outputs
 for future quality review. Quality scores cannot approve real scraping, provider
 calls, checkout, form submit or raw storage.
+
+## Transcription Intake Sandbox
+
+`docs/TRANSCRIPTION_INTAKE_SANDBOX.md` may provide synthetic or sanitized
+transcription outputs for future quality review. Quality scores cannot approve
+real transcription providers, uploads, audio processing, raw transcript storage
+or `executed:true`.

@@ -362,3 +362,10 @@ Devem bloquear qualquer evolucao sensivel:
 Este contrato documenta como o Governance Check Report deve funcionar no
 futuro. Ele nao implementa scanner real, nao cria CI gate novo e nao altera o
 runtime.
+
+## Transcription Intake Sandbox
+
+`docs/TRANSCRIPTION_INTAKE_SANDBOX.md` is a governance check area for future
+audio, video and transcript intake. Governance must block real provider calls,
+uploads, audio processing, raw audio storage, raw transcript storage and any
+attempt to set `real_provider_called:true` or `executed:true`.

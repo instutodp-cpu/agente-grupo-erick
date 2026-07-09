@@ -63,6 +63,10 @@ específicas.
 - Public Web Data Read-Only Sandbox documenta leitura futura de dados publicos
   da web em modo mock/read-only, sem Firecrawl real, crawler, scraping,
   storage, provider real ou `executed:true`.
+- Transcription Intake Sandbox documenta entrada futura de audio, video e
+  transcripts sanitizados em modo mock/read-only, sem AssemblyAI/Whisper real,
+  upload, processamento, storage, provider real, `real_provider_called:true` ou
+  `executed:true`.
 - Permission Matrix e Golden Scenarios formalizam o contrato de expansão por
   domínio antes de qualquer adapter real.
 - Domain Onboarding Guide formaliza o fluxo oficial para novos domínios como

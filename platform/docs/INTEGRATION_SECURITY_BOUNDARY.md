@@ -272,6 +272,9 @@ Future PRs must be blocked when they:
   metadata must stay inside the authenticated workspace and tenant boundary.
 - `PUBLIC_WEB_READ_ONLY_SANDBOX.md`: future public web reads must stay
   read-only, public-only, tenant-scoped and free of raw HTML or private data.
+- `TRANSCRIPTION_INTAKE_SANDBOX.md`: future audio, video and transcript intake
+  must stay sanitized, tenant-scoped and free of raw audio, raw transcripts and
+  real provider calls.
 
 ## Security And LGPD
 

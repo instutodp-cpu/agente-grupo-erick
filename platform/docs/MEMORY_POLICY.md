@@ -165,3 +165,10 @@ client workspaces.
 `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` can only produce sanitized public web
 summaries in this phase. Public web output cannot become memory without tenant
 scope, retention policy and human/governance review.
+
+## Transcription Intake Sandbox
+
+`docs/TRANSCRIPTION_INTAKE_SANDBOX.md` can only produce sanitized summaries and
+draft candidates in this phase. Audio or transcript-derived output cannot
+become memory without tenant scope, consent policy, retention policy and
+human/governance review.

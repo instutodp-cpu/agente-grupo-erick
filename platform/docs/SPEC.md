@@ -571,6 +571,19 @@ crawler, scraping, provider real, adapter real, OAuth, secrets, storage,
 RAG/vector DB, scheduler, cron ou runtime novo. Ele nao autoriza
 `real_provider_called:true`, `executed:true`, escrita ou acao real.
 
+### 5.19 Transcription Intake Sandbox
+
+`docs/TRANSCRIPTION_INTAKE_SANDBOX.md` define o contrato oficial para entrada
+futura de audio, video e transcripts em modo sandbox sanitizado. Ele cobre
+intake modes, source types permitidos/bloqueados, request/response fields,
+statuses, outputs sanitizados, provider candidates, tenant rules,
+audit/cost/rate/retention rules e blocking rules.
+
+Nesta fase o contrato nao implementa AssemblyAI, Whisper, provider real,
+adapter real, API externa, upload, download, processamento de audio,
+transcricao real, storage, fila, scheduler, cron ou runtime novo. Ele nao
+autoriza `real_provider_called:true`, `executed:true`, escrita ou acao real.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -659,3 +672,7 @@ Métricas e tracing entram junto com o pipeline de orquestração.
 - O contrato de leitura publica da web fica em
   `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`; ele prepara public web read-only com
   fixtures seguras sem provider real, scraping real ou storage.
+- O contrato de transcription intake sandbox fica em
+  `docs/TRANSCRIPTION_INTAKE_SANDBOX.md`; ele prepara entrada futura de audio,
+  video e transcripts sanitizados sem AssemblyAI/Whisper real, upload real,
+  processamento real, storage ou runtime.

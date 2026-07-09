@@ -264,6 +264,9 @@ Mock must return blocked when:
   synthetic and scoped to a single workspace and tenant.
 - `PUBLIC_WEB_READ_ONLY_SANDBOX.md`: public web mock examples must remain
   synthetic, public-only and free of raw HTML or real provider calls.
+- `TRANSCRIPTION_INTAKE_SANDBOX.md`: transcription mock examples must remain
+  synthetic or sanitized and free of raw audio, raw transcripts, uploads and
+  real provider calls.
 - `OPERATOR_RUNBOOK.md`: operators must use the runbook for validation,
   rollback and future adapter PR rules.
 

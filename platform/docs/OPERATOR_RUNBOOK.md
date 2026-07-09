@@ -414,3 +414,15 @@ crawler, scraping, provider real, adapter real, OAuth/secrets, storage,
 RAG/vector DB, scheduler, cron ou runtime. Ele nao autoriza
 `real_provider_called:true`, `executed:true`, escrita, checkout, formulario,
 compra, reserva ou pagamento.
+
+## Transcription Intake Sandbox
+
+`docs/TRANSCRIPTION_INTAKE_SANDBOX.md` documenta entrada futura de audio, video
+e transcripts em modo sandbox sanitizado para treinamento, atendimento,
+marketing, desenvolvimento, Hermes Pessoal e clientes externos.
+
+Nesta fase o contrato nao implementa AssemblyAI, Whisper, provider real,
+adapter real, API externa, upload, download, processamento de audio,
+transcricao real, storage, fila, scheduler, cron ou runtime. Ele nao autoriza
+`real_provider_called:true`, `executed:true`, escrita, action, audio bruto ou
+transcript bruto.
