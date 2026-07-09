@@ -521,6 +521,18 @@ secrets, storage, MCP ou chamadas externas. Ele nao substitui Permission
 Matrix, Integration Security Boundary, confirmacao humana ou governance review,
 e nao autoriza escrita real, acao real ou `executed:true`.
 
+### 5.15 External Provider Mock Adapter Harness
+
+`docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` define o contrato oficial para
+simular provedores externos futuros antes de qualquer integracao real. O harness
+cobre adapter modes, mock scopes, response statuses, request/response fields,
+result contracts, blocking rules e exemplos seguros.
+
+Nesta fase o harness usa apenas fixtures e dados sinteticos. Ele nao implementa
+provider real, adapter real, OAuth, secrets, storage, MCP ou chamadas externas.
+Todo exemplo deve manter `simulated:true`, `executed:false`,
+`real_provider_called:false`, `write_allowed:false` e `action_allowed:false`.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -596,3 +608,6 @@ Métricas e tracing entram junto com o pipeline de orquestração.
 - O overlay de permissao para providers externos fica em
   `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`; ele cruza provider, dominio e
   capability sem habilitar provider real ou `executed:true`.
+- O harness de mock para providers externos fica em
+  `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`; ele simula providers apenas
+  com fixtures seguras e dados sinteticos.

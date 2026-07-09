@@ -81,3 +81,9 @@ grant cross-domain access and cannot authorize real execution.
 `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md` overlays provider-specific rules
 on top of this matrix. It does not replace this matrix, cannot expand domain
 capabilities and cannot authorize writes, actions or `executed:true`.
+
+## External Provider Mock Adapter Harness
+
+`docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` can simulate provider behavior
+only after this matrix and the provider overlay keep the domain/capability safe.
+Mock simulation does not expand permissions and does not authorize real calls.

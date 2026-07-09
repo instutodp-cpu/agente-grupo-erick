@@ -1,0 +1,447 @@
+{
+  "adapter_modes": [
+    "mock_only",
+    "blocked_by_registry",
+    "blocked_by_security_boundary",
+    "blocked_by_permission_overlay",
+    "blocked_by_governance",
+    "safe_fixture_response",
+    "safe_error_response"
+  ],
+  "provider_mock_scopes": [
+    "provider_type_mock",
+    "provider_id_mock",
+    "domain_mock",
+    "capability_mock",
+    "blocked_mock",
+    "audit_mock"
+  ],
+  "mock_response_statuses": [
+    "mock_success",
+    "mock_blocked",
+    "mock_error_safe",
+    "mock_requires_human_review",
+    "mock_requires_governance_review",
+    "mock_not_supported",
+    "mock_deprecated"
+  ],
+  "required_mock_request_fields": [
+    "trace_id",
+    "provider_id",
+    "provider_type",
+    "domain",
+    "capability",
+    "intent",
+    "provider_permission_state",
+    "risk_level",
+    "adapter_mode",
+    "simulated",
+    "executed",
+    "real_provider_called",
+    "read_allowed",
+    "write_allowed",
+    "action_allowed",
+    "requires_human_review",
+    "requires_governance_review",
+    "requires_security_boundary",
+    "requires_provider_registry_entry",
+    "requires_permission_overlay",
+    "confirmation_required",
+    "sanitized_input",
+    "blocked_reason"
+  ],
+  "required_mock_response_fields": [
+    "trace_id",
+    "provider_id",
+    "provider_type",
+    "domain",
+    "capability",
+    "adapter_mode",
+    "status",
+    "simulated",
+    "executed",
+    "real_provider_called",
+    "can_trigger_real_execution",
+    "safe_result",
+    "safe_summary",
+    "sanitized_output",
+    "blocked_reason",
+    "error_code",
+    "audit_event_candidate",
+    "next_review_step",
+    "human_review_required",
+    "governance_review_required"
+  ],
+  "provider_type_mock_result_contracts": {
+    "public_web_scraping": {
+      "allowed_result_types": ["safe_summary", "public_result_snippet"],
+      "source_type": "public_web",
+      "raw_content_allowed": false,
+      "real_provider_called": false
+    },
+    "app_integration_hub": {
+      "allowed_result_types": ["safe_summary", "connected_app_candidate"],
+      "oauth_implemented": false,
+      "write_allowed": false,
+      "real_provider_called": false
+    },
+    "transcription_provider": {
+      "allowed_result_types": ["sanitized_summary", "transcript_quality_hint"],
+      "raw_content_allowed": false,
+      "real_provider_called": false
+    },
+    "social_media_provider": {
+      "allowed_result_types": ["draft_text", "suggested_schedule", "comment_summary"],
+      "write_allowed": false,
+      "action_allowed": false,
+      "real_provider_called": false
+    },
+    "direct_platform_api": {
+      "allowed_result_types": ["public_read_summary", "draft_text"],
+      "write_allowed": false,
+      "action_allowed": false,
+      "real_provider_called": false
+    },
+    "internal_business_api": {
+      "allowed_result_types": ["safe_business_summary", "synthetic_metric_sample"],
+      "write_allowed": false,
+      "action_allowed": false,
+      "real_provider_called": false
+    },
+    "internal_mcp_server": {
+      "allowed_result_types": ["tool_manifest_summary", "read_only_tool_candidate"],
+      "write_allowed": false,
+      "action_allowed": false,
+      "real_provider_called": false
+    },
+    "developer_platform": {
+      "allowed_result_types": ["pr_summary", "issue_summary", "docs_summary"],
+      "write_allowed": false,
+      "action_allowed": false,
+      "real_provider_called": false
+    }
+  },
+  "provider_id_mock_coverage": {
+    "firecrawl": {
+      "provider_type": "public_web_scraping",
+      "covered": true
+    },
+    "bright_data": {
+      "provider_type": "public_web_scraping",
+      "covered": true
+    },
+    "scrapeless": {
+      "provider_type": "public_web_scraping",
+      "covered": true
+    },
+    "composio": {
+      "provider_type": "app_integration_hub",
+      "covered": true
+    },
+    "google_workspace_super": {
+      "provider_type": "app_integration_hub",
+      "covered": true
+    },
+    "assemblyai": {
+      "provider_type": "transcription_provider",
+      "covered": true
+    },
+    "social_media_api": {
+      "provider_type": "social_media_provider",
+      "covered": true
+    },
+    "x_direct_api": {
+      "provider_type": "direct_platform_api",
+      "covered": true
+    },
+    "internal_business_api": {
+      "provider_type": "internal_business_api",
+      "covered": true
+    },
+    "internal_mcp_server": {
+      "provider_type": "internal_mcp_server",
+      "covered": true
+    },
+    "github_connector": {
+      "provider_type": "developer_platform",
+      "covered": true
+    }
+  },
+  "default_rules": {
+    "simulated": true,
+    "executed": false,
+    "real_provider_called": false,
+    "can_trigger_real_execution": false,
+    "write_allowed": false,
+    "action_allowed": false,
+    "real_provider_calls_allowed": false,
+    "oauth_implemented": false,
+    "secrets_allowed": false,
+    "storage_implemented": false,
+    "raw_content_allowed": false,
+    "mock_first": true,
+    "human_review_required_for_high_critical": true,
+    "governance_review_required_for_external_provider": true
+  },
+  "blocking_rules": [
+    "unregistered_provider",
+    "missing_provider_type",
+    "missing_security_boundary",
+    "missing_permission_overlay",
+    "write_allowed_true",
+    "action_allowed_true",
+    "can_trigger_real_execution_true",
+    "executed_true",
+    "real_provider_called_true",
+    "real_oauth_attempted",
+    "real_secret_attempted",
+    "external_api_call_attempted",
+    "storage_attempted",
+    "raw_audio_or_transcript_attempted",
+    "raw_html_or_payload_attempted",
+    "social_post_attempted",
+    "email_send_attempted",
+    "calendar_modify_attempted",
+    "money_movement_attempted",
+    "erp_crm_database_write_attempted",
+    "mcp_action_tool_attempted",
+    "cross_tenant_user_domain_leakage"
+  ],
+  "forbidden_fields": [
+    "token",
+    "secret",
+    "env",
+    "headers",
+    "cookies",
+    "credentials",
+    "payload",
+    "rawPayload",
+    "rawMessage",
+    "userMessage",
+    "requiredAdapters",
+    "authorization",
+    "password",
+    "stackTrace",
+    "apiKey",
+    "accessToken",
+    "refreshToken",
+    "requestBody",
+    "responseBody",
+    "rawTranscript",
+    "rawAudio",
+    "rawHtml",
+    "privateUrl",
+    "webhookSecret"
+  ],
+  "required_contract_references": [
+    "EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md",
+    "INTEGRATION_SECURITY_BOUNDARY.md",
+    "EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md",
+    "GOVERNANCE_CHECK_REPORT.md",
+    "PERMISSION_MATRIX.md",
+    "GOLDEN_SCENARIOS.md",
+    "DOMAIN_ONBOARDING.md",
+    "MEMORY_POLICY.md",
+    "USER_PEER_MEMORY_SCOPES.md",
+    "SECOND_BRAIN_INBOX_CONTRACT.md",
+    "QUALITY_SCORE_FEEDBACK_LOOP.md",
+    "SKILL_CANDIDATE_REGISTRY.md",
+    "OPERATOR_RUNBOOK.md"
+  ],
+  "safe_mock_examples": [
+    {
+      "name": "firecrawl_marketing_public_read",
+      "trace_id": "trace_mock_provider_001",
+      "provider_id": "firecrawl",
+      "provider_type": "public_web_scraping",
+      "domain": "marketing",
+      "capability": "public_read",
+      "adapter_mode": "safe_fixture_response",
+      "status": "mock_success",
+      "simulated": true,
+      "executed": false,
+      "real_provider_called": false,
+      "can_trigger_real_execution": false,
+      "write_allowed": false,
+      "action_allowed": false,
+      "safe_summary": "Synthetic public research summary for a mock campaign topic.",
+      "safe_result": {
+        "result_type": "public_result_snippet",
+        "snippet": "Synthetic market trend summary without source URL."
+      },
+      "sanitized_output": {
+        "summary": "Synthetic public trend summary.",
+        "source_type": "public_web"
+      }
+    },
+    {
+      "name": "assemblyai_treinamento_sanitized_transcription",
+      "trace_id": "trace_mock_provider_002",
+      "provider_id": "assemblyai",
+      "provider_type": "transcription_provider",
+      "domain": "treinamento",
+      "capability": "sanitized_transcription",
+      "adapter_mode": "safe_fixture_response",
+      "status": "mock_success",
+      "simulated": true,
+      "executed": false,
+      "real_provider_called": false,
+      "can_trigger_real_execution": false,
+      "write_allowed": false,
+      "action_allowed": false,
+      "safe_summary": "Synthetic training meeting summary.",
+      "safe_result": {
+        "result_type": "sanitized_summary",
+        "quality_hint": "synthetic_clear_audio"
+      },
+      "sanitized_output": {
+        "summary": "Synthetic module outline from sanitized training notes."
+      }
+    },
+    {
+      "name": "social_media_api_marketing_draft_generation",
+      "trace_id": "trace_mock_provider_003",
+      "provider_id": "social_media_api",
+      "provider_type": "social_media_provider",
+      "domain": "marketing",
+      "capability": "draft_generation",
+      "adapter_mode": "safe_fixture_response",
+      "status": "mock_requires_human_review",
+      "simulated": true,
+      "executed": false,
+      "real_provider_called": false,
+      "can_trigger_real_execution": false,
+      "write_allowed": false,
+      "action_allowed": false,
+      "safe_summary": "Synthetic social draft prepared for human review.",
+      "safe_result": {
+        "result_type": "draft_text",
+        "draft": "Synthetic campaign draft for review only."
+      },
+      "sanitized_output": {
+        "review_required": true,
+        "draft_kind": "social_post_candidate"
+      }
+    },
+    {
+      "name": "internal_business_api_compras_private_read",
+      "trace_id": "trace_mock_provider_004",
+      "provider_id": "internal_business_api",
+      "provider_type": "internal_business_api",
+      "domain": "compras",
+      "capability": "private_read",
+      "adapter_mode": "safe_fixture_response",
+      "status": "mock_requires_governance_review",
+      "simulated": true,
+      "executed": false,
+      "real_provider_called": false,
+      "can_trigger_real_execution": false,
+      "write_allowed": false,
+      "action_allowed": false,
+      "safe_summary": "Synthetic purchasing summary for governance review.",
+      "safe_result": {
+        "result_type": "safe_business_summary",
+        "metric_sample": "synthetic_supplier_count"
+      },
+      "sanitized_output": {
+        "summary": "Synthetic private-read candidate without business records."
+      }
+    },
+    {
+      "name": "github_connector_desenvolvimento_public_read",
+      "trace_id": "trace_mock_provider_005",
+      "provider_id": "github_connector",
+      "provider_type": "developer_platform",
+      "domain": "desenvolvimento",
+      "capability": "public_read",
+      "adapter_mode": "safe_fixture_response",
+      "status": "mock_success",
+      "simulated": true,
+      "executed": false,
+      "real_provider_called": false,
+      "can_trigger_real_execution": false,
+      "write_allowed": false,
+      "action_allowed": false,
+      "safe_summary": "Synthetic pull request summary.",
+      "safe_result": {
+        "result_type": "pr_summary",
+        "summary": "Synthetic PR notes with no repository URL."
+      },
+      "sanitized_output": {
+        "summary": "Synthetic development read-only candidate."
+      }
+    },
+    {
+      "name": "financeiro_social_media_blocked",
+      "trace_id": "trace_mock_provider_006",
+      "provider_id": "social_media_api",
+      "provider_type": "social_media_provider",
+      "domain": "financeiro",
+      "capability": "draft_generation",
+      "adapter_mode": "blocked_by_permission_overlay",
+      "status": "mock_blocked",
+      "simulated": true,
+      "executed": false,
+      "real_provider_called": false,
+      "can_trigger_real_execution": false,
+      "write_allowed": false,
+      "action_allowed": false,
+      "blocked_reason": "provider_domain_not_allowed",
+      "safe_summary": "Synthetic blocked response.",
+      "safe_result": {
+        "result_type": "blocked_mock"
+      },
+      "sanitized_output": {
+        "blocked": true
+      }
+    },
+    {
+      "name": "gmail_send_real_blocked",
+      "trace_id": "trace_mock_provider_007",
+      "provider_id": "google_workspace_super",
+      "provider_type": "app_integration_hub",
+      "domain": "marketing",
+      "capability": "email_send_action",
+      "adapter_mode": "blocked_by_security_boundary",
+      "status": "mock_blocked",
+      "simulated": true,
+      "executed": false,
+      "real_provider_called": false,
+      "can_trigger_real_execution": false,
+      "write_allowed": false,
+      "action_allowed": false,
+      "blocked_reason": "email_send_blocked",
+      "safe_summary": "Synthetic email action blocked response.",
+      "safe_result": {
+        "result_type": "blocked_mock"
+      },
+      "sanitized_output": {
+        "blocked": true
+      }
+    },
+    {
+      "name": "mcp_action_tool_blocked",
+      "trace_id": "trace_mock_provider_008",
+      "provider_id": "internal_mcp_server",
+      "provider_type": "internal_mcp_server",
+      "domain": "desenvolvimento",
+      "capability": "mcp_action_tool",
+      "adapter_mode": "blocked_by_security_boundary",
+      "status": "mock_blocked",
+      "simulated": true,
+      "executed": false,
+      "real_provider_called": false,
+      "can_trigger_real_execution": false,
+      "write_allowed": false,
+      "action_allowed": false,
+      "blocked_reason": "mcp_action_tool_blocked",
+      "safe_summary": "Synthetic MCP action tool blocked response.",
+      "safe_result": {
+        "result_type": "blocked_mock"
+      },
+      "sanitized_output": {
+        "blocked": true
+      }
+    }
+  ]
+}

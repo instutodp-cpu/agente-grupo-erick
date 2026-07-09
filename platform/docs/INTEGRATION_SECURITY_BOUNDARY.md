@@ -264,6 +264,8 @@ Future PRs must be blocked when they:
 - `EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`: provider/domain/capability
   combinations must pass the overlay before any future mock, sandbox or adapter
   work.
+- `EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`: mock provider requests and
+  responses must remain synthetic, sanitized and inside this boundary.
 
 ## Security And LGPD
 

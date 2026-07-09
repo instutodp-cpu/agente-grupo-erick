@@ -135,3 +135,9 @@ approve secrets, approve writes or authorize `executed:true`.
 `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md` applies before quality or
 feedback signals can suggest future provider work. Scores cannot override the
 overlay or approve writes, actions or `executed:true`.
+
+## External Provider Mock Adapter Harness
+
+`docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` can provide synthetic outputs
+for future quality checks. Quality scores cannot convert mock results into real
+provider calls.

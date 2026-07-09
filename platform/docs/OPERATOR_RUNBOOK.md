@@ -370,3 +370,16 @@ nao chama API externa, nao cria OAuth/secrets, nao altera runtime e nao
 autoriza `executed:true`. Qualquer regra de overlay deve manter
 `write_allowed:false`, `action_allowed:false`, mock-first, human review e
 governance review.
+
+## External Provider Mock Adapter Harness
+
+`docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` documenta como provedores
+externos futuros devem ser simulados antes de qualquer integracao real. Ele
+define adapter modes, mock scopes, response statuses, request/response fields,
+result contracts e exemplos seguros.
+
+Nesta fase o harness usa apenas fixtures e dados sinteticos. Ele nao chama API
+externa, nao cria adapter real, nao cria OAuth/secrets, nao grava storage, nao
+altera runtime e nao autoriza `executed:true`. Todo exemplo deve manter
+`simulated:true`, `executed:false`, `real_provider_called:false`,
+`write_allowed:false` e `action_allowed:false`.

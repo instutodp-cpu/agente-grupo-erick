@@ -28,6 +28,7 @@ consistencia do Hermes Core antes de evolucoes sensiveis. Ele pode avaliar:
 - External Integration Provider Registry
 - Integration Security Boundary
 - External Provider Permission Overlay
+- External Provider Mock Adapter Harness
 - Forbidden Fields
 - Operator Runbook
 - Runtime Safety
@@ -177,6 +178,13 @@ nao autoriza `executed:true` e nao habilita execucao real.
 - can_block_release: true
 - can_trigger_real_execution: false
 
+### external_provider_mock_adapter_harness
+
+- risk_level: high
+- required_for_sensitive_changes: true
+- can_block_release: true
+- can_trigger_real_execution: false
+
 ### forbidden_fields
 
 - risk_level: critical
@@ -318,6 +326,8 @@ Devem bloquear qualquer evolucao sensivel:
   deve respeitar antes de mock, sandbox ou adapter.
 - External Provider Permission Overlay define se uma combinacao de provider,
   dominio e capability pode avancar como mock/read-only/draft candidate.
+- External Provider Mock Adapter Harness define como provider candidates podem
+  ser simulados com fixtures sinteticas e sem chamadas externas.
 - Second Brain Inbox pode gerar itens de auditoria no futuro, mas nao grava
   memoria real nesta PR.
 - Memory Policy e User / Peer Memory Scopes continuam obrigatorios para

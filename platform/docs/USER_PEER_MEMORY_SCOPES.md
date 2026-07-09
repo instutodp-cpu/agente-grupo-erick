@@ -164,3 +164,9 @@ peer memory to bypass scope, confirmation, governance or `executed:false`.
 `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md` maps future provider use to
 domain and capability permissions. It cannot bypass user scope, tenant scope or
 peer memory isolation.
+
+## External Provider Mock Adapter Harness
+
+`docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` must keep mock examples
+synthetic and scoped. Mock data cannot bypass user, peer, tenant or role
+boundaries.

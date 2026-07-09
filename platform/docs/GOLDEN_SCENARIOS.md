@@ -117,3 +117,9 @@ secrets, cross-tenant leakage, real writes or `executed:true`.
 Provider-related scenarios must also respect
 `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`. The overlay keeps provider
 usage mock/read-only/draft only and does not authorize real API calls.
+
+## External Provider Mock Adapter Harness
+
+Provider-related golden scenarios can use
+`docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` as the safe fixture contract.
+Mock examples remain synthetic and cannot call real providers.
