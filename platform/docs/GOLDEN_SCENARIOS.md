@@ -98,3 +98,10 @@ sem implementar memória real nesta PR.
 `docs/GOVERNANCE_CHECK_REPORT.md` treats these scenarios as a critical check
 area. Governance can flag missing or regressed scenarios, but it does not
 substitute for them and does not authorize real execution.
+
+## External Integration Provider Registry
+
+If a golden scenario depends on a future external provider, the provider must be
+documented in `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md` first. Provider
+registry entries do not call APIs, do not create adapters and do not authorize
+real execution.

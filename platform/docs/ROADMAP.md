@@ -42,6 +42,9 @@ específicas.
   execução real.
 - Governance Check Report documenta as checagens de governanca que podem
   bloquear evolucoes sensiveis antes de qualquer scanner real.
+- External Integration Provider Registry documenta provider types, candidatos,
+  riscos, bloqueios, OAuth/secrets, compliance e review de governanca antes de
+  qualquer integracao externa real.
 - Permission Matrix e Golden Scenarios formalizam o contrato de expansão por
   domínio antes de qualquer adapter real.
 - Domain Onboarding Guide formaliza o fluxo oficial para novos domínios como

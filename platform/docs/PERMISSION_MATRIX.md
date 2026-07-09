@@ -62,3 +62,10 @@ autoriza storage real nem execução real nesta fase.
 `docs/GOVERNANCE_CHECK_REPORT.md` uses this matrix as one of its primary
 checks. The governance report does not replace this matrix and cannot loosen
 `executed:false`, mock-first or human review requirements.
+
+## External Integration Provider Registry
+
+`docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md` must be checked before any
+future external provider is connected to a domain. A provider entry does not
+expand domain permissions, does not replace this matrix and cannot authorize
+real writes, real actions or `executed:true`.

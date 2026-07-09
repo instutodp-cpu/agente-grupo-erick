@@ -116,3 +116,10 @@ repeticao.
 `docs/GOVERNANCE_CHECK_REPORT.md` pode consumir este contrato como area de
 checagem. O Quality Score nao substitui governanca e nao autoriza execucao
 real.
+
+## External Integration Provider Registry
+
+Provider-related feedback or quality signals must reference
+`docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md` before any future integration
+work. Quality scores do not approve provider calls, OAuth scopes, real writes
+or `executed:true`.

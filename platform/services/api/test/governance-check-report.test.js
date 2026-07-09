@@ -24,6 +24,7 @@ const REQUIRED_CHECK_AREAS = [
   'user_peer_memory_scopes',
   'second_brain_inbox',
   'quality_score_feedback_loop',
+  'external_integration_provider_registry',
   'forbidden_fields',
   'operator_runbook',
   'runtime_safety',

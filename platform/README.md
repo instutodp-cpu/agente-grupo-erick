@@ -25,6 +25,7 @@ repositório.
 - **Skill Candidate Registry**: `docs/SKILL_CANDIDATE_REGISTRY.md`
 - **Memory Policy**: `docs/MEMORY_POLICY.md`
 - **Governance Check Report**: `docs/GOVERNANCE_CHECK_REPORT.md`
+- **External Integration Provider Registry**: `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -200,6 +201,12 @@ ligadas a um domínio existente, com mock-first, revisão humana e
 Para memória futura, consulte `docs/MEMORY_POLICY.md`. A política define as
 camadas oficiais, thresholds por domínio e campos proibidos, sem implementar
 storage real nesta fase.
+
+Para provedores externos futuros, consulte
+`docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`. O registry classifica
+provider types, candidatos, riscos, bloqueios, OAuth/secrets e revisão de
+governança antes de qualquer integração real; ele não chama APIs externas, não
+cria adapter real e não autoriza `executed:true`.
 
 ## Estrutura
 

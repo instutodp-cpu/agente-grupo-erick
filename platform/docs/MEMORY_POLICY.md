@@ -121,3 +121,10 @@ Nenhuma camada de memória pode armazenar ou expor:
 `docs/GOVERNANCE_CHECK_REPORT.md` checks that memory policy remains safe. It
 cannot create memory storage, RAG, vector DB or second brain behavior by
 itself.
+
+## External Integration Provider Registry
+
+Future provider output can become a memory candidate only after the provider is
+documented in `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md` and sanitized.
+The registry does not create memory storage, does not retain raw provider
+content and does not permit real execution.

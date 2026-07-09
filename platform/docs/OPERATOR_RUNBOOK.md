@@ -333,3 +333,16 @@ bloquear evoluções sensíveis no futuro. Ele cobre permission matrix, golden
 scenarios, domain onboarding, capability registry, kill switch, mock adapters,
 memory, inbox, quality score, forbidden fields e runtime safety sem virar
 scanner real, sem alterar runtime e sem autorizar `executed:true`.
+
+## External Integration Provider Registry
+
+`docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md` documenta como provedores
+externos futuros devem ser classificados antes de qualquer integração real. Ele
+cobre provider types, candidatos, domínios permitidos/bloqueados, riscos,
+OAuth/secrets, custo, compliance, fallback, audit requirements e bloqueios.
+
+Nesta fase o registry não chama API externa, não cria adapter real, não cria
+OAuth/secrets, não altera runtime, não persiste dados e não autoriza
+`executed:true`. Qualquer provider futuro precisa manter `write_allowed:false`,
+`action_allowed:false`, `can_trigger_real_execution:false`, human review e
+governance review antes de avançar.
