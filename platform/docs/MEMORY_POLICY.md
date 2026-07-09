@@ -172,3 +172,10 @@ scope, retention policy and human/governance review.
 draft candidates in this phase. Audio or transcript-derived output cannot
 become memory without tenant scope, consent policy, retention policy and
 human/governance review.
+
+## Internal Business API Read-Only
+
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md` can only produce sanitized read-only
+summaries and aggregate candidates in this phase. Internal business output
+cannot become memory without tenant scope, retention policy, minimization and
+human/governance review.

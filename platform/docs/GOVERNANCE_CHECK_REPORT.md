@@ -369,3 +369,11 @@ runtime.
 audio, video and transcript intake. Governance must block real provider calls,
 uploads, audio processing, raw audio storage, raw transcript storage and any
 attempt to set `real_provider_called:true` or `executed:true`.
+
+## Internal Business API Read-Only
+
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md` is a governance check area for future
+internal business data queries. Governance must block real Supabase/Postgres/
+Base44/ERP integrations, raw SQL, writeback, cross-tenant queries, storage of
+raw database payloads and any attempt to set `write_allowed:true`,
+`real_provider_called:true` or `executed:true`.

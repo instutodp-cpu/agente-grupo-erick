@@ -384,3 +384,9 @@ Future PRs must be blocked when they:
 `docs/TRANSCRIPTION_INTAKE_SANDBOX.md` covers future audio, video and transcript
 intake. Public web sandbox work does not authorize transcription providers,
 uploads, audio processing, raw transcript storage or real provider calls.
+
+## Internal Business API Read-Only
+
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md` covers future internal business data
+queries. Public web sandbox work does not authorize internal database queries,
+raw SQL, writeback, tenant crossing or real provider calls.

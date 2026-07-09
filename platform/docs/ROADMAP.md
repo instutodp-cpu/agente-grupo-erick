@@ -67,6 +67,10 @@ específicas.
   transcripts sanitizados em modo mock/read-only, sem AssemblyAI/Whisper real,
   upload, processamento, storage, provider real, `real_provider_called:true` ou
   `executed:true`.
+- Internal Business API Read-Only documenta consultas futuras de dados internos
+  em modo mock/read-only, sem Supabase/Postgres/Base44/ERP real, query real,
+  raw SQL, storage, write/action, `real_provider_called:true` ou
+  `executed:true`.
 - Permission Matrix e Golden Scenarios formalizam o contrato de expansão por
   domínio antes de qualquer adapter real.
 - Domain Onboarding Guide formaliza o fluxo oficial para novos domínios como

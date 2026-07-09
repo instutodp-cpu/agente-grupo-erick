@@ -32,6 +32,7 @@ const REQUIRED_CHECK_AREAS = [
   'tenant_workspace_isolation',
   'public_web_read_only_sandbox',
   'transcription_intake_sandbox',
+  'internal_business_api_read_only',
   'forbidden_fields',
   'operator_runbook',
   'runtime_safety',

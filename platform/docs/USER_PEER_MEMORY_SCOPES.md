@@ -194,3 +194,9 @@ memory across tenants.
 `docs/TRANSCRIPTION_INTAKE_SANDBOX.md` must respect user/peer memory
 boundaries. Transcription summaries cannot use personal audio as corporate
 context or client content across tenants.
+
+## Internal Business API Read-Only
+
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md` must respect user/peer memory
+boundaries. Internal business summaries cannot use personal memory as corporate
+context or expose client data across tenants.

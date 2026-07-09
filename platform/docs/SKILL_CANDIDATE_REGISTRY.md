@@ -202,3 +202,10 @@ crawlers or scraping automations in this phase.
 Skill candidates that depend on audio, video or transcript intake must reference
 `docs/TRANSCRIPTION_INTAKE_SANDBOX.md`. Skills cannot become executable
 transcription agents, upload processors or raw transcript stores in this phase.
+
+## Internal Business API Read-Only
+
+Skill candidates that depend on internal business data must reference
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md`. Skills cannot become executable
+business API agents, raw SQL runners, ERP writers or payment/purchase actors in
+this phase.

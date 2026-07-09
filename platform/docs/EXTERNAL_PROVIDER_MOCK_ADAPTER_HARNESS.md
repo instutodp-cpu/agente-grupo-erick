@@ -267,6 +267,9 @@ Mock must return blocked when:
 - `TRANSCRIPTION_INTAKE_SANDBOX.md`: transcription mock examples must remain
   synthetic or sanitized and free of raw audio, raw transcripts, uploads and
   real provider calls.
+- `INTERNAL_BUSINESS_API_READ_ONLY.md`: internal business mock examples must
+  remain synthetic, read-only and free of raw SQL, raw database payloads,
+  writeback and real provider calls.
 - `OPERATOR_RUNBOOK.md`: operators must use the runbook for validation,
   rollback and future adapter PR rules.
 

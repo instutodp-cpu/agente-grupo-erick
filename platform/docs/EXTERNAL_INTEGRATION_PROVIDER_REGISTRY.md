@@ -300,3 +300,10 @@ devem respeitar retencao e LGPD. Nenhuma memoria real e gravada nesta PR.
 sandbox for providers such as `assemblyai` and `whisper_candidate`. Provider
 registry entries do not authorize real transcription calls, uploads, raw audio
 storage or raw transcript storage.
+
+## Internal Business API Read-Only
+
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md` defines the future read-only contract
+for internal business providers such as Supabase, Postgres, Base44, ERP/Linx
+and manual fixtures. Provider registry entries do not authorize real database
+queries, raw SQL, writeback, write/action or cross-tenant access.

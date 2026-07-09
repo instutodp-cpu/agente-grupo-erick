@@ -303,6 +303,9 @@ Future PRs must be blocked when they:
 - `TRANSCRIPTION_INTAKE_SANDBOX.md`: transcription sandbox events must include
   audit/cost/rate-limit and retention metadata before any future sanitized
   provider work.
+- `INTERNAL_BUSINESS_API_READ_ONLY.md`: internal business sandbox events must
+  include audit/cost/rate-limit, tenant and sensitivity metadata before any
+  future read-only provider work.
 
 ## Security And LGPD
 

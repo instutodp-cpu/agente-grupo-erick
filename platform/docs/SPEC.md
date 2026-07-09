@@ -584,6 +584,18 @@ adapter real, API externa, upload, download, processamento de audio,
 transcricao real, storage, fila, scheduler, cron ou runtime novo. Ele nao
 autoriza `real_provider_called:true`, `executed:true`, escrita ou acao real.
 
+### 5.20 Internal Business API Read-Only
+
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md` define o contrato oficial para futuras
+consultas read-only de dados internos de negocio. Ele cobre api modes,
+dominios internos permitidos, query types permitidos, actions bloqueadas,
+request/response fields, statuses, outputs sanitizados e blocking rules.
+
+Nesta fase o contrato nao implementa Supabase, Postgres, Base44, ERP/Linx,
+provider real, adapter real, API real, query real, raw SQL, storage, RLS,
+migration ou runtime novo. Ele nao autoriza write, action,
+`real_provider_called:true` ou `executed:true`.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -676,3 +688,7 @@ Métricas e tracing entram junto com o pipeline de orquestração.
   `docs/TRANSCRIPTION_INTAKE_SANDBOX.md`; ele prepara entrada futura de audio,
   video e transcripts sanitizados sem AssemblyAI/Whisper real, upload real,
   processamento real, storage ou runtime.
+- O contrato de Internal Business API Read-Only fica em
+  `docs/INTERNAL_BUSINESS_API_READ_ONLY.md`; ele prepara consultas internas
+  read-only sem Supabase/Postgres/Base44/ERP real, query real, raw SQL, storage
+  ou runtime.

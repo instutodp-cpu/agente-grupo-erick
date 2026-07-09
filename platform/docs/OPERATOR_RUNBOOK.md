@@ -426,3 +426,14 @@ adapter real, API externa, upload, download, processamento de audio,
 transcricao real, storage, fila, scheduler, cron ou runtime. Ele nao autoriza
 `real_provider_called:true`, `executed:true`, escrita, action, audio bruto ou
 transcript bruto.
+
+## Internal Business API Read-Only
+
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md` documenta consultas futuras de dados
+internos de negocio em modo read-only para Grupo Erick e clientes externos,
+sempre com tenant/workspace isolation.
+
+Nesta fase o contrato nao implementa Supabase, Postgres, Base44, ERP/Linx,
+Internal Business API real, banco, migration, RLS, query real, raw SQL,
+provider real, adapter real, storage ou runtime. Ele nao autoriza write,
+action, `real_provider_called:true` ou `executed:true`.

@@ -391,3 +391,9 @@ Future PRs must be blocked when they:
 - External clients remain isolated.
 - Grupo Erick remains isolated.
 - Hermes Pessoal remains isolated.
+
+## Internal Business API Read-Only
+
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md` covers future internal business data
+queries. Transcription intake does not authorize internal database queries, raw
+SQL, writeback, tenant crossing or real provider calls.
