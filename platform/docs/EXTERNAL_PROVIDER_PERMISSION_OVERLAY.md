@@ -358,6 +358,9 @@ These are blocked:
 - `PUBLIC_WEB_READ_ONLY_SANDBOX.md`: public web provider combinations must
   remain read-only candidates and cannot allow login, checkout, form submit or
   real provider calls.
+- `TRANSCRIPTION_INTAKE_SANDBOX.md`: transcription provider combinations must
+  remain mock/sanitized candidates and cannot allow upload, raw transcript
+  storage or real provider calls.
 
 ## Security And LGPD
 

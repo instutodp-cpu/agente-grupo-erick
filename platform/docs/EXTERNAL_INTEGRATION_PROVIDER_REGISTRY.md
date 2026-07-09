@@ -293,3 +293,10 @@ devem respeitar retencao e LGPD. Nenhuma memoria real e gravada nesta PR.
 - toda integracao externa precisa isolamento por tenant, usuario e dominio
 - logs devem ser sanitizados
 - custos devem ter limite antes de execucao real
+
+## Transcription Intake Sandbox
+
+`docs/TRANSCRIPTION_INTAKE_SANDBOX.md` defines the future transcription intake
+sandbox for providers such as `assemblyai` and `whisper_candidate`. Provider
+registry entries do not authorize real transcription calls, uploads, raw audio
+storage or raw transcript storage.

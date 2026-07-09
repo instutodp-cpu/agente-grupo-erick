@@ -32,6 +32,7 @@ repositório.
 - **External Provider Audit, Cost and Rate Limit**: `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`
 - **Tenant and Workspace Isolation**: `docs/TENANT_WORKSPACE_ISOLATION.md`
 - **Public Web Read-Only Sandbox**: `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`
+- **Transcription Intake Sandbox**: `docs/TRANSCRIPTION_INTAKE_SANDBOX.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -268,4 +269,13 @@ nunca no repositório. Ver `docs/ROADMAP.md` (Fase 8).
 
 Fundação (Fase 0): estrutura, documentação e núcleo mínimo. **Sem** funcionalidades
 complexas ainda — a base é desacoplada e pronta para evoluir sem retrabalho.
+
+## Transcription Intake Sandbox
+
+`docs/TRANSCRIPTION_INTAKE_SANDBOX.md` documents future audio, video and
+transcript intake as a contract-only sandbox. It does not implement AssemblyAI,
+Whisper, uploads, audio processing, storage, provider calls or runtime changes,
+and it keeps tenant isolation, mock-first, read-only first, human-review,
+governance-review, `simulated:true`, `real_provider_called:false` and
+`executed:false` mandatory.
 

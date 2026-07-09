@@ -160,3 +160,10 @@ create cross-workspace access.
 New domains that need public web research must account for
 `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`. Domain onboarding cannot add real
 scraping, crawler, provider calls or raw web storage in this phase.
+
+## Transcription Intake Sandbox
+
+New domains that need audio, video or transcript intake must account for
+`docs/TRANSCRIPTION_INTAKE_SANDBOX.md`. Domain onboarding cannot add real
+transcription providers, uploads, raw audio storage or raw transcript storage
+in this phase.

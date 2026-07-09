@@ -105,3 +105,9 @@ cannot override tenant isolation.
 `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` defines future public web reads as
 read-only candidates. Public web read permissions cannot override this matrix,
 tenant isolation or `executed:false`.
+
+## Transcription Intake Sandbox
+
+`docs/TRANSCRIPTION_INTAKE_SANDBOX.md` defines future transcription intake as a
+sanitized read-only candidate. Audio, video and transcript intake cannot expand
+domain permissions, bypass tenant isolation or authorize `executed:true`.

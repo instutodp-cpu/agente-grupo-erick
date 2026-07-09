@@ -300,6 +300,9 @@ Future PRs must be blocked when they:
   must include workspace/tenant scope before any future sandbox.
 - `PUBLIC_WEB_READ_ONLY_SANDBOX.md`: public web sandbox events must include
   audit/cost/rate-limit metadata before any future read-only provider work.
+- `TRANSCRIPTION_INTAKE_SANDBOX.md`: transcription sandbox events must include
+  audit/cost/rate-limit and retention metadata before any future sanitized
+  provider work.
 
 ## Security And LGPD
 

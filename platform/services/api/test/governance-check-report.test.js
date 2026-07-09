@@ -31,6 +31,7 @@ const REQUIRED_CHECK_AREAS = [
   'external_provider_audit_cost_rate_limit',
   'tenant_workspace_isolation',
   'public_web_read_only_sandbox',
+  'transcription_intake_sandbox',
   'forbidden_fields',
   'operator_runbook',
   'runtime_safety',

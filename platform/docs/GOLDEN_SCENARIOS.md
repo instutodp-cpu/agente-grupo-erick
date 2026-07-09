@@ -142,3 +142,10 @@ declare workspace and tenant scope.
 Public web scenarios should reference `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`.
 Scenarios may use only synthetic public web examples in this phase and cannot
 expect real provider calls.
+
+## Transcription Intake Sandbox
+
+Transcription scenarios should reference `docs/TRANSCRIPTION_INTAKE_SANDBOX.md`.
+Scenarios may use only synthetic or sanitized transcript examples in this phase
+and cannot expect real provider calls, real audio processing or raw transcript
+storage.

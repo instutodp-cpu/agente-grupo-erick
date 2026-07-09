@@ -290,3 +290,9 @@ external client context.
 `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md` can produce only sanitized public web
 candidates for future inbox review. It does not write inbox storage or store
 raw page content.
+
+## Transcription Intake Sandbox
+
+`docs/TRANSCRIPTION_INTAKE_SANDBOX.md` can produce only sanitized transcription
+candidates for future inbox review. It does not write inbox storage, process
+real audio, store raw audio or store raw transcripts.
