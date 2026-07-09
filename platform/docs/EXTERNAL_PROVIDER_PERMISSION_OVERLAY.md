@@ -347,6 +347,9 @@ These are blocked:
   automations.
 - `OPERATOR_RUNBOOK.md`: operators must validate, rollback and review future
   provider changes.
+- `EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`: allowed provider/domain/capability
+  combinations may be simulated with synthetic fixtures before any sandbox or
+  real provider work.
 
 ## Security And LGPD
 

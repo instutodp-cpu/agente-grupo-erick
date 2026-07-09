@@ -248,6 +248,12 @@ write/action real ou `executed:true`.
 dominio, capability, risco e permissoes. Um provider registrado aqui continua
 bloqueado se o overlay nao permitir o dominio/capability solicitado.
 
+## Relacao com External Provider Mock Adapter Harness
+
+`docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` define como provider candidates
+deste registry podem ser simulados com fixtures seguras. O harness nao chama
+provider real e nao substitui registry, security boundary ou permission overlay.
+
 ## Relacao com Permission Matrix e Domain Onboarding
 
 Provider nao libera dominio novo. Dominio novo ainda precisa Domain Onboarding.

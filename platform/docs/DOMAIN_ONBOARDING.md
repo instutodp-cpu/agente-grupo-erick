@@ -136,3 +136,9 @@ security boundary, cannot allow raw payload logging and cannot permit
 New domains that use future external providers must also update
 `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`. The overlay does not replace
 Domain Onboarding and does not allow real execution.
+
+## External Provider Mock Adapter Harness
+
+New domains that need future external providers must start with
+`docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`. Mock harness coverage does not
+replace onboarding and does not permit real providers.

@@ -28,6 +28,7 @@ repositório.
 - **External Integration Provider Registry**: `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`
 - **Integration Security Boundary**: `docs/INTEGRATION_SECURITY_BOUNDARY.md`
 - **External Provider Permission Overlay**: `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`
+- **External Provider Mock Adapter Harness**: `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -219,6 +220,11 @@ Para cruzar provedores externos com dominios e capabilities, consulte
 `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`. O overlay complementa a
 Permission Matrix, mas nao a substitui; ele nao chama providers, nao cria
 adapters e nao autoriza `executed:true`.
+
+Para simular provedores externos antes de qualquer integracao real, consulte
+`docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`. O harness usa apenas fixtures
+seguras e dados sinteticos; nao chama APIs externas, nao cria adapters reais e
+mantem `executed:false`.
 
 ## Estrutura
 

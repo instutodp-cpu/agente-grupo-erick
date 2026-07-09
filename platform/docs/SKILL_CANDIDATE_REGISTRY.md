@@ -172,3 +172,9 @@ secrets, provider calls, writes, cross-tenant access or `executed:true`.
 Skill candidates that depend on a future external provider must reference
 `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`. The overlay cannot turn a skill
 candidate into an executable provider automation.
+
+## External Provider Mock Adapter Harness
+
+Skill candidates that mention provider behavior can reference
+`docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` for synthetic mock examples.
+The harness cannot turn a skill candidate into an executable integration.

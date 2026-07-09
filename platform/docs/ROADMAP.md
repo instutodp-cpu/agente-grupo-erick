@@ -51,6 +51,9 @@ específicas.
 - External Provider Permission Overlay cruza provider_id/provider_type com
   dominio, capability, risco e permissoes sem habilitar provider real,
   adapter real, escrita real ou `executed:true`.
+- External Provider Mock Adapter Harness documenta como provedores externos
+  futuros devem ser simulados com fixtures seguras antes de qualquer sandbox,
+  provider real ou adapter real.
 - Permission Matrix e Golden Scenarios formalizam o contrato de expansão por
   domínio antes de qualquer adapter real.
 - Domain Onboarding Guide formaliza o fluxo oficial para novos domínios como

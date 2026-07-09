@@ -140,3 +140,9 @@ raw transcripts, secrets and cross-user or cross-tenant leakage remain blocked.
 `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md` must allow the provider/domain
 combination before provider output can become a future memory candidate. The
 overlay does not authorize storage or raw data retention.
+
+## External Provider Mock Adapter Harness
+
+`docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` can produce only synthetic mock
+output. Mock output does not become memory automatically and does not authorize
+storage, raw content retention or real provider calls.

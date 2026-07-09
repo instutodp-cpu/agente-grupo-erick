@@ -266,3 +266,9 @@ transcripts, raw audio, secrets and unscoped user or tenant data remain blocked.
 `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md` must allow the provider/domain
 combination before provider output can become a future inbox candidate. The
 overlay does not authorize raw content storage or real provider calls.
+
+## External Provider Mock Adapter Harness
+
+`docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` may provide synthetic examples
+for future inbox candidates. Mock output does not write inbox storage and cannot
+include raw provider content.
