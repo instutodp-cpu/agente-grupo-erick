@@ -178,3 +178,9 @@ candidate into an executable provider automation.
 Skill candidates that mention provider behavior can reference
 `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` for synthetic mock examples.
 The harness cannot turn a skill candidate into an executable integration.
+
+## External Provider Audit, Cost and Rate Limit
+
+Skill candidates that mention provider cost, usage or fallback must reference
+`docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`. Cost/rate signals cannot
+promote a skill or authorize provider execution.

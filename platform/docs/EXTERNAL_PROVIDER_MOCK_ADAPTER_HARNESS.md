@@ -257,6 +257,9 @@ Mock must return blocked when:
   calls.
 - `SKILL_CANDIDATE_REGISTRY.md`: skills cannot become executable provider
   automations.
+- `EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`: mock requests and responses can
+  produce only sanitized audit/cost/rate-limit examples and cannot create real
+  provider calls, retries, rate limiters or budget trackers.
 - `OPERATOR_RUNBOOK.md`: operators must use the runbook for validation,
   rollback and future adapter PR rules.
 

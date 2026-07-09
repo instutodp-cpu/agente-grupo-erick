@@ -141,3 +141,9 @@ overlay or approve writes, actions or `executed:true`.
 `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` can provide synthetic outputs
 for future quality checks. Quality scores cannot convert mock results into real
 provider calls.
+
+## External Provider Audit, Cost and Rate Limit
+
+`docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` can inform future quality or
+feedback review, but scores cannot approve cost, retry, fallback or real
+provider calls.

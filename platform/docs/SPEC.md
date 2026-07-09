@@ -533,6 +533,19 @@ provider real, adapter real, OAuth, secrets, storage, MCP ou chamadas externas.
 Todo exemplo deve manter `simulated:true`, `executed:false`,
 `real_provider_called:false`, `write_allowed:false` e `action_allowed:false`.
 
+### 5.16 External Provider Audit, Cost and Rate Limit
+
+`docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` define o contrato oficial para
+auditoria, custo, rate limit, fallback e stop conditions de provedores externos
+futuros. O contrato cobre audit fields, event types, cost risk, rate limit risk,
+budget scopes, fallback policies, stop conditions, provider type rules e
+blocking rules.
+
+Nesta fase o contrato nao implementa provider real, adapter real, OAuth,
+secrets, storage, scheduler, rate limiter, budget tracker, MCP ou chamadas
+externas. Todo exemplo deve manter `simulated:true`, `executed:false`,
+`real_provider_called:false`, `write_allowed:false` e `action_allowed:false`.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -611,3 +624,7 @@ Métricas e tracing entram junto com o pipeline de orquestração.
 - O harness de mock para providers externos fica em
   `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`; ele simula providers apenas
   com fixtures seguras e dados sinteticos.
+- O contrato de auditoria, custo e rate limit para providers externos fica em
+  `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`; ele documenta limites,
+  fallback e stop conditions sem criar provider real, rate limiter ou budget
+  tracker.

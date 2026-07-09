@@ -170,3 +170,9 @@ peer memory isolation.
 `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md` must keep mock examples
 synthetic and scoped. Mock data cannot bypass user, peer, tenant or role
 boundaries.
+
+## External Provider Audit, Cost and Rate Limit
+
+`docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` keeps provider audit, cost and
+rate-limit metadata scoped. Audit metadata cannot bypass user, peer, tenant or
+role boundaries.

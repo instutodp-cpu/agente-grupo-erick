@@ -142,3 +142,9 @@ Domain Onboarding and does not allow real execution.
 New domains that need future external providers must start with
 `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`. Mock harness coverage does not
 replace onboarding and does not permit real providers.
+
+## External Provider Audit, Cost and Rate Limit
+
+New domains that depend on future external providers must account for
+`docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`. Cost, rate limit, fallback
+and stop conditions are required before sandbox or provider work.
