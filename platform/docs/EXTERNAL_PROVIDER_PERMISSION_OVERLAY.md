@@ -361,6 +361,9 @@ These are blocked:
 - `TRANSCRIPTION_INTAKE_SANDBOX.md`: transcription provider combinations must
   remain mock/sanitized candidates and cannot allow upload, raw transcript
   storage or real provider calls.
+- `INTERNAL_BUSINESS_API_READ_ONLY.md`: internal business provider combinations
+  must remain mock/read-only candidates and cannot allow raw SQL, writeback,
+  cross-tenant queries or real provider calls.
 
 ## Security And LGPD
 

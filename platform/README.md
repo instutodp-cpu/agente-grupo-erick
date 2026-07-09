@@ -33,6 +33,7 @@ repositório.
 - **Tenant and Workspace Isolation**: `docs/TENANT_WORKSPACE_ISOLATION.md`
 - **Public Web Read-Only Sandbox**: `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`
 - **Transcription Intake Sandbox**: `docs/TRANSCRIPTION_INTAKE_SANDBOX.md`
+- **Internal Business API Read-Only**: `docs/INTERNAL_BUSINESS_API_READ_ONLY.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -278,4 +279,13 @@ Whisper, uploads, audio processing, storage, provider calls or runtime changes,
 and it keeps tenant isolation, mock-first, read-only first, human-review,
 governance-review, `simulated:true`, `real_provider_called:false` and
 `executed:false` mandatory.
+
+## Internal Business API Read-Only
+
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md` documents future internal business
+data queries as a contract-only read-only layer. It does not implement
+Supabase, Postgres, Base44, ERP/Linx, real queries, raw SQL, storage, RLS,
+providers, adapters or runtime changes, and it keeps tenant isolation,
+mock-first, read-only first, human-review, governance-review,
+`simulated:true`, `real_provider_called:false` and `executed:false` mandatory.
 

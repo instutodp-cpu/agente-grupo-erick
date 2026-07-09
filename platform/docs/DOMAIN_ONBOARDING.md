@@ -167,3 +167,10 @@ New domains that need audio, video or transcript intake must account for
 `docs/TRANSCRIPTION_INTAKE_SANDBOX.md`. Domain onboarding cannot add real
 transcription providers, uploads, raw audio storage or raw transcript storage
 in this phase.
+
+## Internal Business API Read-Only
+
+New domains that need internal business data must account for
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md`. Domain onboarding cannot add real
+Supabase/Postgres/Base44/ERP queries, raw SQL, writeback or cross-tenant data
+access in this phase.

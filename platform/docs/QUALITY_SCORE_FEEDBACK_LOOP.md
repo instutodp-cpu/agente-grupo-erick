@@ -166,3 +166,10 @@ calls, checkout, form submit or raw storage.
 transcription outputs for future quality review. Quality scores cannot approve
 real transcription providers, uploads, audio processing, raw transcript storage
 or `executed:true`.
+
+## Internal Business API Read-Only
+
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md` may provide synthetic read-only
+business outputs for future quality review. Quality scores cannot approve real
+database queries, raw SQL, writeback, payment, purchase, action or
+`executed:true`.

@@ -111,3 +111,10 @@ tenant isolation or `executed:false`.
 `docs/TRANSCRIPTION_INTAKE_SANDBOX.md` defines future transcription intake as a
 sanitized read-only candidate. Audio, video and transcript intake cannot expand
 domain permissions, bypass tenant isolation or authorize `executed:true`.
+
+## Internal Business API Read-Only
+
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md` defines future internal business data
+queries as read-only candidates. Internal data access cannot expand domain
+permissions, bypass tenant isolation, enable write/action or authorize
+`executed:true`.

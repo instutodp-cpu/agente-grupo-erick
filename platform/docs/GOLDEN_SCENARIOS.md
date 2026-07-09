@@ -149,3 +149,10 @@ Transcription scenarios should reference `docs/TRANSCRIPTION_INTAKE_SANDBOX.md`.
 Scenarios may use only synthetic or sanitized transcript examples in this phase
 and cannot expect real provider calls, real audio processing or raw transcript
 storage.
+
+## Internal Business API Read-Only
+
+Internal business data scenarios should reference
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md`. Scenarios may use only synthetic
+read-only examples in this phase and cannot expect real database queries,
+writeback, raw SQL or full data dumps.

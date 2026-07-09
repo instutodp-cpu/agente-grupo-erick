@@ -296,3 +296,9 @@ raw page content.
 `docs/TRANSCRIPTION_INTAKE_SANDBOX.md` can produce only sanitized transcription
 candidates for future inbox review. It does not write inbox storage, process
 real audio, store raw audio or store raw transcripts.
+
+## Internal Business API Read-Only
+
+`docs/INTERNAL_BUSINESS_API_READ_ONLY.md` can produce only sanitized read-only
+business candidates for future inbox review. It does not write inbox storage,
+run real queries, store raw database payloads or store full dumps.

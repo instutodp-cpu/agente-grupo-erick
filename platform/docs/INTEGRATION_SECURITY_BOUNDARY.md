@@ -275,6 +275,9 @@ Future PRs must be blocked when they:
 - `TRANSCRIPTION_INTAKE_SANDBOX.md`: future audio, video and transcript intake
   must stay sanitized, tenant-scoped and free of raw audio, raw transcripts and
   real provider calls.
+- `INTERNAL_BUSINESS_API_READ_ONLY.md`: future internal business queries must
+  stay read-only, tenant-scoped and free of raw SQL, raw database payloads,
+  writeback and real provider calls.
 
 ## Security And LGPD
 
