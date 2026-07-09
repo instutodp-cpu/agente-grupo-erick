@@ -270,6 +270,9 @@ Mock must return blocked when:
 - `INTERNAL_BUSINESS_API_READ_ONLY.md`: internal business mock examples must
   remain synthetic, read-only and free of raw SQL, raw database payloads,
   writeback and real provider calls.
+- `PERSONAL_WORKSPACE_CONNECTOR_POLICY.md`: personal connector mock examples
+  must remain synthetic, personal-workspace-only and free of OAuth tokens, raw
+  email, raw files, send/write/delete/share and real connector calls.
 - `OPERATOR_RUNBOOK.md`: operators must use the runbook for validation,
   rollback and future adapter PR rules.
 

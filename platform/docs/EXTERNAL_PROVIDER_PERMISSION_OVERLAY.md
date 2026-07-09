@@ -364,6 +364,9 @@ These are blocked:
 - `INTERNAL_BUSINESS_API_READ_ONLY.md`: internal business provider combinations
   must remain mock/read-only candidates and cannot allow raw SQL, writeback,
   cross-tenant queries or real provider calls.
+- `PERSONAL_WORKSPACE_CONNECTOR_POLICY.md`: personal connector combinations
+  must remain mock/read-only/draft-only candidates and cannot allow OAuth,
+  send/write/delete/share, cross-workspace context or real connector calls.
 
 ## Security And LGPD
 

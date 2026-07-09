@@ -397,3 +397,9 @@ Future PRs must be blocked when they:
 `docs/INTERNAL_BUSINESS_API_READ_ONLY.md` covers future internal business data
 queries. Transcription intake does not authorize internal database queries, raw
 SQL, writeback, tenant crossing or real provider calls.
+
+## Personal Workspace Connector Policy
+
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` covers future personal
+connectors. Transcription intake does not authorize Gmail, Calendar, Drive,
+OAuth, token storage, send/write/delete/share or real connector calls.

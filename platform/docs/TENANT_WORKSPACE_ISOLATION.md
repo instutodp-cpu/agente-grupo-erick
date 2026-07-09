@@ -359,3 +359,10 @@ client boundaries.
 `docs/INTERNAL_BUSINESS_API_READ_ONLY.md` defines how future internal business
 queries must stay inside `workspace_type`, `tenant_id` and `user_id`. Business
 data cannot cross Hermes Pessoal, Grupo Erick or external client boundaries.
+
+## Personal Workspace Connector Policy
+
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` defines how future personal
+connectors must stay inside `workspace_type=personal`, `tenant_id=personal::*`
+and `connector_scope=personal_private`. Personal connector output cannot cross
+Hermes Pessoal, Grupo Erick or external client boundaries.

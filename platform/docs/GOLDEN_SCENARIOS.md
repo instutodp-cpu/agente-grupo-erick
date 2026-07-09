@@ -156,3 +156,10 @@ Internal business data scenarios should reference
 `docs/INTERNAL_BUSINESS_API_READ_ONLY.md`. Scenarios may use only synthetic
 read-only examples in this phase and cannot expect real database queries,
 writeback, raw SQL or full data dumps.
+
+## Personal Workspace Connector Policy
+
+Personal connector scenarios should reference
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md`. Scenarios may use only synthetic
+read-only or draft-only examples in this phase and cannot expect real Gmail,
+Calendar, Drive, OAuth, send/write/delete/share or token storage.

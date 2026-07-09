@@ -173,3 +173,10 @@ or `executed:true`.
 business outputs for future quality review. Quality scores cannot approve real
 database queries, raw SQL, writeback, payment, purchase, action or
 `executed:true`.
+
+## Personal Workspace Connector Policy
+
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` may provide synthetic personal
+connector outputs for future quality review. Quality scores cannot approve real
+OAuth, Gmail, Calendar, Drive, send/write/delete/share, token storage or
+`executed:true`.

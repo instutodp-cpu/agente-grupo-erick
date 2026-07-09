@@ -71,6 +71,10 @@ específicas.
   em modo mock/read-only, sem Supabase/Postgres/Base44/ERP real, query real,
   raw SQL, storage, write/action, `real_provider_called:true` ou
   `executed:true`.
+- Personal Workspace Connector Policy documenta conectores pessoais futuros em
+  modo mock/read-only/draft-only, sem Gmail/Calendar/Drive real, OAuth, token,
+  storage, memoria, send/write/delete/share, `real_provider_called:true` ou
+  `executed:true`.
 - Permission Matrix e Golden Scenarios formalizam o contrato de expansão por
   domínio antes de qualquer adapter real.
 - Domain Onboarding Guide formaliza o fluxo oficial para novos domínios como

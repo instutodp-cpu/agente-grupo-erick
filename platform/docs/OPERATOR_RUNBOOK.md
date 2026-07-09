@@ -437,3 +437,13 @@ Nesta fase o contrato nao implementa Supabase, Postgres, Base44, ERP/Linx,
 Internal Business API real, banco, migration, RLS, query real, raw SQL,
 provider real, adapter real, storage ou runtime. Ele nao autoriza write,
 action, `real_provider_called:true` ou `executed:true`.
+
+## Personal Workspace Connector Policy
+
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` documenta conectores pessoais
+futuros no workspace personal, separados de Grupo Erick e clientes externos.
+
+Nesta fase o contrato nao implementa Gmail, Calendar, Drive, Contacts, OAuth,
+tokens, provider real, adapter real, API externa, storage, memoria ou runtime.
+Ele nao autoriza send, write, delete, share, action,
+`real_provider_called:true` ou `executed:true`.

@@ -34,6 +34,7 @@ repositório.
 - **Public Web Read-Only Sandbox**: `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`
 - **Transcription Intake Sandbox**: `docs/TRANSCRIPTION_INTAKE_SANDBOX.md`
 - **Internal Business API Read-Only**: `docs/INTERNAL_BUSINESS_API_READ_ONLY.md`
+- **Personal Workspace Connector Policy**: `docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -288,4 +289,13 @@ Supabase, Postgres, Base44, ERP/Linx, real queries, raw SQL, storage, RLS,
 providers, adapters or runtime changes, and it keeps tenant isolation,
 mock-first, read-only first, human-review, governance-review,
 `simulated:true`, `real_provider_called:false` and `executed:false` mandatory.
+
+## Personal Workspace Connector Policy
+
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` documents future personal
+connectors as a contract-only personal workspace policy. It does not implement
+Gmail, Calendar, Drive, Contacts, OAuth, tokens, provider calls, adapters,
+storage, memory or runtime changes, and it keeps tenant isolation, mock-first,
+read-only first, human-review, governance-review, `simulated:true`,
+`real_provider_called:false` and `executed:false` mandatory.
 

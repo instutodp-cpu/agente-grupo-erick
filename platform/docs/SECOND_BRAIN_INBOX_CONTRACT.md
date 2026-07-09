@@ -302,3 +302,9 @@ real audio, store raw audio or store raw transcripts.
 `docs/INTERNAL_BUSINESS_API_READ_ONLY.md` can produce only sanitized read-only
 business candidates for future inbox review. It does not write inbox storage,
 run real queries, store raw database payloads or store full dumps.
+
+## Personal Workspace Connector Policy
+
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` can produce only sanitized
+personal connector candidates for future inbox review. It does not write inbox
+storage, call real connectors, store tokens, store raw email or store raw files.

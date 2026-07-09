@@ -209,3 +209,10 @@ Skill candidates that depend on internal business data must reference
 `docs/INTERNAL_BUSINESS_API_READ_ONLY.md`. Skills cannot become executable
 business API agents, raw SQL runners, ERP writers or payment/purchase actors in
 this phase.
+
+## Personal Workspace Connector Policy
+
+Skill candidates that depend on personal connectors must reference
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md`. Skills cannot become executable
+Gmail, Calendar, Drive, OAuth, send/write/delete/share or token-handling agents
+in this phase.

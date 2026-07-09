@@ -179,3 +179,10 @@ human/governance review.
 summaries and aggregate candidates in this phase. Internal business output
 cannot become memory without tenant scope, retention policy, minimization and
 human/governance review.
+
+## Personal Workspace Connector Policy
+
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` can only produce sanitized
+personal summaries, drafts and memory candidates in this phase. Personal
+connector output cannot become memory without consent, tenant/user scope,
+retention policy, minimization and human/governance review.

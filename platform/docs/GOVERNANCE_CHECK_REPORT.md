@@ -377,3 +377,11 @@ internal business data queries. Governance must block real Supabase/Postgres/
 Base44/ERP integrations, raw SQL, writeback, cross-tenant queries, storage of
 raw database payloads and any attempt to set `write_allowed:true`,
 `real_provider_called:true` or `executed:true`.
+
+## Personal Workspace Connector Policy
+
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` is a governance check area for
+future personal workspace connectors. Governance must block real Gmail,
+Calendar, Drive, OAuth, token storage, send/write/delete/share, cross-workspace
+personal data use and any attempt to set `write_allowed:true`,
+`real_provider_called:true` or `executed:true`.
