@@ -254,3 +254,9 @@ Outputs from future providers can become inbox candidates only after the
 provider is documented in `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`.
 Provider output must be sanitized first; raw content is not stored in this phase
 and no provider call can trigger real execution.
+
+## Integration Security Boundary
+
+`docs/INTEGRATION_SECURITY_BOUNDARY.md` defines the required boundary before
+future provider output can become an inbox candidate. Raw payloads, raw
+transcripts, raw audio, secrets and unscoped user or tenant data remain blocked.

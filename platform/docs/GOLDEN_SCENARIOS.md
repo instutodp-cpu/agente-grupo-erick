@@ -105,3 +105,9 @@ If a golden scenario depends on a future external provider, the provider must be
 documented in `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md` first. Provider
 registry entries do not call APIs, do not create adapters and do not authorize
 real execution.
+
+## Integration Security Boundary
+
+Provider-related scenarios must also respect
+`docs/INTEGRATION_SECURITY_BOUNDARY.md`. A scenario cannot include raw payloads,
+secrets, cross-tenant leakage, real writes or `executed:true`.

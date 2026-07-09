@@ -160,3 +160,9 @@ Skill candidates that mention a future provider must point to
 `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`. A provider reference does not
 turn a skill into an executable automation and does not allow real provider
 calls.
+
+## Integration Security Boundary
+
+Skill candidates that mention future integrations must respect
+`docs/INTEGRATION_SECURITY_BOUNDARY.md`. A skill candidate cannot approve OAuth,
+secrets, provider calls, writes, cross-tenant access or `executed:true`.

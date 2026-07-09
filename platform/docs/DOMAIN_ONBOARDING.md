@@ -123,3 +123,10 @@ New domains that need a future external provider must reference
 `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`. Provider registry review is
 required before any provider-specific mock, sandbox or adapter work, and it
 does not allow real execution.
+
+## Integration Security Boundary
+
+New domains that involve future integrations must also reference
+`docs/INTEGRATION_SECURITY_BOUNDARY.md`. Domain onboarding cannot bypass the
+security boundary, cannot allow raw payload logging and cannot permit
+`executed:true`.

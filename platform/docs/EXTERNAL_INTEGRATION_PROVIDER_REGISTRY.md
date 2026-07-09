@@ -235,6 +235,13 @@ registry entry. Provider `high` ou `critical` exige human review. Provider com
 OAuth ou secrets exige revisao critica. Governance nao aprova execucao real
 sozinha.
 
+## Relacao com Integration Security Boundary
+
+`docs/INTEGRATION_SECURITY_BOUNDARY.md` define a fronteira obrigatoria entre
+este registry e qualquer mock, sandbox ou adapter futuro. Provider registrado
+continua bloqueado se tentar expor secrets, raw payload, cross-tenant data,
+write/action real ou `executed:true`.
+
 ## Relacao com Permission Matrix e Domain Onboarding
 
 Provider nao libera dominio novo. Dominio novo ainda precisa Domain Onboarding.

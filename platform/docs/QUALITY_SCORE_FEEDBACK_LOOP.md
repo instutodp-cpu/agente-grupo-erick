@@ -123,3 +123,9 @@ Provider-related feedback or quality signals must reference
 `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md` before any future integration
 work. Quality scores do not approve provider calls, OAuth scopes, real writes
 or `executed:true`.
+
+## Integration Security Boundary
+
+`docs/INTEGRATION_SECURITY_BOUNDARY.md` applies before provider-related quality
+signals can influence future work. Quality scores cannot loosen boundary rules,
+approve secrets, approve writes or authorize `executed:true`.
