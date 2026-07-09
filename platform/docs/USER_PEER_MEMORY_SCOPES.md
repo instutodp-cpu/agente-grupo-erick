@@ -158,3 +158,9 @@ do not bypass user isolation, tenant isolation, confirmation or
 `docs/INTEGRATION_SECURITY_BOUNDARY.md` keeps user, tenant, role, store and
 company scopes inside the identity boundary. Future integrations cannot use
 peer memory to bypass scope, confirmation, governance or `executed:false`.
+
+## External Provider Permission Overlay
+
+`docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md` maps future provider use to
+domain and capability permissions. It cannot bypass user scope, tenant scope or
+peer memory isolation.

@@ -27,6 +27,7 @@ repositório.
 - **Governance Check Report**: `docs/GOVERNANCE_CHECK_REPORT.md`
 - **External Integration Provider Registry**: `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`
 - **Integration Security Boundary**: `docs/INTEGRATION_SECURITY_BOUNDARY.md`
+- **External Provider Permission Overlay**: `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -213,6 +214,11 @@ Para a fronteira de seguranca de qualquer integracao futura, consulte
 `docs/INTEGRATION_SECURITY_BOUNDARY.md`. O boundary define camadas, campos
 permitidos/proibidos, regras default e bloqueios antes de provider real,
 adapter real, OAuth/secrets ou qualquer chamada externa.
+
+Para cruzar provedores externos com dominios e capabilities, consulte
+`docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`. O overlay complementa a
+Permission Matrix, mas nao a substitui; ele nao chama providers, nao cria
+adapters e nao autoriza `executed:true`.
 
 ## Estrutura
 

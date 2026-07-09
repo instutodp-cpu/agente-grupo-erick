@@ -111,3 +111,9 @@ real execution.
 Provider-related scenarios must also respect
 `docs/INTEGRATION_SECURITY_BOUNDARY.md`. A scenario cannot include raw payloads,
 secrets, cross-tenant leakage, real writes or `executed:true`.
+
+## External Provider Permission Overlay
+
+Provider-related scenarios must also respect
+`docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`. The overlay keeps provider
+usage mock/read-only/draft only and does not authorize real API calls.

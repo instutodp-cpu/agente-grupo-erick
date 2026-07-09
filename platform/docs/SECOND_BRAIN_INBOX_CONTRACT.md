@@ -260,3 +260,9 @@ and no provider call can trigger real execution.
 `docs/INTEGRATION_SECURITY_BOUNDARY.md` defines the required boundary before
 future provider output can become an inbox candidate. Raw payloads, raw
 transcripts, raw audio, secrets and unscoped user or tenant data remain blocked.
+
+## External Provider Permission Overlay
+
+`docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md` must allow the provider/domain
+combination before provider output can become a future inbox candidate. The
+overlay does not authorize raw content storage or real provider calls.

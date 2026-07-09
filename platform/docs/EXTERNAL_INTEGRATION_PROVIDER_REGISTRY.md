@@ -242,6 +242,12 @@ este registry e qualquer mock, sandbox ou adapter futuro. Provider registrado
 continua bloqueado se tentar expor secrets, raw payload, cross-tenant data,
 write/action real ou `executed:true`.
 
+## Relacao com External Provider Permission Overlay
+
+`docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md` cruza provider_id, provider_type,
+dominio, capability, risco e permissoes. Um provider registrado aqui continua
+bloqueado se o overlay nao permitir o dominio/capability solicitado.
+
 ## Relacao com Permission Matrix e Domain Onboarding
 
 Provider nao libera dominio novo. Dominio novo ainda precisa Domain Onboarding.

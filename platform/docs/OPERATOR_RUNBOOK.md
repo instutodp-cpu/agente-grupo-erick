@@ -358,3 +358,15 @@ real, nao chama API externa, nao cria OAuth/secrets, nao altera runtime e nao
 autoriza `executed:true`. Ele preserva `mock-first`, human review, governance
 review, kill switch, rollback e logs sanitizados como requisitos para qualquer
 evolucao futura.
+
+## External Provider Permission Overlay
+
+`docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md` cruza provider externo, dominio,
+capability, risco e permissao antes de qualquer uso futuro. Ele complementa a
+Permission Matrix, o Provider Registry e o Integration Security Boundary.
+
+Nesta fase o overlay nao implementa provider real, nao implementa adapter real,
+nao chama API externa, nao cria OAuth/secrets, nao altera runtime e nao
+autoriza `executed:true`. Qualquer regra de overlay deve manter
+`write_allowed:false`, `action_allowed:false`, mock-first, human review e
+governance review.
