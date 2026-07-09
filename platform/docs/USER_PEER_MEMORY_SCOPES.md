@@ -176,3 +176,9 @@ boundaries.
 `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` keeps provider audit, cost and
 rate-limit metadata scoped. Audit metadata cannot bypass user, peer, tenant or
 role boundaries.
+
+## Tenant and Workspace Isolation
+
+`docs/TENANT_WORKSPACE_ISOLATION.md` defines how user/peer memory must be scoped
+by `workspace_type`, `tenant_id` and `user_id`. Peer memory cannot cross
+personal, Grupo Erick or external client workspaces.

@@ -268,6 +268,8 @@ Future PRs must be blocked when they:
   responses must remain synthetic, sanitized and inside this boundary.
 - `EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`: provider audit, cost, rate
   limit, fallback and stop-condition metadata must stay inside this boundary.
+- `TENANT_WORKSPACE_ISOLATION.md`: provider, MCP, memory, cache and audit
+  metadata must stay inside the authenticated workspace and tenant boundary.
 
 ## Security And LGPD
 

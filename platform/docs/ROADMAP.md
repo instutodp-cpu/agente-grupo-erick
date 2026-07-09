@@ -57,6 +57,9 @@ específicas.
 - External Provider Audit, Cost and Rate Limit documenta campos de auditoria,
   riscos de custo/rate limit, budget scopes, fallback policies e stop
   conditions antes de qualquer provider real, rate limiter ou budget tracker.
+- Tenant and Workspace Isolation documenta a separacao entre Hermes Pessoal,
+  Grupo Erick e clientes externos antes de auth real, storage, RLS, Supabase,
+  memoria real, RAG, MCP ou SaaS multiempresa.
 - Permission Matrix e Golden Scenarios formalizam o contrato de expansão por
   domínio antes de qualquer adapter real.
 - Domain Onboarding Guide formaliza o fluxo oficial para novos domínios como

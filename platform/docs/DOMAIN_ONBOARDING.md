@@ -148,3 +148,9 @@ replace onboarding and does not permit real providers.
 New domains that depend on future external providers must account for
 `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`. Cost, rate limit, fallback
 and stop conditions are required before sandbox or provider work.
+
+## Tenant and Workspace Isolation
+
+New domains that touch memory, providers, MCP, inbox, cache or business data
+must account for `docs/TENANT_WORKSPACE_ISOLATION.md`. Domain onboarding cannot
+create cross-workspace access.

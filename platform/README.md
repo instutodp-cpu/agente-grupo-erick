@@ -30,6 +30,7 @@ repositório.
 - **External Provider Permission Overlay**: `docs/EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`
 - **External Provider Mock Adapter Harness**: `docs/EXTERNAL_PROVIDER_MOCK_ADAPTER_HARNESS.md`
 - **External Provider Audit, Cost and Rate Limit**: `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`
+- **Tenant and Workspace Isolation**: `docs/TENANT_WORKSPACE_ISOLATION.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -232,6 +233,11 @@ provedores externos futuros, consulte
 `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`. Este contrato nao cria rate
 limiter real, budget tracker, scheduler, provider real ou adapter real, e
 mantem `real_provider_called:false` e `executed:false`.
+
+Para separar Hermes Pessoal, Grupo Erick e clientes externos SaaS, consulte
+`docs/TENANT_WORKSPACE_ISOLATION.md`. Este contrato nao implementa auth real,
+tenant resolver, storage, RLS, Supabase, memoria real, cache, RAG, MCP ou
+runtime novo, e mantem `executed:false`.
 
 ## Estrutura
 

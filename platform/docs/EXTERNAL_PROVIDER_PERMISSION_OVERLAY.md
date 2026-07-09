@@ -353,6 +353,8 @@ These are blocked:
 - `EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`: allowed provider/domain/capability
   combinations still need audit, cost, rate limit, fallback and stop-condition
   contracts before any sandbox work.
+- `TENANT_WORKSPACE_ISOLATION.md`: provider/domain/capability combinations must
+  also stay inside the selected workspace and tenant.
 
 ## Security And LGPD
 

@@ -152,3 +152,10 @@ storage, raw content retention or real provider calls.
 `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` defines safe provider audit
 fields and stop conditions. Audit output cannot become memory without future
 sanitization, retention policy and human review.
+
+## Tenant and Workspace Isolation
+
+`docs/TENANT_WORKSPACE_ISOLATION.md` defines the tenant/workspace scope required
+before any memory becomes real. Future memory must include `workspace_type`,
+`tenant_id` and `user_id`, and cannot cross personal, Grupo Erick or external
+client workspaces.

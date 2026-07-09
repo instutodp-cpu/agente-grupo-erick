@@ -546,6 +546,18 @@ secrets, storage, scheduler, rate limiter, budget tracker, MCP ou chamadas
 externas. Todo exemplo deve manter `simulated:true`, `executed:false`,
 `real_provider_called:false`, `write_allowed:false` e `action_allowed:false`.
 
+### 5.17 Tenant and Workspace Isolation
+
+`docs/TENANT_WORKSPACE_ISOLATION.md` define o contrato oficial de isolamento por
+tenant e workspace. Ele separa Hermes Pessoal, Grupo Erick e clientes externos
+SaaS, define `workspace_type`, formatos de `tenant_id`, identity fields,
+boundaries, policies e blocking rules.
+
+Nesta fase o contrato nao implementa auth real, tenant resolver, RLS, Supabase,
+storage, memoria real, cache, RAG/vector DB, MCP ou runtime novo. Ele nao
+autoriza `executed:true` e nao substitui Permission Matrix, Memory Policy,
+Integration Security Boundary, confirmacao humana ou governance review.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -628,3 +640,6 @@ Métricas e tracing entram junto com o pipeline de orquestração.
   `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`; ele documenta limites,
   fallback e stop conditions sem criar provider real, rate limiter ou budget
   tracker.
+- O contrato de isolamento por tenant/workspace fica em
+  `docs/TENANT_WORKSPACE_ISOLATION.md`; ele separa Hermes Pessoal, Grupo Erick
+  e clientes externos sem implementar auth real, RLS, Supabase ou storage.

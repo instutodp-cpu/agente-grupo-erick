@@ -278,3 +278,9 @@ include raw provider content.
 `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` can produce only sanitized
 audit/cost/rate-limit candidates for future inbox review. It does not write
 inbox storage and cannot include raw provider content.
+
+## Tenant and Workspace Isolation
+
+`docs/TENANT_WORKSPACE_ISOLATION.md` defines the tenant/workspace requirements
+for any future inbox item. The inbox cannot mix personal, Grupo Erick or
+external client context.
