@@ -36,7 +36,7 @@ test("user peer memory scopes document describes the required safety contract", 
     "Permission Matrix",
     "Skill Candidate Registry",
     "executed:false",
-    "confirmation humana",
+    "confirmação humana",
   ]) {
     assert.match(doc, new RegExp(phrase, "i"));
   }

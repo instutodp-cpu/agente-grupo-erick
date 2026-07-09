@@ -40,6 +40,8 @@ específicas.
 - Workflow de CI (`.github/workflows/hermes-core-smoke.yml`) roda as validações
   e o smoke test automaticamente em `pull_request` e `push` para `main`, sem
   execução real.
+- Governance Check Report documenta as checagens de governanca que podem
+  bloquear evolucoes sensiveis antes de qualquer scanner real.
 - Permission Matrix e Golden Scenarios formalizam o contrato de expansão por
   domínio antes de qualquer adapter real.
 - Domain Onboarding Guide formaliza o fluxo oficial para novos domínios como

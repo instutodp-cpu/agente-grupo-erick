@@ -236,3 +236,14 @@ Regras iniciais:
 - `docs/PERMISSION_MATRIX.md`
 - `docs/GOLDEN_SCENARIOS.md`
 - `docs/DOMAIN_ONBOARDING.md`
+
+## Governance Check Report
+
+`docs/GOVERNANCE_CHECK_REPORT.md` treats the inbox contract as a review area.
+It does not turn the inbox into storage, search or execution.
+
+## User / Peer Memory Scopes
+
+`docs/USER_PEER_MEMORY_SCOPES.md` continua sendo a referencia para isolamento,
+roles e proibicoes de memoria por usuario/peer. O inbox nao substitui esse
+contrato e nao permite vazamento entre usuarios ou tenants.
