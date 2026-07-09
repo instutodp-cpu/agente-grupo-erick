@@ -48,6 +48,10 @@ O catálogo de padrões de tarefa para evoluções futuras fica em
 `docs/SKILL_CANDIDATE_REGISTRY.md`; ele documenta drafts, não execução real.
 A política oficial de memória fica em `docs/MEMORY_POLICY.md`; ela documenta
 camadas e thresholds sem criar storage real nesta PR.
+O registry oficial de provedores externos fica em
+`docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`; ele documenta provider types,
+candidatos, riscos e bloqueios antes de qualquer integração real, sem chamar
+APIs externas, sem criar adapter real e sem autorizar `executed:true`.
 
 ## 2. Serviços e portas
 
@@ -478,6 +482,20 @@ governança do Hermes Core. O documento lista áreas de checagem, status,
 severidades, achados e bloqueios, mas não implementa scanner real, CI gate
 novo, auditoria automatica real ou qualquer mudanca de runtime. O reporte
 continua sem autorizar `executed:true` ou execucao real.
+
+### 5.12 External Integration Provider Registry
+
+`docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md` define o contrato oficial para
+catalogar provedores externos futuros antes de qualquer integração real. O
+registry cobre provider types, candidatos, status, campos obrigatórios,
+bloqueios, regras por domínio, custo, compliance, OAuth/secrets, tenant
+isolation e review de governança.
+
+Nesta fase o registry não chama Firecrawl, Bright Data, Scrapeless, Composio,
+AssemblyAI, Google, redes sociais, GitHub, Supabase, Base44, MCP ou qualquer
+API real. Também não cria scanner, adapter, storage, OAuth, secrets ou runtime
+novo. `write_allowed`, `action_allowed`, `can_trigger_real_execution` e
+`executed` continuam `false`.
 
 ## 6. Configuração
 

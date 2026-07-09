@@ -25,6 +25,7 @@ consistencia do Hermes Core antes de evolucoes sensiveis. Ele pode avaliar:
 - User / Peer Memory Scopes
 - Second Brain Inbox
 - Quality Score + Feedback Loop
+- External Integration Provider Registry
 - Forbidden Fields
 - Operator Runbook
 - Runtime Safety
@@ -149,6 +150,13 @@ nao autoriza `executed:true` e nao habilita execucao real.
 ### quality_score_feedback_loop
 
 - risk_level: medium
+- required_for_sensitive_changes: true
+- can_block_release: true
+- can_trigger_real_execution: false
+
+### external_integration_provider_registry
+
+- risk_level: high
 - required_for_sensitive_changes: true
 - can_block_release: true
 - can_trigger_real_execution: false

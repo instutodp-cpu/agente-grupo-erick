@@ -145,3 +145,10 @@ Nenhuma memória de usuário/peer pode armazenar ou expor:
 `docs/GOVERNANCE_CHECK_REPORT.md` verifies that user/peer memory scopes stay
 isolated and do not leak across users or tenants. It does not change the scope
 contract.
+
+## External Integration Provider Registry
+
+External providers that depend on user, role or tenant scope must be documented
+in `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`. Provider registry entries
+do not bypass user isolation, tenant isolation, confirmation or
+`executed:false`.

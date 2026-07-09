@@ -116,3 +116,10 @@ cérebro real nesta PR.
 `docs/GOVERNANCE_CHECK_REPORT.md` can block domain expansion when onboarding is
 missing, incomplete or unsafe. It does not replace onboarding and does not
 permit execution real.
+
+## External Integration Provider Registry
+
+New domains that need a future external provider must reference
+`docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`. Provider registry review is
+required before any provider-specific mock, sandbox or adapter work, and it
+does not allow real execution.

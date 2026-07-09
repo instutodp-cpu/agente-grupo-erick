@@ -247,3 +247,10 @@ It does not turn the inbox into storage, search or execution.
 `docs/USER_PEER_MEMORY_SCOPES.md` continua sendo a referencia para isolamento,
 roles e proibicoes de memoria por usuario/peer. O inbox nao substitui esse
 contrato e nao permite vazamento entre usuarios ou tenants.
+
+## External Integration Provider Registry
+
+Outputs from future providers can become inbox candidates only after the
+provider is documented in `docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`.
+Provider output must be sanitized first; raw content is not stored in this phase
+and no provider call can trigger real execution.

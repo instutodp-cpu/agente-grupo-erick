@@ -153,3 +153,10 @@ nem storage real; ela apenas orienta limites, isolamento e campos proibidos.
 `docs/GOVERNANCE_CHECK_REPORT.md` can surface skill candidate risk and missing
 contract references. It does not approve a skill and does not change the draft,
 mock-first or `executed:false` rules.
+
+## External Integration Provider Registry
+
+Skill candidates that mention a future provider must point to
+`docs/EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`. A provider reference does not
+turn a skill into an executable automation and does not allow real provider
+calls.
