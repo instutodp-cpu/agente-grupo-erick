@@ -130,3 +130,9 @@ Provider-related scenarios should reference
 `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` when future cost, rate limit,
 fallback or stop-condition behavior is relevant. The contract does not permit
 real provider calls.
+
+## Tenant and Workspace Isolation
+
+Tenant-related scenarios should reference `docs/TENANT_WORKSPACE_ISOLATION.md`.
+Future scenarios that use memory, inbox, providers, MCP or business data must
+declare workspace and tenant scope.

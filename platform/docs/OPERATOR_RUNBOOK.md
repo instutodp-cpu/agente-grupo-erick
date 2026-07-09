@@ -393,3 +393,13 @@ Nesta fase o contrato nao implementa provider real, adapter real, OAuth,
 secrets, rate limiter, budget tracker, scheduler, storage, MCP ou chamadas
 externas. Ele nao autoriza `executed:true` nem `real_provider_called:true`; todo
 fluxo futuro continua mock-first, human-review e governance-review.
+
+## Tenant and Workspace Isolation
+
+`docs/TENANT_WORKSPACE_ISOLATION.md` documenta a separacao entre Hermes Pessoal,
+Grupo Erick e clientes externos SaaS antes de qualquer auth real, tenant
+resolver, storage, RLS, Supabase, memoria real, cache, RAG, MCP ou runtime.
+
+Nesta fase o contrato e apenas documentacao, fixture e teste. Ele nao autoriza
+`executed:true`, nao permite dados cross-tenant e nao substitui Permission
+Matrix, Memory Policy, Integration Security Boundary ou governance review.

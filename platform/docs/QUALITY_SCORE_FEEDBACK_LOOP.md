@@ -147,3 +147,9 @@ provider calls.
 `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` can inform future quality or
 feedback review, but scores cannot approve cost, retry, fallback or real
 provider calls.
+
+## Tenant and Workspace Isolation
+
+`docs/TENANT_WORKSPACE_ISOLATION.md` keeps future feedback and learning signals
+scoped by workspace and tenant. Quality scores cannot approve cross-tenant
+context use.

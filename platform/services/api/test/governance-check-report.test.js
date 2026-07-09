@@ -29,6 +29,7 @@ const REQUIRED_CHECK_AREAS = [
   'external_provider_permission_overlay',
   'external_provider_mock_adapter_harness',
   'external_provider_audit_cost_rate_limit',
+  'tenant_workspace_isolation',
   'forbidden_fields',
   'operator_runbook',
   'runtime_safety',

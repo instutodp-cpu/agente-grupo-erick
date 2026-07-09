@@ -93,3 +93,9 @@ Mock simulation does not expand permissions and does not authorize real calls.
 `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md` must be satisfied before any
 future provider sandbox. Cost, rate limit, fallback and stop conditions cannot
 expand this matrix or authorize real provider calls.
+
+## Tenant and Workspace Isolation
+
+`docs/TENANT_WORKSPACE_ISOLATION.md` scopes this matrix by workspace and tenant.
+Workspace isolation cannot expand domain permissions and domain permissions
+cannot override tenant isolation.

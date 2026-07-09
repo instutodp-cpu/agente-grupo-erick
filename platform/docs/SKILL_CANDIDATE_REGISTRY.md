@@ -184,3 +184,9 @@ The harness cannot turn a skill candidate into an executable integration.
 Skill candidates that mention provider cost, usage or fallback must reference
 `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`. Cost/rate signals cannot
 promote a skill or authorize provider execution.
+
+## Tenant and Workspace Isolation
+
+Skill candidates that depend on future memory, inbox, provider or business data
+must reference `docs/TENANT_WORKSPACE_ISOLATION.md`. Skills cannot bypass
+tenant/workspace isolation.

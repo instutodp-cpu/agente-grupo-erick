@@ -260,6 +260,12 @@ provider real e nao substitui registry, security boundary ou permission overlay.
 candidates devem documentar audit fields, cost risk, rate limit risk, budget
 scopes, fallback policies e stop conditions antes de qualquer sandbox.
 
+## Relacao com Tenant and Workspace Isolation
+
+`docs/TENANT_WORKSPACE_ISOLATION.md` define como provider candidates devem
+respeitar `workspace_type`, `tenant_id` e `user_id`. Provider externo nao pode
+inferir, alterar ou atravessar tenant/workspace.
+
 ## Relacao com Permission Matrix e Domain Onboarding
 
 Provider nao libera dominio novo. Dominio novo ainda precisa Domain Onboarding.

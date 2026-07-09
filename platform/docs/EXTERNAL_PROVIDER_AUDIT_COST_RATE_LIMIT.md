@@ -296,6 +296,8 @@ Future PRs must be blocked when they:
   automations.
 - `OPERATOR_RUNBOOK.md`: operators must use the runbook for validation,
   rollback and future provider PR rules.
+- `TENANT_WORKSPACE_ISOLATION.md`: provider audit, cost and rate-limit metadata
+  must include workspace/tenant scope before any future sandbox.
 
 ## Security And LGPD
 

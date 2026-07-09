@@ -331,6 +331,9 @@ Devem bloquear qualquer evolucao sensivel:
 - External Provider Audit, Cost and Rate Limit define audit fields, cost/rate
   risks, budget scopes, fallback policies and stop conditions before sandbox or
   provider work.
+- Tenant and Workspace Isolation define como Hermes Pessoal, Grupo Erick e
+  clientes externos devem permanecer separados antes de storage, auth, RLS,
+  Supabase, RAG, MCP ou SaaS real.
 - Second Brain Inbox pode gerar itens de auditoria no futuro, mas nao grava
   memoria real nesta PR.
 - Memory Policy e User / Peer Memory Scopes continuam obrigatorios para

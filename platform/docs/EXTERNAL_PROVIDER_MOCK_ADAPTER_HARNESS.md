@@ -260,6 +260,8 @@ Mock must return blocked when:
 - `EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`: mock requests and responses can
   produce only sanitized audit/cost/rate-limit examples and cannot create real
   provider calls, retries, rate limiters or budget trackers.
+- `TENANT_WORKSPACE_ISOLATION.md`: mock requests and responses must remain
+  synthetic and scoped to a single workspace and tenant.
 - `OPERATOR_RUNBOOK.md`: operators must use the runbook for validation,
   rollback and future adapter PR rules.
 
