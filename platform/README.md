@@ -35,6 +35,7 @@ repositório.
 - **Transcription Intake Sandbox**: `docs/TRANSCRIPTION_INTAKE_SANDBOX.md`
 - **Internal Business API Read-Only**: `docs/INTERNAL_BUSINESS_API_READ_ONLY.md`
 - **Personal Workspace Connector Policy**: `docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md`
+- **Social Media Draft-Only Approval**: `docs/SOCIAL_MEDIA_DRAFT_ONLY_APPROVAL.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -299,3 +300,14 @@ storage, memory or runtime changes, and it keeps tenant isolation, mock-first,
 read-only first, human-review, governance-review, `simulated:true`,
 `real_provider_called:false` and `executed:false` mandatory.
 
+
+## Social Media Draft-Only Approval
+
+`docs/SOCIAL_MEDIA_DRAFT_ONLY_APPROVAL.md` documents the contract-only policy
+for future social media draft generation and approval. It keeps all output as
+draft content, separates personal, Grupo Erick and external client brand scopes,
+and does not implement real social providers, OAuth, tokens, publishing,
+scheduling, comments, DMs, media storage, scheduler, adapters or runtime
+changes. It keeps `simulated:true`, `executed:false`,
+`real_provider_called:false`, `publish_allowed:false` and `send_allowed:false`
+mandatory.
