@@ -118,3 +118,10 @@ domain permissions, bypass tenant isolation or authorize `executed:true`.
 queries as read-only candidates. Internal data access cannot expand domain
 permissions, bypass tenant isolation, enable write/action or authorize
 `executed:true`.
+
+## Personal Workspace Connector Policy
+
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` defines future personal connector
+access as personal-workspace-only read/draft candidates. Personal connectors
+cannot expand domain permissions, bypass tenant isolation, enable send/write/
+delete/share/action or authorize `executed:true`.

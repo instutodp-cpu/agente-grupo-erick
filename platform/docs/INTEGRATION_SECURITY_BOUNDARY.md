@@ -278,6 +278,9 @@ Future PRs must be blocked when they:
 - `INTERNAL_BUSINESS_API_READ_ONLY.md`: future internal business queries must
   stay read-only, tenant-scoped and free of raw SQL, raw database payloads,
   writeback and real provider calls.
+- `PERSONAL_WORKSPACE_CONNECTOR_POLICY.md`: future personal connectors must
+  stay personal-workspace-only, sanitized and free of OAuth tokens, raw email,
+  raw files, send/write/delete/share and real connector calls.
 
 ## Security And LGPD
 

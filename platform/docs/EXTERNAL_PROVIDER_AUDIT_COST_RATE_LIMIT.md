@@ -306,6 +306,9 @@ Future PRs must be blocked when they:
 - `INTERNAL_BUSINESS_API_READ_ONLY.md`: internal business sandbox events must
   include audit/cost/rate-limit, tenant and sensitivity metadata before any
   future read-only provider work.
+- `PERSONAL_WORKSPACE_CONNECTOR_POLICY.md`: personal connector sandbox events
+  must include audit/cost/rate-limit, tenant, user and OAuth policy metadata
+  before any future connector work.
 
 ## Security And LGPD
 

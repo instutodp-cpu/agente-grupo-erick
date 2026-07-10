@@ -200,3 +200,9 @@ context or client content across tenants.
 `docs/INTERNAL_BUSINESS_API_READ_ONLY.md` must respect user/peer memory
 boundaries. Internal business summaries cannot use personal memory as corporate
 context or expose client data across tenants.
+
+## Personal Workspace Connector Policy
+
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` must respect user/peer memory
+boundaries. Personal connector summaries cannot become corporate context or
+external client context without an explicit future policy and review.

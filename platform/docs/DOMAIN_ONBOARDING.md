@@ -174,3 +174,10 @@ New domains that need internal business data must account for
 `docs/INTERNAL_BUSINESS_API_READ_ONLY.md`. Domain onboarding cannot add real
 Supabase/Postgres/Base44/ERP queries, raw SQL, writeback or cross-tenant data
 access in this phase.
+
+## Personal Workspace Connector Policy
+
+New domains that need personal connectors must account for
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md`. Domain onboarding cannot add real
+Gmail, Calendar, Drive, OAuth, token storage, send/write/delete/share or
+cross-workspace personal data use in this phase.

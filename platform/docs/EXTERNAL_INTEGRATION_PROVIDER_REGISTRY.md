@@ -307,3 +307,10 @@ storage or raw transcript storage.
 for internal business providers such as Supabase, Postgres, Base44, ERP/Linx
 and manual fixtures. Provider registry entries do not authorize real database
 queries, raw SQL, writeback, write/action or cross-tenant access.
+
+## Personal Workspace Connector Policy
+
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` defines the future policy for
+personal connectors such as Gmail, Calendar, Drive and Contacts. Provider
+registry entries do not authorize OAuth, tokens, send/write/delete/share,
+storage, memory writes or real connector calls.

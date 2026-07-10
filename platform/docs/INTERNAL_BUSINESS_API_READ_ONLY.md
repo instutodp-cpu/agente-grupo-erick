@@ -444,3 +444,10 @@ Future PRs must be blocked when they:
 - Retention must be defined before real storage.
 - Sensitive export requires its own future policy.
 - Write remains prohibited in this phase.
+
+## Personal Workspace Connector Policy
+
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` covers future personal
+connectors. Internal business read-only work cannot use personal Gmail,
+Calendar, Drive, Contacts, OAuth tokens or personal memory as corporate
+operational context.

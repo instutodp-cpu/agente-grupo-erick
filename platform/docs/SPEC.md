@@ -596,6 +596,18 @@ provider real, adapter real, API real, query real, raw SQL, storage, RLS,
 migration ou runtime novo. Ele nao autoriza write, action,
 `real_provider_called:true` ou `executed:true`.
 
+### 5.21 Personal Workspace Connector Policy
+
+`docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` define o contrato oficial para
+conectores pessoais futuros no workspace personal. Ele cobre connector modes,
+candidatos pessoais, operacoes permitidas/bloqueadas, request/response fields,
+statuses, outputs sanitizados, OAuth/token policy e blocking rules.
+
+Nesta fase o contrato nao implementa Gmail, Calendar, Drive, Contacts, OAuth,
+tokens, provider real, adapter real, API real, storage, memoria ou runtime
+novo. Ele nao autoriza send, write, delete, share, action,
+`real_provider_called:true` ou `executed:true`.
+
 ## 6. Configuração
 
 Via variáveis de ambiente (ver `.env.example`). O `docker-compose` injeta
@@ -692,3 +704,7 @@ Métricas e tracing entram junto com o pipeline de orquestração.
   `docs/INTERNAL_BUSINESS_API_READ_ONLY.md`; ele prepara consultas internas
   read-only sem Supabase/Postgres/Base44/ERP real, query real, raw SQL, storage
   ou runtime.
+- O contrato de Personal Workspace Connector Policy fica em
+  `docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md`; ele separa conectores pessoais
+  de Grupo Erick e clientes externos sem Gmail/Calendar/Drive real, OAuth,
+  token, storage, memoria ou runtime.
