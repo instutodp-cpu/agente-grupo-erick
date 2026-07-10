@@ -206,3 +206,14 @@ context or expose client data across tenants.
 `docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md` must respect user/peer memory
 boundaries. Personal connector summaries cannot become corporate context or
 external client context without an explicit future policy and review.
+
+## Social Media Draft-Only Approval
+
+`docs/SOCIAL_MEDIA_DRAFT_ONLY_APPROVAL.md` documents the contract-only policy
+for future social media draft generation and approval. It keeps all output as
+draft content, separates personal, Grupo Erick and external client brand scopes,
+and does not implement real social providers, OAuth, tokens, publishing,
+scheduling, comments, DMs, media storage, scheduler, adapters or runtime
+changes. It keeps `simulated:true`, `executed:false`,
+`real_provider_called:false`, `publish_allowed:false` and `send_allowed:false`
+mandatory.

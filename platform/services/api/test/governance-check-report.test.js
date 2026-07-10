@@ -34,6 +34,7 @@ const REQUIRED_CHECK_AREAS = [
   'transcription_intake_sandbox',
   'internal_business_api_read_only',
   'personal_workspace_connector_policy',
+  'social_media_draft_only_approval',
   'forbidden_fields',
   'operator_runbook',
   'runtime_safety',

@@ -176,6 +176,13 @@
       "can_trigger_real_execution": false
     },
     {
+      "id": "social_media_draft_only_approval",
+      "risk_level": "critical",
+      "required_for_sensitive_changes": true,
+      "can_block_release": true,
+      "can_trigger_real_execution": false
+    },
+    {
       "id": "forbidden_fields",
       "risk_level": "critical",
       "required_for_sensitive_changes": true,

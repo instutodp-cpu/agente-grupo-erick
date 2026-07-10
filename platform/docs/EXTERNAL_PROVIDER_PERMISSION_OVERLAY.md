@@ -377,3 +377,14 @@ These are blocked:
 - Future output must be sanitized.
 - Personal data requires minimization, explicit scope and retention policy.
 - Logs must be sanitized.
+
+## Social Media Draft-Only Approval
+
+`docs/SOCIAL_MEDIA_DRAFT_ONLY_APPROVAL.md` documents the contract-only policy
+for future social media draft generation and approval. It keeps all output as
+draft content, separates personal, Grupo Erick and external client brand scopes,
+and does not implement real social providers, OAuth, tokens, publishing,
+scheduling, comments, DMs, media storage, scheduler, adapters or runtime
+changes. It keeps `simulated:true`, `executed:false`,
+`real_provider_called:false`, `publish_allowed:false` and `send_allowed:false`
+mandatory.
