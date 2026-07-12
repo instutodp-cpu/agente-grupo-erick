@@ -39,3 +39,13 @@ test('hermes smoke test normalizes JSON booleans and logs safe request diagnosti
   assert.match(script, /smoke request: step=%s method=%s path=%s http_status=%s body_bytes=%s/);
   assert.equal(/cat "\$response_file"\s*>\s*&2/.test(script), false);
 });
+
+test('hermes smoke test waits for health with bounded retries before endpoint assertions', () => {
+  const scriptPath = path.resolve(__dirname, '../../../scripts/hermes-smoke-test.sh');
+  const script = fs.readFileSync(scriptPath, 'utf8');
+
+  assert.match(script, /for attempt in \$\(seq 1 30\)/);
+  assert.match(script, /request_json GET \/health "" "health attempt \$attempt"/);
+  assert.match(script, /health did not become ready after 30 attempts/);
+  assert.equal(/\|\|\s*true/.test(script), false);
+});

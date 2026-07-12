@@ -78,16 +78,16 @@ request_json() {
 
   if [[ "$curl_exit" -ne 0 ]]; then
     rm -f "$response_file"
-    printf 'smoke test failed: request failed (step=%s curl_exit=%s http_status=%s body_bytes=%s)\n' \
+    printf 'smoke request failed: step=%s curl_exit=%s http_status=%s body_bytes=%s\n' \
       "$step" "$curl_exit" "$http_status" "$body_bytes" >&2
-    exit 1
+    return 1
   fi
 
   if [[ ! "$http_status" =~ ^2[0-9][0-9]$ ]]; then
     rm -f "$response_file"
-    printf 'smoke test failed: unexpected HTTP status (step=%s http_status=%s body_bytes=%s)\n' \
+    printf 'smoke request failed: step=%s unexpected_http_status=%s body_bytes=%s\n' \
       "$step" "$http_status" "$body_bytes" >&2
-    exit 1
+    return 1
   fi
 
   cat "$response_file"
@@ -167,9 +167,31 @@ assert_equal() {
 
 assert_health() {
   local health
-  health="$(request_json GET /health "" "health")"
-  assert_equal "$(json_get "$health" status)" "ok" "health status"
-  log "health: ok"
+  local health_status
+  local json_exit
+  local attempt
+
+  for attempt in $(seq 1 30); do
+    if health="$(request_json GET /health "" "health attempt $attempt")"; then
+      set +e
+      health_status="$(json_get "$health" status 2>/dev/null)"
+      json_exit=$?
+      set -e
+
+      if [[ "$json_exit" -eq 0 && "$health_status" == "ok" ]]; then
+        log "health: ok"
+        return 0
+      fi
+
+      printf 'smoke health not ready: attempt=%s parsed_status=%s body_bytes=%s\n' \
+        "$attempt" "${health_status:-unreadable}" "$(printf '%s' "$health" | wc -c | tr -d '[:space:]')" >&2
+    fi
+
+    sleep 1
+  done
+
+  printf 'smoke test failed: health did not become ready after 30 attempts\n' >&2
+  exit 1
 }
 
 check_public_message_response() {
