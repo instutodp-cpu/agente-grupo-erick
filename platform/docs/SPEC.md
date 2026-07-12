@@ -745,3 +745,11 @@ read-only first, human review, governance review, `simulated:true`, `executed:fa
 ## Real Read-Only Adapter Readiness Gate
 
 `docs/REAL_READ_ONLY_ADAPTER_READINESS_GATE.md` documents the first executable readiness gate for future real read-only adapters. This PR creates a deterministic, deny-by-default and fail-closed gate, fixture and tests only. It does not create a real adapter, call a provider, activate an integration, enable a feature flag, add OAuth or secrets, or change `/message` or `/confirm`. `READY` means only eligible for a future integration PR; `executed:false`, `real_provider_called:false` and `can_trigger_real_execution:false` remain mandatory in this PR.
+
+## Read-Only Adapter Interface and Runtime Contract
+
+`docs/READ_ONLY_ADAPTER_INTERFACE_RUNTIME_CONTRACT.md` defines the contract-only
+adapter descriptor, sanitized request/response shape and pure runtime plan for
+future read-only adapters. It depends on the readiness gate and still does not
+invoke adapters, call providers, register runtime integrations, read secrets or
+change `/message` or `/confirm`.

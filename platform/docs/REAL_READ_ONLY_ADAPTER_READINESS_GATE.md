@@ -326,6 +326,7 @@ These are documented only and are not implemented or activated in this PR:
 - `EXTERNAL_CLIENT_WORKSPACE_CONNECTOR_POLICY.md`
 - `CORPORATE_WORKSPACE_CONNECTOR_POLICY.md`
 - `SOCIAL_MEDIA_DRAFT_ONLY_APPROVAL.md`
+- `READ_ONLY_ADAPTER_INTERFACE_RUNTIME_CONTRACT.md`
 - `GOVERNANCE_CHECK_REPORT.md`
 - `PERMISSION_MATRIX.md`
 - `GOLDEN_SCENARIOS.md`
@@ -335,3 +336,10 @@ These are documented only and are not implemented or activated in this PR:
 ## Runtime Scope
 
 This PR creates an executable gate, fixture, and tests only. It does not create a real adapter, call a provider, activate an integration, change `/message`, change `/confirm`, turn on a feature flag, add OAuth, add secrets, add storage, add database access, add network calls, or allow write/action/send/publish/delete. `READY` remains eligibility for a future PR only.
+
+## Next Contract Boundary
+
+`READ_ONLY_ADAPTER_INTERFACE_RUNTIME_CONTRACT.md` defines the next contract-only
+boundary after readiness: adapter descriptors, sanitized requests/responses and
+a pure runtime plan. It still does not invoke adapters, register providers,
+enable feature flags or permit `executed:true` or `real_provider_called:true`.
