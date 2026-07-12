@@ -18,3 +18,14 @@ test('hermes smoke test script exists and does not embed external secrets or URL
   assert.equal(/cookie\s*[:=]/i.test(script), false);
   assert.equal(/http:\/\/(?!localhost:8080)/.test(script), false);
 });
+
+test('hermes smoke test json helpers pass JSON outside the Python stdin script stream', () => {
+  const scriptPath = path.resolve(__dirname, '../../../scripts/hermes-smoke-test.sh');
+  const script = fs.readFileSync(scriptPath, 'utf8');
+
+  assert.match(script, /JSON_INPUT="\$json"\s+"\$PYTHON_BIN" - "\$path"/);
+  assert.match(script, /JSON_INPUT="\$json"\s+"\$PYTHON_BIN" - "\$field"/);
+  assert.match(script, /JSON_INPUT="\$json"\s+"\$PYTHON_BIN" - "\$fields"/);
+  assert.equal(/printf '%s' "\$json" \| "\$PYTHON_BIN" -/.test(script), false);
+  assert.match(script, /json\.loads\(os\.environ\["JSON_INPUT"\]\)/);
+});

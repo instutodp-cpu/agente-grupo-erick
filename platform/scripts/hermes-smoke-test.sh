@@ -65,12 +65,13 @@ json_get() {
   local json="$1"
   local path="$2"
 
-  printf '%s' "$json" | "$PYTHON_BIN" - "$path" <<'PY'
+  JSON_INPUT="$json" "$PYTHON_BIN" - "$path" <<'PY'
 import json
+import os
 import sys
 
 path = sys.argv[1].split(".")
-value = json.load(sys.stdin)
+value = json.loads(os.environ["JSON_INPUT"])
 for key in path:
     if not isinstance(value, dict) or key not in value:
         sys.exit(2)
@@ -88,12 +89,13 @@ PY
 assert_has_field() {
   local json="$1"
   local field="$2"
-  printf '%s' "$json" | "$PYTHON_BIN" - "$field" <<'PY'
+  JSON_INPUT="$json" "$PYTHON_BIN" - "$field" <<'PY'
 import json
+import os
 import sys
 
 field = sys.argv[1]
-data = json.load(sys.stdin)
+data = json.loads(os.environ["JSON_INPUT"])
 if field not in data:
     sys.exit(3)
 PY
@@ -103,12 +105,13 @@ assert_missing_fields() {
   local json="$1"
   local fields="$2"
 
-  printf '%s' "$json" | "$PYTHON_BIN" - "$fields" <<'PY'
+  JSON_INPUT="$json" "$PYTHON_BIN" - "$fields" <<'PY'
 import json
+import os
 import sys
 
 forbidden = [field for field in sys.argv[1].split(",") if field]
-data = json.load(sys.stdin)
+data = json.loads(os.environ["JSON_INPUT"])
 for field in forbidden:
     if field in data:
         print(f"Forbidden field present: {field}", file=sys.stderr)
