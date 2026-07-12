@@ -497,3 +497,14 @@ Future PRs must be blocked when they:
 - Brand, tone and audience must remain in scope.
 - Draft is not publication.
 - Internal approval is not publication authorization.
+
+
+## External Client Workspace Connector Policy
+
+`docs/EXTERNAL_CLIENT_WORKSPACE_CONNECTOR_POLICY.md` documents the contract-only
+policy for future external client SaaS connectors. It keeps every connector
+scoped to `workspace_type=external_client`, `tenant_id=client::<client_id>` and
+`client_id`, blocks cross-client access, and does not implement real connectors,
+OAuth, tokens, APIs, storage, cache, memory, providers, adapters or runtime
+changes. It keeps mock-first, read-only first, human review, governance review,
+`simulated:true`, `executed:false`, `real_provider_called:false`, `send_allowed:false` and `publish_allowed:false` mandatory.

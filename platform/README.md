@@ -36,6 +36,7 @@ repositório.
 - **Internal Business API Read-Only**: `docs/INTERNAL_BUSINESS_API_READ_ONLY.md`
 - **Personal Workspace Connector Policy**: `docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md`
 - **Social Media Draft-Only Approval**: `docs/SOCIAL_MEDIA_DRAFT_ONLY_APPROVAL.md`
+- **External Client Workspace Connector Policy**: `docs/EXTERNAL_CLIENT_WORKSPACE_CONNECTOR_POLICY.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
