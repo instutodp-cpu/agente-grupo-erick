@@ -7,6 +7,8 @@ const {
   validateAdapterMetadata
 } = require('./read-only-adapter-contract');
 
+const REGISTRY_STORAGE = new WeakMap();
+
 function freezeMetadata(metadata) {
   return Object.freeze(deepClone(metadata));
 }
@@ -57,8 +59,8 @@ function normalizeAdapter(adapter) {
   };
 }
 
-function registerAdapter(registry, adapter) {
-  if (!registry || !(registry._adapters instanceof Map)) {
+function registerAdapterInternal(adapters, adapter) {
+  if (!(adapters instanceof Map)) {
     return {
       ok: false,
       error_code: 'INVALID_ADAPTER_REGISTRY',
@@ -77,7 +79,7 @@ function registerAdapter(registry, adapter) {
   }
 
   const adapterId = normalized.adapter.metadata.adapter_id;
-  if (registry._adapters.has(adapterId)) {
+  if (adapters.has(adapterId)) {
     return {
       ok: false,
       error_code: 'DUPLICATE_ADAPTER',
@@ -85,7 +87,7 @@ function registerAdapter(registry, adapter) {
     };
   }
 
-  registry._adapters.set(adapterId, normalized.adapter);
+  adapters.set(adapterId, normalized.adapter);
   return {
     ok: true,
     adapter_id: adapterId,
@@ -93,69 +95,99 @@ function registerAdapter(registry, adapter) {
   };
 }
 
-function unregisterAdapter(registry, adapterId) {
-  if (!registry || !(registry._adapters instanceof Map) || !isNonEmptyString(adapterId)) {
+function unregisterAdapterInternal(adapters, adapterId) {
+  if (!(adapters instanceof Map) || !isNonEmptyString(adapterId)) {
     return { ok: false, removed: false };
   }
 
   return {
     ok: true,
-    removed: registry._adapters.delete(adapterId)
+    removed: adapters.delete(adapterId)
   };
 }
 
-function getAdapter(registry, adapterId) {
-  if (!registry || !(registry._adapters instanceof Map) || !isNonEmptyString(adapterId)) {
+function getAdapterInternal(adapters, adapterId) {
+  if (!(adapters instanceof Map) || !isNonEmptyString(adapterId)) {
     return null;
   }
 
-  return cloneAdapter(registry._adapters.get(adapterId));
+  return cloneAdapter(adapters.get(adapterId));
 }
 
-function listAdapters(registry) {
-  if (!registry || !(registry._adapters instanceof Map)) return [];
-  return Array.from(registry._adapters.values())
+function listAdaptersInternal(adapters) {
+  if (!(adapters instanceof Map)) return [];
+  return Array.from(adapters.values())
     .map(cloneAdapter)
     .sort((a, b) => a.metadata.adapter_id.localeCompare(b.metadata.adapter_id));
 }
 
+function hasAdapterInternal(adapters, adapterId) {
+  return Boolean(adapters instanceof Map && adapters.has(adapterId));
+}
+
+function getStorage(registry) {
+  return REGISTRY_STORAGE.get(registry) || null;
+}
+
+function registerAdapter(registry, adapter) {
+  return registerAdapterInternal(getStorage(registry), adapter);
+}
+
+function unregisterAdapter(registry, adapterId) {
+  return unregisterAdapterInternal(getStorage(registry), adapterId);
+}
+
+function getAdapter(registry, adapterId) {
+  return getAdapterInternal(getStorage(registry), adapterId);
+}
+
+function listAdapters(registry) {
+  return listAdaptersInternal(getStorage(registry));
+}
+
 function hasAdapter(registry, adapterId) {
-  return Boolean(registry && registry._adapters instanceof Map && registry._adapters.has(adapterId));
+  return hasAdapterInternal(getStorage(registry), adapterId);
+}
+
+function prepareInitialAdapters(initialAdapters) {
+  if (!Array.isArray(initialAdapters)) {
+    throw new Error('INVALID_INITIAL_ADAPTER');
+  }
+
+  const adapters = new Map();
+  for (const adapter of initialAdapters) {
+    const result = registerAdapterInternal(adapters, adapter);
+    if (!result.ok) {
+      throw new Error('INVALID_INITIAL_ADAPTER');
+    }
+  }
+
+  return adapters;
 }
 
 function createReadOnlyAdapterRegistry(initialAdapters = []) {
+  const adapters = prepareInitialAdapters(initialAdapters);
+
   const registry = {
-    _adapters: new Map()
+    registerAdapter(adapter) {
+      return registerAdapterInternal(adapters, adapter);
+    },
+    unregisterAdapter(adapterId) {
+      return unregisterAdapterInternal(adapters, adapterId);
+    },
+    getAdapter(adapterId) {
+      return getAdapterInternal(adapters, adapterId);
+    },
+    listAdapters() {
+      return listAdaptersInternal(adapters);
+    },
+    hasAdapter(adapterId) {
+      return hasAdapterInternal(adapters, adapterId);
+    }
   };
 
-  Object.defineProperties(registry, {
-    registerAdapter: {
-      enumerable: true,
-      value: (adapter) => registerAdapter(registry, adapter)
-    },
-    unregisterAdapter: {
-      enumerable: true,
-      value: (adapterId) => unregisterAdapter(registry, adapterId)
-    },
-    getAdapter: {
-      enumerable: true,
-      value: (adapterId) => getAdapter(registry, adapterId)
-    },
-    listAdapters: {
-      enumerable: true,
-      value: () => listAdapters(registry)
-    },
-    hasAdapter: {
-      enumerable: true,
-      value: (adapterId) => hasAdapter(registry, adapterId)
-    }
-  });
-
-  for (const adapter of initialAdapters) {
-    registerAdapter(registry, adapter);
-  }
-
-  return registry;
+  REGISTRY_STORAGE.set(registry, adapters);
+  return Object.freeze(registry);
 }
 
 module.exports = {

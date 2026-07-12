@@ -20,7 +20,8 @@ const {
   findForbiddenFields
 } = require('../src/core/read-only-adapter-contract');
 const {
-  createReadOnlyAdapterRegistry
+  createReadOnlyAdapterRegistry,
+  registerAdapter
 } = require('../src/core/read-only-adapter-registry');
 const {
   executeReadOnlyAdapter
@@ -190,19 +191,57 @@ test('metadata validation blocks unsafe metadata', () => {
 
 test('registry registers valid adapters and protects internal state', () => {
   const registry = createReadOnlyAdapterRegistry();
+  assert.equal(Object.isFrozen(registry), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(registry, '_adapters'), false);
+  assert.equal(registry._adapters, undefined);
+  assert.equal(Object.keys(registry).includes('_adapters'), false);
+  assert.throws(() => {
+    registry.registerAdapter = () => ({ ok: true });
+  }, TypeError);
+  assert.throws(() => {
+    registry.getAdapter = () => ({ metadata: metadata({ adapter_kind: 'real_read_only' }) });
+  }, TypeError);
   assert.equal(registry.registerAdapter(mock_success_adapter).ok, true);
   assert.equal(registry.hasAdapter('mock_success_adapter'), true);
   assert.equal(registry.listAdapters().length, 1);
   assert.equal(registry.getAdapter('mock_success_adapter').metadata.adapter_id, 'mock_success_adapter');
+  assert.equal(registerAdapter(registry, mock_success_adapter).ok, false);
   assert.equal(registry.registerAdapter(mock_success_adapter).ok, false);
   assert.equal(registry.registerAdapter({ metadata: metadata({ adapter_id: '' }) }).ok, false);
+  assert.equal(registry._adapters, undefined);
   const returned = registry.getAdapter('mock_success_adapter');
   returned.metadata.adapter_id = 'mutated';
   assert.equal(registry.getAdapter('mock_success_adapter').metadata.adapter_id, 'mock_success_adapter');
+  const listed = registry.listAdapters();
+  listed[0].metadata.adapter_id = 'listed_mutation';
+  assert.equal(registry.listAdapters()[0].metadata.adapter_id, 'mock_success_adapter');
   assert.equal(registry.registerAdapter(real_candidate_adapter).ok, true);
   assert.equal(registry.registerAdapter(real_adapter_forbidden_test).ok, false);
   assert.equal(registry.unregisterAdapter('mock_success_adapter').removed, true);
   assert.equal(registry.hasAdapter('mock_success_adapter'), false);
+});
+
+test('registry initial adapters fail closed without exposing partial storage', () => {
+  assert.throws(() => createReadOnlyAdapterRegistry([
+    mock_success_adapter,
+    { metadata: metadata({ adapter_id: '' }) }
+  ]), /INVALID_INITIAL_ADAPTER/);
+
+  assert.throws(() => createReadOnlyAdapterRegistry([
+    real_adapter_forbidden_test
+  ]), /INVALID_INITIAL_ADAPTER/);
+
+  assert.throws(() => createReadOnlyAdapterRegistry([
+    mock_success_adapter,
+    mock_success_adapter
+  ]), /INVALID_INITIAL_ADAPTER/);
+
+  const registry = createReadOnlyAdapterRegistry([mock_success_adapter, real_candidate_adapter]);
+  assert.equal(registry._adapters, undefined);
+  assert.equal(registry.hasAdapter('mock_success_adapter'), true);
+  assert.equal(registry.hasAdapter('real_candidate_adapter'), true);
+  assert.equal(registry.listAdapters().length, 2);
+  assert.equal(registry.registerAdapter(real_adapter_forbidden_test).ok, false);
 });
 
 test('request validation blocks invalid fields and write operations', () => {
