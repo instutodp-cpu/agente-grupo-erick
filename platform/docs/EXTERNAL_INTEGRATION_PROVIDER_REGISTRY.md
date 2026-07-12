@@ -335,3 +335,15 @@ scoped to `workspace_type=external_client`, `tenant_id=client::<client_id>` and
 OAuth, tokens, APIs, storage, cache, memory, providers, adapters or runtime
 changes. It keeps mock-first, read-only first, human review, governance review,
 `simulated:true`, `executed:false`, `real_provider_called:false`, `send_allowed:false` and `publish_allowed:false` mandatory.
+
+
+## Corporate Workspace Connector Policy
+
+`docs/CORPORATE_WORKSPACE_CONNECTOR_POLICY.md` documents the contract-only
+policy for future Grupo Erick corporate connectors. It keeps corporate access
+scoped to `workspace_type=corporate`, `tenant_id=grupo_erick` and
+`organization_id=grupo_erick`, blocks personal and external-client context,
+and does not implement real corporate connectors, OAuth, tokens, APIs, storage,
+cache, memory, providers, adapters or runtime changes. It keeps mock-first,
+read-only first, human review, governance review, `simulated:true`, `executed:false`, `real_provider_called:false`, `send_allowed:false` and
+`publish_allowed:false` mandatory.
