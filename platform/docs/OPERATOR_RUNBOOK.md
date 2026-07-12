@@ -480,3 +480,27 @@ and does not implement real corporate connectors, OAuth, tokens, APIs, storage,
 cache, memory, providers, adapters or runtime changes. It keeps mock-first,
 read-only first, human review, governance review, `simulated:true`, `executed:false`, `real_provider_called:false`, `send_allowed:false` and
 `publish_allowed:false` mandatory.
+
+## Real Read-Only Adapter Readiness Gate
+
+`docs/REAL_READ_ONLY_ADAPTER_READINESS_GATE.md` documents the first executable readiness gate for future real read-only adapters. This PR creates a deterministic, deny-by-default and fail-closed gate, fixture and tests only. It does not create a real adapter, call a provider, activate an integration, enable a feature flag, add OAuth or secrets, or change `/message` or `/confirm`. `READY` means only eligible for a future integration PR; `executed:false`, `real_provider_called:false` and `can_trigger_real_execution:false` remain mandatory in this PR.
+
+## Read-Only Adapter Readiness Gate Checklist
+
+Before any future real read-only adapter PR, operators must confirm:
+
+- candidate identity is declared with candidate_id, provider_id and adapter_id
+- tenant and workspace scope are explicit and cannot be prompt-controlled
+- provider registry candidate status exists
+- mock parity is documented with safe fixtures
+- permission matrix, permission overlay, security boundary and governance review are mapped
+- human review owner is declared
+- cost, rate limit and timeout controls are known and bounded
+- kill switch is defined
+- feature flag exists and defaults off
+- rollout and rollback plans exist
+- incident runbook exists
+- logs are sanitized and forbidden fields are blocked
+- no-write tests exist for write/action/send/publish/delete
+
+A `ready_for_real_read_only_pr` verdict is not runtime approval. It does not activate a provider, does not call a provider, does not enable a feature flag and does not permit `executed:true` or `real_provider_called:true`.
