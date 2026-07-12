@@ -168,12 +168,18 @@ function completeRequest(overrides = {}) {
 
 function readyReadiness() {
   return {
+    candidate_id: 'candidate_interface_unit',
+    provider_id: 'public_web_manual_fixture',
+    adapter_id: 'adapter_public_web_fixture_read',
     status: 'ready_for_real_read_only_pr',
+    verdict: 'allow_future_read_only_pr',
     ready: true,
     simulated: true,
     executed: false,
     real_provider_called: false,
-    can_trigger_real_execution: false
+    can_trigger_real_execution: false,
+    blocking_requirements: [],
+    blocking_reasons: []
   };
 }
 

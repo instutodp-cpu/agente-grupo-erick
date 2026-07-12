@@ -520,3 +520,17 @@ confirm:
 - adapter_invocation_allowed:false and real_provider_calls_allowed:false remain fixed in this phase
 - response contract returns only safe_summary and sanitized_output
 - no runtime import is added to `/message`, `/confirm` or adapter execution without a future approved PR
+
+For `READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md`, operators must also confirm:
+
+- metadata validates with adapter_id, provider_id, adapter_kind, version, scopes, timeout and retry policy
+- registry registration is isolated and does not expose mutable internal state
+- feature flag is explicit and default off
+- kill switch is available and blocks safely
+- readiness evidence is strongly bound to candidate_id, provider_id and adapter_id for real candidates
+- workspace, tenant, capability and operation scopes are enforced before execution
+- forbidden fields are blocked recursively before adapter execution
+- only local mock/test-double adapters can execute in this PR
+- timeout returns `ADAPTER_TIMEOUT` without stack trace or raw payload
+- every result includes sanitized `audit_event_candidate`
+- no real provider calls, OAuth, tokens, secrets, `/message` changes or `/confirm` changes are present

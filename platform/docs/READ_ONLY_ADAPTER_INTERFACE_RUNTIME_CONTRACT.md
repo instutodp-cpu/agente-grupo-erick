@@ -9,10 +9,15 @@ It is an interface contract and a deterministic runtime planning contract. It
 does not register an adapter, does not call a provider, does not read secrets,
 does not enable OAuth, and does not change `/message` or `/confirm`.
 
-This PR keeps the system in contract-only mode:
+This document is retained as the compatibility contract for the initial
+interface work. The executable v2 boundary is
+`READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md`, which adds an isolated registry and a
+runtime that can execute only local mock/test-double adapters.
+
+The runtime keeps real adapters and provider calls blocked:
 
 - `simulated:true`
-- `executed:false`
+- `executed:false` for real candidates
 - `real_provider_called:false`
 - `can_trigger_real_execution:false`
 - `write_allowed:false`
@@ -20,6 +25,9 @@ This PR keeps the system in contract-only mode:
 - `send_allowed:false`
 - `publish_allowed:false`
 - `delete_allowed:false`
+
+Local mock adapters may return `executed:true` only to indicate local
+test-double execution. That never means a provider was called.
 
 ## Goals
 

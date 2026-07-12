@@ -39,7 +39,7 @@ repositório.
 - **External Client Workspace Connector Policy**: `docs/EXTERNAL_CLIENT_WORKSPACE_CONNECTOR_POLICY.md`
 - **Corporate Workspace Connector Policy**: `docs/CORPORATE_WORKSPACE_CONNECTOR_POLICY.md`
 - **Real Read-Only Adapter Readiness Gate**: `docs/REAL_READ_ONLY_ADAPTER_READINESS_GATE.md`
-- **Read-Only Adapter Interface and Runtime Contract**: `docs/READ_ONLY_ADAPTER_INTERFACE_RUNTIME_CONTRACT.md`
+- **Read-Only Adapter Interface and Runtime Contract**: `docs/READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -322,10 +322,10 @@ mandatory.
 
 ## Read-Only Adapter Interface and Runtime Contract
 
-`docs/READ_ONLY_ADAPTER_INTERFACE_RUNTIME_CONTRACT.md` documents the contract-only
-interface and runtime plan for future read-only adapters. It defines adapter
-descriptors, sanitized request/response fields and a pure runtime plan, but does
-not register adapters, call providers, create OAuth/secrets, enable feature
-flags or alter `/message` or `/confirm`. Runtime execution remains blocked with
-`executed:false`, `real_provider_called:false` and
+`docs/READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md` documents the isolated read-only
+adapter interface, registry and runtime. It permits only local mock/test-double
+execution in this PR and keeps real candidates blocked behind readiness,
+feature flags and kill switch checks. It does not call providers, create
+OAuth/secrets, alter `/message` or alter `/confirm`. Real providers remain
+blocked with `real_provider_called:false` and
 `can_trigger_real_execution:false`.

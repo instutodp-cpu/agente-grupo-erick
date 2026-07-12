@@ -200,9 +200,11 @@ The first real read-only adapter readiness gate is delivered as contract, fixtur
 
 ## PR #60 Read-Only Adapter Interface Delivery
 
-The read-only adapter interface and runtime contract is delivered as contract,
-fixture, pure validator/planner and tests in this branch. It defines the safe
-boundary after readiness evaluation, but it does not connect providers,
-register adapters, enable feature flags or permit runtime invocation. The next
-step remains explicit adapter wiring behind feature flags default off and kill
-switches, not unrestricted provider execution.
+The read-only adapter interface and runtime v1 is delivered as contract,
+fixture, isolated registry, pure contract validators, mock-only runtime and
+tests in this branch. It defines the safe boundary after readiness evaluation
+and permits only local mock/test-double execution. It does not connect
+providers, enable real feature flags, call external services or alter
+`/message` or `/confirm`.
+
+Next step: Connector Lifecycle and Runtime Registry.

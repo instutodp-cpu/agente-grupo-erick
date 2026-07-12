@@ -748,8 +748,8 @@ read-only first, human review, governance review, `simulated:true`, `executed:fa
 
 ## Read-Only Adapter Interface and Runtime Contract
 
-`docs/READ_ONLY_ADAPTER_INTERFACE_RUNTIME_CONTRACT.md` defines the contract-only
-adapter descriptor, sanitized request/response shape and pure runtime plan for
-future read-only adapters. It depends on the readiness gate and still does not
-invoke adapters, call providers, register runtime integrations, read secrets or
-change `/message` or `/confirm`.
+`docs/READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md` defines the read-only adapter
+descriptor, registry, sanitized request/response envelope and isolated runtime.
+Only local mocks/test doubles can execute in this PR. Real candidates remain
+blocked behind readiness, feature flag and kill switch checks, and no provider
+is called. The current `/message` and `/confirm` flows are unchanged.

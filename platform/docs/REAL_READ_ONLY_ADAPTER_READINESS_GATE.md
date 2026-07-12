@@ -339,7 +339,8 @@ This PR creates an executable gate, fixture, and tests only. It does not create 
 
 ## Next Contract Boundary
 
-`READ_ONLY_ADAPTER_INTERFACE_RUNTIME_CONTRACT.md` defines the next contract-only
-boundary after readiness: adapter descriptors, sanitized requests/responses and
-a pure runtime plan. It still does not invoke adapters, register providers,
-enable feature flags or permit `executed:true` or `real_provider_called:true`.
+`READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md` defines the next boundary after
+readiness: adapter metadata, sanitized request/response envelopes, isolated
+registry and mock-only runtime. It can execute only local test-double mocks.
+Real candidates still require strong readiness evidence, feature flag default
+off and kill switch checks, and they cannot call providers in this PR.
