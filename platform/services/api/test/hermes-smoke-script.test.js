@@ -18,3 +18,34 @@ test('hermes smoke test script exists and does not embed external secrets or URL
   assert.equal(/cookie\s*[:=]/i.test(script), false);
   assert.equal(/http:\/\/(?!localhost:8080)/.test(script), false);
 });
+
+test('hermes smoke test json helpers pass JSON outside the Python stdin script stream', () => {
+  const scriptPath = path.resolve(__dirname, '../../../scripts/hermes-smoke-test.sh');
+  const script = fs.readFileSync(scriptPath, 'utf8');
+
+  assert.match(script, /JSON_INPUT="\$json"\s+"\$PYTHON_BIN" - "\$path"/);
+  assert.match(script, /JSON_INPUT="\$json"\s+"\$PYTHON_BIN" - "\$field"/);
+  assert.match(script, /JSON_INPUT="\$json"\s+"\$PYTHON_BIN" - "\$fields"/);
+  assert.equal(/printf '%s' "\$json" \| "\$PYTHON_BIN" -/.test(script), false);
+  assert.match(script, /json\.loads\(os\.environ\["JSON_INPUT"\]\)/);
+});
+
+test('hermes smoke test normalizes JSON booleans and logs safe request diagnostics', () => {
+  const scriptPath = path.resolve(__dirname, '../../../scripts/hermes-smoke-test.sh');
+  const script = fs.readFileSync(scriptPath, 'utf8');
+
+  assert.match(script, /isinstance\(value, bool\)/);
+  assert.match(script, /"true" if value else "false"/);
+  assert.match(script, /smoke request: step=%s method=%s path=%s http_status=%s body_bytes=%s/);
+  assert.equal(/cat "\$response_file"\s*>\s*&2/.test(script), false);
+});
+
+test('hermes smoke test waits for health with bounded retries before endpoint assertions', () => {
+  const scriptPath = path.resolve(__dirname, '../../../scripts/hermes-smoke-test.sh');
+  const script = fs.readFileSync(scriptPath, 'utf8');
+
+  assert.match(script, /for attempt in \$\(seq 1 30\)/);
+  assert.match(script, /request_json GET \/health "" "health attempt \$attempt"/);
+  assert.match(script, /health did not become ready after 30 attempts/);
+  assert.equal(/\|\|\s*true/.test(script), false);
+});

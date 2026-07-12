@@ -37,6 +37,7 @@ const REQUIRED_CHECK_AREAS = [
   'social_media_draft_only_approval',
   'external_client_workspace_connector_policy',
   'corporate_workspace_connector_policy',
+  'real_read_only_adapter_readiness_gate',
   'forbidden_fields',
   'operator_runbook',
   'runtime_safety',
