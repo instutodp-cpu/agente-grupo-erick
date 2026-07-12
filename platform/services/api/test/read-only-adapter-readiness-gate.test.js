@@ -233,7 +233,9 @@ function completeCandidate(overrides = {}) {
 }
 
 function assertDeny(result, status = 'blocked') {
-  assert.equal(result.status, status);
+  if (status) {
+    assert.equal(result.status, status);
+  }
   assert.equal(result.verdict, 'deny_future_read_only_pr');
   assert.equal(result.ready, false);
   assert.equal(result.simulated, true);
@@ -351,6 +353,151 @@ test('readiness gate rejects invalid candidates without throwing', () => {
   assertDeny(evaluateReadOnlyAdapterReadiness({ ...completeCandidate(), evidence: undefined }), 'invalid_candidate');
 });
 
+test('custom contracts cannot remove base requirements or immediate blockers', () => {
+  const incomplete = completeCandidate({
+    evidence: completeEvidence().filter((entry) => entry.requirement_id !== 'mock_adapter_exists')
+  });
+  const emptyContract = {
+    required_blocking_requirements: [],
+    immediate_blocking_conditions: []
+  };
+  const reducedRequiredContract = {
+    required_blocking_requirements: []
+  };
+  const reducedImmediateContract = {
+    immediate_blocking_conditions: []
+  };
+
+  const emptyContractResult = evaluateReadOnlyAdapterReadiness(incomplete, emptyContract);
+  assertDeny(emptyContractResult);
+  assert.ok(emptyContractResult.blocking_requirements.includes('mock_adapter_exists'));
+
+  const reducedRequiredResult = evaluateReadOnlyAdapterReadiness(incomplete, reducedRequiredContract);
+  assertDeny(reducedRequiredResult);
+  assert.ok(reducedRequiredResult.blocking_requirements.includes('mock_adapter_exists'));
+
+  const writeResult = evaluateReadOnlyAdapterReadiness(
+    completeCandidate({ write_allowed: true }),
+    reducedImmediateContract
+  );
+  assertDeny(writeResult);
+  assert.ok(writeResult.blocking_requirements.includes('write_allowed_true'));
+});
+
+test('custom contracts can only add requirements and unknown conditions fail closed', () => {
+  const additiveContract = {
+    required_blocking_requirements: ['provider_specific_extra_review']
+  };
+  const missingExtra = evaluateReadOnlyAdapterReadiness(completeCandidate(), additiveContract);
+  assertDeny(missingExtra);
+  assert.ok(missingExtra.blocking_requirements.includes('provider_specific_extra_review'));
+
+  const withExtra = completeCandidate({
+    evidence: [
+      ...completeEvidence(),
+      {
+        requirement_id: 'provider_specific_extra_review',
+        category: 'provider_specific_readiness',
+        required: true,
+        status: 'satisfied',
+        evidence_refs: ['internal:provider_specific_extra_review'],
+        notes: 'synthetic extra evidence',
+        reviewer: 'reviewer_synthetic',
+        reviewed_at: '2026-07-12T00:00:00.000Z',
+        blocking_reason: null
+      }
+    ]
+  });
+  assertReady(evaluateReadOnlyAdapterReadiness(withExtra, additiveContract));
+
+  const unknownConditionResult = evaluateReadOnlyAdapterReadiness(completeCandidate(), {
+    immediate_blocking_conditions: ['provider_specific_unknown_condition']
+  });
+  assertDeny(unknownConditionResult);
+  assert.ok(
+    unknownConditionResult.blocking_requirements.includes(
+      'unknown_immediate_blocking_condition::provider_specific_unknown_condition'
+    )
+  );
+});
+
+test('forbidden candidate fields block without leaking values', () => {
+  const secretValue = 'synthetic_secret_value_must_not_echo';
+  const rootToken = evaluateReadOnlyAdapterReadiness(completeCandidate({ token: secretValue }));
+  const nestedAccessToken = evaluateReadOnlyAdapterReadiness(completeCandidate({
+    synthetic_metadata: { accessToken: secretValue }
+  }));
+  const nestedRawPayload = evaluateReadOnlyAdapterReadiness(completeCandidate({
+    synthetic_metadata: { safe: { rawPayload: secretValue } }
+  }));
+
+  assertDeny(rootToken);
+  assert.ok(rootToken.blocking_requirements.includes('forbidden_candidate_field::token'));
+  assertDeny(nestedAccessToken);
+  assert.ok(nestedAccessToken.blocking_requirements.includes('forbidden_candidate_field::accessToken'));
+  assertDeny(nestedRawPayload);
+  assert.ok(nestedRawPayload.blocking_requirements.includes('forbidden_candidate_field::rawPayload'));
+
+  for (const result of [rootToken, nestedAccessToken, nestedRawPayload]) {
+    assert.equal(JSON.stringify(result).includes(secretValue), false);
+  }
+});
+
+test('structural fields are validated before evidence can satisfy readiness', () => {
+  const invalidCases = [
+    [{ workspace_types: undefined }, 'workspace_types_must_be_non_empty_string_array'],
+    [{ workspace_types: [] }, 'workspace_types_must_be_non_empty_string_array'],
+    [{ domains: undefined }, 'domains_must_be_non_empty_string_array'],
+    [{ domains: [] }, 'domains_must_be_non_empty_string_array'],
+    [{ capabilities: undefined }, 'capabilities_must_be_non_empty_string_array'],
+    [{ capabilities: [] }, 'capabilities_must_be_non_empty_string_array'],
+    [{ operations: undefined }, 'operations_must_be_non_empty_string_array'],
+    [{ operations: [] }, 'operations_must_be_non_empty_string_array']
+  ];
+
+  for (const [override, expectedReason] of invalidCases) {
+    const result = evaluateReadOnlyAdapterReadiness(completeCandidate(override));
+    assertDeny(result, 'invalid_candidate');
+    assert.ok(result.blocking_requirements.includes(expectedReason), expectedReason);
+  }
+});
+
+test('write-like operations are rejected structurally', () => {
+  for (const operation of ['create_record', 'send_email', 'publish_post']) {
+    const result = evaluateReadOnlyAdapterReadiness(completeCandidate({ operations: [operation] }));
+    assertDeny(result, 'invalid_candidate');
+    assert.ok(result.blocking_requirements.includes(`blocked_operation::${operation}`), operation);
+  }
+});
+
+test('fixed safety booleans are required on input and cannot be changed by custom contract', () => {
+  const simulatedFalse = evaluateReadOnlyAdapterReadiness(completeCandidate({ simulated: false }));
+  const executedTrue = evaluateReadOnlyAdapterReadiness(completeCandidate({ executed: true }));
+  const realProviderCalledTrue = evaluateReadOnlyAdapterReadiness(completeCandidate({ real_provider_called: true }));
+  const unsafeContractResult = evaluateReadOnlyAdapterReadiness(completeCandidate(), {
+    default_rules: {
+      simulated: false,
+      executed: true,
+      real_provider_called: true,
+      can_trigger_real_execution: true
+    },
+    verdicts: ['allow_future_read_only_pr']
+  });
+
+  assertDeny(simulatedFalse, 'invalid_candidate');
+  assert.ok(simulatedFalse.blocking_requirements.includes('simulated_must_be_true'));
+  assertDeny(executedTrue, 'invalid_candidate');
+  assert.ok(executedTrue.blocking_requirements.includes('executed_true_in_readiness'));
+  assertDeny(realProviderCalledTrue, 'invalid_candidate');
+  assert.ok(realProviderCalledTrue.blocking_requirements.includes('real_provider_called_true_in_readiness'));
+
+  assertReady(unsafeContractResult);
+  assert.equal(unsafeContractResult.simulated, true);
+  assert.equal(unsafeContractResult.executed, false);
+  assert.equal(unsafeContractResult.real_provider_called, false);
+  assert.equal(unsafeContractResult.can_trigger_real_execution, false);
+});
+
 test('readiness gate blocks missing failed and unknown required requirements', () => {
   const missing = completeCandidate({
     evidence: completeEvidence().filter((entry) => entry.requirement_id !== 'mock_adapter_exists')
@@ -408,7 +555,7 @@ test('readiness gate blocks immediate unsafe conditions', () => {
 
   for (const [field, value, expectedBlock] of cases) {
     const result = evaluateReadOnlyAdapterReadiness(completeCandidate({ [field]: value }));
-    assertDeny(result);
+    assertDeny(result, null);
     assert.ok(result.blocking_requirements.includes(expectedBlock), expectedBlock);
   }
 });
@@ -495,4 +642,3 @@ test('readiness gate is not imported by runtime entrypoint or adapter executor',
   assert.match(indexSource, /\/confirm/);
   assert.match(adapterExecutionSource, /planAdapterExecution/);
 });
-

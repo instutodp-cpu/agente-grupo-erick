@@ -104,12 +104,64 @@ const IMMEDIATE_BLOCKING_CONDITIONS = [
   'real_provider_called_true_in_readiness'
 ];
 
+const FORBIDDEN_CANDIDATE_FIELDS = [
+  'token',
+  'secret',
+  'env',
+  'headers',
+  'cookies',
+  'credentials',
+  'payload',
+  'rawPayload',
+  'rawMessage',
+  'userMessage',
+  'requiredAdapters',
+  'authorization',
+  'password',
+  'stackTrace',
+  'apiKey',
+  'accessToken',
+  'refreshToken',
+  'requestBody',
+  'responseBody',
+  'rawSql',
+  'rawQuery',
+  'rawDatabasePayload',
+  'rawSocialPayload',
+  'rawTranscript',
+  'rawAudio',
+  'privateUrl',
+  'webhookSecret'
+];
+
+const BLOCKED_OPERATION_TERMS = [
+  'create',
+  'update',
+  'delete',
+  'write',
+  'send',
+  'publish',
+  'merge',
+  'approve',
+  'reject',
+  'payment',
+  'purchase',
+  'insert',
+  'upsert',
+  'execute',
+  'upload',
+  'share',
+  'modify',
+  'cancel'
+];
+
 const DEFAULT_CONTRACT = Object.freeze({
   readiness_statuses: READINESS_STATUSES,
   verdicts: VERDICTS,
   evidence_statuses: EVIDENCE_STATUSES,
   required_blocking_requirements: REQUIRED_BLOCKING_REQUIREMENTS,
   immediate_blocking_conditions: IMMEDIATE_BLOCKING_CONDITIONS,
+  forbidden_candidate_fields: FORBIDDEN_CANDIDATE_FIELDS,
   default_rules: Object.freeze({
     simulated: true,
     executed: false,
@@ -162,19 +214,75 @@ function uniqueSorted(values) {
 }
 
 function getRequiredRequirements(contract) {
-  const source = contract && Array.isArray(contract.required_blocking_requirements)
+  const custom = contract && Array.isArray(contract.required_blocking_requirements)
     ? contract.required_blocking_requirements
-    : REQUIRED_BLOCKING_REQUIREMENTS;
+    : [];
 
-  return uniqueSorted(source);
+  return uniqueSorted([
+    ...REQUIRED_BLOCKING_REQUIREMENTS,
+    ...custom
+  ]);
 }
 
 function getImmediateConditions(contract) {
-  const source = contract && Array.isArray(contract.immediate_blocking_conditions)
+  const custom = contract && Array.isArray(contract.immediate_blocking_conditions)
     ? contract.immediate_blocking_conditions
-    : IMMEDIATE_BLOCKING_CONDITIONS;
+    : [];
 
-  return uniqueSorted(source);
+  return uniqueSorted([
+    ...IMMEDIATE_BLOCKING_CONDITIONS,
+    ...custom
+  ]);
+}
+
+function getForbiddenCandidateFields(contract) {
+  const custom = contract && Array.isArray(contract.forbidden_candidate_fields)
+    ? contract.forbidden_candidate_fields
+    : [];
+
+  return uniqueSorted([
+    ...FORBIDDEN_CANDIDATE_FIELDS,
+    ...custom
+  ]);
+}
+
+function hasOnlyNonEmptyStrings(value) {
+  return Array.isArray(value) && value.length > 0 && value.every(isNonEmptyString);
+}
+
+function isBlockedOperation(operation) {
+  const normalized = String(operation || '').toLowerCase();
+  return BLOCKED_OPERATION_TERMS.some((term) => normalized.includes(term));
+}
+
+function collectForbiddenCandidateFields(value, contract = DEFAULT_CONTRACT) {
+  const forbidden = new Set(getForbiddenCandidateFields(contract));
+  const found = [];
+
+  function visit(entry) {
+    if (Array.isArray(entry)) {
+      for (const item of entry) {
+        visit(item);
+      }
+      return;
+    }
+
+    if (!isPlainObject(entry)) {
+      return;
+    }
+
+    for (const [key, nestedValue] of Object.entries(entry)) {
+      if (forbidden.has(key)) {
+        found.push(`forbidden_candidate_field::${key}`);
+        continue;
+      }
+
+      visit(nestedValue);
+    }
+  }
+
+  visit(value);
+  return uniqueSorted(found);
 }
 
 function summarizeCandidate(candidate) {
@@ -264,9 +372,24 @@ function validateReadinessCandidate(candidate) {
     };
   }
 
-  for (const field of ['candidate_id', 'provider_id', 'adapter_id']) {
+  for (const field of [
+    'trace_id',
+    'candidate_id',
+    'provider_id',
+    'adapter_id',
+    'provider_type',
+    'tenant_strategy',
+    'risk_level',
+    'requested_by'
+  ]) {
     if (!isNonEmptyString(candidate[field])) {
       reasons.push(`missing_${field}`);
+    }
+  }
+
+  for (const field of ['workspace_types', 'domains', 'capabilities', 'operations']) {
+    if (!hasOnlyNonEmptyStrings(candidate[field])) {
+      reasons.push(`${field}_must_be_non_empty_string_array`);
     }
   }
 
@@ -276,6 +399,26 @@ function validateReadinessCandidate(candidate) {
 
   if (!Array.isArray(candidate.evidence)) {
     reasons.push('evidence_must_be_array');
+  }
+
+  if (candidate.simulated !== true) {
+    reasons.push('simulated_must_be_true');
+  }
+
+  if (candidate.executed !== false) {
+    reasons.push('executed_true_in_readiness');
+  }
+
+  if (candidate.real_provider_called !== false) {
+    reasons.push('real_provider_called_true_in_readiness');
+  }
+
+  if (Array.isArray(candidate.operations)) {
+    for (const operation of candidate.operations) {
+      if (isNonEmptyString(operation) && isBlockedOperation(operation)) {
+        reasons.push(`blocked_operation::${operation}`);
+      }
+    }
   }
 
   return {
@@ -346,10 +489,17 @@ function hasImmediateBlockingCondition(candidate, contract = DEFAULT_CONTRACT) {
   const conditions = [];
   for (const condition of getImmediateConditions(contract)) {
     const predicate = IMMEDIATE_BLOCKERS[condition];
+    if (typeof predicate !== 'function') {
+      conditions.push(`unknown_immediate_blocking_condition::${condition}`);
+      continue;
+    }
+
     if (typeof predicate === 'function' && predicate(candidate)) {
       conditions.push(condition);
     }
   }
+
+  conditions.push(...collectForbiddenCandidateFields(candidate, contract));
 
   return {
     blocked: conditions.length > 0,
@@ -408,6 +558,7 @@ module.exports = {
   EVIDENCE_STATUSES,
   REQUIRED_BLOCKING_REQUIREMENTS,
   IMMEDIATE_BLOCKING_CONDITIONS,
+  FORBIDDEN_CANDIDATE_FIELDS,
   evaluateReadOnlyAdapterReadiness,
   validateReadinessCandidate,
   buildBlockedReadinessResult,

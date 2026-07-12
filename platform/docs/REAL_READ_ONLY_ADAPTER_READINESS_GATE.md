@@ -13,6 +13,7 @@ The gate does not call a provider, test real credentials, activate an integratio
 - deny-by-default
 - fail-closed
 - explicit evidence
+- additive-only custom contracts
 - read-only first
 - mock-first
 - tenant isolation
@@ -25,6 +26,11 @@ The gate does not call a provider, test real credentials, activate an integratio
 - real retry disabled by default
 - progressive rollout
 - rollback and kill switch required
+
+Custom contracts are additive-only. They can add mandatory requirements,
+provider-specific requirements, and blocking conditions, but they can never
+remove base requirements, remove base blocking conditions, weaken verdicts, or
+change fixed safety flags.
 
 ## C. Official Readiness Statuses
 
@@ -134,6 +140,10 @@ All mandatory requirements must be explicitly satisfied:
 - `no_real_call_in_test`
 - `provider_specific_requirements_satisfied`
 
+The base mandatory requirements are immutable. A custom contract can append
+requirements to this list, but it cannot remove or override any base
+requirement.
+
 ## G. Requirements That Can Never Be Accepted
 
 The gate must immediately block:
@@ -167,6 +177,10 @@ The gate must immediately block:
 - `executed_true_in_readiness`
 - `real_provider_called_true_in_readiness`
 
+The base immediate blockers are immutable. A custom contract can append more
+blockers, but it cannot remove or override any base blocker. Unknown custom
+blocking conditions fail closed and produce a blocked/deny result.
+
 ## H. Evidence Model
 
 Each requirement receives:
@@ -190,6 +204,11 @@ Evidence statuses:
 - `not_applicable`
 
 `required + not_applicable` can only be accepted when the requirement definition explicitly allows it. `required + missing`, `required + failed`, and `required + unknown` block. `evidence_refs` must use internal references and must never include tokens, private URLs, or secrets. Reviewer and `reviewed_at` can be synthetic placeholders in this phase.
+
+Evidence never replaces structural validation. A candidate must still provide
+valid identity fields, provider fields, workspace and tenant scope, domains,
+capabilities, operations, mode, risk level, requester, and fixed safety booleans
+before evidence is considered.
 
 ## I. Readiness Request
 
@@ -215,6 +234,14 @@ Minimum fields:
 
 `proposed_mode` must be `real_read_only_candidate`. This PR requires `simulated:true`, `executed:false`, and `real_provider_called:false`. Operations cannot include write or action operations.
 
+Candidate input is recursively checked for forbidden fields. If a key such as
+`token`, `secret`, `accessToken`, `rawPayload`, `rawMessage`, `headers`,
+`cookies`, `credentials`, `requestBody`, `responseBody`, `rawSql`, `rawAudio`,
+`privateUrl`, or `webhookSecret` appears at any level, the gate returns
+blocked/deny using only a sanitized blocker name such as
+`forbidden_candidate_field::<field>`. The forbidden value is never copied to the
+result and the raw candidate is never logged.
+
 ## J. Readiness Response
 
 Minimum fields:
@@ -239,6 +266,10 @@ Minimum fields:
 - `audit_event_candidate`
 
 The response always keeps `executed:false`, `real_provider_called:false`, and `can_trigger_real_execution:false` in this PR. `ready:true` is only valid with `ready_for_real_read_only_pr`. `allow_future_read_only_pr` is only valid with `ready:true`. Any missing mandatory requirement returns `ready:false`. Internal errors return `blocked`, never allow.
+
+These fixed response flags cannot be changed by a custom contract:
+`simulated:true`, `executed:false`, `real_provider_called:false`, and
+`can_trigger_real_execution:false`.
 
 ## K. Provider Classes
 
