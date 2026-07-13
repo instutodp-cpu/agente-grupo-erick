@@ -504,3 +504,33 @@ Before any future real read-only adapter PR, operators must confirm:
 - no-write tests exist for write/action/send/publish/delete
 
 A `ready_for_real_read_only_pr` verdict is not runtime approval. It does not activate a provider, does not call a provider, does not enable a feature flag and does not permit `executed:true` or `real_provider_called:true`.
+
+## Read-Only Adapter Interface Checklist
+
+Before any future read-only adapter is wired into runtime, operators must
+confirm:
+
+- adapter descriptor has adapter_id, provider_id, provider_class and runtime_mode
+- workspace_types, tenant_strategy, domains, capabilities and operations are explicit
+- operations are read-only or draft-only and contain no write/action/send/publish/delete terms
+- request fields include trace_id, workspace_type, tenant_id and user_id
+- sanitized_input contains no raw payload, raw message, token, secret, headers, cookies or credentials
+- readiness gate result is `ready_for_real_read_only_pr`
+- runtime plan still returns execution_allowed:false
+- adapter_invocation_allowed:false and real_provider_calls_allowed:false remain fixed in this phase
+- response contract returns only safe_summary and sanitized_output
+- no runtime import is added to `/message`, `/confirm` or adapter execution without a future approved PR
+
+For `READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md`, operators must also confirm:
+
+- metadata validates with adapter_id, provider_id, adapter_kind, version, scopes, timeout and retry policy
+- registry registration is isolated and does not expose mutable internal state
+- feature flag is explicit and default off
+- kill switch is available and blocks safely
+- readiness evidence is strongly bound to candidate_id, provider_id and adapter_id for real candidates
+- workspace, tenant, capability and operation scopes are enforced before execution
+- forbidden fields are blocked recursively before adapter execution
+- only local mock/test-double adapters can execute in this PR
+- timeout returns `ADAPTER_TIMEOUT` without stack trace or raw payload
+- every result includes sanitized `audit_event_candidate`
+- no real provider calls, OAuth, tokens, secrets, `/message` changes or `/confirm` changes are present

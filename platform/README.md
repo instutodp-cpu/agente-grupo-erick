@@ -39,6 +39,7 @@ repositório.
 - **External Client Workspace Connector Policy**: `docs/EXTERNAL_CLIENT_WORKSPACE_CONNECTOR_POLICY.md`
 - **Corporate Workspace Connector Policy**: `docs/CORPORATE_WORKSPACE_CONNECTOR_POLICY.md`
 - **Real Read-Only Adapter Readiness Gate**: `docs/REAL_READ_ONLY_ADAPTER_READINESS_GATE.md`
+- **Read-Only Adapter Interface and Runtime Contract**: `docs/READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -318,3 +319,13 @@ mandatory.
 ## Real Read-Only Adapter Readiness Gate
 
 `docs/REAL_READ_ONLY_ADAPTER_READINESS_GATE.md` documents the first executable readiness gate for future real read-only adapters. This PR creates a deterministic, deny-by-default and fail-closed gate, fixture and tests only. It does not create a real adapter, call a provider, activate an integration, enable a feature flag, add OAuth or secrets, or change `/message` or `/confirm`. `READY` means only eligible for a future integration PR; `executed:false`, `real_provider_called:false` and `can_trigger_real_execution:false` remain mandatory in this PR.
+
+## Read-Only Adapter Interface and Runtime Contract
+
+`docs/READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md` documents the isolated read-only
+adapter interface, registry and runtime. It permits only local mock/test-double
+execution in this PR and keeps real candidates blocked behind readiness,
+feature flags and kill switch checks. It does not call providers, create
+OAuth/secrets, alter `/message` or alter `/confirm`. Real providers remain
+blocked with `real_provider_called:false` and
+`can_trigger_real_execution:false`.

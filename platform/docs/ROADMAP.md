@@ -197,3 +197,14 @@ read-only first, human review, governance review, `simulated:true`, `executed:fa
 ## PR #59 Readiness Gate Delivery
 
 The first real read-only adapter readiness gate is delivered as contract, fixture, pure evaluator and tests in this branch. The next step is a safe adapter interface/runtime boundary with feature flags default off, not unrestricted provider connection.
+
+## PR #60 Read-Only Adapter Interface Delivery
+
+The read-only adapter interface and runtime v1 is delivered as contract,
+fixture, isolated registry, pure contract validators, mock-only runtime and
+tests in this branch. It defines the safe boundary after readiness evaluation
+and permits only local mock/test-double execution. It does not connect
+providers, enable real feature flags, call external services or alter
+`/message` or `/confirm`.
+
+Next step: Connector Lifecycle and Runtime Registry.
