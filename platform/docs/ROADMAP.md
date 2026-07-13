@@ -208,3 +208,14 @@ providers, enable real feature flags, call external services or alter
 `/message` or `/confirm`.
 
 Next step: Connector Lifecycle and Runtime Registry.
+
+## PR #61 Connector Lifecycle Runtime Registry Delivery
+
+The connector lifecycle/runtime registry is delivered as contract, fixture,
+state machine, private in-memory registry, optimistic concurrency and tests in
+this branch. It controls lifecycle state and transition history only. It keeps
+`mock_only` as the maximum reachable state, blocks canary and
+`read_only_active`, requires feature flags default off and kill switches, and
+does not call providers or alter `/message` or `/confirm`.
+
+Next step: Real Provider Secrets and Configuration Boundary.

@@ -40,6 +40,7 @@ repositório.
 - **Corporate Workspace Connector Policy**: `docs/CORPORATE_WORKSPACE_CONNECTOR_POLICY.md`
 - **Real Read-Only Adapter Readiness Gate**: `docs/REAL_READ_ONLY_ADAPTER_READINESS_GATE.md`
 - **Read-Only Adapter Interface and Runtime Contract**: `docs/READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md`
+- **Connector Lifecycle Runtime Registry**: `docs/CONNECTOR_LIFECYCLE_RUNTIME_REGISTRY.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -329,3 +330,14 @@ feature flags and kill switch checks. It does not call providers, create
 OAuth/secrets, alter `/message` or alter `/confirm`. Real providers remain
 blocked with `real_provider_called:false` and
 `can_trigger_real_execution:false`.
+
+## Connector Lifecycle and Runtime Registry
+
+`docs/CONNECTOR_LIFECYCLE_RUNTIME_REGISTRY.md` documents the official connector
+lifecycle state machine and private in-memory runtime registry. It controls
+connector state, version, readiness, feature flag, kill switch, ownership and
+sanitized transition history while keeping `mock_only` as the maximum reachable
+state in this PR. It does not activate providers, create secrets, call external
+APIs, or change `/message` or `/confirm`; `executed:false`,
+`real_provider_called:false` and `can_trigger_real_execution:false` remain
+mandatory for lifecycle transitions.

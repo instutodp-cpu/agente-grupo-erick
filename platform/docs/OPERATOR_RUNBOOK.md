@@ -534,3 +534,29 @@ For `READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md`, operators must also confirm:
 - timeout returns `ADAPTER_TIMEOUT` without stack trace or raw payload
 - every result includes sanitized `audit_event_candidate`
 - no real provider calls, OAuth, tokens, secrets, `/message` changes or `/confirm` changes are present
+
+## Connector Lifecycle Runtime Registry Checklist
+
+Before any connector lifecycle transition is accepted, operators must confirm:
+
+- connector identity is stable with connector_id, provider_id and adapter_id
+- lifecycle_state and lifecycle_version match the expected transition
+- transition_id is present, unique and not replayed
+- adapter registry binding uses only public registry APIs
+- readiness binding validates candidate_id, provider_id and adapter_id
+- feature flag is declared and defaults off
+- kill switch key is declared
+- tenant and workspace scopes are declared
+- operations remain read-only or draft-only with no write/action/send/publish/delete terms
+- phase ceiling remains `mock_only` in this PR
+- canary and `read_only_active` transitions are blocked
+- transition history is sanitized and append-only
+- transition history is bounded and preserves only the configured safe window
+- direct registration starts only at `registered` version 1
+- no real provider is enabled
+- no OAuth, token, secret, raw payload, raw evidence or credential appears in the record or history
+
+`CONNECTOR_LIFECYCLE_RUNTIME_REGISTRY.md` does not activate providers. A
+readiness-passed lifecycle state still requires future configuration boundary,
+feature flag policy, kill switch policy and a separate approved PR before any
+real provider work can be considered.

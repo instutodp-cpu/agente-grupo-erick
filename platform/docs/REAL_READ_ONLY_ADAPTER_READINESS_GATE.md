@@ -327,6 +327,7 @@ These are documented only and are not implemented or activated in this PR:
 - `CORPORATE_WORKSPACE_CONNECTOR_POLICY.md`
 - `SOCIAL_MEDIA_DRAFT_ONLY_APPROVAL.md`
 - `READ_ONLY_ADAPTER_INTERFACE_RUNTIME_CONTRACT.md`
+- `CONNECTOR_LIFECYCLE_RUNTIME_REGISTRY.md`
 - `GOVERNANCE_CHECK_REPORT.md`
 - `PERMISSION_MATRIX.md`
 - `GOLDEN_SCENARIOS.md`
@@ -344,3 +345,11 @@ readiness: adapter metadata, sanitized request/response envelopes, isolated
 registry and mock-only runtime. It can execute only local test-double mocks.
 Real candidates still require strong readiness evidence, feature flag default
 off and kill switch checks, and they cannot call providers in this PR.
+
+## Connector Lifecycle Relationship
+
+`CONNECTOR_LIFECYCLE_RUNTIME_REGISTRY.md` consumes readiness results only as
+strongly-bound evidence for lifecycle transitions. A
+`ready_for_real_read_only_pr` readiness result can move a lifecycle record to
+`readiness_passed`, but it does not activate runtime, does not enable canary,
+does not enable `read_only_active`, and does not allow real provider calls.
