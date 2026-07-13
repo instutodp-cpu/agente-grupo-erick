@@ -33,12 +33,48 @@ function validateLifecycleBinding(configuration, context = {}) {
   if (connector.adapter_id !== configuration.adapter_id) errors.push('lifecycle_adapter_id_mismatch');
   if (connector.readiness_candidate_id !== configuration.readiness_candidate_id) errors.push('lifecycle_readiness_candidate_id_mismatch');
   if (!Array.isArray(connector.workspace_types) || !connector.workspace_types.includes(configuration.workspace_type)) errors.push('lifecycle_workspace_mismatch');
-  if (configuration.tenant_id !== 'grupo_erick' && connector.tenant_strategy === 'corporate_grupo_erick') errors.push('lifecycle_tenant_mismatch');
+  if (isNonEmptyString(configuration.tenant_policy) && configuration.tenant_policy !== connector.tenant_strategy) errors.push('configuration_tenant_policy_mismatch');
+  errors.push(...validateTenantStrategyBinding(configuration, connector));
   if (!ELIGIBLE_LIFECYCLE_STATES.includes(connector.lifecycle_state)) errors.push(`lifecycle_state_not_eligible::${connector.lifecycle_state}`);
   if (connector.real_provider_enabled !== false) errors.push('lifecycle_real_provider_enabled_must_be_false');
   if (connector.feature_flag_default !== false) errors.push('lifecycle_feature_flag_default_must_be_false');
   if (!isNonEmptyString(connector.kill_switch_key)) errors.push('lifecycle_kill_switch_missing');
   return uniqueSorted(errors);
+}
+
+function validateTenantStrategyBinding(configuration, connector) {
+  const errors = [];
+  const strategy = connector && connector.tenant_strategy;
+  if (!isNonEmptyString(strategy)) return ['lifecycle_tenant_strategy_missing'];
+  if (strategy === 'tenant_id_required') {
+    if (!isNonEmptyString(configuration.tenant_id)) errors.push('tenant_id_required');
+    return errors;
+  }
+  if (strategy === 'corporate_grupo_erick') {
+    if (configuration.workspace_type !== 'corporate') errors.push('corporate_workspace_required');
+    if (configuration.tenant_id !== 'grupo_erick') errors.push('corporate_tenant_mismatch');
+    return errors;
+  }
+  if (strategy === 'personal_user_tenant') {
+    if (configuration.workspace_type !== 'personal') errors.push('personal_workspace_required');
+    if (!isNonEmptyString(configuration.user_id)) {
+      errors.push('personal_user_id_required');
+    } else if (configuration.tenant_id !== `personal::${configuration.user_id}`) {
+      errors.push('personal_tenant_mismatch');
+    }
+    return errors;
+  }
+  if (strategy === 'external_client_tenant') {
+    if (configuration.workspace_type !== 'external_client') errors.push('external_client_workspace_required');
+    if (!isNonEmptyString(configuration.client_id)) {
+      errors.push('external_client_id_required');
+    } else if (configuration.tenant_id !== `client::${configuration.client_id}`) {
+      errors.push('external_client_tenant_mismatch');
+    }
+    return errors;
+  }
+  errors.push(`tenant_strategy_not_supported::${strategy}`);
+  return errors;
 }
 
 function validateAdapterBinding(configuration, context = {}) {

@@ -86,6 +86,45 @@
     "revoked->deprecated",
     "disabled->deprecated"
   ],
+  "readiness_binding_required_fields": [
+    "configuration_id",
+    "connector_id",
+    "provider_id",
+    "adapter_id",
+    "readiness_candidate_id",
+    "status",
+    "readiness_status",
+    "ready",
+    "simulated",
+    "executed",
+    "real_provider_called",
+    "can_trigger_real_execution",
+    "secret_resolution_performed",
+    "secret_value_exposed",
+    "blocking_reasons",
+    "error"
+  ],
+  "required_secret_access_context_fields": [
+    "trace_id",
+    "request_id",
+    "configuration_id",
+    "connector_id",
+    "provider_id",
+    "adapter_id",
+    "workspace_type",
+    "tenant_id",
+    "environment",
+    "purpose",
+    "requested_by",
+    "simulated",
+    "executed",
+    "real_provider_called"
+  ],
+  "allowed_secret_access_purposes": [
+    "configuration_structure_validation",
+    "local_test_readiness_validation",
+    "synthetic_contract_test"
+  ],
   "required_provider_configuration_fields": [
     "configuration_id",
     "connector_id",
@@ -160,6 +199,34 @@
     "environment",
     "secret_reference_type",
     "owner_id"
+  ],
+  "conditional_provider_configuration_fields": [
+    "tenant_policy",
+    "user_id",
+    "client_id"
+  ],
+  "tenant_strategy_rules": [
+    "tenant_id_required requires non-empty tenant_id",
+    "corporate_grupo_erick requires workspace_type corporate and tenant_id grupo_erick",
+    "personal_user_tenant requires workspace_type personal, user_id and tenant_id personal::<user_id>",
+    "external_client_tenant requires workspace_type external_client, client_id and tenant_id client::<client_id>"
+  ],
+  "secret_reference_change_operations": [
+    "mark_revoked",
+    "mark_disabled",
+    "mark_rotation_required"
+  ],
+  "error_codes": [
+    "INVALID_PROVIDER_CONFIGURATION",
+    "INVALID_SECRET_REFERENCE",
+    "SECRET_REFERENCE_TYPE_UNSUPPORTED",
+    "REPLAYED_CONFIGURATION_REQUEST",
+    "VERSION_CONFLICT",
+    "CONFIGURATION_READINESS_BINDING_INVALID",
+    "CONFIGURATION_IDENTITY_MUTATION_BLOCKED",
+    "FORBIDDEN_FIELD_DETECTED",
+    "UNSAFE_OPERATION",
+    "INTERNAL_CONFIGURATION_ERROR"
   ],
   "blocked_scope_terms": [
     "*",
@@ -236,6 +303,10 @@
     "initial_configuration_state_required": "descriptor_registered",
     "initial_readiness_status_required": "not_ready",
     "secret_reference_registry_required": true,
+    "evaluate_readiness_requires_injected_evaluator": true,
+    "evaluate_readiness_rejects_patch_supplied_readiness": true,
+    "secret_access_context_required": true,
+    "secret_reference_blocked_changes_return_audit": true,
     "only_local_test_double_reference_resolvable": true,
     "future_secret_reference_types_ready": false,
     "local_test_resolver_only": true,

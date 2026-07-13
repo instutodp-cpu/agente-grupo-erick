@@ -135,6 +135,10 @@ Rules:
   delete, write, send, publish, merge, payment or similar action terms.
 - `cost_risk` and `rate_limit_risk` cannot be `unknown`.
 - `kill_switch_required` must be `true`.
+- `tenant_policy` must match the connector lifecycle `tenant_strategy` when
+  present.
+- `user_id` is conditionally required for `personal_user_tenant`.
+- `client_id` is conditionally required for `external_client_tenant`.
 
 Immutable identity fields cannot be changed after registration:
 
@@ -234,12 +238,18 @@ Required API behavior:
 
 Supported state mutations:
 
-- mark reference revoked
-- mark reference disabled
-- mark rotation required
+- `mark_revoked`
+- `mark_disabled`
+- `mark_rotation_required`
 
 The registry does not resolve a secret. It only validates and stores safe
 reference descriptors.
+
+Every reference change request must include an `operation` that matches the
+method being called. Blocked reference changes, including invalid requests,
+missing references, version conflicts and replayed changes, must still return a
+sanitized `audit_event_candidate`. That audit never contains the full reference
+or any secret handle.
 
 ## D2. Local Test Secret Resolver
 
@@ -254,6 +264,37 @@ It can resolve only:
 It must fail closed for production, future real secret-reference types,
 revoked references, disabled references, expired references and rotation-due
 references.
+
+`resolveReference` requires a complete Secret Access Context. It must never
+resolve with only `{ "environment": "local_test" }`.
+
+Secret Access Context fields:
+
+- `trace_id`
+- `request_id`
+- `configuration_id`
+- `connector_id`
+- `provider_id`
+- `adapter_id`
+- `workspace_type`
+- `tenant_id`
+- `environment`
+- `purpose`
+- `requested_by`
+- `simulated`
+- `executed`
+- `real_provider_called`
+
+Allowed access purposes:
+
+- `configuration_structure_validation`
+- `local_test_readiness_validation`
+- `synthetic_contract_test`
+
+The context must match the reference provider, workspace, tenant and
+environment. `environment` must be `local_test`; `simulated:true`,
+`executed:false` and `real_provider_called:false` are mandatory. Forbidden
+fields or secret-value material in the context block resolution.
 
 `resolveReference` may return only an opaque synthetic handle:
 
@@ -354,6 +395,38 @@ Readiness must validate:
 - local test resolver can resolve structurally
 - no handle or secret value is returned
 
+The `evaluate_readiness` registry operation must call an injected readiness
+evaluator. It cannot accept readiness supplied by a patch or prompt. The
+evaluator context must include lifecycle registry, adapter registry, secret
+reference registry, secret resolver and clock. Missing evaluator or missing
+binding context fails closed with
+`CONFIGURATION_READINESS_BINDING_INVALID`.
+
+The readiness result must match the configuration identity exactly:
+
+- `configuration_id`
+- `connector_id`
+- `provider_id`
+- `adapter_id`
+- `readiness_candidate_id`
+
+It must also contain:
+
+- `status: configuration_structurally_ready`
+- `readiness_status: configuration_structurally_ready`
+- `ready:true`
+- `simulated:true`
+- `executed:false`
+- `real_provider_called:false`
+- `can_trigger_real_execution:false`
+- `secret_resolution_performed:false`
+- `secret_value_exposed:false`
+- empty `blocking_reasons`
+- `error:null`
+
+Any mismatch, blocking reason, forbidden field or `secret_handle` blocks the
+transition and does not increment `configuration_version`.
+
 Public readiness result keeps:
 
 - `secret_resolution_performed:false`
@@ -375,7 +448,8 @@ Allowed transitions in this PR:
 - `reference_registered -> revoked`
 - `reference_registered -> disabled`
 - `validation_pending -> validation_blocked`
-- `validation_pending -> structurally_ready`
+- `validation_pending -> structurally_ready` only through trusted
+  `evaluate_readiness` binding
 - `validation_blocked -> validation_pending`
 - `validation_blocked -> disabled`
 - `structurally_ready -> rotation_required`
@@ -480,6 +554,9 @@ Rules:
 - corporate configuration requires `workspace_type: corporate` and `tenant_id: grupo_erick`
 - personal configuration requires `workspace_type: personal` and `tenant_id: personal::<user_id>`
 - external client configuration requires `workspace_type: external_client` and `tenant_id: client::<client_id>`
+- `tenant_id_required` requires a non-empty `tenant_id`
+- `personal_user_tenant` requires non-empty `user_id`
+- `external_client_tenant` requires non-empty `client_id`
 - provider configuration cannot override tenant identity
 - prompt input cannot provide tenant identity by itself
 

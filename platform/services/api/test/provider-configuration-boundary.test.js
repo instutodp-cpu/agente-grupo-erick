@@ -27,7 +27,8 @@ const {
   createProviderSecretReferenceRegistry
 } = require('../src/core/provider-secret-reference-registry');
 const {
-  createLocalTestSecretResolver
+  createLocalTestSecretResolver,
+  validateSecretAccessContext
 } = require('../src/core/provider-secret-resolver');
 const {
   evaluateProviderConfigurationReadiness
@@ -89,6 +90,8 @@ function validConfig(overrides = {}) {
     readiness_candidate_id: 'candidate_lifecycle_public_web',
     workspace_type: 'corporate',
     tenant_id: 'grupo_erick',
+    tenant_policy: 'corporate_grupo_erick',
+    user_id: 'user_synthetic',
     organization_id: 'grupo_erick',
     client_id: 'not_applicable',
     environment: 'local_test',
@@ -149,6 +152,26 @@ function validChange(overrides = {}) {
     actor_role: 'platform_operator',
     reason: 'synthetic configuration state transition',
     requested_at: now,
+    simulated: true,
+    executed: false,
+    real_provider_called: false,
+    ...overrides
+  };
+}
+
+function validSecretAccessContext(overrides = {}) {
+  return {
+    trace_id: 'trace_secret_access',
+    request_id: 'request_secret_access',
+    configuration_id: 'config_public_web_local_test',
+    connector_id: 'connector_public_web_fixture',
+    provider_id: 'manual_fixture_provider',
+    adapter_id: 'mock_lifecycle_adapter',
+    workspace_type: 'corporate',
+    tenant_id: 'grupo_erick',
+    environment: 'local_test',
+    purpose: 'local_test_readiness_validation',
+    requested_by: 'operator_fixture',
     simulated: true,
     executed: false,
     real_provider_called: false,
@@ -278,6 +301,7 @@ test('secret reference registry supports revocation, disabling, rotation and rep
     trace_id: 'trace_ref',
     change_id: 'ref_change_1',
     reference_id: 'secretref_public_web_local_test',
+    operation: 'mark_revoked',
     expected_version: 1,
     actor_id: 'operator',
     actor_role: 'operator',
@@ -289,21 +313,61 @@ test('secret reference registry supports revocation, disabling, rotation and rep
   };
   const revoked = registry.markReferenceRevoked(req);
   assert.equal(revoked.applied, true);
+  assert.equal(revoked.audit_event_candidate.event_name, 'provider_secret_reference_change_evaluated');
+  assert.equal(revoked.audit_event_candidate.operation, 'mark_revoked');
   assert.equal(registry.getSecretReference('secretref_public_web_local_test').status, 'revoked');
   const replay = registry.markReferenceRevoked(req);
   assert.equal(replay.applied, false);
+  assert.equal(replay.audit_event_candidate.error_code, 'REPLAYED_CONFIGURATION_REQUEST');
   assert.equal(registry.getReferenceHistory('secretref_public_web_local_test').length, 1);
+  const conflictRegistry = createProviderSecretReferenceRegistry({ initialReferences: [validReference()], context: { now } });
+  const conflict = conflictRegistry.markReferenceDisabled({
+    ...req,
+    change_id: 'ref_conflict',
+    operation: 'mark_disabled',
+    expected_version: 99
+  });
+  assert.equal(conflict.applied, false);
+  assert.equal(conflict.audit_event_candidate.error_code, 'VERSION_CONFLICT');
+  const invalid = conflictRegistry.markRotationRequired({
+    ...req,
+    change_id: 'ref_invalid',
+    operation: 'mark_revoked'
+  });
+  assert.equal(invalid.applied, false);
+  assert.equal(invalid.audit_event_candidate.blocked_reason, 'reference_operation_mismatch');
 });
 
-test('local test resolver resolves only synthetic local test references and never exposes values publicly', () => {
+test('local test resolver requires a complete secret access context', () => {
   const resolver = createLocalTestSecretResolver();
   const reference = validReference();
   assert.equal(resolver.canResolve(reference), true);
-  const resolved = resolver.resolveReference(reference, { environment: 'local_test' });
+  const context = validSecretAccessContext();
+  assert.equal(validateSecretAccessContext(reference, context).valid, true);
+  const resolved = resolver.resolveReference(reference, context);
   assert.equal(resolved.resolved, true);
   assert.equal(resolved.secret_handle, 'opaque_test_handle::secretref_public_web_local_test');
   assert.equal(resolved.exportable, false);
-  assert.equal(resolver.resolveReference(reference, { environment: 'production' }).resolved, false);
+  for (const invalidContext of [
+    undefined,
+    validSecretAccessContext({ provider_id: 'other_provider' }),
+    validSecretAccessContext({ tenant_id: 'other_tenant' }),
+    validSecretAccessContext({ workspace_type: 'personal' }),
+    validSecretAccessContext({ environment: 'production' }),
+    (() => { const value = validSecretAccessContext(); delete value.configuration_id; return value; })(),
+    (() => { const value = validSecretAccessContext(); delete value.connector_id; return value; })(),
+    (() => { const value = validSecretAccessContext(); delete value.adapter_id; return value; })(),
+    (() => { const value = validSecretAccessContext(); delete value.purpose; return value; })(),
+    validSecretAccessContext({ purpose: 'deploy_to_production' }),
+    validSecretAccessContext({ simulated: false }),
+    validSecretAccessContext({ executed: true }),
+    validSecretAccessContext({ real_provider_called: true }),
+    { ...validSecretAccessContext(), accessToken: 'never' }
+  ]) {
+    const blocked = resolver.resolveReference(reference, invalidContext);
+    assert.equal(blocked.resolved, false);
+    assert.equal(Object.prototype.hasOwnProperty.call(blocked, 'secret_handle'), false);
+  }
   assert.equal(resolver.resolveReference(validReference({ reference_type: 'aws_secrets_manager_reference' })).ready, false);
 });
 
@@ -379,6 +443,7 @@ test('configuration readiness blocks invalid bindings and unsafe references', ()
     trace_id: 'trace_ref_rotation',
     change_id: 'ref_rotation_change',
     reference_id: 'secretref_public_web_local_test',
+    operation: 'mark_rotation_required',
     expected_version: 1,
     actor_id: 'operator',
     actor_role: 'operator',
@@ -401,6 +466,187 @@ test('configuration readiness blocks invalid bindings and unsafe references', ()
   assert.ok(result.blocking_reasons.some((reason) => reason.startsWith('lifecycle_state_not_eligible')));
   assert.ok(result.blocking_reasons.includes('adapter_provider_id_mismatch'));
   assert.ok(result.blocking_reasons.includes('secret_reference_rotation_required'));
+});
+
+test('configuration registry evaluate_readiness requires trusted readiness binding', () => {
+  const base = validConfig({ configuration_status: 'validation_pending', configuration_version: 3 });
+  const registry = createProviderConfigurationRegistry({ initialConfigurations: [validConfig()], context: { now } });
+  registry.applyConfigurationChange(validChange(), {}, { now, clock: () => now });
+  registry.applyConfigurationChange(validChange({
+    change_id: 'change_ref_registered',
+    operation: 'register_synthetic_reference',
+    expected_version: 2
+  }), {}, { now, clock: () => now });
+  registry.applyConfigurationChange(validChange({
+    change_id: 'change_validation_pending',
+    operation: 'validate_structure',
+    expected_version: 3
+  }), {}, { now, clock: () => now });
+
+  const missingEvaluator = registry.applyConfigurationChange(validChange({
+    change_id: 'change_eval_missing',
+    operation: 'evaluate_readiness',
+    expected_version: 4
+  }), {}, { now, clock: () => now });
+  assert.equal(missingEvaluator.applied, false);
+  assert.equal(missingEvaluator.error.error_code, 'CONFIGURATION_READINESS_BINDING_INVALID');
+  assert.equal(registry.getConfiguration('config_public_web_local_test').configuration_status, 'validation_pending');
+  assert.equal(registry.getConfiguration('config_public_web_local_test').configuration_version, 4);
+
+  const invalidCases = [
+    { configuration_id: undefined },
+    { configuration_id: 'other_config' },
+    { connector_id: 'other_connector' },
+    { provider_id: 'other_provider' },
+    { adapter_id: 'other_adapter' },
+    { readiness_candidate_id: 'other_candidate' },
+    { blocking_reasons: ['blocked'] },
+    { executed: true },
+    { real_provider_called: true },
+    { can_trigger_real_execution: true },
+    { secret_resolution_performed: true },
+    { secret_value_exposed: true },
+    { secret_handle: 'opaque_test_handle::should_not_leak' }
+  ];
+  for (const [index, override] of invalidCases.entries()) {
+    const result = registry.applyConfigurationChange(validChange({
+      change_id: `change_eval_invalid_${index}`,
+      operation: 'evaluate_readiness',
+      expected_version: 4
+    }), { readiness: { ready: true } }, {
+      now,
+      clock: () => now,
+      lifecycleRegistry: readyLifecycleRegistry(),
+      adapterRegistry: createReadOnlyAdapterRegistry([mockLifecycleAdapter()]),
+      secretReferenceRegistry: createProviderSecretReferenceRegistry({ initialReferences: [validReference()], context: { now } }),
+      secretResolver: createLocalTestSecretResolver(),
+      readinessEvaluator() {
+        return {
+          configuration_id: base.configuration_id,
+          connector_id: base.connector_id,
+          provider_id: base.provider_id,
+          adapter_id: base.adapter_id,
+          readiness_candidate_id: base.readiness_candidate_id,
+          status: 'configuration_structurally_ready',
+          readiness_status: 'configuration_structurally_ready',
+          ready: true,
+          simulated: true,
+          executed: false,
+          real_provider_called: false,
+          can_trigger_real_execution: false,
+          secret_resolution_performed: false,
+          secret_value_exposed: false,
+          blocking_reasons: [],
+          error: null,
+          ...override
+        };
+      }
+    });
+    assert.equal(result.applied, false);
+    assert.equal(result.error.error_code, 'CONFIGURATION_READINESS_BINDING_INVALID');
+  }
+
+  const ready = registry.applyConfigurationChange(validChange({
+    change_id: 'change_eval_ready',
+    operation: 'evaluate_readiness',
+    expected_version: 4
+  }), {}, {
+    now,
+    clock: () => now,
+    lifecycleRegistry: readyLifecycleRegistry(),
+    adapterRegistry: createReadOnlyAdapterRegistry([mockLifecycleAdapter()]),
+    secretReferenceRegistry: createProviderSecretReferenceRegistry({ initialReferences: [validReference()], context: { now } }),
+    secretResolver: createLocalTestSecretResolver(),
+    readinessEvaluator: evaluateProviderConfigurationReadiness
+  });
+  assert.equal(ready.applied, true);
+  assert.equal(ready.previous_version, 4);
+  assert.equal(ready.new_version, 5);
+  assert.equal(ready.current_status, 'structurally_ready');
+});
+
+test('configuration readiness enforces all tenant strategies', () => {
+  const adapterRegistry = createReadOnlyAdapterRegistry([mockLifecycleAdapter()]);
+  const secretResolver = createLocalTestSecretResolver();
+  const secretReferenceRegistry = createProviderSecretReferenceRegistry({ initialReferences: [validReference()], context: { now } });
+  assert.equal(evaluateProviderConfigurationReadiness(validConfig(), {
+    now,
+    lifecycleRegistry: readyLifecycleRegistry(),
+    adapterRegistry,
+    secretReferenceRegistry,
+    secretResolver,
+    clock: () => now
+  }).ready, true);
+
+  const personalReferenceRegistry = createProviderSecretReferenceRegistry({
+    initialReferences: [validReference({ workspace_type: 'personal', tenant_id: 'personal::user_fixture' })],
+    context: { now }
+  });
+  const personalBase = validConfig({
+    workspace_type: 'personal',
+    tenant_id: 'personal::wrong',
+    tenant_policy: 'personal_user_tenant',
+    user_id: 'user_fixture',
+    organization_id: 'not_applicable',
+    secret_reference_descriptors: [{ reference_id: 'secretref_public_web_local_test', reference_type: 'local_test_double_reference' }]
+  });
+  const personalMismatch = evaluateProviderConfigurationReadiness(personalBase, {
+    now,
+    lifecycleRegistry: readyLifecycleRegistry({ workspace_types: ['personal'], tenant_strategy: 'personal_user_tenant' }),
+    adapterRegistry,
+    secretReferenceRegistry: personalReferenceRegistry,
+    secretResolver,
+    clock: () => now
+  });
+  assert.ok(personalMismatch.blocking_reasons.includes('personal_tenant_mismatch'));
+  const missingUser = evaluateProviderConfigurationReadiness({ ...personalBase, tenant_id: 'personal::user_fixture', user_id: '' }, {
+    now,
+    lifecycleRegistry: readyLifecycleRegistry({ workspace_types: ['personal'], tenant_strategy: 'personal_user_tenant' }),
+    adapterRegistry,
+    secretReferenceRegistry: personalReferenceRegistry,
+    secretResolver,
+    clock: () => now
+  });
+  assert.ok(missingUser.blocking_reasons.includes('personal_user_id_required'));
+
+  const externalReferenceRegistry = createProviderSecretReferenceRegistry({
+    initialReferences: [validReference({ workspace_type: 'external_client', tenant_id: 'client::client_fixture' })],
+    context: { now }
+  });
+  const externalBase = validConfig({
+    workspace_type: 'external_client',
+    tenant_id: 'client::wrong',
+    tenant_policy: 'external_client_tenant',
+    client_id: 'client_fixture',
+    organization_id: 'not_applicable'
+  });
+  const externalMismatch = evaluateProviderConfigurationReadiness(externalBase, {
+    now,
+    lifecycleRegistry: readyLifecycleRegistry({ workspace_types: ['external_client'], tenant_strategy: 'external_client_tenant' }),
+    adapterRegistry,
+    secretReferenceRegistry: externalReferenceRegistry,
+    secretResolver,
+    clock: () => now
+  });
+  assert.ok(externalMismatch.blocking_reasons.includes('external_client_tenant_mismatch'));
+  const missingClient = evaluateProviderConfigurationReadiness({ ...externalBase, tenant_id: 'client::client_fixture', client_id: '' }, {
+    now,
+    lifecycleRegistry: readyLifecycleRegistry({ workspace_types: ['external_client'], tenant_strategy: 'external_client_tenant' }),
+    adapterRegistry,
+    secretReferenceRegistry: externalReferenceRegistry,
+    secretResolver,
+    clock: () => now
+  });
+  assert.ok(missingClient.blocking_reasons.includes('external_client_id_required'));
+  const policyMismatch = evaluateProviderConfigurationReadiness(validConfig({ tenant_policy: 'external_client_tenant' }), {
+    now,
+    lifecycleRegistry: readyLifecycleRegistry(),
+    adapterRegistry,
+    secretReferenceRegistry,
+    secretResolver,
+    clock: () => now
+  });
+  assert.ok(policyMismatch.blocking_reasons.includes('configuration_tenant_policy_mismatch'));
 });
 
 test('new modules do not use provider runtime mechanisms or current runtime imports', () => {

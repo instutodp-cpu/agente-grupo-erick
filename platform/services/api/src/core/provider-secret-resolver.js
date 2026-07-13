@@ -3,9 +3,34 @@
 const {
   RESOLVABLE_SECRET_REFERENCE_TYPES,
   buildSafeConfigurationError,
+  findConfigurationForbiddenFields,
   isNonEmptyString,
+  isPlainObject,
   validateSecretReference
 } = require('./provider-configuration-contract');
+
+const SECRET_ACCESS_CONTEXT_FIELDS = [
+  'trace_id',
+  'request_id',
+  'configuration_id',
+  'connector_id',
+  'provider_id',
+  'adapter_id',
+  'workspace_type',
+  'tenant_id',
+  'environment',
+  'purpose',
+  'requested_by',
+  'simulated',
+  'executed',
+  'real_provider_called'
+];
+
+const ALLOWED_SECRET_ACCESS_PURPOSES = [
+  'configuration_structure_validation',
+  'local_test_readiness_validation',
+  'synthetic_contract_test'
+];
 
 function safeBlocked(reason, code = 'SECRET_REFERENCE_TYPE_UNSUPPORTED') {
   return {
@@ -20,6 +45,28 @@ function safeBlocked(reason, code = 'SECRET_REFERENCE_TYPE_UNSUPPORTED') {
     real_provider_called: false,
     can_trigger_real_execution: false
   };
+}
+
+function validateSecretAccessContext(reference, context) {
+  const errors = [];
+  if (!isPlainObject(context)) return { valid: false, errors: ['secret_access_context_must_be_object'] };
+  for (const field of SECRET_ACCESS_CONTEXT_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(context, field)) errors.push(`missing_${field}`);
+  }
+  for (const field of ['trace_id', 'request_id', 'configuration_id', 'connector_id', 'provider_id', 'adapter_id', 'workspace_type', 'tenant_id', 'environment', 'purpose', 'requested_by']) {
+    if (!isNonEmptyString(context[field])) errors.push(`invalid_${field}`);
+  }
+  if (reference && context.provider_id !== reference.provider_id) errors.push('secret_access_provider_mismatch');
+  if (reference && context.workspace_type !== reference.workspace_type) errors.push('secret_access_workspace_mismatch');
+  if (reference && context.tenant_id !== reference.tenant_id) errors.push('secret_access_tenant_mismatch');
+  if (reference && context.environment !== reference.environment) errors.push('secret_access_environment_mismatch');
+  if (context.environment !== 'local_test') errors.push('secret_access_environment_must_be_local_test');
+  if (!ALLOWED_SECRET_ACCESS_PURPOSES.includes(context.purpose)) errors.push('secret_access_purpose_not_allowed');
+  if (context.simulated !== true) errors.push('simulated_must_be_true');
+  if (context.executed !== false) errors.push('executed_must_be_false');
+  if (context.real_provider_called !== false) errors.push('real_provider_called_must_be_false');
+  errors.push(...findConfigurationForbiddenFields(context));
+  return { valid: errors.length === 0, errors: [...new Set(errors)].sort() };
 }
 
 function createLocalTestSecretResolver(options = {}) {
@@ -42,11 +89,12 @@ function createLocalTestSecretResolver(options = {}) {
     if (!reference || reference.reference_type !== 'local_test_double_reference') {
       return safeBlocked('unsupported_in_current_phase');
     }
-    if (context.environment && context.environment !== 'local_test') {
-      return safeBlocked('production_resolution_blocked', 'INVALID_SECRET_REFERENCE');
-    }
     if (!canResolve(reference)) {
       return safeBlocked('secret_reference_not_resolvable', 'INVALID_SECRET_REFERENCE');
+    }
+    const accessValidation = validateSecretAccessContext(reference, context);
+    if (!accessValidation.valid) {
+      return safeBlocked(accessValidation.errors[0] || 'secret_access_context_invalid', 'INVALID_SECRET_REFERENCE');
     }
     return {
       resolved: true,
@@ -111,5 +159,8 @@ function createLocalTestSecretResolver(options = {}) {
 }
 
 module.exports = {
-  createLocalTestSecretResolver
+  createLocalTestSecretResolver,
+  validateSecretAccessContext,
+  SECRET_ACCESS_CONTEXT_FIELDS,
+  ALLOWED_SECRET_ACCESS_PURPOSES
 };

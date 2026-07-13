@@ -6,6 +6,7 @@ const {
   deepClone,
   detectConfigurationIdentityMutation,
   getConfigurationTargetStatus,
+  findConfigurationForbiddenFields,
   isNonEmptyString,
   isPlainObject,
   sanitizeConfigurationData,
@@ -215,6 +216,19 @@ function applyPatch(current, request, patch = {}, context = {}) {
       errors: identityMutations
     };
   }
+  const patchForbiddenFields = findConfigurationForbiddenFields(patch);
+  if (patchForbiddenFields.length > 0) {
+    return {
+      ok: false,
+      errorCode: 'FORBIDDEN_FIELD_DETECTED',
+      blockedReason: patchForbiddenFields[0],
+      errors: patchForbiddenFields
+    };
+  }
+  if (request.operation === 'evaluate_readiness') {
+    const readinessValidation = evaluateReadinessBinding(current, request, context);
+    if (!readinessValidation.ok) return readinessValidation;
+  }
   const candidate = sanitizeConfigurationData({
     ...current,
     ...patch,
@@ -241,6 +255,85 @@ function applyPatch(current, request, patch = {}, context = {}) {
     };
   }
   return { ok: true, configuration: candidate };
+}
+
+function hasArrayLengthZero(value) {
+  return Array.isArray(value) && value.length === 0;
+}
+
+function evaluateReadinessBinding(current, request, context = {}) {
+  const requiredContext = [
+    'lifecycleRegistry',
+    'adapterRegistry',
+    'secretReferenceRegistry',
+    'secretResolver'
+  ];
+  if (typeof context.readinessEvaluator !== 'function') {
+    return {
+      ok: false,
+      errorCode: 'CONFIGURATION_READINESS_BINDING_INVALID',
+      blockedReason: 'configuration_readiness_evaluator_missing'
+    };
+  }
+  for (const field of requiredContext) {
+    if (!context[field]) {
+      return {
+        ok: false,
+        errorCode: 'CONFIGURATION_READINESS_BINDING_INVALID',
+        blockedReason: `configuration_readiness_${field}_missing`
+      };
+    }
+  }
+
+  let readiness;
+  try {
+    readiness = context.readinessEvaluator(cloneValue(current), {
+      lifecycleRegistry: context.lifecycleRegistry,
+      adapterRegistry: context.adapterRegistry,
+      secretReferenceRegistry: context.secretReferenceRegistry,
+      secretResolver: context.secretResolver,
+      clock: context.clock,
+      trace_id: request.trace_id,
+      change_id: request.change_id
+    });
+  } catch (_error) {
+    return {
+      ok: false,
+      errorCode: 'CONFIGURATION_READINESS_BINDING_INVALID',
+      blockedReason: 'configuration_readiness_evaluator_failed'
+    };
+  }
+
+  const errors = [];
+  if (!isPlainObject(readiness)) errors.push('configuration_readiness_result_invalid');
+  if (isPlainObject(readiness)) {
+    if (readiness.configuration_id !== current.configuration_id) errors.push('configuration_readiness_configuration_id_mismatch');
+    if (readiness.connector_id !== current.connector_id) errors.push('configuration_readiness_connector_id_mismatch');
+    if (readiness.provider_id !== current.provider_id) errors.push('configuration_readiness_provider_id_mismatch');
+    if (readiness.adapter_id !== current.adapter_id) errors.push('configuration_readiness_adapter_id_mismatch');
+    if (readiness.readiness_candidate_id !== current.readiness_candidate_id) errors.push('configuration_readiness_candidate_id_mismatch');
+    if (readiness.status !== 'configuration_structurally_ready') errors.push('configuration_readiness_status_invalid');
+    if (readiness.readiness_status !== 'configuration_structurally_ready') errors.push('configuration_readiness_readiness_status_invalid');
+    if (readiness.ready !== true) errors.push('configuration_readiness_not_ready');
+    if (readiness.simulated !== true) errors.push('configuration_readiness_simulated_invalid');
+    if (readiness.executed !== false) errors.push('configuration_readiness_executed_invalid');
+    if (readiness.real_provider_called !== false) errors.push('configuration_readiness_real_provider_called_invalid');
+    if (readiness.can_trigger_real_execution !== false) errors.push('configuration_readiness_can_trigger_real_execution_invalid');
+    if (readiness.secret_resolution_performed !== false) errors.push('configuration_readiness_secret_resolution_performed_invalid');
+    if (readiness.secret_value_exposed !== false) errors.push('configuration_readiness_secret_value_exposed_invalid');
+    if (!hasArrayLengthZero(readiness.blocking_reasons)) errors.push('configuration_readiness_blocking_reasons_present');
+    if (readiness.error !== null) errors.push('configuration_readiness_error_present');
+    errors.push(...findConfigurationForbiddenFields(readiness).map((field) => `configuration_readiness_${field}`));
+  }
+  if (errors.length > 0) {
+    return {
+      ok: false,
+      errorCode: 'CONFIGURATION_READINESS_BINDING_INVALID',
+      blockedReason: uniqueSorted(errors)[0],
+      errors: uniqueSorted(errors)
+    };
+  }
+  return { ok: true };
 }
 
 function markProcessed(processedChangeIds, changeId) {

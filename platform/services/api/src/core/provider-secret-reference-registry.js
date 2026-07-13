@@ -27,15 +27,16 @@ function normalizeMaxHistory(value) {
   return configured;
 }
 
-function validateReferenceChangeRequest(request) {
+function validateReferenceChangeRequest(request, expectedOperation) {
   const errors = [];
   if (!isPlainObject(request)) return { valid: false, errors: ['reference_change_request_must_be_object'] };
-  for (const field of ['trace_id', 'change_id', 'reference_id', 'expected_version', 'actor_id', 'actor_role', 'reason', 'requested_at', 'simulated', 'executed', 'real_provider_called']) {
+  for (const field of ['trace_id', 'change_id', 'reference_id', 'operation', 'expected_version', 'actor_id', 'actor_role', 'reason', 'requested_at', 'simulated', 'executed', 'real_provider_called']) {
     if (!Object.prototype.hasOwnProperty.call(request, field)) errors.push(`missing_${field}`);
   }
-  for (const field of ['trace_id', 'change_id', 'reference_id', 'actor_id', 'actor_role', 'reason', 'requested_at']) {
+  for (const field of ['trace_id', 'change_id', 'reference_id', 'operation', 'actor_id', 'actor_role', 'reason', 'requested_at']) {
     if (!isNonEmptyString(request[field])) errors.push(`invalid_${field}`);
   }
+  if (request.operation !== expectedOperation) errors.push('reference_operation_mismatch');
   if (!Number.isInteger(request.expected_version) || request.expected_version < 1) errors.push('invalid_expected_version');
   if (request.simulated !== true) errors.push('simulated_must_be_true');
   if (request.executed !== false) errors.push('executed_must_be_false');
@@ -45,6 +46,7 @@ function validateReferenceChangeRequest(request) {
 
 function buildHistoryEvent(reference, request, status, applied, errorCode, blockedReason, occurredAt) {
   return sanitizeConfigurationData({
+    event_name: 'provider_secret_reference_change_evaluated',
     event_id: `${request && request.change_id ? request.change_id : 'change_not_available'}::${reference && reference.reference_id ? reference.reference_id : 'reference_not_available'}`,
     trace_id: request && request.trace_id ? request.trace_id : 'trace_not_available',
     change_id: request && request.change_id ? request.change_id : 'change_not_available',
@@ -52,6 +54,7 @@ function buildHistoryEvent(reference, request, status, applied, errorCode, block
     provider_id: reference && reference.provider_id ? reference.provider_id : 'provider_not_available',
     previous_status: reference && reference.status ? reference.status : 'unknown',
     current_status: status,
+    operation: request && request.operation ? request.operation : 'unknown',
     applied: applied === true,
     error_code: errorCode || null,
     blocked_reason: blockedReason || null,
@@ -60,6 +63,14 @@ function buildHistoryEvent(reference, request, status, applied, errorCode, block
     executed: false,
     real_provider_called: false
   });
+}
+
+function buildReferenceAuditEvent(reference, request, currentStatus, applied, errorCode, blockedReason, occurredAt, expectedOperation) {
+  return buildHistoryEvent(reference || {
+    reference_id: request && request.reference_id,
+    provider_id: 'provider_not_available',
+    status: 'unknown'
+  }, request || { operation: expectedOperation }, currentStatus || 'unknown', applied, errorCode, blockedReason, occurredAt);
 }
 
 function appendHistory(histories, referenceId, event, maxHistory) {
@@ -108,25 +119,50 @@ function listSecretReferencesInternal(references, filters = {}) {
     .sort((a, b) => a.reference_id.localeCompare(b.reference_id));
 }
 
-function changeReferenceStatusInternal(references, histories, processedChangeIds, maxHistory, request, nextStatus, flags = {}) {
+function changeReferenceStatusInternal(references, histories, processedChangeIds, maxHistory, request, nextStatus, expectedOperation, flags = {}) {
   const occurredAt = new Date(0).toISOString();
   if (!(references instanceof Map) || !(histories instanceof Map) || !(processedChangeIds instanceof Set)) {
-    return { ok: false, applied: false, error: buildSafeConfigurationError('INTERNAL_CONFIGURATION_ERROR', 'Secret reference change blocked safely.', { blocked_reason: 'registry_storage_invalid' }) };
+    return {
+      ok: false,
+      applied: false,
+      error: buildSafeConfigurationError('INTERNAL_CONFIGURATION_ERROR', 'Secret reference change blocked safely.', { blocked_reason: 'registry_storage_invalid' }),
+      audit_event_candidate: buildReferenceAuditEvent(null, request, 'unknown', false, 'INTERNAL_CONFIGURATION_ERROR', 'registry_storage_invalid', occurredAt, expectedOperation)
+    };
   }
   if (isNonEmptyString(request && request.change_id) && processedChangeIds.has(request.change_id)) {
-    return { ok: false, applied: false, error: buildSafeConfigurationError('REPLAYED_CONFIGURATION_REQUEST', 'Secret reference change replay blocked.', { blocked_reason: 'replayed_reference_change' }) };
+    return {
+      ok: false,
+      applied: false,
+      error: buildSafeConfigurationError('REPLAYED_CONFIGURATION_REQUEST', 'Secret reference change replay blocked.', { blocked_reason: 'replayed_reference_change' }),
+      audit_event_candidate: buildReferenceAuditEvent(null, request, 'unknown', false, 'REPLAYED_CONFIGURATION_REQUEST', 'replayed_reference_change', occurredAt, expectedOperation)
+    };
   }
   if (isNonEmptyString(request && request.change_id)) processedChangeIds.add(request.change_id);
-  const validation = validateReferenceChangeRequest(request);
+  const validation = validateReferenceChangeRequest(request, expectedOperation);
   if (!validation.valid) {
-    return { ok: false, applied: false, error: buildSafeConfigurationError('INVALID_SECRET_REFERENCE', 'Secret reference change blocked safely.', { blocked_reason: 'reference_change_request_invalid' }) };
+    return {
+      ok: false,
+      applied: false,
+      error: buildSafeConfigurationError('INVALID_SECRET_REFERENCE', 'Secret reference change blocked safely.', { blocked_reason: 'reference_change_request_invalid' }),
+      audit_event_candidate: buildReferenceAuditEvent(null, request, 'unknown', false, 'INVALID_SECRET_REFERENCE', validation.errors[0] || 'reference_change_request_invalid', occurredAt, expectedOperation)
+    };
   }
   const current = references.get(request.reference_id);
   if (!current) {
-    return { ok: false, applied: false, error: buildSafeConfigurationError('INVALID_SECRET_REFERENCE', 'Secret reference missing.', { blocked_reason: 'secret_reference_not_found' }) };
+    return {
+      ok: false,
+      applied: false,
+      error: buildSafeConfigurationError('INVALID_SECRET_REFERENCE', 'Secret reference missing.', { blocked_reason: 'secret_reference_not_found' }),
+      audit_event_candidate: buildReferenceAuditEvent(null, request, 'unknown', false, 'INVALID_SECRET_REFERENCE', 'secret_reference_not_found', occurredAt, expectedOperation)
+    };
   }
   if (current.reference_version !== request.expected_version) {
-    return { ok: false, applied: false, error: buildSafeConfigurationError('VERSION_CONFLICT', 'Secret reference version conflict.', { blocked_reason: 'version_conflict' }) };
+    return {
+      ok: false,
+      applied: false,
+      error: buildSafeConfigurationError('VERSION_CONFLICT', 'Secret reference version conflict.', { blocked_reason: 'version_conflict' }),
+      audit_event_candidate: buildReferenceAuditEvent(current, request, current.status, false, 'VERSION_CONFLICT', 'version_conflict', occurredAt, expectedOperation)
+    };
   }
   const next = sanitizeConfigurationData({
     ...current,
@@ -165,13 +201,13 @@ function createProviderSecretReferenceRegistry(options = {}) {
       return references.has(referenceId);
     },
     markReferenceRevoked(request) {
-      return changeReferenceStatusInternal(references, histories, processedChangeIds, maxHistory, request, 'revoked', { revoked: true });
+      return changeReferenceStatusInternal(references, histories, processedChangeIds, maxHistory, request, 'revoked', 'mark_revoked', { revoked: true });
     },
     markReferenceDisabled(request) {
-      return changeReferenceStatusInternal(references, histories, processedChangeIds, maxHistory, request, 'disabled', { disabled: true });
+      return changeReferenceStatusInternal(references, histories, processedChangeIds, maxHistory, request, 'disabled', 'mark_disabled', { disabled: true });
     },
     markRotationRequired(request) {
-      return changeReferenceStatusInternal(references, histories, processedChangeIds, maxHistory, request, 'rotation_required');
+      return changeReferenceStatusInternal(references, histories, processedChangeIds, maxHistory, request, 'rotation_required', 'mark_rotation_required');
     },
     getReferenceHistory(referenceId) {
       return (histories.get(referenceId) || []).map(cloneValue);
