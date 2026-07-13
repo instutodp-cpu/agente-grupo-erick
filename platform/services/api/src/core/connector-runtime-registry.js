@@ -8,13 +8,16 @@ const {
   isPlainObject,
   sanitizeLifecycleData,
   uniqueSorted,
-  validateConnectorRecord
+  validateConnectorRecord,
+  validateInitialConnectorState
 } = require('./connector-lifecycle-contract');
 const {
   applyLifecycleTransition
 } = require('./connector-lifecycle-state-machine');
 
 const REGISTRY_STORAGE = new WeakMap();
+const DEFAULT_MAX_HISTORY_PER_CONNECTOR = 100;
+const MAX_HISTORY_PER_CONNECTOR = 1000;
 
 function cloneRecord(record) {
   return record ? deepClone(record) : null;
@@ -75,6 +78,14 @@ function normalizeRecord(record) {
   };
 }
 
+function validateRegistrationState(record) {
+  const errors = validateInitialConnectorState(record);
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
 function registerConnectorInternal(records, record) {
   if (!(records instanceof Map)) {
     return {
@@ -91,6 +102,15 @@ function registerConnectorInternal(records, record) {
       error_code: 'INVALID_CONNECTOR_RECORD',
       blocked_reason: 'connector_record_invalid',
       errors: uniqueSorted(normalized.errors)
+    };
+  }
+  const registrationState = validateRegistrationState(normalized.record);
+  if (!registrationState.valid) {
+    return {
+      ok: false,
+      error_code: 'INITIAL_STATE_NOT_ALLOWED',
+      blocked_reason: 'connector_initial_state_not_allowed',
+      errors: uniqueSorted(registrationState.errors)
     };
   }
 
@@ -164,76 +184,97 @@ function hasConnectorInternal(records, connectorId) {
   return Boolean(records instanceof Map && records.has(connectorId));
 }
 
-function appendHistory(histories, connectorId, event) {
+function appendHistory(histories, connectorId, event, maxHistoryPerConnector) {
   if (!(histories instanceof Map) || !isNonEmptyString(connectorId) || !event) return;
   const current = histories.get(connectorId) || [];
-  histories.set(connectorId, current.concat([sanitizeLifecycleData(event)]));
+  const next = current.concat([sanitizeLifecycleData(event)]);
+  const limit = Number.isInteger(maxHistoryPerConnector) ? maxHistoryPerConnector : DEFAULT_MAX_HISTORY_PER_CONNECTOR;
+  histories.set(connectorId, next.slice(Math.max(0, next.length - limit)));
 }
 
-function transitionConnectorInternal(records, histories, request, context = {}) {
-  if (!(records instanceof Map) || !(histories instanceof Map)) {
-    return {
-      trace_id: request && request.trace_id ? request.trace_id : 'trace_not_available',
-      connector_id: request && request.connector_id ? request.connector_id : 'connector_not_available',
-      previous_state: 'unknown',
-      new_state: 'unknown',
-      previous_version: 0,
-      new_version: 0,
-      transition_event: request && request.transition_event ? request.transition_event : 'unknown',
-      status: 'lifecycle_internal_error_safe',
+function buildRegistrySafeResult(request, fields = {}) {
+  const status = fields.status || 'lifecycle_internal_error_safe';
+  const blockedReason = fields.blockedReason || 'internal_lifecycle_error';
+  const errorCode = fields.errorCode || 'INTERNAL_LIFECYCLE_ERROR';
+  return {
+    trace_id: request && request.trace_id ? request.trace_id : 'trace_not_available',
+    transition_id: request && request.transition_id ? request.transition_id : 'transition_not_available',
+    connector_id: request && request.connector_id ? request.connector_id : 'connector_not_available',
+    previous_state: fields.previousState || 'unknown',
+    new_state: fields.newState || fields.previousState || 'unknown',
+    previous_version: Number.isInteger(fields.previousVersion) ? fields.previousVersion : 0,
+    new_version: Number.isInteger(fields.newVersion) ? fields.newVersion : Number.isInteger(fields.previousVersion) ? fields.previousVersion : 0,
+    transition_event: request && request.transition_event ? request.transition_event : 'unknown',
+    status,
+    applied: false,
+    simulated: true,
+    executed: false,
+    real_provider_called: false,
+    can_trigger_real_execution: false,
+    blocking_reasons: [blockedReason],
+    warnings: [],
+    error: buildSafeLifecycleError(errorCode, 'Connector lifecycle transition blocked safely.', {
+      blocked_reason: blockedReason
+    }),
+    lifecycle_record: null,
+    transition_audit_event: buildTransitionAuditEvent({
+      trace_id: request && request.trace_id,
+      transition_id: request && request.transition_id,
+      connector_id: request && request.connector_id,
+      provider_id: fields.providerId,
+      adapter_id: fields.adapterId,
+      previous_state: fields.previousState,
+      new_state: fields.newState || fields.previousState,
+      previous_version: fields.previousVersion,
+      new_version: fields.newVersion,
+      transition_event: request && request.transition_event,
+      actor_id: request && request.actor_id,
+      actor_role: request && request.actor_role,
+      status,
       applied: false,
-      simulated: true,
-      executed: false,
-      real_provider_called: false,
-      can_trigger_real_execution: false,
-      blocking_reasons: ['registry_storage_invalid'],
-      warnings: [],
-      lifecycle_record: null,
-      transition_audit_event: buildTransitionAuditEvent({
-        trace_id: request && request.trace_id,
-        connector_id: request && request.connector_id,
-        status: 'lifecycle_internal_error_safe',
-        applied: false,
-        blocked_reason: 'registry_storage_invalid'
-      })
-    };
+      error_code: errorCode,
+      occurred_at: fields.occurredAt,
+      blocked_reason: blockedReason
+    })
+  };
+}
+
+function transitionConnectorInternal(records, histories, processedTransitionIds, maxHistoryPerConnector, request, context = {}) {
+  if (!(records instanceof Map) || !(histories instanceof Map)) {
+    return buildRegistrySafeResult(request, {
+      status: 'lifecycle_internal_error_safe',
+      blockedReason: 'registry_storage_invalid',
+      errorCode: 'INTERNAL_LIFECYCLE_ERROR'
+    });
+  }
+  if (isNonEmptyString(request && request.transition_id) && processedTransitionIds instanceof Set && processedTransitionIds.has(request.transition_id)) {
+    return buildRegistrySafeResult(request, {
+      status: 'lifecycle_transition_blocked',
+      blockedReason: 'replayed_transition',
+      errorCode: 'REPLAYED_TRANSITION',
+      occurredAt: context && typeof context.clock === 'function' ? context.clock() : new Date().toISOString()
+    });
   }
 
   const connectorId = request && request.connector_id;
   const record = isNonEmptyString(connectorId) ? records.get(connectorId) : null;
   if (!record) {
-    return {
-      trace_id: request && request.trace_id ? request.trace_id : 'trace_not_available',
-      connector_id: isNonEmptyString(connectorId) ? connectorId : 'connector_not_available',
-      previous_state: 'unknown',
-      new_state: 'unknown',
-      previous_version: 0,
-      new_version: 0,
-      transition_event: request && request.transition_event ? request.transition_event : 'unknown',
+    return buildRegistrySafeResult(request, {
       status: 'lifecycle_connector_not_found',
-      applied: false,
-      simulated: true,
-      executed: false,
-      real_provider_called: false,
-      can_trigger_real_execution: false,
-      blocking_reasons: ['connector_not_found'],
-      warnings: [],
-      lifecycle_record: null,
-      transition_audit_event: buildTransitionAuditEvent({
-        trace_id: request && request.trace_id,
-        connector_id: connectorId,
-        status: 'lifecycle_connector_not_found',
-        applied: false,
-        blocked_reason: 'connector_not_found'
-      })
-    };
+      blockedReason: 'connector_not_found',
+      errorCode: 'CONNECTOR_NOT_FOUND',
+      occurredAt: context && typeof context.clock === 'function' ? context.clock() : new Date().toISOString()
+    });
   }
 
   const result = applyLifecycleTransition(record, request, context);
   if (result.applied === true && result.lifecycle_record) {
     records.set(record.connector_id, sanitizeLifecycleData(result.lifecycle_record));
   }
-  if (result.history_event) appendHistory(histories, record.connector_id, result.history_event);
+  if (isNonEmptyString(request && request.transition_id) && processedTransitionIds instanceof Set) {
+    processedTransitionIds.add(request.transition_id);
+  }
+  if (result.history_event) appendHistory(histories, record.connector_id, result.history_event, maxHistoryPerConnector);
   return sanitizeLifecycleData(result);
 }
 
@@ -282,7 +323,7 @@ function hasConnector(registry, connectorId) {
 
 function transitionConnector(registry, request, context = {}) {
   const storage = getStorage(registry);
-  return transitionConnectorInternal(storage && storage.records, storage && storage.histories, request, context);
+  return transitionConnectorInternal(storage && storage.records, storage && storage.histories, storage && storage.processedTransitionIds, storage && storage.maxHistoryPerConnector, request, context);
 }
 
 function getConnectorHistory(registry, connectorId) {
@@ -307,9 +348,20 @@ function prepareInitialRecords(initialRecords) {
   return { records, histories };
 }
 
+function normalizeMaxHistoryPerConnector(value) {
+  const configured = value === undefined ? DEFAULT_MAX_HISTORY_PER_CONNECTOR : value;
+  if (!Number.isInteger(configured) || configured < 1 || configured > MAX_HISTORY_PER_CONNECTOR) {
+    throw new Error('INVALID_HISTORY_LIMIT');
+  }
+  return configured;
+}
+
 function createConnectorRuntimeRegistry(options = {}) {
   const initialRecords = Array.isArray(options.initialRecords) ? options.initialRecords : [];
+  const maxHistoryPerConnector = normalizeMaxHistoryPerConnector(options.maxHistoryPerConnector);
   const storage = prepareInitialRecords(initialRecords);
+  storage.processedTransitionIds = new Set();
+  storage.maxHistoryPerConnector = maxHistoryPerConnector;
 
   const registry = {
     registerConnector(record) {
@@ -330,7 +382,7 @@ function createConnectorRuntimeRegistry(options = {}) {
       return hasConnectorInternal(storage.records, connectorId);
     },
     transitionConnector(request, context = {}) {
-      return transitionConnectorInternal(storage.records, storage.histories, request, context);
+      return transitionConnectorInternal(storage.records, storage.histories, storage.processedTransitionIds, storage.maxHistoryPerConnector, request, context);
     },
     getConnectorHistory(connectorId) {
       return getConnectorHistoryInternal(storage.histories, connectorId);

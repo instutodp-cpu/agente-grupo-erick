@@ -56,6 +56,7 @@ function validConnectorRecord(overrides = {}) {
 function validTransitionRequest(overrides = {}) {
   return {
     trace_id: 'trace_lifecycle_fixture',
+    transition_id: `transition_lifecycle_fixture_${overrides.transition_event || 'nominate_candidate'}_${overrides.expected_version || 1}`,
     connector_id: 'connector_public_web_fixture',
     transition_event: 'nominate_candidate',
     expected_version: 1,

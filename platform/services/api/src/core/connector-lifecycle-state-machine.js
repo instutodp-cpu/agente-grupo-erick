@@ -3,6 +3,7 @@
 const {
   BLOCKED_TRANSITIONS_THIS_PHASE,
   FUTURE_BLOCKED_STATES,
+  buildSafeLifecycleError,
   buildTransitionAuditEvent,
   deepClone,
   isNonEmptyString,
@@ -24,6 +25,7 @@ const TRANSITION_TARGETS = Object.freeze({
   }),
   registered: Object.freeze({
     nominate_candidate: 'candidate',
+    disable_runtime: 'runtime_disabled',
     block_connector: 'blocked'
   }),
   candidate: Object.freeze({
@@ -39,33 +41,41 @@ const TRANSITION_TARGETS = Object.freeze({
   }),
   readiness_blocked: Object.freeze({
     request_readiness_review: 'readiness_pending',
+    disable_runtime: 'runtime_disabled',
     block_connector: 'blocked',
     pause_connector: 'paused'
   }),
   readiness_passed: Object.freeze({
     request_configuration: 'configuration_pending',
+    disable_runtime: 'runtime_disabled',
     block_connector: 'blocked',
     pause_connector: 'paused'
   }),
   configuration_pending: Object.freeze({
     mark_feature_flag_off: 'feature_flag_off',
+    disable_runtime: 'runtime_disabled',
     block_connector: 'blocked',
     pause_connector: 'paused'
   }),
   feature_flag_off: Object.freeze({
+    disable_runtime: 'runtime_disabled',
     block_connector: 'blocked',
     pause_connector: 'paused'
   }),
   mock_only: Object.freeze({
+    disable_runtime: 'runtime_disabled',
     pause_connector: 'paused',
     block_connector: 'blocked',
     deprecate_connector: 'deprecated'
   }),
   runtime_disabled: Object.freeze({
-    pause_connector: 'paused',
-    block_connector: 'blocked'
+    enable_mock_only: 'mock_only',
+    request_readiness_review: 'readiness_pending',
+    block_connector: 'blocked',
+    deprecate_connector: 'deprecated'
   }),
   paused: Object.freeze({
+    resume_connector: 'runtime_disabled',
     deprecate_connector: 'deprecated',
     block_connector: 'blocked'
   }),
@@ -192,12 +202,29 @@ function nextEventId(context, connectorId, nextVersion) {
   return `lifecycle_event_${connectorId}_${nextVersion}`;
 }
 
+function errorCodeForReason(reason) {
+  if (!isNonEmptyString(reason)) return 'INTERNAL_LIFECYCLE_ERROR';
+  if (reason === 'version_conflict') return 'VERSION_CONFLICT';
+  if (reason === 'replayed_transition') return 'REPLAYED_TRANSITION';
+  if (reason === 'transition_blocked_this_phase' || reason === 'target_state_blocked_this_phase') return 'TRANSITION_NOT_ALLOWED_IN_THIS_PHASE';
+  if (reason.startsWith('readiness_')) return 'READINESS_EVIDENCE_REQUIRED';
+  if (reason === 'adapter_not_registered' || reason === 'adapter_metadata_invalid') return 'ADAPTER_NOT_REGISTERED';
+  if (reason === 'adapter_kind_not_mock' || reason === 'record_adapter_kind_not_mock') return 'ADAPTER_KIND_NOT_ALLOWED';
+  if (reason.includes('feature_flag')) return 'FEATURE_FLAG_POLICY_INVALID';
+  if (reason.includes('kill_switch')) return 'KILL_SWITCH_POLICY_INVALID';
+  if (reason.startsWith('forbidden_field::')) return 'FORBIDDEN_FIELD_DETECTED';
+  if (reason.startsWith('unsafe_operation::')) return 'UNSAFE_OPERATION';
+  if (reason.includes('transition')) return 'INVALID_TRANSITION';
+  return 'INVALID_TRANSITION';
+}
+
 function buildHistoryEvent(record, request, status, applied, targetState, timestamp, eventId, reason) {
   const previousVersion = Number.isInteger(record && record.lifecycle_version) ? record.lifecycle_version : 0;
   const newVersion = applied ? previousVersion + 1 : previousVersion;
   return {
     event_id: eventId,
     trace_id: request && request.trace_id,
+    transition_id: request && request.transition_id,
     connector_id: request && request.connector_id,
     previous_state: record && record.lifecycle_state ? record.lifecycle_state : 'unknown',
     new_state: targetState || (record && record.lifecycle_state) || 'unknown',
@@ -224,6 +251,7 @@ function buildTransitionResponse(record, request, fields) {
   const newState = fields.targetState || previousState;
   return {
     trace_id: request && request.trace_id ? request.trace_id : 'trace_not_available',
+    transition_id: request && request.transition_id ? request.transition_id : 'transition_not_available',
     connector_id: request && request.connector_id ? request.connector_id : 'connector_not_available',
     previous_state: previousState,
     new_state: newState,
@@ -238,21 +266,85 @@ function buildTransitionResponse(record, request, fields) {
     can_trigger_real_execution: false,
     blocking_reasons: uniqueSorted(fields.blockingReasons || []),
     warnings: [],
+    error: fields.errorCode ? buildSafeLifecycleError(fields.errorCode, 'Connector lifecycle transition blocked safely.', {
+      blocked_reason: fields.blockingReasons && fields.blockingReasons[0]
+    }) : null,
     lifecycle_record: fields.lifecycleRecord ? sanitizeLifecycleData(fields.lifecycleRecord) : null,
     transition_audit_event: buildTransitionAuditEvent({
       trace_id: request && request.trace_id,
+      transition_id: request && request.transition_id,
       connector_id: request && request.connector_id,
+      provider_id: record && record.provider_id,
+      adapter_id: record && record.adapter_id,
       previous_state: previousState,
       new_state: newState,
       previous_version: previousVersion,
       new_version: newVersion,
       transition_event: request && request.transition_event,
+      actor_id: request && request.actor_id,
+      actor_role: request && request.actor_role,
       status: fields.status,
       applied,
+      error_code: fields.errorCode || null,
+      occurred_at: fields.occurredAt,
       blocked_reason: fields.blockingReasons && fields.blockingReasons[0]
     }),
     history_event: fields.historyEvent ? sanitizeLifecycleData(fields.historyEvent) : null
   };
+}
+
+function applyTargetStateFields(record, targetState, timestamp) {
+  const next = {
+    ...deepClone(record),
+    lifecycle_state: targetState,
+    lifecycle_version: record.lifecycle_version + 1,
+    updated_at: timestamp,
+    runtime_enabled: false,
+    real_provider_enabled: false
+  };
+
+  if (targetState === 'mock_only') {
+    next.runtime_enabled = true;
+    next.execution_mode = 'mock_only';
+    next.rollout_stage = 'mock';
+    next.deprecated = false;
+    next.retired = false;
+    return next;
+  }
+
+  if (targetState === 'runtime_disabled') {
+    next.execution_mode = 'disabled';
+    next.rollout_stage = 'none';
+    return next;
+  }
+
+  if (targetState === 'paused' || targetState === 'blocked') {
+    next.execution_mode = 'disabled';
+    next.rollout_stage = 'none';
+    return next;
+  }
+
+  if (targetState === 'deprecated') {
+    next.execution_mode = 'disabled';
+    next.rollout_stage = 'none';
+    next.deprecated = true;
+    next.retired = false;
+    return next;
+  }
+
+  if (targetState === 'retired') {
+    next.execution_mode = 'disabled';
+    next.rollout_stage = 'none';
+    next.deprecated = true;
+    next.retired = true;
+    return next;
+  }
+
+  next.execution_mode = 'contract_only';
+  next.rollout_stage = 'contract';
+  next.deprecated = false;
+  next.retired = false;
+  return next;
 }
 
 function applyLifecycleTransition(record, request, context = {}) {
@@ -270,19 +362,11 @@ function applyLifecycleTransition(record, request, context = {}) {
     const timestamp = now(context);
     const eventId = nextEventId(context, request && request.connector_id, applied ? record.lifecycle_version + 1 : record && record.lifecycle_version);
     const nextRecord = applied
-      ? {
-        ...deepClone(record),
-        lifecycle_state: targetState,
-        lifecycle_version: record.lifecycle_version + 1,
-        updated_at: timestamp,
-        runtime_enabled: targetState === 'mock_only',
-        execution_mode: targetState === 'mock_only' ? 'mock_only' : record.execution_mode,
-        rollout_stage: targetState === 'mock_only' ? 'mock' : record.rollout_stage,
-        deprecated: targetState === 'deprecated' ? true : record.deprecated,
-        retired: targetState === 'retired' ? true : record.retired
-      }
+      ? applyTargetStateFields(record, targetState, timestamp)
       : deepClone(record);
     const historyEvent = buildHistoryEvent(record || {}, request || {}, status, applied, targetState, timestamp, eventId, guardErrors[0] || request && request.reason);
+    const primaryReason = guardErrors.includes('version_conflict') ? 'version_conflict' : guardErrors[0];
+    const errorCode = applied ? null : errorCodeForReason(primaryReason);
 
     return buildTransitionResponse(record || {}, request || {}, {
       status,
@@ -290,14 +374,18 @@ function applyLifecycleTransition(record, request, context = {}) {
       targetState,
       blockingReasons: guardErrors,
       lifecycleRecord: nextRecord,
-      historyEvent
+      historyEvent,
+      errorCode,
+      occurredAt: timestamp
     });
   } catch (_err) {
     return buildTransitionResponse(record || {}, request || {}, {
       status: 'lifecycle_internal_error_safe',
       applied: false,
       targetState: record && record.lifecycle_state,
-      blockingReasons: ['internal_lifecycle_error']
+      blockingReasons: ['internal_lifecycle_error'],
+      errorCode: 'INTERNAL_LIFECYCLE_ERROR',
+      occurredAt: now(context)
     });
   }
 }
@@ -307,5 +395,6 @@ module.exports = {
   canTransition,
   resolveTargetState,
   applyLifecycleTransition,
-  validateTransitionGuards
+  validateTransitionGuards,
+  errorCodeForReason
 };

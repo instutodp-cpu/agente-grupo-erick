@@ -27,6 +27,7 @@ Runtime registry:
 - Contains no secrets.
 - Calls no provider.
 - Does not replace the read-only adapter registry.
+- Accepts new records only in `registered` state in this PR.
 
 ## C. Official lifecycle states
 
@@ -83,8 +84,17 @@ Events:
 Allowed in this PR:
 - `unregistered -> registered`
 - `registered -> candidate`
+- `registered -> runtime_disabled`
 - `candidate -> mock_only`
 - `candidate -> readiness_pending`
+- `mock_only -> runtime_disabled`
+- `readiness_blocked -> runtime_disabled`
+- `readiness_passed -> runtime_disabled`
+- `configuration_pending -> runtime_disabled`
+- `feature_flag_off -> runtime_disabled`
+- `paused -> runtime_disabled`
+- `runtime_disabled -> mock_only`
+- `runtime_disabled -> readiness_pending`
 - `readiness_pending -> readiness_blocked`
 - `readiness_pending -> readiness_passed`
 - `readiness_blocked -> readiness_pending`
@@ -113,6 +123,7 @@ Every transition validates:
 - `reason` is sanitized
 - timestamp is valid
 - `expected_version` matches
+- `transition_id` is present and has not been processed before
 - workspace types are declared
 - tenant strategy is declared
 - provider and adapter are bound
@@ -128,6 +139,24 @@ Specific guards:
 - `readiness_pending -> readiness_passed` requires a complete PR #59 readiness result with status `ready_for_real_read_only_pr`, verdict `allow_future_read_only_pr`, matching candidate/provider/adapter identity, empty blocking arrays and safe flags.
 - `readiness_passed -> configuration_pending` does not enable execution.
 - `configuration_pending -> feature_flag_off` requires feature flag default off, kill switch and no secrets.
+- `disable_runtime` always sets `runtime_enabled:false`, `execution_mode:disabled` and a non-real rollout stage.
+- `resume_connector` returns only to `runtime_disabled`; it never jumps directly back to `mock_only`.
+- `runtime_disabled -> mock_only` requires the same mock adapter binding as `candidate -> mock_only`.
+
+## Registration rules
+
+Normal `registerConnector` accepts only a new connector record with:
+- `lifecycle_state: registered`
+- `lifecycle_version: 1`
+- `runtime_enabled:false`
+- `real_provider_enabled:false`
+- `execution_mode: contract_only` or `disabled`
+- `rollout_stage: contract` or `none`
+- `deprecated:false`
+- `retired:false`
+- `feature_flag_default:false`
+
+`initialRecords` follows the same rule in this PR. Advanced snapshot restore is not implemented in this phase. Any future restore mode must be explicit, separately reviewed and fail-closed.
 
 ## F. Connector lifecycle record
 
@@ -183,6 +212,7 @@ Rules:
 
 Fields:
 - `trace_id`
+- `transition_id`
 - `connector_id`
 - `transition_event`
 - `expected_version`
@@ -202,11 +232,15 @@ Rules:
 - Evidence is sanitized.
 - Reason is short and sanitized.
 - `expected_version` is required for optimistic concurrency.
+- `transition_id` is required for replay protection.
+- `transition_id` must be globally unique inside the registry.
+- Replaying a processed `transition_id` returns `REPLAYED_TRANSITION`, does not increment version and does not append duplicate history.
 
 ## H. Transition response
 
 Fields:
 - `trace_id`
+- `transition_id`
 - `connector_id`
 - `previous_state`
 - `new_state`
@@ -232,6 +266,7 @@ Rules:
 - `can_trigger_real_execution:false`.
 - Lifecycle record is sanitized.
 - Raw input is never returned.
+- Blocked responses include a safe `error` object with `error_code` and sanitized `blocked_reason`.
 
 ## I. Transition statuses
 
@@ -261,6 +296,9 @@ Rules:
 - `FORBIDDEN_FIELD_DETECTED`
 - `UNSAFE_OPERATION`
 - `INTERNAL_LIFECYCLE_ERROR`
+- `REPLAYED_TRANSITION`
+- `INITIAL_STATE_NOT_ALLOWED`
+- `INVALID_INITIAL_CONNECTOR_STATE`
 
 ## K. Optimistic concurrency
 
@@ -270,12 +308,14 @@ Rules:
 - Version increments exactly 1 for an applied transition.
 - Records cannot be overwritten directly.
 - Concurrent transitions cannot be lost silently.
+- Two different transition ids with the same stale `expected_version` cannot both apply.
 
 ## L. Lifecycle history
 
 Each history event stores:
 - `event_id`
 - `trace_id`
+- `transition_id`
 - `connector_id`
 - `previous_state`
 - `new_state`
@@ -308,10 +348,14 @@ Never store:
 - Registry object is frozen.
 - Records are cloned defensively.
 - History is cloned defensively.
+- History is bounded per connector. The default maximum is 100 events and the accepted range is 1 to 1000.
+- When the limit is exceeded, the oldest retained events are removed deterministically.
 - `connector_id` is unique.
 - There is no access to the internal Map.
 - There is no mandatory singleton.
 - Initial records are validated fail-closed and atomically.
+- Initial records and normal registration accept only `registered` records with `lifecycle_version:1`, `runtime_enabled:false`, `real_provider_enabled:false`, `feature_flag_default:false`, non-deprecated and non-retired flags.
+- Direct registration of `candidate`, `mock_only`, `readiness_passed`, `feature_flag_off`, `deprecated`, `retired` or any advanced state is blocked.
 - There is no silent partial initialization.
 
 ## N. Relationship with adapter registry

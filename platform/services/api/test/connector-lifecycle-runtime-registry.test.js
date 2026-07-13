@@ -136,6 +136,7 @@ test('connector record validation blocks unsafe records', () => {
 test('transition request and history validation block unsafe data', () => {
   assert.equal(validateTransitionRequest(transition()).valid, true);
   assert.ok(validateTransitionRequest(transition({ trace_id: '' })).errors.includes('invalid_trace_id'));
+  assert.ok(validateTransitionRequest(transition({ transition_id: '' })).errors.includes('invalid_transition_id'));
   assert.ok(validateTransitionRequest(transition({ expected_version: 0 })).errors.includes('invalid_expected_version'));
   assert.ok(validateTransitionRequest(transition({ transition_event: 'activate_canary' })).valid, true);
   assert.ok(validateTransitionRequest(transition({ evidence: { payload: 'nope' } })).errors.includes('forbidden_field::payload'));
@@ -143,6 +144,7 @@ test('transition request and history validation block unsafe data', () => {
   const history = {
     event_id: 'event_fixture',
     trace_id: 'trace_fixture',
+    transition_id: 'transition_history_fixture',
     connector_id: 'connector_public_web_fixture',
     previous_state: 'registered',
     new_state: 'candidate',
@@ -161,6 +163,46 @@ test('transition request and history validation block unsafe data', () => {
   };
   assert.equal(validateLifecycleHistoryEvent(history).valid, true);
   assert.ok(validateLifecycleHistoryEvent({ ...history, token: 'nope' }).errors.includes('forbidden_field::token'));
+});
+
+test('connector record state and flag consistency is enforced', () => {
+  const cases = [
+    [registeredConnector({ runtime_enabled: true }), 'registered_runtime_enabled_must_be_false'],
+    [registeredConnector({ execution_mode: 'mock_only' }), 'registered_execution_mode_must_be_disabled_or_contract_only'],
+    [mockOnlyConnector({ runtime_enabled: false }), 'mock_only_runtime_enabled_must_be_true'],
+    [mockOnlyConnector({ adapter_kind: 'real_read_only_candidate' }), 'mock_only_adapter_kind_must_be_mock'],
+    [deprecatedConnector({ deprecated: false }), 'deprecated_state_requires_deprecated_true'],
+    [validConnectorRecord({ lifecycle_state: 'retired', retired: false, deprecated: true, execution_mode: 'disabled', rollout_stage: 'none' }), 'retired_state_requires_retired_true'],
+    [validConnectorRecord({ lifecycle_state: 'paused', runtime_enabled: true }), 'paused_runtime_enabled_must_be_false']
+  ];
+  for (const [record, error] of cases) {
+    assert.ok(validateConnectorRecord(record).errors.includes(error), `missing ${error}`);
+  }
+});
+
+test('sanitizeLifecycleData removes lifecycle-only forbidden fields without mutating input', () => {
+  const {
+    sanitizeLifecycleData
+  } = require('../src/core/connector-lifecycle-contract');
+  const input = {
+    input: 'remove-root-input',
+    safe: 'keep',
+    nested: {
+      output: 'remove-output',
+      rawEvidence: 'remove-evidence',
+      accessToken: 'remove-token',
+      list: [{ rawPayload: 'remove-payload', safe_item: 'keep-item' }]
+    }
+  };
+  const sanitized = sanitizeLifecycleData(input);
+  assert.equal(sanitized.input, undefined);
+  assert.equal(sanitized.safe, 'keep');
+  assert.equal(sanitized.nested.output, undefined);
+  assert.equal(sanitized.nested.rawEvidence, undefined);
+  assert.equal(sanitized.nested.accessToken, undefined);
+  assert.equal(sanitized.nested.list[0].rawPayload, undefined);
+  assert.equal(JSON.stringify(sanitized).includes('remove-token'), false);
+  assert.equal(input.nested.accessToken, 'remove-token');
 });
 
 test('connector runtime registry keeps private frozen storage and clones records', () => {
@@ -208,19 +250,58 @@ test('connector runtime registry fails closed for initial records atomically', (
   assert.equal(registry.listConnectors({ lifecycle_state: 'registered' }).length, 2);
 });
 
+test('registration blocks direct advanced lifecycle states', () => {
+  const registry = createConnectorRuntimeRegistry();
+  for (const record of [
+    candidateConnector({ lifecycle_version: 1 }),
+    mockOnlyConnector({ lifecycle_version: 1 }),
+    validConnectorRecord({ lifecycle_state: 'readiness_passed', lifecycle_version: 1 }),
+    validConnectorRecord({ lifecycle_state: 'feature_flag_off', lifecycle_version: 1 }),
+    deprecatedConnector({ lifecycle_version: 1 })
+  ]) {
+    const result = registry.registerConnector(record);
+    assert.equal(result.ok, false);
+    assert.equal(result.error_code, 'INITIAL_STATE_NOT_ALLOWED');
+  }
+  assert.throws(() => createConnectorRuntimeRegistry({
+    initialRecords: [mockOnlyConnector({ lifecycle_version: 1 })]
+  }), /INVALID_INITIAL_CONNECTOR_RECORD/);
+  assert.throws(() => createConnectorRuntimeRegistry({
+    initialRecords: [validConnectorRecord({ lifecycle_state: 'readiness_passed', lifecycle_version: 1 })]
+  }), /INVALID_INITIAL_CONNECTOR_RECORD/);
+});
+
 test('unregister is allowed only for safe early states', () => {
-  const registry = createConnectorRuntimeRegistry({
-    initialRecords: [registeredConnector(), mockOnlyConnector({ connector_id: 'connector_mock_fixture' }), deprecatedConnector({ connector_id: 'connector_deprecated_fixture', retired: false })]
-  });
+  const registry = createConnectorRuntimeRegistry({ initialRecords: [registeredConnector()] });
+  const mockRecord = registeredConnector({ connector_id: 'connector_mock_fixture' });
+  assert.equal(registry.registerConnector(mockRecord).ok, true);
+  registry.transitionConnector(transition({
+    connector_id: 'connector_mock_fixture',
+    transition_id: 'transition_mock_nominate',
+    transition_event: 'nominate_candidate',
+    expected_version: 1
+  }));
+  registry.transitionConnector(transition({
+    connector_id: 'connector_mock_fixture',
+    transition_id: 'transition_mock_enable',
+    transition_event: 'enable_mock_only',
+    expected_version: 2
+  }), { adapterRegistry: createMockAdapterRegistry(mockLifecycleAdapter({ metadata: { adapter_id: 'mock_lifecycle_adapter' } })) });
   assert.equal(registry.unregisterConnector('connector_public_web_fixture').removed, true);
   assert.equal(registry.unregisterConnector('connector_mock_fixture').removed, false);
-  assert.equal(registry.unregisterConnector('connector_deprecated_fixture').removed, false);
 });
 
 test('state machine resolves allowed and blocked transitions deterministically', () => {
   assertIncludesAll(getAllowedTransitions('registered'), ['nominate_candidate', 'block_connector']);
   assert.equal(resolveTargetState('registered', 'nominate_candidate'), 'candidate');
   assert.equal(resolveTargetState('retired', 'nominate_candidate'), null);
+  const declaredMappedOrBlocked = new Set();
+  for (const state of LIFECYCLE_STATES) {
+    for (const event of getAllowedTransitions(state)) declaredMappedOrBlocked.add(event);
+  }
+  for (const event of TRANSITION_EVENTS) {
+    assert.equal(declaredMappedOrBlocked.has(event) || BLOCKED_TRANSITIONS_THIS_PHASE.includes(event), true, `dead transition event ${event}`);
+  }
 });
 
 test('state machine applies permitted transitions without mutating records', () => {
@@ -303,6 +384,48 @@ test('state machine supports main lifecycle path through mock and readiness stat
   assert.equal(featureOff.new_state, 'feature_flag_off');
 });
 
+test('state machine supports disable_runtime and resume_connector paths', () => {
+  const adapterRegistry = createMockAdapterRegistry();
+  const disabledFromRegistered = applyLifecycleTransition(registeredConnector(), transition({
+    transition_id: 'transition_disable_registered',
+    transition_event: 'disable_runtime',
+    expected_version: 1
+  }));
+  assert.equal(disabledFromRegistered.applied, true);
+  assert.equal(disabledFromRegistered.new_state, 'runtime_disabled');
+  assert.equal(disabledFromRegistered.lifecycle_record.runtime_enabled, false);
+  assert.equal(disabledFromRegistered.lifecycle_record.execution_mode, 'disabled');
+
+  const disabledToMock = applyLifecycleTransition(validConnectorRecord({
+    lifecycle_state: 'runtime_disabled',
+    lifecycle_version: 2,
+    execution_mode: 'disabled',
+    rollout_stage: 'none',
+    runtime_enabled: false
+  }), transition({
+    transition_id: 'transition_runtime_disabled_mock',
+    transition_event: 'enable_mock_only',
+    expected_version: 2
+  }), { adapterRegistry });
+  assert.equal(disabledToMock.applied, true);
+  assert.equal(disabledToMock.new_state, 'mock_only');
+
+  const resumed = applyLifecycleTransition(validConnectorRecord({
+    lifecycle_state: 'paused',
+    lifecycle_version: 3,
+    execution_mode: 'disabled',
+    rollout_stage: 'none',
+    runtime_enabled: false
+  }), transition({
+    transition_id: 'transition_resume_to_runtime_disabled',
+    transition_event: 'resume_connector',
+    expected_version: 3
+  }));
+  assert.equal(resumed.applied, true);
+  assert.equal(resumed.new_state, 'runtime_disabled');
+  assert.equal(resumed.lifecycle_record.runtime_enabled, false);
+});
+
 test('state machine applies pause block deprecate and retire while retired does not transition', () => {
   const paused = applyLifecycleTransition(mockOnlyConnector(), transition({
     transition_event: 'pause_connector',
@@ -335,10 +458,16 @@ test('state machine applies pause block deprecate and retire while retired does 
   const noTransition = applyLifecycleTransition(validConnectorRecord({
     lifecycle_state: 'retired',
     lifecycle_version: 5,
-    retired: true
+    deprecated: true,
+    retired: true,
+    runtime_enabled: false,
+    real_provider_enabled: false,
+    execution_mode: 'disabled',
+    rollout_stage: 'none'
   }), transition({
     transition_event: 'nominate_candidate',
-    expected_version: 5
+    expected_version: 5,
+    transition_id: 'transition_retired_nominate'
   }));
   assert.equal(noTransition.applied, false);
   assert.ok(noTransition.blocking_reasons.includes('transition_not_allowed_from_state'));
@@ -425,14 +554,22 @@ test('state machine blocks feature flag default on and missing kill switch', () 
 
 test('registry transitions enforce optimistic concurrency and append sanitized history', () => {
   const registry = createConnectorRuntimeRegistry({ initialRecords: [registeredConnector()] });
-  const first = registry.transitionConnector(transition(), { clock: () => '2026-07-12T00:02:00.000Z' });
+  const first = registry.transitionConnector(transition({ transition_id: 'transition_registry_first' }), { clock: () => '2026-07-12T00:02:00.000Z' });
   assert.equal(first.applied, true);
   assert.equal(first.new_version, 2);
   assert.equal(registry.getConnector('connector_public_web_fixture').lifecycle_state, 'candidate');
 
-  const stale = registry.transitionConnector(transition(), { clock: () => '2026-07-12T00:03:00.000Z' });
+  const replay = registry.transitionConnector(transition({ transition_id: 'transition_registry_first' }), { clock: () => '2026-07-12T00:03:00.000Z' });
+  assert.equal(replay.applied, false);
+  assert.equal(replay.status, 'lifecycle_transition_blocked');
+  assert.equal(replay.error.error_code, 'REPLAYED_TRANSITION');
+  assert.equal(registry.getConnector('connector_public_web_fixture').lifecycle_version, 2);
+  assert.equal(registry.getConnectorHistory('connector_public_web_fixture').length, 1);
+
+  const stale = registry.transitionConnector(transition({ transition_id: 'transition_registry_stale' }), { clock: () => '2026-07-12T00:04:00.000Z' });
   assert.equal(stale.applied, false);
   assert.equal(stale.status, 'lifecycle_version_conflict');
+  assert.equal(stale.error.error_code, 'VERSION_CONFLICT');
   assert.equal(registry.getConnector('connector_public_web_fixture').lifecycle_version, 2);
 
   const history = registry.getConnectorHistory('connector_public_web_fixture');
@@ -444,27 +581,68 @@ test('registry transitions enforce optimistic concurrency and append sanitized h
   assert.equal(registry.getConnectorHistory('connector_public_web_fixture')[0].connector_id, 'connector_public_web_fixture');
 });
 
+test('registry bounds history per connector deterministically', () => {
+  assert.throws(() => createConnectorRuntimeRegistry({ maxHistoryPerConnector: 0 }), /INVALID_HISTORY_LIMIT/);
+  assert.throws(() => createConnectorRuntimeRegistry({ maxHistoryPerConnector: -1 }), /INVALID_HISTORY_LIMIT/);
+  assert.throws(() => createConnectorRuntimeRegistry({ maxHistoryPerConnector: 1001 }), /INVALID_HISTORY_LIMIT/);
+
+  const registry = createConnectorRuntimeRegistry({
+    initialRecords: [registeredConnector()],
+    maxHistoryPerConnector: 3
+  });
+
+  registry.transitionConnector(transition({ transition_id: 'history_1' }), { clock: () => '2026-07-12T00:00:01.000Z' });
+  registry.transitionConnector(transition({
+    transition_id: 'history_2',
+    transition_event: 'block_connector',
+    expected_version: 2
+  }), { clock: () => '2026-07-12T00:00:02.000Z' });
+  registry.transitionConnector(transition({
+    transition_id: 'history_3',
+    transition_event: 'deprecate_connector',
+    expected_version: 3
+  }), { clock: () => '2026-07-12T00:00:03.000Z' });
+  registry.transitionConnector(transition({
+    transition_id: 'history_4',
+    transition_event: 'retire_connector',
+    expected_version: 4
+  }), { clock: () => '2026-07-12T00:00:04.000Z' });
+
+  const history = registry.getConnectorHistory('connector_public_web_fixture');
+  assert.equal(history.length, 3);
+  assert.deepEqual(history.map((event) => event.transition_id), ['history_2', 'history_3', 'history_4']);
+  history[0].transition_id = 'mutated';
+  assert.equal(registry.getConnectorHistory('connector_public_web_fixture')[0].transition_id, 'history_2');
+  assert.equal(registry.listTransitionHistory().length, 3);
+});
+
 test('registry transition helper functions use private storage and deterministic filters', () => {
   const registry = createConnectorRuntimeRegistry({ initialRecords: [
     registeredConnector(),
-    candidateConnector({ connector_id: 'connector_candidate_fixture', lifecycle_version: 1 })
+    registeredConnector({ connector_id: 'connector_candidate_fixture', adapter_id: 'mock_candidate_adapter' })
   ] });
+  registry.transitionConnector(transition({
+    connector_id: 'connector_candidate_fixture',
+    transition_id: 'transition_candidate_fixture_nominate',
+    expected_version: 1
+  }));
   assert.equal(registry.listConnectors({ lifecycle_state: 'registered' }).length, 1);
   assert.equal(registry.listConnectors({ lifecycle_state: 'candidate' })[0].connector_id, 'connector_candidate_fixture');
 
-  const missing = registry.transitionConnector(transition({ connector_id: 'missing_connector' }));
+  const missing = registry.transitionConnector(transition({ connector_id: 'missing_connector', transition_id: 'transition_missing_connector' }));
   assert.equal(missing.status, 'lifecycle_connector_not_found');
   assert.equal(missing.applied, false);
-  assert.equal(registry.listTransitionHistory().length, 0);
+  assert.equal(registry.listTransitionHistory().length, 1);
 
   const blocked = registry.transitionConnector(transition({
     connector_id: 'connector_candidate_fixture',
+    transition_id: 'transition_candidate_activate_read_only',
     transition_event: 'activate_read_only',
-    expected_version: 1
+    expected_version: 2
   }));
   assert.equal(blocked.applied, false);
   assert.equal(registry.listTransitionHistory({ applied: false }).length, 1);
-  assert.equal(registry.listTransitionHistory({ connector_id: 'connector_candidate_fixture' }).length, 1);
+  assert.equal(registry.listTransitionHistory({ connector_id: 'connector_candidate_fixture' }).length, 2);
 });
 
 test('safety invariants are fixed and current runtime modules are not coupled', () => {

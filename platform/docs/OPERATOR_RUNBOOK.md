@@ -541,6 +541,7 @@ Before any connector lifecycle transition is accepted, operators must confirm:
 
 - connector identity is stable with connector_id, provider_id and adapter_id
 - lifecycle_state and lifecycle_version match the expected transition
+- transition_id is present, unique and not replayed
 - adapter registry binding uses only public registry APIs
 - readiness binding validates candidate_id, provider_id and adapter_id
 - feature flag is declared and defaults off
@@ -550,6 +551,8 @@ Before any connector lifecycle transition is accepted, operators must confirm:
 - phase ceiling remains `mock_only` in this PR
 - canary and `read_only_active` transitions are blocked
 - transition history is sanitized and append-only
+- transition history is bounded and preserves only the configured safe window
+- direct registration starts only at `registered` version 1
 - no real provider is enabled
 - no OAuth, token, secret, raw payload, raw evidence or credential appears in the record or history
 
