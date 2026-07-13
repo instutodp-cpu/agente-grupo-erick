@@ -229,5 +229,5 @@ metadata, tenant/workspace policy and sanitized configuration audit candidates
 without creating providers, OAuth, secrets, SDKs, external calls, persistent
 storage or runtime integration.
 
-Next step: Real Provider Secrets Manager Integration Readiness, not direct
-provider activation.
+Next step: Public Web Read-Only Adapter Pilot readiness/configuration, not
+direct or unrestricted provider activation.

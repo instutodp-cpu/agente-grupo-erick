@@ -8,6 +8,17 @@ This PR does not implement providers. It does not create OAuth. It does not crea
 
 The boundary exists so future real read-only providers cannot be introduced with ad hoc configuration, raw credentials, unclear tenant ownership, missing rotation, missing expiration, or missing kill switch policy.
 
+This boundary now has four isolated runtime-safe components:
+
+- Provider Configuration Contract.
+- Provider Secret Reference Registry.
+- Local Test Secret Resolver.
+- Provider Configuration Readiness evaluator.
+
+These components are still contract infrastructure only. They do not create or
+resolve real credentials, do not call providers, do not read `process.env`, do
+not use filesystem secret paths, and do not connect to `/message` or `/confirm`.
+
 ## B. Principles
 
 - deny-by-default
@@ -36,6 +47,34 @@ The boundary exists so future real read-only providers cannot be introduced with
 
 A provider configuration record is a sanitized, non-secret descriptor for a future provider. It may reference a secret by opaque internal reference, but it must never contain the secret value.
 
+Official configuration states:
+
+- `unconfigured`
+- `descriptor_registered`
+- `reference_pending`
+- `reference_registered`
+- `validation_pending`
+- `validation_blocked`
+- `structurally_ready`
+- `rotation_required`
+- `expired`
+- `revoked`
+- `disabled`
+- `deprecated`
+
+Initial registration accepts only:
+
+- `configuration_status: descriptor_registered`
+- `readiness_status: not_ready`
+- `configuration_version: 1`
+- `deprecated:false`
+- `disabled:false`
+- `feature_flag_default:false`
+- `kill_switch_required:true`
+
+Direct registration in `structurally_ready`, `expired`, `revoked`, `disabled`
+or `deprecated` is blocked by `INITIAL_CONFIGURATION_STATE_NOT_ALLOWED`.
+
 Required fields:
 
 - `configuration_id`
@@ -50,6 +89,14 @@ Required fields:
 - `configuration_version`
 - `readiness_status`
 - `secret_refs`
+- `secret_reference_descriptors`
+- `secret_reference_type`
+- `required_secret_names`
+- `required_scopes`
+- `allowed_operations`
+- `rotation_policy`
+- `expiration_policy`
+- `revocation_policy`
 - `feature_flag_key`
 - `feature_flag_default`
 - `kill_switch_key`
@@ -81,6 +128,33 @@ Rules:
 - Plaintext credentials are blocked.
 - Provider calls are blocked.
 - Runtime environment provider secrets are blocked.
+- `required_secret_names` and `required_scopes` must be non-empty.
+- wildcard or privileged scopes such as `*`, `all`, `admin`, `full_access`,
+  `write`, `repo` and `root` are blocked.
+- `allowed_operations` must remain read-only and cannot include create, update,
+  delete, write, send, publish, merge, payment or similar action terms.
+- `cost_risk` and `rate_limit_risk` cannot be `unknown`.
+- `kill_switch_required` must be `true`.
+
+Immutable identity fields cannot be changed after registration:
+
+- `configuration_id`
+- `connector_id`
+- `provider_id`
+- `provider_type`
+- `adapter_id`
+- `readiness_candidate_id`
+- `workspace_type`
+- `tenant_id`
+- `organization_id`
+- `client_id`
+- `environment`
+- `secret_reference_type`
+- `owner_id`
+
+Attempts to mutate identity return
+`CONFIGURATION_IDENTITY_MUTATION_BLOCKED`, do not increment version and do not
+change the stored record.
 
 ## D. Secret Reference Contract
 
@@ -101,11 +175,24 @@ Required fields:
 - `expires_at`
 - `metadata`
 
-Allowed reference types:
+Allowed resolvable type in this PR:
 
-- `secret_ref`
-- `vault_ref`
-- `manual_fixture_ref`
+- `local_test_double_reference`
+
+Future reference types are documented but unsupported in this PR:
+
+- `railway_variable_reference`
+- `aws_secrets_manager_reference`
+- `gcp_secret_manager_reference`
+- `azure_key_vault_reference`
+- `hashicorp_vault_reference`
+- `supabase_vault_reference`
+- `github_actions_secret_reference`
+- `kubernetes_secret_reference`
+
+These future types must return `unsupported_in_current_phase`,
+`SECRET_REFERENCE_TYPE_UNSUPPORTED` or `ready:false` until a future approved
+secret manager boundary exists.
 
 Rules:
 
@@ -115,6 +202,73 @@ Rules:
 - Expired references are blocked.
 - Rotation-overdue references are blocked.
 - No token, password, key, private key, session cookie, raw credential or OAuth code may appear in a reference.
+- No real path, ARN, environment variable name, connection string or vault path
+  may appear in a reference.
+- Unknown reference fields are blocked fail-closed.
+- Reference metadata uses an allowlist and cannot contain arbitrary credential
+  material.
+- Initial reference registration accepts only `reference_pending` or
+  `reference_registered`.
+
+## D1. Provider Secret Reference Registry
+
+The Provider Secret Reference Registry is the authoritative in-memory registry
+for secret references.
+
+Required API behavior:
+
+- private storage
+- frozen registry object
+- defensive clones
+- unique `reference_id`
+- fail-closed atomic initial references
+- bounded sanitized history
+- optimistic concurrency
+- replay protection by `change_id`
+- no direct deletion of operational references
+- no secret value
+- no real path
+- no real ARN
+- no runtime environment variable name
+- no connection string
+
+Supported state mutations:
+
+- mark reference revoked
+- mark reference disabled
+- mark rotation required
+
+The registry does not resolve a secret. It only validates and stores safe
+reference descriptors.
+
+## D2. Local Test Secret Resolver
+
+The only resolver in this PR is `local_test_secret_resolver`.
+
+It can resolve only:
+
+- `reference_type: local_test_double_reference`
+- `environment: local_test`
+- `synthetic:true`
+
+It must fail closed for production, future real secret-reference types,
+revoked references, disabled references, expired references and rotation-due
+references.
+
+`resolveReference` may return only an opaque synthetic handle:
+
+```json
+{
+  "resolved": true,
+  "secret_handle": "opaque_test_handle::<reference_id>",
+  "synthetic": true,
+  "exportable": false
+}
+```
+
+The handle is not a credential, cannot be converted into a credential, must not
+appear in readiness responses, must not appear in audit and must not appear in
+history.
 
 ## E. Configuration Registry
 
@@ -182,6 +336,65 @@ No readiness status permits:
 - `executed:true`
 - `real_provider_called:true`
 
+Readiness must validate:
+
+- connector exists via public lifecycle registry API
+- connector, provider, adapter, tenant, workspace and readiness candidate IDs match
+- lifecycle state is one of `readiness_passed`, `configuration_pending`,
+  `feature_flag_off` or `runtime_disabled`
+- blocked, deprecated, retired and early lifecycle states are blocked
+- adapter exists via public adapter registry API
+- adapter metadata validates
+- adapter is `real_read_only_candidate` or structural local mock test adapter
+- `real_read_only` is blocked
+- secret reference exists via public secret reference registry API
+- secret reference provider, tenant, workspace and environment match
+- secret reference is synthetic `local_test_double_reference`
+- reference is not revoked, disabled, expired or rotation due
+- local test resolver can resolve structurally
+- no handle or secret value is returned
+
+Public readiness result keeps:
+
+- `secret_resolution_performed:false`
+- `secret_value_exposed:false`
+- no `secret_handle`
+- `simulated:true`
+- `executed:false`
+- `real_provider_called:false`
+- `can_trigger_real_execution:false`
+
+## G1. Configuration State Machine
+
+Allowed transitions in this PR:
+
+- `descriptor_registered -> reference_pending`
+- `reference_pending -> reference_registered`
+- `reference_pending -> validation_blocked`
+- `reference_registered -> validation_pending`
+- `reference_registered -> revoked`
+- `reference_registered -> disabled`
+- `validation_pending -> validation_blocked`
+- `validation_pending -> structurally_ready`
+- `validation_blocked -> validation_pending`
+- `validation_blocked -> disabled`
+- `structurally_ready -> rotation_required`
+- `structurally_ready -> expired`
+- `structurally_ready -> revoked`
+- `structurally_ready -> disabled`
+- `structurally_ready -> deprecated`
+- `rotation_required -> disabled`
+- `rotation_required -> revoked`
+- `rotation_required -> deprecated`
+- `expired -> revoked`
+- `expired -> disabled`
+- `expired -> deprecated`
+- `revoked -> deprecated`
+- `disabled -> deprecated`
+
+No direct jump activates a provider. No state enables `real_provider_called:true`.
+`deprecated` is terminal in this PR.
+
 ## H. Rotation Metadata
 
 Rotation metadata is mandatory even though this PR does not rotate secrets.
@@ -203,6 +416,8 @@ Required behavior:
 - `expires_at` must exist.
 - expired configuration blocks readiness.
 - expired secret reference blocks readiness.
+- rotation-due secret reference blocks readiness.
+- revoked or disabled secret reference blocks readiness.
 - expiration status is informational and does not override date validation.
 
 ## J. Secret Policy
@@ -228,6 +443,15 @@ Blocked fields include:
 - `oauthCode`
 - `rawSecret`
 - `providerCredential`
+- `secret_value`
+- `rawValue`
+- `connectionString`
+- `databaseUrl`
+- `vaultPath`
+- `secretArn`
+- `secretResourceName`
+- `environmentVariableName`
+- `secret_handle`
 
 The sanitizer removes forbidden keys recursively and never returns their values.
 
@@ -306,6 +530,11 @@ Audit fields:
 Audit must never contain:
 
 - raw configuration
+- full descriptor
+- full reference
+- secret names complete list
+- scopes complete list
+- secret handle
 - secret value
 - request body
 - response body
@@ -340,9 +569,11 @@ This PR only creates contracts, validation, fixture, registry and tests.
 It does not:
 
 - implement provider real
+- implement real secret manager
 - create OAuth
 - create token or secret
 - read provider credentials from runtime environment
+- accept real secret paths, ARNs or environment variable names
 - call API
 - add SDK
 - create persistent storage

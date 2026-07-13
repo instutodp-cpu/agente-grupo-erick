@@ -2,8 +2,8 @@
 
 const {
   FORBIDDEN_FIELDS: ADAPTER_FORBIDDEN_FIELDS,
-  TENANT_STRATEGIES,
   deepClone,
+  isBlockedOperation,
   isNonEmptyString,
   isNonEmptyStringArray,
   isPlainObject,
@@ -11,19 +11,29 @@ const {
 } = require('./read-only-adapter-contract');
 
 const CONFIGURATION_STATUSES = [
-  'configuration_registered',
-  'configuration_incomplete',
-  'configuration_invalid',
-  'configuration_ready',
-  'configuration_blocked',
-  'configuration_rotation_required',
-  'configuration_expired',
-  'configuration_deprecated'
+  'unconfigured',
+  'descriptor_registered',
+  'reference_pending',
+  'reference_registered',
+  'validation_pending',
+  'validation_blocked',
+  'structurally_ready',
+  'rotation_required',
+  'expired',
+  'revoked',
+  'disabled',
+  'deprecated'
 ];
+
+const INITIAL_CONFIGURATION_STATUS = 'descriptor_registered';
+const INITIAL_READINESS_STATUS = 'not_ready';
 
 const CONFIGURATION_READINESS_STATUSES = [
   'not_ready',
-  'configuration_ready_for_mock_binding',
+  'configuration_structurally_ready',
+  'blocked_by_lifecycle_binding',
+  'blocked_by_adapter_binding',
+  'blocked_by_secret_reference_binding',
   'blocked_by_secret_policy',
   'blocked_by_environment_policy',
   'blocked_by_tenant_policy',
@@ -34,71 +44,157 @@ const CONFIGURATION_READINESS_STATUSES = [
   'blocked_by_kill_switch'
 ];
 
+const SECRET_REFERENCE_STATUSES = [
+  'reference_pending',
+  'reference_registered',
+  'structurally_ready',
+  'rotation_required',
+  'expired',
+  'revoked',
+  'disabled'
+];
+
+const INITIAL_SECRET_REFERENCE_STATUSES = ['reference_pending', 'reference_registered'];
+
 const SECRET_REFERENCE_TYPES = [
-  'secret_ref',
-  'vault_ref',
-  'manual_fixture_ref'
+  'local_test_double_reference',
+  'railway_variable_reference',
+  'aws_secrets_manager_reference',
+  'gcp_secret_manager_reference',
+  'azure_key_vault_reference',
+  'hashicorp_vault_reference',
+  'supabase_vault_reference',
+  'github_actions_secret_reference',
+  'kubernetes_secret_reference'
 ];
 
-const ENVIRONMENT_POLICIES = [
-  'explicit_secret_reference_only',
-  'no_plaintext_secret',
-  'no_runtime_environment_provider_secret',
-  'no_provider_sdk_configuration'
+const RESOLVABLE_SECRET_REFERENCE_TYPES = ['local_test_double_reference'];
+
+const CONFIGURATION_OPERATIONS = [
+  'register_synthetic_reference',
+  'validate_structure',
+  'evaluate_readiness',
+  'mark_rotation_required',
+  'mark_revoked',
+  'disable_configuration',
+  'deprecate_configuration'
 ];
 
-const TENANT_CONFIGURATION_POLICIES = TENANT_STRATEGIES;
-const WORKSPACE_CONFIGURATION_POLICIES = ['personal', 'corporate', 'external_client'];
+const CONFIGURATION_TRANSITIONS = Object.freeze({
+  descriptor_registered: {
+    register_synthetic_reference: 'reference_pending',
+    disable_configuration: 'disabled',
+    deprecate_configuration: 'deprecated'
+  },
+  reference_pending: {
+    register_synthetic_reference: 'reference_registered',
+    validate_structure: 'validation_blocked',
+    mark_revoked: 'revoked',
+    disable_configuration: 'disabled'
+  },
+  reference_registered: {
+    validate_structure: 'validation_pending',
+    mark_revoked: 'revoked',
+    disable_configuration: 'disabled'
+  },
+  validation_pending: {
+    validate_structure: 'validation_blocked',
+    evaluate_readiness: 'structurally_ready',
+    disable_configuration: 'disabled'
+  },
+  validation_blocked: {
+    validate_structure: 'validation_pending',
+    disable_configuration: 'disabled'
+  },
+  structurally_ready: {
+    mark_rotation_required: 'rotation_required',
+    mark_revoked: 'revoked',
+    disable_configuration: 'disabled',
+    deprecate_configuration: 'deprecated'
+  },
+  rotation_required: {
+    disable_configuration: 'disabled',
+    mark_revoked: 'revoked',
+    deprecate_configuration: 'deprecated'
+  },
+  expired: {
+    mark_revoked: 'revoked',
+    disable_configuration: 'disabled',
+    deprecate_configuration: 'deprecated'
+  },
+  revoked: {
+    deprecate_configuration: 'deprecated'
+  },
+  disabled: {
+    deprecate_configuration: 'deprecated'
+  },
+  deprecated: {}
+});
 
-const ROTATION_STATUSES = ['rotation_not_due', 'rotation_due', 'rotation_overdue'];
-const EXPIRATION_STATUSES = ['active', 'expired'];
+const ALLOWED_SECRET_REFERENCE_FIELDS = [
+  'reference_id',
+  'reference_type',
+  'provider_id',
+  'workspace_type',
+  'tenant_id',
+  'environment',
+  'synthetic',
+  'status',
+  'reference_version',
+  'created_at',
+  'updated_at',
+  'last_rotated_at',
+  'rotation_due_at',
+  'expires_at',
+  'disabled',
+  'revoked',
+  'required_secret_names',
+  'secret_names',
+  'metadata'
+];
 
-const ERROR_CODES = [
-  'INVALID_PROVIDER_CONFIGURATION',
-  'PROVIDER_NOT_REGISTERED',
-  'INVALID_SECRET_REFERENCE',
-  'TENANT_CONFIGURATION_INVALID',
-  'WORKSPACE_CONFIGURATION_INVALID',
-  'FEATURE_FLAG_POLICY_INVALID',
-  'KILL_SWITCH_POLICY_INVALID',
-  'ROTATION_EXPIRED',
-  'CONFIGURATION_EXPIRED',
-  'CONFIGURATION_INCOMPLETE',
-  'FORBIDDEN_FIELD_DETECTED',
-  'REPLAYED_CONFIGURATION_CHANGE',
-  'VERSION_CONFLICT',
-  'DUPLICATE_CONFIGURATION',
-  'CONFIGURATION_NOT_FOUND',
-  'INTERNAL_CONFIGURATION_ERROR'
+const ALLOWED_SECRET_REFERENCE_METADATA_FIELDS = [
+  'label',
+  'purpose',
+  'classification',
+  'synthetic_note'
 ];
 
 const REQUIRED_PROVIDER_CONFIGURATION_FIELDS = [
   'configuration_id',
+  'connector_id',
   'provider_id',
   'provider_type',
   'adapter_id',
-  'connector_id',
+  'readiness_candidate_id',
   'workspace_type',
   'tenant_id',
   'environment',
   'configuration_status',
   'configuration_version',
   'readiness_status',
-  'secret_refs',
+  'secret_reference_descriptors',
+  'secret_reference_type',
+  'required_secret_names',
+  'required_scopes',
+  'allowed_operations',
+  'rotation_policy',
+  'expiration_policy',
+  'revocation_policy',
+  'risk_level',
+  'cost_risk',
+  'rate_limit_risk',
+  'data_classification',
+  'contract_refs',
   'feature_flag_key',
   'feature_flag_default',
   'kill_switch_key',
-  'rotation',
-  'expiration',
-  'tenant_policy',
-  'workspace_policy',
-  'environment_policy',
-  'secret_policy',
+  'kill_switch_required',
   'owner_id',
-  'reviewer_ids',
   'created_at',
   'updated_at',
   'deprecated',
+  'disabled',
   'simulated',
   'executed',
   'real_provider_called',
@@ -106,17 +202,23 @@ const REQUIRED_PROVIDER_CONFIGURATION_FIELDS = [
 ];
 
 const REQUIRED_SECRET_REFERENCE_FIELDS = [
-  'secret_ref_id',
-  'secret_ref_type',
+  'reference_id',
+  'reference_type',
   'provider_id',
   'workspace_type',
   'tenant_id',
-  'scope',
+  'environment',
+  'synthetic',
   'status',
+  'reference_version',
   'created_at',
+  'updated_at',
   'last_rotated_at',
   'rotation_due_at',
   'expires_at',
+  'disabled',
+  'revoked',
+  'required_secret_names',
   'metadata'
 ];
 
@@ -124,6 +226,7 @@ const REQUIRED_CONFIGURATION_CHANGE_FIELDS = [
   'trace_id',
   'change_id',
   'configuration_id',
+  'operation',
   'expected_version',
   'actor_id',
   'actor_role',
@@ -139,39 +242,92 @@ const REQUIRED_AUDIT_FIELDS = [
   'trace_id',
   'change_id',
   'configuration_id',
+  'connector_id',
   'provider_id',
   'adapter_id',
-  'connector_id',
-  'workspace_type',
-  'tenant_id',
-  'status',
+  'previous_status',
+  'current_status',
+  'operation',
   'applied',
-  'previous_version',
-  'new_version',
-  'actor_id',
-  'actor_role',
-  'simulated',
-  'executed',
-  'real_provider_called',
-  'can_trigger_real_execution',
   'error_code',
   'blocked_reason',
-  'occurred_at'
+  'occurred_at',
+  'simulated',
+  'executed',
+  'real_provider_called'
+];
+
+const IMMUTABLE_CONFIGURATION_FIELDS = [
+  'configuration_id',
+  'connector_id',
+  'provider_id',
+  'provider_type',
+  'adapter_id',
+  'readiness_candidate_id',
+  'workspace_type',
+  'tenant_id',
+  'organization_id',
+  'client_id',
+  'environment',
+  'secret_reference_type',
+  'owner_id'
+];
+
+const BLOCKED_SCOPE_TERMS = ['*', 'all', 'admin', 'full_access', 'write', 'repo', 'root'];
+
+const ERROR_CODES = [
+  'INVALID_PROVIDER_CONFIGURATION',
+  'PROVIDER_NOT_REGISTERED',
+  'INVALID_SECRET_REFERENCE',
+  'SECRET_REFERENCE_TYPE_UNSUPPORTED',
+  'DUPLICATE_SECRET_REFERENCE',
+  'INVALID_INITIAL_SECRET_REFERENCE',
+  'TENANT_CONFIGURATION_INVALID',
+  'WORKSPACE_CONFIGURATION_INVALID',
+  'FEATURE_FLAG_POLICY_INVALID',
+  'KILL_SWITCH_POLICY_INVALID',
+  'ROTATION_EXPIRED',
+  'CONFIGURATION_EXPIRED',
+  'CONFIGURATION_INCOMPLETE',
+  'FORBIDDEN_FIELD_DETECTED',
+  'REPLAYED_CONFIGURATION_REQUEST',
+  'VERSION_CONFLICT',
+  'DUPLICATE_CONFIGURATION',
+  'CONFIGURATION_NOT_FOUND',
+  'INITIAL_CONFIGURATION_STATE_NOT_ALLOWED',
+  'CONFIGURATION_IDENTITY_MUTATION_BLOCKED',
+  'INVALID_CONFIGURATION_TRANSITION',
+  'UNSAFE_OPERATION',
+  'INTERNAL_CONFIGURATION_ERROR'
 ];
 
 const FORBIDDEN_FIELDS = uniqueSorted([
   ...ADAPTER_FORBIDDEN_FIELDS,
-  'plaintextSecret',
   'secretValue',
-  'clientSecret',
-  'oauthCode',
-  'privateKey',
-  'sessionCookie',
-  'providerCredential',
-  'rawConfig',
+  'secret_value',
+  'plaintext',
+  'rawValue',
   'rawSecret',
+  'passwordValue',
+  'apiKeyValue',
+  'access_token_value',
+  'refresh_token_value',
+  'clientSecret',
+  'client_secret_value',
+  'privateKey',
+  'private_key_value',
+  'certificateValue',
+  'connectionString',
+  'databaseUrl',
+  'webhookSecret',
+  'vaultPath',
+  'secretArn',
+  'secretResourceName',
+  'environmentVariableName',
+  'secret_handle',
+  'rawConfig',
   'rawProviderConfig',
-  'rawCredential'
+  'providerCredential'
 ]);
 
 function isIsoLikeString(value) {
@@ -205,7 +361,6 @@ function findConfigurationForbiddenFields(value) {
       return;
     }
     seen.add(entry);
-
     for (const [key, nested] of Object.entries(entry)) {
       if (forbidden.has(key)) {
         found.push(`forbidden_field::${key}`);
@@ -223,19 +378,13 @@ function findConfigurationForbiddenFields(value) {
 function sanitizeConfigurationData(value) {
   const forbidden = new Set(FORBIDDEN_FIELDS);
   const seen = new WeakSet();
-
   function sanitize(entry) {
     if (entry === null || entry === undefined) return entry;
     if (typeof entry === 'string' || typeof entry === 'number' || typeof entry === 'boolean') return entry;
     if (Array.isArray(entry)) return entry.map(sanitize);
     if (!isPlainObject(entry)) return undefined;
-    if (seen.has(entry)) {
-      return {
-        blocked_reason: 'cycle_removed'
-      };
-    }
+    if (seen.has(entry)) return { blocked_reason: 'cycle_removed' };
     seen.add(entry);
-
     const output = {};
     for (const [key, nested] of Object.entries(entry)) {
       if (forbidden.has(key)) continue;
@@ -245,170 +394,135 @@ function sanitizeConfigurationData(value) {
     seen.delete(entry);
     return output;
   }
-
   return sanitize(value);
 }
 
-function validateSecretReference(ref, config = {}, context = {}) {
+function validateAllowedKeys(value, allowedFields, prefix) {
+  if (!isPlainObject(value)) return [];
+  return Object.keys(value)
+    .filter((key) => !allowedFields.includes(key))
+    .map((key) => `${prefix}_unknown_field::${key}`);
+}
+
+function validateSecretReference(reference, context = {}) {
   const errors = [];
-  if (!isPlainObject(ref)) return { valid: false, errors: ['secret_reference_must_be_object'] };
-
+  if (!isPlainObject(reference)) return { valid: false, errors: ['secret_reference_must_be_object'] };
+  errors.push(...validateAllowedKeys(reference, ALLOWED_SECRET_REFERENCE_FIELDS, 'secret_reference'));
   for (const field of REQUIRED_SECRET_REFERENCE_FIELDS) {
-    if (!Object.prototype.hasOwnProperty.call(ref, field)) errors.push(`missing_${field}`);
+    if (!Object.prototype.hasOwnProperty.call(reference, field)) errors.push(`missing_${field}`);
   }
-  for (const field of ['secret_ref_id', 'secret_ref_type', 'provider_id', 'workspace_type', 'tenant_id', 'scope', 'status', 'created_at', 'last_rotated_at', 'rotation_due_at', 'expires_at']) {
-    if (!isNonEmptyString(ref[field])) errors.push(`invalid_${field}`);
+  for (const field of ['reference_id', 'reference_type', 'provider_id', 'workspace_type', 'tenant_id', 'environment', 'status', 'created_at', 'updated_at', 'last_rotated_at', 'rotation_due_at', 'expires_at']) {
+    if (!isNonEmptyString(reference[field])) errors.push(`invalid_${field}`);
   }
-  if (!SECRET_REFERENCE_TYPES.includes(ref.secret_ref_type)) errors.push('secret_ref_type_not_allowed');
-  if (ref.provider_id !== config.provider_id) errors.push('secret_ref_provider_mismatch');
-  if (ref.workspace_type !== config.workspace_type) errors.push('secret_ref_workspace_mismatch');
-  if (ref.tenant_id !== config.tenant_id) errors.push('secret_ref_tenant_mismatch');
-  if (!isPlainObject(ref.metadata)) errors.push('secret_ref_metadata_must_be_object');
-  if (isPast(ref.rotation_due_at, context)) errors.push('secret_ref_rotation_due');
-  if (isPast(ref.expires_at, context)) errors.push('secret_ref_expired');
-  errors.push(...findConfigurationForbiddenFields(ref));
-
+  if (!SECRET_REFERENCE_TYPES.includes(reference.reference_type)) errors.push('secret_reference_type_not_allowed');
+  if (!RESOLVABLE_SECRET_REFERENCE_TYPES.includes(reference.reference_type)) errors.push('unsupported_in_current_phase');
+  if (!SECRET_REFERENCE_STATUSES.includes(reference.status)) errors.push('secret_reference_status_not_allowed');
+  if (!Number.isInteger(reference.reference_version) || reference.reference_version < 1) errors.push('invalid_reference_version');
+  if (reference.synthetic !== true) errors.push('secret_reference_must_be_synthetic');
+  if (reference.environment !== 'local_test') errors.push('secret_reference_environment_must_be_local_test');
+  if (reference.disabled !== false) errors.push('secret_reference_disabled_must_be_false');
+  if (reference.revoked !== false) errors.push('secret_reference_revoked_must_be_false');
+  if (!isNonEmptyStringArray(reference.required_secret_names)) errors.push('required_secret_names_required');
+  if (reference.secret_names !== undefined && !isNonEmptyStringArray(reference.secret_names)) errors.push('invalid_secret_names');
+  if (!isPlainObject(reference.metadata)) {
+    errors.push('secret_reference_metadata_must_be_object');
+  } else {
+    errors.push(...validateAllowedKeys(reference.metadata, ALLOWED_SECRET_REFERENCE_METADATA_FIELDS, 'secret_reference_metadata'));
+  }
+  if (isPast(reference.rotation_due_at, context)) errors.push('secret_reference_rotation_due');
+  if (isPast(reference.expires_at, context)) errors.push('secret_reference_expired');
+  errors.push(...findConfigurationForbiddenFields(reference));
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }
 
-function validateTenantPolicy(config) {
+function validateInitialSecretReferenceState(reference) {
   const errors = [];
-  const policy = config.tenant_policy;
-  if (!TENANT_CONFIGURATION_POLICIES.includes(policy)) {
-    errors.push('tenant_policy_not_allowed');
-    return errors;
-  }
-  if (!isNonEmptyString(config.tenant_id)) errors.push('tenant_id_required');
-  if (policy === 'corporate_grupo_erick') {
-    if (config.workspace_type !== 'corporate') errors.push('corporate_workspace_required');
-    if (config.tenant_id !== 'grupo_erick') errors.push('corporate_tenant_required');
-  }
-  if (policy === 'personal_user_tenant') {
-    if (config.workspace_type !== 'personal') errors.push('personal_workspace_required');
-    if (!isNonEmptyString(config.user_id)) errors.push('personal_user_id_required');
-    if (isNonEmptyString(config.user_id) && config.tenant_id !== `personal::${config.user_id}`) {
-      errors.push('personal_tenant_mismatch');
-    }
-  }
-  if (policy === 'external_client_tenant') {
-    if (config.workspace_type !== 'external_client') errors.push('external_client_workspace_required');
-    if (!isNonEmptyString(config.client_id)) errors.push('external_client_id_required');
-    if (isNonEmptyString(config.client_id) && config.tenant_id !== `client::${config.client_id}`) {
-      errors.push('external_client_tenant_mismatch');
-    }
+  if (!isPlainObject(reference)) return ['secret_reference_must_be_object'];
+  if (!INITIAL_SECRET_REFERENCE_STATUSES.includes(reference.status)) errors.push('initial_secret_reference_state_not_allowed');
+  if (reference.reference_version !== 1) errors.push('initial_reference_version_must_be_1');
+  if (reference.disabled !== false) errors.push('initial_reference_disabled_must_be_false');
+  if (reference.revoked !== false) errors.push('initial_reference_revoked_must_be_false');
+  return uniqueSorted(errors);
+}
+
+function validateScopeList(scopes) {
+  const errors = [];
+  if (!isNonEmptyStringArray(scopes)) return ['required_scopes_required'];
+  for (const scope of scopes) {
+    const normalized = scope.toLowerCase();
+    if (BLOCKED_SCOPE_TERMS.includes(normalized)) errors.push(`blocked_scope::${scope}`);
   }
   return errors;
 }
 
-function validateWorkspacePolicy(config) {
+function validateReadOnlyOperationList(operations) {
   const errors = [];
-  if (!WORKSPACE_CONFIGURATION_POLICIES.includes(config.workspace_type)) {
-    errors.push('workspace_type_not_allowed');
+  if (!isNonEmptyStringArray(operations)) return ['allowed_operations_required'];
+  for (const operation of operations) {
+    if (isBlockedOperation(operation)) errors.push(`unsafe_operation::${operation}`);
   }
-  if (!isPlainObject(config.workspace_policy)) {
-    errors.push('workspace_policy_must_be_object');
-    return errors;
-  }
-  if (!isNonEmptyStringArray(config.workspace_policy.allowed_workspace_types)) {
-    errors.push('workspace_policy_allowed_workspaces_required');
-  } else if (!config.workspace_policy.allowed_workspace_types.includes(config.workspace_type)) {
-    errors.push('workspace_policy_mismatch');
-  }
-  return errors;
-}
-
-function validateEnvironmentPolicy(config) {
-  const errors = [];
-  if (!isPlainObject(config.environment_policy)) {
-    errors.push('environment_policy_must_be_object');
-    return errors;
-  }
-  if (config.environment_policy.provider_calls_allowed !== false) errors.push('provider_calls_must_be_disabled');
-  if (config.environment_policy.provider_sdk_allowed !== false) errors.push('provider_sdk_must_be_disabled');
-  if (config.environment_policy.runtime_environment_secret_allowed !== false) {
-    errors.push('runtime_environment_secret_must_be_disabled');
-  }
-  if (config.environment_policy.secret_references_only !== true) errors.push('secret_references_only_required');
-  return errors;
-}
-
-function validateSecretPolicy(config) {
-  const errors = [];
-  if (!isPlainObject(config.secret_policy)) {
-    errors.push('secret_policy_must_be_object');
-    return errors;
-  }
-  if (config.secret_policy.plaintext_secrets_allowed !== false) errors.push('plaintext_secrets_must_be_disabled');
-  if (config.secret_policy.secret_creation_allowed !== false) errors.push('secret_creation_must_be_disabled');
-  if (config.secret_policy.secret_values_allowed !== false) errors.push('secret_values_must_be_disabled');
-  if (config.secret_policy.secret_references_only !== true) errors.push('secret_policy_references_only_required');
   return errors;
 }
 
 function validateProviderConfiguration(config, context = {}) {
   const errors = [];
   if (!isPlainObject(config)) return { valid: false, errors: ['configuration_must_be_object'] };
-
   for (const field of REQUIRED_PROVIDER_CONFIGURATION_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(config, field)) errors.push(`missing_${field}`);
   }
-  for (const field of [
-    'configuration_id',
-    'provider_id',
-    'provider_type',
-    'adapter_id',
-    'connector_id',
-    'workspace_type',
-    'tenant_id',
-    'environment',
-    'configuration_status',
-    'readiness_status',
-    'feature_flag_key',
-    'kill_switch_key',
-    'tenant_policy',
-    'owner_id',
-    'created_at',
-    'updated_at'
-  ]) {
+  for (const field of ['configuration_id', 'connector_id', 'provider_id', 'provider_type', 'adapter_id', 'readiness_candidate_id', 'workspace_type', 'tenant_id', 'environment', 'configuration_status', 'readiness_status', 'secret_reference_type', 'feature_flag_key', 'kill_switch_key', 'owner_id', 'created_at', 'updated_at']) {
     if (!isNonEmptyString(config[field])) errors.push(`invalid_${field}`);
   }
   if (!CONFIGURATION_STATUSES.includes(config.configuration_status)) errors.push('configuration_status_not_allowed');
   if (!CONFIGURATION_READINESS_STATUSES.includes(config.readiness_status)) errors.push('readiness_status_not_allowed');
   if (!Number.isInteger(config.configuration_version) || config.configuration_version < 1) errors.push('invalid_configuration_version');
-  if (!isNonEmptyStringArray(config.reviewer_ids)) errors.push('invalid_reviewer_ids');
-  if (!Array.isArray(config.secret_refs) || config.secret_refs.length === 0) errors.push('secret_refs_required');
+  if (!Array.isArray(config.secret_reference_descriptors) || config.secret_reference_descriptors.length === 0) errors.push('secret_reference_descriptors_required');
+  if (config.secret_reference_type !== 'local_test_double_reference') errors.push('unsupported_in_current_phase');
+  if (!isNonEmptyStringArray(config.required_secret_names)) errors.push('required_secret_names_required');
+  errors.push(...validateScopeList(config.required_scopes));
+  errors.push(...validateReadOnlyOperationList(config.allowed_operations));
+  for (const field of ['rotation_policy', 'expiration_policy', 'revocation_policy', 'metadata']) {
+    if (!isPlainObject(config[field])) errors.push(`${field}_must_be_object`);
+  }
+  if (isPlainObject(config.rotation_policy)) {
+    if (!isIsoLikeString(config.rotation_policy.next_rotation_due_at)) errors.push('rotation_due_at_required');
+    if (isPast(config.rotation_policy.next_rotation_due_at, context)) errors.push('rotation_due_or_expired');
+  }
+  if (isPlainObject(config.expiration_policy)) {
+    if (!isIsoLikeString(config.expiration_policy.expires_at)) errors.push('expiration_required');
+    if (isPast(config.expiration_policy.expires_at, context)) errors.push('configuration_expired');
+  }
+  if (config.risk_level === 'unknown') errors.push('risk_level_unknown');
+  if (config.cost_risk === 'unknown') errors.push('cost_risk_unknown');
+  if (config.rate_limit_risk === 'unknown') errors.push('rate_limit_risk_unknown');
+  if (!isNonEmptyString(config.data_classification)) errors.push('invalid_data_classification');
+  if (!isNonEmptyStringArray(config.contract_refs)) errors.push('contract_refs_required');
   if (config.feature_flag_default !== false) errors.push('feature_flag_default_must_be_false');
+  if (config.kill_switch_required !== true) errors.push('kill_switch_required_must_be_true');
+  if (config.deprecated !== false && config.configuration_status !== 'deprecated') errors.push('deprecated_flag_invalid');
+  if (config.disabled !== false && !['disabled', 'deprecated'].includes(config.configuration_status)) errors.push('disabled_flag_invalid');
   if (config.simulated !== true) errors.push('simulated_must_be_true');
   if (config.executed !== false) errors.push('executed_must_be_false');
   if (config.real_provider_called !== false) errors.push('real_provider_called_must_be_false');
-  if (typeof config.deprecated !== 'boolean') errors.push('invalid_deprecated');
-  if (!isPlainObject(config.metadata)) errors.push('metadata_must_be_object');
-  if (!isPlainObject(config.rotation)) errors.push('rotation_must_be_object');
-  if (!isPlainObject(config.expiration)) errors.push('expiration_must_be_object');
-  if (isPlainObject(config.rotation)) {
-    if (!isIsoLikeString(config.rotation.next_rotation_due_at)) errors.push('rotation_due_at_required');
-    if (isPast(config.rotation.next_rotation_due_at, context)) errors.push('rotation_due_or_expired');
-  }
-  if (isPlainObject(config.expiration)) {
-    if (!isIsoLikeString(config.expiration.expires_at)) errors.push('expiration_required');
-    if (isPast(config.expiration.expires_at, context)) errors.push('configuration_expired');
-  }
   if (isPlainObject(context.providerRegistry) && typeof context.providerRegistry.hasProvider === 'function' && !context.providerRegistry.hasProvider(config.provider_id)) {
     errors.push('provider_not_registered');
   }
-  if (Array.isArray(config.secret_refs)) {
-    for (const ref of config.secret_refs) {
-      errors.push(...validateSecretReference(ref, config, context).errors);
-    }
-  }
-
-  errors.push(...validateTenantPolicy(config));
-  errors.push(...validateWorkspacePolicy(config));
-  errors.push(...validateEnvironmentPolicy(config));
-  errors.push(...validateSecretPolicy(config));
   errors.push(...findConfigurationForbiddenFields(config));
-
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
+}
+
+function validateInitialConfigurationState(config) {
+  const errors = [];
+  if (!isPlainObject(config)) return ['configuration_must_be_object'];
+  if (config.configuration_status !== INITIAL_CONFIGURATION_STATUS) errors.push('initial_configuration_status_must_be_descriptor_registered');
+  if (config.readiness_status !== INITIAL_READINESS_STATUS) errors.push('initial_readiness_status_must_be_not_ready');
+  if (config.configuration_version !== 1) errors.push('initial_configuration_version_must_be_1');
+  if (config.deprecated !== false) errors.push('initial_deprecated_must_be_false');
+  if (config.disabled !== false) errors.push('initial_disabled_must_be_false');
+  if (config.feature_flag_default !== false) errors.push('initial_feature_flag_default_must_be_false');
+  if (config.kill_switch_required !== true) errors.push('initial_kill_switch_required_must_be_true');
+  if (!['local_test', 'contract_only'].includes(config.environment)) errors.push('initial_environment_not_allowed');
+  return uniqueSorted(errors);
 }
 
 function validateConfigurationChangeRequest(request) {
@@ -417,9 +531,10 @@ function validateConfigurationChangeRequest(request) {
   for (const field of REQUIRED_CONFIGURATION_CHANGE_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(request, field)) errors.push(`missing_${field}`);
   }
-  for (const field of ['trace_id', 'change_id', 'configuration_id', 'actor_id', 'actor_role', 'reason', 'requested_at']) {
+  for (const field of ['trace_id', 'change_id', 'configuration_id', 'operation', 'actor_id', 'actor_role', 'reason', 'requested_at']) {
     if (!isNonEmptyString(request[field])) errors.push(`invalid_${field}`);
   }
+  if (!CONFIGURATION_OPERATIONS.includes(request.operation)) errors.push('configuration_operation_not_allowed');
   if (!Number.isInteger(request.expected_version) || request.expected_version < 1) errors.push('invalid_expected_version');
   if (request.simulated !== true) errors.push('simulated_must_be_true');
   if (request.executed !== false) errors.push('executed_must_be_false');
@@ -428,20 +543,21 @@ function validateConfigurationChangeRequest(request) {
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }
 
-function validateConfigurationReadiness(config, context = {}) {
-  const validation = validateProviderConfiguration(config, context);
-  if (!validation.valid) {
-    return {
-      ready: false,
-      readiness_status: 'not_ready',
-      blocking_reasons: validation.errors
-    };
+function getConfigurationTargetStatus(currentStatus, operation) {
+  return CONFIGURATION_TRANSITIONS[currentStatus] && CONFIGURATION_TRANSITIONS[currentStatus][operation]
+    ? CONFIGURATION_TRANSITIONS[currentStatus][operation]
+    : null;
+}
+
+function detectConfigurationIdentityMutation(current, patch = {}) {
+  const mutations = [];
+  if (!isPlainObject(current) || !isPlainObject(patch)) return mutations;
+  for (const field of IMMUTABLE_CONFIGURATION_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(patch, field) && patch[field] !== current[field]) {
+      mutations.push(`identity_mutation::${field}`);
+    }
   }
-  return {
-    ready: true,
-    readiness_status: 'configuration_ready_for_mock_binding',
-    blocking_reasons: []
-  };
+  return uniqueSorted(mutations);
 }
 
 function buildSafeConfigurationError(code, message, context = {}) {
@@ -459,46 +575,50 @@ function buildConfigurationAuditEventCandidate(context = {}) {
     trace_id: isNonEmptyString(context.trace_id) ? context.trace_id : 'trace_not_available',
     change_id: isNonEmptyString(context.change_id) ? context.change_id : 'change_not_available',
     configuration_id: isNonEmptyString(context.configuration_id) ? context.configuration_id : 'configuration_not_available',
+    connector_id: isNonEmptyString(context.connector_id) ? context.connector_id : 'connector_not_available',
     provider_id: isNonEmptyString(context.provider_id) ? context.provider_id : 'provider_not_available',
     adapter_id: isNonEmptyString(context.adapter_id) ? context.adapter_id : 'adapter_not_available',
-    connector_id: isNonEmptyString(context.connector_id) ? context.connector_id : 'connector_not_available',
-    workspace_type: isNonEmptyString(context.workspace_type) ? context.workspace_type : 'workspace_not_available',
-    tenant_id: isNonEmptyString(context.tenant_id) ? context.tenant_id : 'tenant_not_available',
-    status: isNonEmptyString(context.status) ? context.status : 'configuration_blocked',
+    previous_status: isNonEmptyString(context.previous_status) ? context.previous_status : 'unknown',
+    current_status: isNonEmptyString(context.current_status) ? context.current_status : 'unknown',
+    operation: isNonEmptyString(context.operation) ? context.operation : 'unknown',
     applied: context.applied === true,
-    previous_version: Number.isInteger(context.previous_version) ? context.previous_version : 0,
-    new_version: Number.isInteger(context.new_version) ? context.new_version : 0,
-    actor_id: isNonEmptyString(context.actor_id) ? context.actor_id : 'actor_not_available',
-    actor_role: isNonEmptyString(context.actor_role) ? context.actor_role : 'actor_role_not_available',
+    error_code: isNonEmptyString(context.error_code) ? context.error_code : null,
+    blocked_reason: isNonEmptyString(context.blocked_reason) ? context.blocked_reason : null,
+    occurred_at: isNonEmptyString(context.occurred_at) ? context.occurred_at : new Date(0).toISOString(),
     simulated: true,
     executed: false,
     real_provider_called: false,
-    can_trigger_real_execution: false,
-    error_code: isNonEmptyString(context.error_code) ? context.error_code : null,
-    blocked_reason: isNonEmptyString(context.blocked_reason) ? context.blocked_reason : null,
-    occurred_at: isNonEmptyString(context.occurred_at) ? context.occurred_at : new Date(0).toISOString()
+    can_trigger_real_execution: false
   };
 }
 
 module.exports = {
   CONFIGURATION_STATUSES,
+  INITIAL_CONFIGURATION_STATUS,
+  INITIAL_READINESS_STATUS,
   CONFIGURATION_READINESS_STATUSES,
+  SECRET_REFERENCE_STATUSES,
+  INITIAL_SECRET_REFERENCE_STATUSES,
   SECRET_REFERENCE_TYPES,
-  ENVIRONMENT_POLICIES,
-  TENANT_CONFIGURATION_POLICIES,
-  WORKSPACE_CONFIGURATION_POLICIES,
-  ROTATION_STATUSES,
-  EXPIRATION_STATUSES,
-  ERROR_CODES,
+  RESOLVABLE_SECRET_REFERENCE_TYPES,
+  CONFIGURATION_OPERATIONS,
+  CONFIGURATION_TRANSITIONS,
   REQUIRED_PROVIDER_CONFIGURATION_FIELDS,
   REQUIRED_SECRET_REFERENCE_FIELDS,
   REQUIRED_CONFIGURATION_CHANGE_FIELDS,
   REQUIRED_AUDIT_FIELDS,
+  IMMUTABLE_CONFIGURATION_FIELDS,
+  BLOCKED_SCOPE_TERMS,
+  ERROR_CODES,
   FORBIDDEN_FIELDS,
+  ALLOWED_SECRET_REFERENCE_FIELDS,
   validateProviderConfiguration,
+  validateInitialConfigurationState,
   validateSecretReference,
+  validateInitialSecretReferenceState,
   validateConfigurationChangeRequest,
-  validateConfigurationReadiness,
+  getConfigurationTargetStatus,
+  detectConfigurationIdentityMutation,
   findConfigurationForbiddenFields,
   sanitizeConfigurationData,
   buildSafeConfigurationError,

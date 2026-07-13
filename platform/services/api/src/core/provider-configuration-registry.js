@@ -4,11 +4,14 @@ const {
   buildConfigurationAuditEventCandidate,
   buildSafeConfigurationError,
   deepClone,
+  detectConfigurationIdentityMutation,
+  getConfigurationTargetStatus,
   isNonEmptyString,
   isPlainObject,
   sanitizeConfigurationData,
   uniqueSorted,
   validateConfigurationChangeRequest,
+  validateInitialConfigurationState,
   validateProviderConfiguration
 } = require('./provider-configuration-contract');
 
@@ -16,8 +19,8 @@ const REGISTRY_STORAGE = new WeakMap();
 const DEFAULT_MAX_HISTORY_PER_CONFIGURATION = 100;
 const MAX_HISTORY_PER_CONFIGURATION = 1000;
 
-function cloneConfig(config) {
-  return config ? deepClone(config) : null;
+function cloneValue(value) {
+  return value ? deepClone(value) : value;
 }
 
 function normalizeMaxHistory(value) {
@@ -38,7 +41,7 @@ function normalizeFilters(filters = {}) {
   return normalized;
 }
 
-function configMatchesFilters(config, filters) {
+function matchesConfiguration(config, filters) {
   if (filters.configuration_id && config.configuration_id !== filters.configuration_id) return false;
   if (filters.provider_id && config.provider_id !== filters.provider_id) return false;
   if (filters.adapter_id && config.adapter_id !== filters.adapter_id) return false;
@@ -48,10 +51,10 @@ function configMatchesFilters(config, filters) {
   return true;
 }
 
-function historyMatchesFilters(event, filters) {
+function matchesHistory(event, filters) {
   if (filters.configuration_id && event.configuration_id !== filters.configuration_id) return false;
   if (filters.provider_id && event.provider_id !== filters.provider_id) return false;
-  if (filters.status && event.status !== filters.status) return false;
+  if (filters.status && event.current_status !== filters.status) return false;
   if (typeof filters.applied === 'boolean' && event.applied !== filters.applied) return false;
   return true;
 }
@@ -70,40 +73,35 @@ function sortHistory(history) {
 
 function normalizeConfiguration(config, context = {}) {
   const validation = validateProviderConfiguration(config, context);
-  if (!validation.valid) {
-    return {
-      valid: false,
-      errors: validation.errors
-    };
-  }
+  if (!validation.valid) return { valid: false, errors: validation.errors };
+  return { valid: true, configuration: sanitizeConfigurationData(config) };
+}
+
+function validateRegistration(config) {
+  const stateErrors = validateInitialConfigurationState(config);
   return {
-    valid: true,
-    configuration: sanitizeConfigurationData(config)
+    valid: stateErrors.length === 0,
+    errors: stateErrors
   };
 }
 
-function buildRegistrySafeResult(request, fields = {}) {
+function buildSafeResult(request, fields = {}) {
+  const current = fields.current || {};
   const status = fields.status || 'configuration_blocked';
   const blockedReason = fields.blockedReason || 'configuration_operation_blocked';
   const errorCode = fields.errorCode || 'INTERNAL_CONFIGURATION_ERROR';
-  const previousVersion = Number.isInteger(fields.previousVersion) ? fields.previousVersion : 0;
-  const newVersion = Number.isInteger(fields.newVersion) ? fields.newVersion : previousVersion;
   const occurredAt = fields.occurredAt || new Date(0).toISOString();
   const audit = buildConfigurationAuditEventCandidate({
     trace_id: request && request.trace_id,
     change_id: request && request.change_id,
     configuration_id: request && request.configuration_id,
-    provider_id: fields.providerId,
-    adapter_id: fields.adapterId,
-    connector_id: fields.connectorId,
-    workspace_type: fields.workspaceType,
-    tenant_id: fields.tenantId,
-    status,
+    connector_id: current.connector_id || fields.connectorId,
+    provider_id: current.provider_id || fields.providerId,
+    adapter_id: current.adapter_id || fields.adapterId,
+    previous_status: current.configuration_status || fields.previousStatus,
+    current_status: current.configuration_status || fields.currentStatus,
+    operation: request && request.operation,
     applied: false,
-    previous_version: previousVersion,
-    new_version: newVersion,
-    actor_id: request && request.actor_id,
-    actor_role: request && request.actor_role,
     error_code: errorCode,
     blocked_reason: blockedReason,
     occurred_at: occurredAt
@@ -113,8 +111,11 @@ function buildRegistrySafeResult(request, fields = {}) {
     trace_id: request && request.trace_id ? request.trace_id : 'trace_not_available',
     change_id: request && request.change_id ? request.change_id : 'change_not_available',
     configuration_id: request && request.configuration_id ? request.configuration_id : 'configuration_not_available',
-    previous_version: previousVersion,
-    new_version: newVersion,
+    previous_version: Number.isInteger(current.configuration_version) ? current.configuration_version : 0,
+    new_version: Number.isInteger(current.configuration_version) ? current.configuration_version : 0,
+    previous_status: current.configuration_status || 'unknown',
+    current_status: current.configuration_status || 'unknown',
+    operation: request && request.operation ? request.operation : 'unknown',
     status,
     applied: false,
     simulated: true,
@@ -131,8 +132,15 @@ function buildRegistrySafeResult(request, fields = {}) {
   };
 }
 
-function registerConfigurationInternal(configurations, config, context = {}) {
-  if (!(configurations instanceof Map)) {
+function appendHistory(histories, configurationId, event, maxHistory) {
+  if (!(histories instanceof Map) || !isNonEmptyString(configurationId) || !event) return;
+  const current = histories.get(configurationId) || [];
+  const next = current.concat([sanitizeConfigurationData(event)]);
+  histories.set(configurationId, next.slice(Math.max(0, next.length - maxHistory)));
+}
+
+function registerConfigurationInternal(configurations, histories, config, context = {}) {
+  if (!(configurations instanceof Map) || !(histories instanceof Map)) {
     return {
       ok: false,
       error_code: 'INTERNAL_CONFIGURATION_ERROR',
@@ -148,11 +156,13 @@ function registerConfigurationInternal(configurations, config, context = {}) {
       errors: uniqueSorted(normalized.errors)
     };
   }
-  if (normalized.configuration.configuration_version !== 1) {
+  const initial = validateRegistration(normalized.configuration);
+  if (!initial.valid) {
     return {
       ok: false,
-      error_code: 'INVALID_PROVIDER_CONFIGURATION',
-      blocked_reason: 'initial_configuration_version_must_be_1'
+      error_code: 'INITIAL_CONFIGURATION_STATE_NOT_ALLOWED',
+      blocked_reason: 'initial_configuration_state_not_allowed',
+      errors: uniqueSorted(initial.errors)
     };
   }
   if (configurations.has(normalized.configuration.configuration_id)) {
@@ -163,6 +173,7 @@ function registerConfigurationInternal(configurations, config, context = {}) {
     };
   }
   configurations.set(normalized.configuration.configuration_id, normalized.configuration);
+  histories.set(normalized.configuration.configuration_id, []);
   return {
     ok: true,
     configuration_id: normalized.configuration.configuration_id,
@@ -173,67 +184,101 @@ function registerConfigurationInternal(configurations, config, context = {}) {
 
 function unregisterConfigurationInternal(configurations, histories, configurationId) {
   if (!(configurations instanceof Map) || !isNonEmptyString(configurationId)) {
-    return {
-      ok: false,
-      removed: false,
-      error_code: 'INVALID_PROVIDER_CONFIGURATION',
-      blocked_reason: 'configuration_id_invalid'
-    };
+    return { ok: false, removed: false, error_code: 'INVALID_PROVIDER_CONFIGURATION', blocked_reason: 'configuration_id_invalid' };
   }
-  if (!configurations.has(configurationId)) {
-    return {
-      ok: false,
-      removed: false,
-      error_code: 'CONFIGURATION_NOT_FOUND',
-      blocked_reason: 'configuration_not_found'
-    };
+  const current = configurations.get(configurationId);
+  if (!current) return { ok: false, removed: false, error_code: 'CONFIGURATION_NOT_FOUND', blocked_reason: 'configuration_not_found' };
+  const history = histories.get(configurationId) || [];
+  if (current.configuration_status !== 'descriptor_registered' || history.length > 0) {
+    return { ok: false, removed: false, error_code: 'INVALID_CONFIGURATION_TRANSITION', blocked_reason: 'configuration_unregister_not_allowed' };
   }
   configurations.delete(configurationId);
-  if (histories instanceof Map) histories.delete(configurationId);
-  return {
-    ok: true,
-    removed: true,
-    configuration_id: configurationId
-  };
+  histories.delete(configurationId);
+  return { ok: true, removed: true, configuration_id: configurationId };
 }
 
-function appendHistory(histories, configurationId, event, maxHistory) {
-  if (!(histories instanceof Map) || !isNonEmptyString(configurationId) || !event) return;
-  const current = histories.get(configurationId) || [];
-  const next = current.concat([sanitizeConfigurationData(event)]);
-  histories.set(configurationId, next.slice(Math.max(0, next.length - maxHistory)));
+function applyPatch(current, request, patch = {}, context = {}) {
+  const targetStatus = getConfigurationTargetStatus(current.configuration_status, request.operation);
+  if (!targetStatus) {
+    return {
+      ok: false,
+      errorCode: 'INVALID_CONFIGURATION_TRANSITION',
+      blockedReason: 'configuration_transition_not_allowed'
+    };
+  }
+  const identityMutations = detectConfigurationIdentityMutation(current, patch);
+  if (identityMutations.length > 0) {
+    return {
+      ok: false,
+      errorCode: 'CONFIGURATION_IDENTITY_MUTATION_BLOCKED',
+      blockedReason: identityMutations[0],
+      errors: identityMutations
+    };
+  }
+  const candidate = sanitizeConfigurationData({
+    ...current,
+    ...patch,
+    configuration_status: targetStatus,
+    readiness_status: targetStatus === 'structurally_ready' ? 'configuration_structurally_ready' : current.readiness_status,
+    configuration_version: current.configuration_version + 1,
+    updated_at: context.occurredAt || current.updated_at,
+    disabled: targetStatus === 'disabled' ? true : current.disabled,
+    deprecated: targetStatus === 'deprecated' ? true : current.deprecated
+  });
+  if (request.operation === 'mark_rotation_required') {
+    candidate.configuration_status = 'rotation_required';
+  }
+  if (request.operation === 'mark_revoked') {
+    candidate.configuration_status = 'revoked';
+  }
+  const validation = validateProviderConfiguration(candidate, context);
+  if (!validation.valid) {
+    return {
+      ok: false,
+      errorCode: 'INVALID_PROVIDER_CONFIGURATION',
+      blockedReason: 'provider_configuration_invalid',
+      errors: validation.errors
+    };
+  }
+  return { ok: true, configuration: candidate };
 }
 
-function applyConfigurationChangeInternal(configurations, histories, processedChangeIds, maxHistory, request, nextConfiguration, context = {}) {
+function markProcessed(processedChangeIds, changeId) {
+  if (isNonEmptyString(changeId) && processedChangeIds instanceof Set) processedChangeIds.add(changeId);
+}
+
+function applyConfigurationChangeInternal(configurations, histories, processedChangeIds, maxHistory, request, patch = {}, context = {}) {
   const occurredAt = typeof context.clock === 'function' ? context.clock() : new Date().toISOString();
   if (!(configurations instanceof Map) || !(histories instanceof Map) || !(processedChangeIds instanceof Set)) {
-    return buildRegistrySafeResult(request, {
+    return buildSafeResult(request, {
       status: 'configuration_blocked',
       blockedReason: 'registry_storage_invalid',
       errorCode: 'INTERNAL_CONFIGURATION_ERROR',
       occurredAt
     });
   }
+  const changeId = request && request.change_id;
+  if (isNonEmptyString(changeId) && processedChangeIds.has(changeId)) {
+    return buildSafeResult(request, {
+      status: 'configuration_blocked',
+      blockedReason: 'replayed_configuration_request',
+      errorCode: 'REPLAYED_CONFIGURATION_REQUEST',
+      occurredAt
+    });
+  }
+  markProcessed(processedChangeIds, changeId);
   const requestValidation = validateConfigurationChangeRequest(request);
   if (!requestValidation.valid) {
-    return buildRegistrySafeResult(request, {
+    return buildSafeResult(request, {
       status: 'configuration_invalid',
       blockedReason: 'configuration_change_request_invalid',
       errorCode: 'INVALID_PROVIDER_CONFIGURATION',
       occurredAt
     });
   }
-  if (processedChangeIds.has(request.change_id)) {
-    return buildRegistrySafeResult(request, {
-      status: 'configuration_blocked',
-      blockedReason: 'replayed_configuration_change',
-      errorCode: 'REPLAYED_CONFIGURATION_CHANGE',
-      occurredAt
-    });
-  }
   const current = configurations.get(request.configuration_id);
   if (!current) {
-    return buildRegistrySafeResult(request, {
+    return buildSafeResult(request, {
       status: 'configuration_blocked',
       blockedReason: 'configuration_not_found',
       errorCode: 'CONFIGURATION_NOT_FOUND',
@@ -241,71 +286,49 @@ function applyConfigurationChangeInternal(configurations, histories, processedCh
     });
   }
   if (current.configuration_version !== request.expected_version) {
-    return buildRegistrySafeResult(request, {
+    return buildSafeResult(request, {
+      current,
       status: 'configuration_blocked',
       blockedReason: 'version_conflict',
       errorCode: 'VERSION_CONFLICT',
-      previousVersion: current.configuration_version,
-      newVersion: current.configuration_version,
-      providerId: current.provider_id,
-      adapterId: current.adapter_id,
-      connectorId: current.connector_id,
-      workspaceType: current.workspace_type,
-      tenantId: current.tenant_id,
       occurredAt
     });
   }
-
-  const candidate = {
-    ...sanitizeConfigurationData(nextConfiguration),
-    configuration_id: current.configuration_id,
-    configuration_version: current.configuration_version + 1
-  };
-  const normalized = normalizeConfiguration(candidate, context);
-  if (!normalized.valid) {
-    return buildRegistrySafeResult(request, {
-      status: 'configuration_invalid',
-      blockedReason: 'provider_configuration_invalid',
-      errorCode: 'INVALID_PROVIDER_CONFIGURATION',
-      previousVersion: current.configuration_version,
-      newVersion: current.configuration_version,
-      providerId: current.provider_id,
-      adapterId: current.adapter_id,
-      connectorId: current.connector_id,
-      workspaceType: current.workspace_type,
-      tenantId: current.tenant_id,
+  const patched = applyPatch(current, request, patch, { ...context, occurredAt });
+  if (!patched.ok) {
+    return buildSafeResult(request, {
+      current,
+      status: 'configuration_blocked',
+      blockedReason: patched.blockedReason,
+      errorCode: patched.errorCode,
       occurredAt
     });
   }
-
-  configurations.set(request.configuration_id, normalized.configuration);
-  processedChangeIds.add(request.change_id);
+  configurations.set(request.configuration_id, patched.configuration);
   const audit = buildConfigurationAuditEventCandidate({
     trace_id: request.trace_id,
     change_id: request.change_id,
     configuration_id: request.configuration_id,
-    provider_id: normalized.configuration.provider_id,
-    adapter_id: normalized.configuration.adapter_id,
-    connector_id: normalized.configuration.connector_id,
-    workspace_type: normalized.configuration.workspace_type,
-    tenant_id: normalized.configuration.tenant_id,
-    status: 'configuration_registered',
+    connector_id: current.connector_id,
+    provider_id: current.provider_id,
+    adapter_id: current.adapter_id,
+    previous_status: current.configuration_status,
+    current_status: patched.configuration.configuration_status,
+    operation: request.operation,
     applied: true,
-    previous_version: current.configuration_version,
-    new_version: normalized.configuration.configuration_version,
-    actor_id: request.actor_id,
-    actor_role: request.actor_role,
     occurred_at: occurredAt
   });
   appendHistory(histories, request.configuration_id, audit, maxHistory);
-
   return {
     trace_id: request.trace_id,
     change_id: request.change_id,
     configuration_id: request.configuration_id,
     previous_version: current.configuration_version,
-    new_version: normalized.configuration.configuration_version,
-    status: 'configuration_registered',
+    new_version: patched.configuration.configuration_version,
+    previous_status: current.configuration_status,
+    current_status: patched.configuration.configuration_status,
+    operation: request.operation,
+    status: 'configuration_change_applied',
     applied: true,
     simulated: true,
     executed: false,
@@ -314,7 +337,7 @@ function applyConfigurationChangeInternal(configurations, histories, processedCh
     blocking_reasons: [],
     warnings: [],
     error: null,
-    configuration: cloneConfig(normalized.configuration),
+    configuration: cloneValue(patched.configuration),
     audit_event_candidate: audit
   };
 }
@@ -325,79 +348,24 @@ function getStorage(registry) {
 
 function getConfigurationInternal(configurations, configurationId) {
   if (!(configurations instanceof Map) || !isNonEmptyString(configurationId)) return null;
-  return cloneConfig(configurations.get(configurationId));
+  return cloneValue(configurations.get(configurationId));
 }
 
 function listConfigurationsInternal(configurations, filters = {}) {
   if (!(configurations instanceof Map)) return [];
   const normalized = normalizeFilters(filters);
-  return sortConfigurations(Array.from(configurations.values())
-    .filter((config) => configMatchesFilters(config, normalized))
-    .map(cloneConfig));
+  return sortConfigurations(Array.from(configurations.values()).filter((config) => matchesConfiguration(config, normalized)).map(cloneValue));
 }
 
 function getConfigurationHistoryInternal(histories, configurationId) {
   if (!(histories instanceof Map) || !isNonEmptyString(configurationId)) return [];
-  return sortHistory((histories.get(configurationId) || []).map(cloneConfig));
+  return sortHistory((histories.get(configurationId) || []).map(cloneValue));
 }
 
 function listConfigurationHistoryInternal(histories, filters = {}) {
   if (!(histories instanceof Map)) return [];
   const normalized = normalizeFilters(filters);
-  return sortHistory(Array.from(histories.values())
-    .flat()
-    .filter((event) => historyMatchesFilters(event, normalized))
-    .map(cloneConfig));
-}
-
-function registerConfiguration(registry, config, context = {}) {
-  const storage = getStorage(registry);
-  const result = registerConfigurationInternal(storage && storage.configurations, config, context);
-  if (result.ok && storage && storage.histories) storage.histories.set(result.configuration_id, []);
-  return result;
-}
-
-function unregisterConfiguration(registry, configurationId) {
-  const storage = getStorage(registry);
-  return unregisterConfigurationInternal(storage && storage.configurations, storage && storage.histories, configurationId);
-}
-
-function getConfiguration(registry, configurationId) {
-  const storage = getStorage(registry);
-  return getConfigurationInternal(storage && storage.configurations, configurationId);
-}
-
-function listConfigurations(registry, filters = {}) {
-  const storage = getStorage(registry);
-  return listConfigurationsInternal(storage && storage.configurations, filters);
-}
-
-function hasConfiguration(registry, configurationId) {
-  const storage = getStorage(registry);
-  return Boolean(storage && storage.configurations instanceof Map && storage.configurations.has(configurationId));
-}
-
-function applyConfigurationChange(registry, request, nextConfiguration, context = {}) {
-  const storage = getStorage(registry);
-  return applyConfigurationChangeInternal(
-    storage && storage.configurations,
-    storage && storage.histories,
-    storage && storage.processedChangeIds,
-    storage && storage.maxHistory,
-    request,
-    nextConfiguration,
-    context
-  );
-}
-
-function getConfigurationHistory(registry, configurationId) {
-  const storage = getStorage(registry);
-  return getConfigurationHistoryInternal(storage && storage.histories, configurationId);
-}
-
-function listConfigurationHistory(registry, filters = {}) {
-  const storage = getStorage(registry);
-  return listConfigurationHistoryInternal(storage && storage.histories, filters);
+  return sortHistory(Array.from(histories.values()).flat().filter((event) => matchesHistory(event, normalized)).map(cloneValue));
 }
 
 function prepareInitialConfigurations(initialConfigurations, context = {}) {
@@ -405,9 +373,8 @@ function prepareInitialConfigurations(initialConfigurations, context = {}) {
   const configurations = new Map();
   const histories = new Map();
   for (const config of initialConfigurations) {
-    const result = registerConfigurationInternal(configurations, config, context);
+    const result = registerConfigurationInternal(configurations, histories, config, context);
     if (!result.ok) throw new Error('INVALID_INITIAL_PROVIDER_CONFIGURATION');
-    histories.set(result.configuration_id, []);
   }
   return { configurations, histories };
 }
@@ -418,12 +385,9 @@ function createProviderConfigurationRegistry(options = {}) {
   const storage = prepareInitialConfigurations(initialConfigurations, options.context || {});
   storage.processedChangeIds = new Set();
   storage.maxHistory = maxHistory;
-
   const registry = {
     registerConfiguration(config, context = {}) {
-      const result = registerConfigurationInternal(storage.configurations, config, context);
-      if (result.ok) storage.histories.set(result.configuration_id, []);
-      return result;
+      return registerConfigurationInternal(storage.configurations, storage.histories, config, context);
     },
     unregisterConfiguration(configurationId) {
       return unregisterConfigurationInternal(storage.configurations, storage.histories, configurationId);
@@ -435,10 +399,10 @@ function createProviderConfigurationRegistry(options = {}) {
       return listConfigurationsInternal(storage.configurations, filters);
     },
     hasConfiguration(configurationId) {
-      return hasConfiguration(this, configurationId);
+      return Boolean(storage.configurations.has(configurationId));
     },
-    applyConfigurationChange(request, nextConfiguration, context = {}) {
-      return applyConfigurationChangeInternal(storage.configurations, storage.histories, storage.processedChangeIds, storage.maxHistory, request, nextConfiguration, context);
+    applyConfigurationChange(request, patch = {}, context = {}) {
+      return applyConfigurationChangeInternal(storage.configurations, storage.histories, storage.processedChangeIds, storage.maxHistory, request, patch, context);
     },
     getConfigurationHistory(configurationId) {
       return getConfigurationHistoryInternal(storage.histories, configurationId);
@@ -447,9 +411,43 @@ function createProviderConfigurationRegistry(options = {}) {
       return listConfigurationHistoryInternal(storage.histories, filters);
     }
   };
-
   REGISTRY_STORAGE.set(registry, storage);
   return Object.freeze(registry);
+}
+
+function registerConfiguration(registry, config, context = {}) {
+  const storage = REGISTRY_STORAGE.get(registry);
+  return registerConfigurationInternal(storage && storage.configurations, storage && storage.histories, config, context);
+}
+
+function unregisterConfiguration(registry, configurationId) {
+  const storage = REGISTRY_STORAGE.get(registry);
+  return unregisterConfigurationInternal(storage && storage.configurations, storage && storage.histories, configurationId);
+}
+
+function getConfiguration(registry, configurationId) {
+  const storage = REGISTRY_STORAGE.get(registry);
+  return getConfigurationInternal(storage && storage.configurations, configurationId);
+}
+
+function listConfigurations(registry, filters = {}) {
+  const storage = REGISTRY_STORAGE.get(registry);
+  return listConfigurationsInternal(storage && storage.configurations, filters);
+}
+
+function hasConfiguration(registry, configurationId) {
+  const storage = REGISTRY_STORAGE.get(registry);
+  return Boolean(storage && storage.configurations instanceof Map && storage.configurations.has(configurationId));
+}
+
+function applyConfigurationChange(registry, request, patch = {}, context = {}) {
+  const storage = REGISTRY_STORAGE.get(registry);
+  return applyConfigurationChangeInternal(storage && storage.configurations, storage && storage.histories, storage && storage.processedChangeIds, storage && storage.maxHistory, request, patch, context);
+}
+
+function getConfigurationHistory(registry, configurationId) {
+  const storage = REGISTRY_STORAGE.get(registry);
+  return getConfigurationHistoryInternal(storage && storage.histories, configurationId);
 }
 
 module.exports = {
@@ -461,6 +459,9 @@ module.exports = {
   hasConfiguration,
   applyConfigurationChange,
   getConfigurationHistory,
-  listConfigurationHistory,
+  listConfigurationHistory: (registry, filters = {}) => {
+    const storage = REGISTRY_STORAGE.get(registry);
+    return listConfigurationHistoryInternal(storage && storage.histories, filters);
+  },
   buildSafeConfigurationError
 };
