@@ -414,3 +414,11 @@ read-only first, human review, governance review, `simulated:true`, `executed:fa
 declare workspace types and tenant strategy. Transitions cannot rely on prompt
 text to change tenant scope, and lifecycle state never bypasses tenant or
 workspace isolation.
+
+## Real Provider Configuration Boundary
+
+`REAL_PROVIDER_CONFIGURATION_BOUNDARY.md` requires every future provider
+configuration to declare tenant and workspace policy before it can be retained
+in the private configuration registry. Configuration records cannot widen
+tenant scope, cannot use prompt text as tenant authority, cannot share secret
+references across tenants, and cannot activate real provider calls.

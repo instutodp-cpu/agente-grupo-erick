@@ -328,6 +328,7 @@ These are documented only and are not implemented or activated in this PR:
 - `SOCIAL_MEDIA_DRAFT_ONLY_APPROVAL.md`
 - `READ_ONLY_ADAPTER_INTERFACE_RUNTIME_CONTRACT.md`
 - `CONNECTOR_LIFECYCLE_RUNTIME_REGISTRY.md`
+- `REAL_PROVIDER_CONFIGURATION_BOUNDARY.md`
 - `GOVERNANCE_CHECK_REPORT.md`
 - `PERMISSION_MATRIX.md`
 - `GOLDEN_SCENARIOS.md`
@@ -353,3 +354,11 @@ strongly-bound evidence for lifecycle transitions. A
 `ready_for_real_read_only_pr` readiness result can move a lifecycle record to
 `readiness_passed`, but it does not activate runtime, does not enable canary,
 does not enable `read_only_active`, and does not allow real provider calls.
+
+## Provider Configuration Boundary Relationship
+
+`REAL_PROVIDER_CONFIGURATION_BOUNDARY.md` must be satisfied before any future
+real provider can receive configuration. Readiness alone does not create
+secrets, OAuth, SDK setup, provider calls or runtime activation. Configuration
+must remain reference-only, feature-flagged, kill-switch protected and tenant
+scoped.

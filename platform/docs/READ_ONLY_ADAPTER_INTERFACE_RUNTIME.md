@@ -372,6 +372,7 @@ or payload.
 
 - `REAL_READ_ONLY_ADAPTER_READINESS_GATE.md`
 - `CONNECTOR_LIFECYCLE_RUNTIME_REGISTRY.md`
+- `REAL_PROVIDER_CONFIGURATION_BOUNDARY.md`
 - `EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`
 - `INTEGRATION_SECURITY_BOUNDARY.md`
 - `EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`
@@ -395,3 +396,12 @@ rollout stage, readiness binding, feature flag default-off policy and kill
 switch policy for connector records. It does not replace this adapter
 interface/runtime contract and does not activate real adapters. `mock_only`
 remains the maximum reachable lifecycle state in PR #61.
+
+## Provider Configuration Boundary Relationship
+
+`REAL_PROVIDER_CONFIGURATION_BOUNDARY.md` defines future provider configuration,
+secret references, rotation and expiration metadata and sanitized configuration
+audit candidates. This adapter runtime does not read provider credentials,
+does not use provider SDKs and does not call providers. Real candidates remain
+blocked until a future PR explicitly binds lifecycle, readiness, configuration,
+feature flag, kill switch and provider execution policy.

@@ -433,3 +433,12 @@ read-only first, human review, governance review, `simulated:true`, `executed:fa
 lifecycle evidence chain. `readiness_passed` only records eligibility evidence;
 it does not activate runtime, canary, read-only execution or real provider
 calls.
+
+## Real Provider Configuration Boundary
+
+`REAL_PROVIDER_CONFIGURATION_BOUNDARY.md` is a governance check area for future
+provider configuration. Governance must block plaintext secrets, runtime
+environment credentials, missing feature flag, missing kill switch, missing
+rotation/expiration metadata, expired configuration, invalid tenant/workspace
+policy, OAuth creation, SDK setup, provider calls and any attempt to set
+`executed:true` or `real_provider_called:true`.

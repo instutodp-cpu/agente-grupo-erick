@@ -219,3 +219,15 @@ this branch. It controls lifecycle state and transition history only. It keeps
 does not call providers or alter `/message` or `/confirm`.
 
 Next step: Real Provider Secrets and Configuration Boundary.
+
+## PR #62 Real Provider Configuration Boundary Delivery
+
+The real provider configuration boundary is delivered as contract, fixture,
+pure validators, private in-memory registry and tests in this branch. It
+defines secret references, configuration readiness, rotation and expiration
+metadata, tenant/workspace policy and sanitized configuration audit candidates
+without creating providers, OAuth, secrets, SDKs, external calls, persistent
+storage or runtime integration.
+
+Next step: Real Provider Secrets Manager Integration Readiness, not direct
+provider activation.

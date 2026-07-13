@@ -764,3 +764,13 @@ keeps `mock_only` as the phase ceiling in this PR. Canary and
 not activate runtime, feature flags remain default off, kill switch is
 mandatory, and no OAuth, secrets, provider calls, `/message` changes or
 `/confirm` changes are introduced.
+
+## Real Provider Configuration Boundary
+
+`docs/REAL_PROVIDER_CONFIGURATION_BOUNDARY.md` defines the provider
+configuration boundary for future real providers. It adds validated provider
+configuration records, secret references, rotation and expiration metadata,
+tenant/workspace policy, private in-memory registry behavior and sanitized
+audit candidates. It does not create OAuth, secrets, SDKs, provider calls,
+persistent storage or runtime wiring, and it does not change `/message` or
+`/confirm`.

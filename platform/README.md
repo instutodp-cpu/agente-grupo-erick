@@ -41,6 +41,7 @@ repositório.
 - **Real Read-Only Adapter Readiness Gate**: `docs/REAL_READ_ONLY_ADAPTER_READINESS_GATE.md`
 - **Read-Only Adapter Interface and Runtime Contract**: `docs/READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md`
 - **Connector Lifecycle Runtime Registry**: `docs/CONNECTOR_LIFECYCLE_RUNTIME_REGISTRY.md`
+- **Real Provider Configuration Boundary**: `docs/REAL_PROVIDER_CONFIGURATION_BOUNDARY.md`
 - **Regras para agentes de código**: `CLAUDE.md`
 
 ## Pré-requisitos
@@ -341,3 +342,13 @@ state in this PR. It does not activate providers, create secrets, call external
 APIs, or change `/message` or `/confirm`; `executed:false`,
 `real_provider_called:false` and `can_trigger_real_execution:false` remain
 mandatory for lifecycle transitions.
+
+## Real Provider Configuration Boundary
+
+`docs/REAL_PROVIDER_CONFIGURATION_BOUNDARY.md` documents the official provider
+configuration boundary. It defines secret references, configuration validation,
+rotation and expiration metadata, tenant/workspace policy, private in-memory
+registry behavior and sanitized audit candidates. It does not implement real
+providers, OAuth, tokens, secrets, SDKs, external API calls, persistent storage,
+or changes to `/message` and `/confirm`; `executed:false` and
+`real_provider_called:false` remain mandatory.

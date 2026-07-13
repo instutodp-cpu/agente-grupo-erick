@@ -362,3 +362,12 @@ read-only first, human review, governance review, `simulated:true`, `executed:fa
 adapter_id to lifecycle state, version, readiness, feature flag and kill switch
 controls. It keeps `mock_only` as the maximum reachable state in this PR,
 blocks canary/read-only activation, and does not create or call a real provider.
+
+## Real Provider Configuration Boundary
+
+`REAL_PROVIDER_CONFIGURATION_BOUNDARY.md` defines how future provider
+configuration must be represented before any real provider can be proposed.
+Provider registry candidacy does not create secrets, OAuth, SDK setup, runtime
+environment credentials or provider calls. Future providers must use validated
+secret references, tenant/workspace policy, rotation and expiration metadata,
+feature flag default off, kill switch and sanitized audit candidates.
