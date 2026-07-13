@@ -327,3 +327,10 @@ read-only first, human review, governance review, `simulated:true`, `executed:fa
 ## Read-Only Adapter Interface Runtime
 
 `READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md` defines the isolated adapter interface, in-memory registry and mock-only runtime for future read-only integrations. It permits only local mocks/test doubles in this PR, blocks real providers and real candidates from execution, requires readiness/feature-flag/kill-switch checks for future candidates, and does not alter `/message` or `/confirm`.
+
+## Connector Lifecycle Runtime Registry
+
+`CONNECTOR_LIFECYCLE_RUNTIME_REGISTRY.md` is the lifecycle layer above mock
+adapter registration. A connector can reach `mock_only` only when its mock
+adapter exists through the adapter registry public API and metadata validates;
+this still does not enable a real provider.

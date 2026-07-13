@@ -371,6 +371,7 @@ or payload.
 ## Relationship With Existing Contracts
 
 - `REAL_READ_ONLY_ADAPTER_READINESS_GATE.md`
+- `CONNECTOR_LIFECYCLE_RUNTIME_REGISTRY.md`
 - `EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`
 - `INTEGRATION_SECURITY_BOUNDARY.md`
 - `EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`
@@ -386,3 +387,11 @@ or payload.
 - `PERSONAL_WORKSPACE_CONNECTOR_POLICY.md`
 - `CORPORATE_WORKSPACE_CONNECTOR_POLICY.md`
 - `EXTERNAL_CLIENT_WORKSPACE_CONNECTOR_POLICY.md`
+
+## Connector Lifecycle Relationship
+
+`CONNECTOR_LIFECYCLE_RUNTIME_REGISTRY.md` controls lifecycle state, version,
+rollout stage, readiness binding, feature flag default-off policy and kill
+switch policy for connector records. It does not replace this adapter
+interface/runtime contract and does not activate real adapters. `mock_only`
+remains the maximum reachable lifecycle state in PR #61.

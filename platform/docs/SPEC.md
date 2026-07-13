@@ -753,3 +753,14 @@ descriptor, registry, sanitized request/response envelope and isolated runtime.
 Only local mocks/test doubles can execute in this PR. Real candidates remain
 blocked behind readiness, feature flag and kill switch checks, and no provider
 is called. The current `/message` and `/confirm` flows are unchanged.
+
+## Connector Lifecycle and Runtime Registry
+
+`docs/CONNECTOR_LIFECYCLE_RUNTIME_REGISTRY.md` defines the connector lifecycle
+state machine and private runtime registry for connector records. It separates
+registered, candidate, readiness-passed, configured and executable states, and
+keeps `mock_only` as the phase ceiling in this PR. Canary and
+`read_only_active` states are contract-only and blocked. Readiness passed does
+not activate runtime, feature flags remain default off, kill switch is
+mandatory, and no OAuth, secrets, provider calls, `/message` changes or
+`/confirm` changes are introduced.
