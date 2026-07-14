@@ -366,3 +366,12 @@ read-only first, human review, governance review, `simulated:true`, `executed:fa
 connector lifecycle changes. History includes state, version, actor and status
 only; it must not include raw evidence, payloads, tokens, secrets, headers,
 cookies or credentials.
+
+## Real Provider Configuration Boundary
+
+`REAL_PROVIDER_CONFIGURATION_BOUNDARY.md` adds sanitized audit candidates for
+future provider configuration changes. Configuration audit records must include
+identity, tenant/workspace scope, version and status, but must not include raw
+configuration, secret values, headers, cookies, credentials or provider
+payloads. Rotation and expiration metadata must be known before future provider
+configuration can advance.

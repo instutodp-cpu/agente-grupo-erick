@@ -560,3 +560,24 @@ Before any connector lifecycle transition is accepted, operators must confirm:
 readiness-passed lifecycle state still requires future configuration boundary,
 feature flag policy, kill switch policy and a separate approved PR before any
 real provider work can be considered.
+
+## Real Provider Configuration Boundary Checklist
+
+Before any future provider configuration is accepted, operators must confirm:
+
+- configuration identity is stable with configuration_id, provider_id, adapter_id and connector_id
+- only secret references are present; no secret value, token, OAuth code, private key or session cookie appears
+- provider credentials are not read from runtime environment variables
+- tenant and workspace policy match the configuration record
+- feature flag key exists and defaults off
+- kill switch key exists
+- rotation metadata exists and is not due
+- expiration metadata exists and is not expired
+- configuration change_id is unique and not replayed
+- snapshots and audit candidates are sanitized
+- no provider call, SDK call, OAuth flow, persistent storage or runtime route change is introduced
+
+`REAL_PROVIDER_CONFIGURATION_BOUNDARY.md` is a contract and validation layer
+only. It does not activate providers, does not create secrets, does not connect
+to `/message` or `/confirm`, and keeps `executed:false` and
+`real_provider_called:false` mandatory.

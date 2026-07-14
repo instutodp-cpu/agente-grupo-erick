@@ -338,3 +338,12 @@ read-only first, human review, governance review, `simulated:true`, `executed:fa
 connector can move from registration to candidate, mock-only, readiness or
 future configuration states. It does not weaken the security boundary, does not
 allow secrets, and keeps all real provider calls blocked.
+
+## Real Provider Configuration Boundary
+
+`REAL_PROVIDER_CONFIGURATION_BOUNDARY.md` defines the configuration boundary
+for future real providers. Security review must require secret references only,
+feature flags default off, kill switch, tenant/workspace policy, rotation and
+expiration metadata, sanitized audit candidates and no provider calls. It does
+not authorize OAuth, SDK setup, secrets, runtime environment credentials or
+external API calls.

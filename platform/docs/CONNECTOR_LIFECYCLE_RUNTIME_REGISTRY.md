@@ -390,6 +390,7 @@ In this PR:
 This contract relies on and does not replace:
 - `READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md`
 - `REAL_READ_ONLY_ADAPTER_READINESS_GATE.md`
+- `REAL_PROVIDER_CONFIGURATION_BOUNDARY.md`
 - `EXTERNAL_INTEGRATION_PROVIDER_REGISTRY.md`
 - `INTEGRATION_SECURITY_BOUNDARY.md`
 - `EXTERNAL_PROVIDER_PERMISSION_OVERLAY.md`
@@ -399,3 +400,12 @@ This contract relies on and does not replace:
 - `PERMISSION_MATRIX.md`
 - `GOVERNANCE_CHECK_REPORT.md`
 - `OPERATOR_RUNBOOK.md`
+
+## R. Real Provider Configuration Boundary
+
+`REAL_PROVIDER_CONFIGURATION_BOUNDARY.md` is the next boundary after connector
+lifecycle control. It defines provider configuration records, secret references,
+rotation and expiration metadata, tenant/workspace policies, private registry
+behavior and sanitized configuration audit candidates. A lifecycle state such
+as `readiness_passed` still does not activate runtime or provider calls without
+this configuration boundary and a future approved integration PR.
