@@ -14,6 +14,15 @@ const {
 const REGISTRY_STORAGE = new WeakMap();
 const DEFAULT_MAX_HISTORY_PER_REFERENCE = 100;
 const MAX_HISTORY_PER_REFERENCE = 1000;
+const SECRET_REFERENCE_STATUS_TRANSITIONS = Object.freeze({
+  reference_pending: ['reference_registered', 'revoked', 'disabled'],
+  reference_registered: ['structurally_ready', 'rotation_required', 'revoked', 'disabled'],
+  structurally_ready: ['rotation_required', 'expired', 'revoked', 'disabled'],
+  rotation_required: ['revoked', 'disabled'],
+  expired: ['revoked', 'disabled'],
+  revoked: [],
+  disabled: []
+});
 
 function cloneValue(value) {
   return value ? deepClone(value) : value;
@@ -78,6 +87,23 @@ function appendHistory(histories, referenceId, event, maxHistory) {
   const current = histories.get(referenceId) || [];
   const next = current.concat([event]);
   histories.set(referenceId, next.slice(Math.max(0, next.length - maxHistory)));
+}
+
+function canTransitionReferenceStatus(fromStatus, toStatus) {
+  return Array.isArray(SECRET_REFERENCE_STATUS_TRANSITIONS[fromStatus]) &&
+    SECRET_REFERENCE_STATUS_TRANSITIONS[fromStatus].includes(toStatus);
+}
+
+function validateReferenceStateConsistency(reference) {
+  const errors = [];
+  if (!reference || !SECRET_REFERENCE_STATUS_TRANSITIONS[reference.status]) return ['secret_reference_status_not_allowed'];
+  if (['reference_pending', 'reference_registered', 'structurally_ready', 'rotation_required', 'expired'].includes(reference.status)) {
+    if (reference.revoked !== false) errors.push(`${reference.status}_revoked_must_be_false`);
+    if (reference.disabled !== false) errors.push(`${reference.status}_disabled_must_be_false`);
+  }
+  if (reference.status === 'revoked' && reference.revoked !== true) errors.push('revoked_status_requires_revoked_true');
+  if (reference.status === 'disabled' && reference.disabled !== true) errors.push('disabled_status_requires_disabled_true');
+  return uniqueSorted(errors);
 }
 
 function registerSecretReferenceInternal(references, histories, reference, context = {}) {
@@ -164,6 +190,14 @@ function changeReferenceStatusInternal(references, histories, processedChangeIds
       audit_event_candidate: buildReferenceAuditEvent(current, request, current.status, false, 'VERSION_CONFLICT', 'version_conflict', occurredAt, expectedOperation)
     };
   }
+  if (!canTransitionReferenceStatus(current.status, nextStatus)) {
+    return {
+      ok: false,
+      applied: false,
+      error: buildSafeConfigurationError('INVALID_SECRET_REFERENCE', 'Secret reference transition blocked safely.', { blocked_reason: 'secret_reference_transition_not_allowed' }),
+      audit_event_candidate: buildReferenceAuditEvent(current, request, current.status, false, 'INVALID_SECRET_REFERENCE', 'secret_reference_transition_not_allowed', occurredAt, expectedOperation)
+    };
+  }
   const next = sanitizeConfigurationData({
     ...current,
     status: nextStatus,
@@ -171,6 +205,15 @@ function changeReferenceStatusInternal(references, histories, processedChangeIds
     updated_at: request.requested_at,
     ...flags
   });
+  const stateErrors = validateReferenceStateConsistency(next);
+  if (stateErrors.length > 0) {
+    return {
+      ok: false,
+      applied: false,
+      error: buildSafeConfigurationError('INVALID_SECRET_REFERENCE', 'Secret reference state consistency blocked safely.', { blocked_reason: stateErrors[0] }),
+      audit_event_candidate: buildReferenceAuditEvent(current, request, current.status, false, 'INVALID_SECRET_REFERENCE', stateErrors[0], occurredAt, expectedOperation)
+    };
+  }
   references.set(request.reference_id, next);
   const event = buildHistoryEvent(current, request, nextStatus, true, null, null, occurredAt);
   appendHistory(histories, request.reference_id, event, maxHistory);
@@ -209,6 +252,15 @@ function createProviderSecretReferenceRegistry(options = {}) {
     markRotationRequired(request) {
       return changeReferenceStatusInternal(references, histories, processedChangeIds, maxHistory, request, 'rotation_required', 'mark_rotation_required');
     },
+    markReferenceRegistered(request) {
+      return changeReferenceStatusInternal(references, histories, processedChangeIds, maxHistory, request, 'reference_registered', 'mark_registered');
+    },
+    markReferenceStructurallyReady(request) {
+      return changeReferenceStatusInternal(references, histories, processedChangeIds, maxHistory, request, 'structurally_ready', 'mark_structurally_ready');
+    },
+    markReferenceExpired(request) {
+      return changeReferenceStatusInternal(references, histories, processedChangeIds, maxHistory, request, 'expired', 'mark_expired');
+    },
     getReferenceHistory(referenceId) {
       return (histories.get(referenceId) || []).map(cloneValue);
     }
@@ -218,5 +270,6 @@ function createProviderSecretReferenceRegistry(options = {}) {
 }
 
 module.exports = {
-  createProviderSecretReferenceRegistry
+  createProviderSecretReferenceRegistry,
+  SECRET_REFERENCE_STATUS_TRANSITIONS
 };

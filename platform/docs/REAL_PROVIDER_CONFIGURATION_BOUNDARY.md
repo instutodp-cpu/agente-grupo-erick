@@ -238,12 +238,38 @@ Required API behavior:
 
 Supported state mutations:
 
+- `mark_registered`
+- `mark_structurally_ready`
+- `mark_expired`
 - `mark_revoked`
 - `mark_disabled`
 - `mark_rotation_required`
 
 The registry does not resolve a secret. It only validates and stores safe
 reference descriptors.
+
+Every status change must pass the explicit transition matrix:
+
+- `reference_pending -> reference_registered | revoked | disabled`
+- `reference_registered -> structurally_ready | rotation_required | revoked | disabled`
+- `structurally_ready -> rotation_required | expired | revoked | disabled`
+- `rotation_required -> revoked | disabled`
+- `expired -> revoked | disabled`
+- `revoked -> terminal`
+- `disabled -> terminal`
+
+Blocked transitions include `revoked -> rotation_required`,
+`disabled -> rotation_required`, `expired -> rotation_required`,
+`rotation_required -> reference_registered` and any informal reactivation.
+
+State consistency rules:
+
+- `revoked` requires `revoked:true`.
+- `disabled` requires `disabled:true`.
+- `reference_pending`, `reference_registered`, `structurally_ready`,
+  `rotation_required` and `expired` require `revoked:false` and
+  `disabled:false`.
+- `rotation_required` and `expired` are never resolvable.
 
 Every reference change request must include an `operation` that matches the
 method being called. Blocked reference changes, including invalid requests,
@@ -260,10 +286,19 @@ It can resolve only:
 - `reference_type: local_test_double_reference`
 - `environment: local_test`
 - `synthetic:true`
+- `status: reference_registered` or `status: structurally_ready`
+- `disabled:false`
+- `revoked:false`
 
 It must fail closed for production, future real secret-reference types,
 revoked references, disabled references, expired references and rotation-due
 references.
+
+The resolver explicitly blocks `reference_pending`, `rotation_required`,
+`expired`, `revoked`, `disabled` and unknown status values. Blocked resolver
+results return `resolved:false`, `ready:false`, `exportable:false`,
+`simulated:true`, `executed:false`, `real_provider_called:false` and
+`can_trigger_real_execution:false`, and never include `secret_handle`.
 
 `resolveReference` requires a complete Secret Access Context. It must never
 resolve with only `{ "environment": "local_test" }`.

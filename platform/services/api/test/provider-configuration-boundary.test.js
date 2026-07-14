@@ -179,6 +179,24 @@ function validSecretAccessContext(overrides = {}) {
   };
 }
 
+function validReferenceChange(overrides = {}) {
+  return {
+    trace_id: 'trace_ref',
+    change_id: 'ref_change_1',
+    reference_id: 'secretref_public_web_local_test',
+    operation: 'mark_revoked',
+    expected_version: 1,
+    actor_id: 'operator',
+    actor_role: 'operator',
+    reason: 'synthetic reference transition',
+    requested_at: now,
+    simulated: true,
+    executed: false,
+    real_provider_called: false,
+    ...overrides
+  };
+}
+
 function readyLifecycleRegistry(overrides = {}) {
   return {
     getConnector() {
@@ -297,20 +315,7 @@ test('secret reference registry is private, frozen, versioned and blocks advance
 
 test('secret reference registry supports revocation, disabling, rotation and replay protection', () => {
   const registry = createProviderSecretReferenceRegistry({ initialReferences: [validReference()], context: { now } });
-  const req = {
-    trace_id: 'trace_ref',
-    change_id: 'ref_change_1',
-    reference_id: 'secretref_public_web_local_test',
-    operation: 'mark_revoked',
-    expected_version: 1,
-    actor_id: 'operator',
-    actor_role: 'operator',
-    reason: 'synthetic revocation',
-    requested_at: now,
-    simulated: true,
-    executed: false,
-    real_provider_called: false
-  };
+  const req = validReferenceChange({ reason: 'synthetic revocation' });
   const revoked = registry.markReferenceRevoked(req);
   assert.equal(revoked.applied, true);
   assert.equal(revoked.audit_event_candidate.event_name, 'provider_secret_reference_change_evaluated');
@@ -336,6 +341,87 @@ test('secret reference registry supports revocation, disabling, rotation and rep
   });
   assert.equal(invalid.applied, false);
   assert.equal(invalid.audit_event_candidate.blocked_reason, 'reference_operation_mismatch');
+});
+
+test('secret reference registry enforces explicit status transition matrix', () => {
+  const rotationRegistry = createProviderSecretReferenceRegistry({ initialReferences: [validReference()], context: { now } });
+  const rotated = rotationRegistry.markRotationRequired(validReferenceChange({
+    change_id: 'ref_rotation',
+    operation: 'mark_rotation_required'
+  }));
+  assert.equal(rotated.applied, true);
+  assert.equal(rotated.reference.status, 'rotation_required');
+  assert.equal(rotated.reference.reference_version, 2);
+  const revokedFromRotation = rotationRegistry.markReferenceRevoked(validReferenceChange({
+    change_id: 'ref_rotation_revoked',
+    operation: 'mark_revoked',
+    expected_version: 2
+  }));
+  assert.equal(revokedFromRotation.applied, true);
+  assert.equal(revokedFromRotation.reference.status, 'revoked');
+
+  const disabledRegistry = createProviderSecretReferenceRegistry({ initialReferences: [validReference()], context: { now } });
+  disabledRegistry.markRotationRequired(validReferenceChange({
+    change_id: 'ref_rotation_2',
+    operation: 'mark_rotation_required'
+  }));
+  const disabledFromRotation = disabledRegistry.markReferenceDisabled(validReferenceChange({
+    change_id: 'ref_rotation_disabled',
+    operation: 'mark_disabled',
+    expected_version: 2
+  }));
+  assert.equal(disabledFromRotation.applied, true);
+  assert.equal(disabledFromRotation.reference.status, 'disabled');
+
+  const revokedRegistry = createProviderSecretReferenceRegistry({ initialReferences: [validReference()], context: { now } });
+  revokedRegistry.markReferenceRevoked(validReferenceChange({ change_id: 'ref_revoked' }));
+  const revokedToRotation = revokedRegistry.markRotationRequired(validReferenceChange({
+    change_id: 'ref_revoked_rotation',
+    operation: 'mark_rotation_required',
+    expected_version: 2
+  }));
+  assert.equal(revokedToRotation.applied, false);
+  assert.equal(revokedToRotation.audit_event_candidate.blocked_reason, 'secret_reference_transition_not_allowed');
+  assert.equal(revokedRegistry.getSecretReference('secretref_public_web_local_test').reference_version, 2);
+
+  const disabledTerminalRegistry = createProviderSecretReferenceRegistry({ initialReferences: [validReference()], context: { now } });
+  disabledTerminalRegistry.markReferenceDisabled(validReferenceChange({
+    change_id: 'ref_disabled',
+    operation: 'mark_disabled'
+  }));
+  const disabledToRotation = disabledTerminalRegistry.markRotationRequired(validReferenceChange({
+    change_id: 'ref_disabled_rotation',
+    operation: 'mark_rotation_required',
+    expected_version: 2
+  }));
+  assert.equal(disabledToRotation.applied, false);
+  assert.equal(disabledTerminalRegistry.getSecretReference('secretref_public_web_local_test').reference_version, 2);
+
+  const expiredRegistry = createProviderSecretReferenceRegistry({ initialReferences: [validReference()], context: { now } });
+  expiredRegistry.markReferenceStructurallyReady(validReferenceChange({
+    change_id: 'ref_structural',
+    operation: 'mark_structurally_ready'
+  }));
+  expiredRegistry.markReferenceExpired(validReferenceChange({
+    change_id: 'ref_expired',
+    operation: 'mark_expired',
+    expected_version: 2
+  }));
+  const expiredToRotation = expiredRegistry.markRotationRequired(validReferenceChange({
+    change_id: 'ref_expired_rotation',
+    operation: 'mark_rotation_required',
+    expected_version: 3
+  }));
+  assert.equal(expiredToRotation.applied, false);
+  assert.equal(expiredToRotation.audit_event_candidate.error_code, 'INVALID_SECRET_REFERENCE');
+  assert.equal(expiredRegistry.getSecretReference('secretref_public_web_local_test').reference_version, 3);
+
+  const replay = expiredRegistry.markRotationRequired(validReferenceChange({
+    change_id: 'ref_expired_rotation',
+    operation: 'mark_rotation_required',
+    expected_version: 3
+  }));
+  assert.equal(replay.error.error_code, 'REPLAYED_CONFIGURATION_REQUEST');
 });
 
 test('local test resolver requires a complete secret access context', () => {
@@ -370,6 +456,33 @@ test('local test resolver requires a complete secret access context', () => {
   }
   assert.equal(resolver.resolveReference(validReference({ reference_type: 'aws_secrets_manager_reference' })).ready, false);
 });
+
+test('local test resolver resolves only active secret reference statuses', () => {
+  const resolver = createLocalTestSecretResolver();
+  for (const reference of [
+    validReference(),
+    validReference({ status: 'structurally_ready' })
+  ]) {
+    const resolved = resolver.resolveReference(reference, validSecretAccessContext());
+    assert.equal(resolved.resolved, true);
+    assert.ok(resolved.secret_handle.startsWith('opaque_test_handle::'));
+  }
+  for (const reference of [
+    validReference({ status: 'reference_pending' }),
+    validReference({ status: 'rotation_required' }),
+    validReference({ status: 'expired' }),
+    validReference({ status: 'revoked', revoked: true }),
+    validReference({ status: 'disabled', disabled: true }),
+    validReference({ status: 'unknown_status' })
+  ]) {
+    const blocked = resolver.resolveReference(reference, validSecretAccessContext());
+    assert.equal(blocked.resolved, false);
+    assert.equal(blocked.ready, false);
+    assert.equal(blocked.exportable, false);
+    assert.equal(Object.prototype.hasOwnProperty.call(blocked, 'secret_handle'), false);
+  }
+});
+
 
 test('configuration registry blocks direct advanced state registration and operational delete', () => {
   const registry = createProviderConfigurationRegistry();
@@ -466,6 +579,66 @@ test('configuration readiness blocks invalid bindings and unsafe references', ()
   assert.ok(result.blocking_reasons.some((reason) => reason.startsWith('lifecycle_state_not_eligible')));
   assert.ok(result.blocking_reasons.includes('adapter_provider_id_mismatch'));
   assert.ok(result.blocking_reasons.includes('secret_reference_rotation_required'));
+});
+
+test('configuration readiness blocks non-resolvable secret reference statuses', () => {
+  const adapterRegistry = createReadOnlyAdapterRegistry([mockLifecycleAdapter()]);
+  const secretResolver = createLocalTestSecretResolver();
+  const cases = [
+    {
+      expected: 'secret_reference_rotation_required',
+      prepare(registry) {
+        registry.markRotationRequired(validReferenceChange({
+          change_id: 'readiness_rotation',
+          operation: 'mark_rotation_required'
+        }));
+      }
+    },
+    {
+      expected: 'secret_reference_expired',
+      prepare(registry) {
+        registry.markReferenceStructurallyReady(validReferenceChange({
+          change_id: 'readiness_structural',
+          operation: 'mark_structurally_ready'
+        }));
+        registry.markReferenceExpired(validReferenceChange({
+          change_id: 'readiness_expired',
+          operation: 'mark_expired',
+          expected_version: 2
+        }));
+      }
+    },
+    {
+      expected: 'secret_reference_revoked',
+      prepare(registry) {
+        registry.markReferenceRevoked(validReferenceChange({ change_id: 'readiness_revoked' }));
+      }
+    },
+    {
+      expected: 'secret_reference_disabled',
+      prepare(registry) {
+        registry.markReferenceDisabled(validReferenceChange({
+          change_id: 'readiness_disabled',
+          operation: 'mark_disabled'
+        }));
+      }
+    }
+  ];
+  for (const item of cases) {
+    const secretReferenceRegistry = createProviderSecretReferenceRegistry({ initialReferences: [validReference()], context: { now } });
+    item.prepare(secretReferenceRegistry);
+    const result = evaluateProviderConfigurationReadiness(validConfig(), {
+      now,
+      lifecycleRegistry: readyLifecycleRegistry(),
+      adapterRegistry,
+      secretReferenceRegistry,
+      secretResolver,
+      trace_id: `trace_${item.expected}`,
+      clock: () => now
+    });
+    assert.equal(result.ready, false);
+    assert.ok(result.blocking_reasons.includes(item.expected));
+  }
 });
 
 test('configuration registry evaluate_readiness requires trusted readiness binding', () => {

@@ -42,6 +42,46 @@
     "reference_pending",
     "reference_registered"
   ],
+  "resolvable_secret_reference_statuses_this_phase": [
+    "reference_registered",
+    "structurally_ready"
+  ],
+  "blocked_secret_reference_statuses_for_resolution": [
+    "reference_pending",
+    "rotation_required",
+    "expired",
+    "revoked",
+    "disabled"
+  ],
+  "secret_reference_status_transitions": {
+    "reference_pending": [
+      "reference_registered",
+      "revoked",
+      "disabled"
+    ],
+    "reference_registered": [
+      "structurally_ready",
+      "rotation_required",
+      "revoked",
+      "disabled"
+    ],
+    "structurally_ready": [
+      "rotation_required",
+      "expired",
+      "revoked",
+      "disabled"
+    ],
+    "rotation_required": [
+      "revoked",
+      "disabled"
+    ],
+    "expired": [
+      "revoked",
+      "disabled"
+    ],
+    "revoked": [],
+    "disabled": []
+  },
   "resolvable_secret_reference_types_this_phase": [
     "local_test_double_reference"
   ],
@@ -212,6 +252,9 @@
     "external_client_tenant requires workspace_type external_client, client_id and tenant_id client::<client_id>"
   ],
   "secret_reference_change_operations": [
+    "mark_registered",
+    "mark_structurally_ready",
+    "mark_expired",
     "mark_revoked",
     "mark_disabled",
     "mark_rotation_required"
@@ -307,6 +350,8 @@
     "evaluate_readiness_rejects_patch_supplied_readiness": true,
     "secret_access_context_required": true,
     "secret_reference_blocked_changes_return_audit": true,
+    "secret_reference_status_transition_required": true,
+    "secret_reference_resolution_requires_active_status": true,
     "only_local_test_double_reference_resolvable": true,
     "future_secret_reference_types_ready": false,
     "local_test_resolver_only": true,

@@ -32,6 +32,11 @@ const ALLOWED_SECRET_ACCESS_PURPOSES = [
   'synthetic_contract_test'
 ];
 
+const RESOLVABLE_SECRET_REFERENCE_STATUSES = [
+  'reference_registered',
+  'structurally_ready'
+];
+
 function safeBlocked(reason, code = 'SECRET_REFERENCE_TYPE_UNSUPPORTED') {
   return {
     resolved: false,
@@ -40,6 +45,7 @@ function safeBlocked(reason, code = 'SECRET_REFERENCE_TYPE_UNSUPPORTED') {
       blocked_reason: reason
     }),
     blocked_reason: reason,
+    exportable: false,
     simulated: true,
     executed: false,
     real_provider_called: false,
@@ -82,6 +88,7 @@ function createLocalTestSecretResolver(options = {}) {
       reference.synthetic === true &&
       reference.disabled === false &&
       reference.revoked === false &&
+      RESOLVABLE_SECRET_REFERENCE_STATUSES.includes(reference.status) &&
       !revoked.has(reference.reference_id);
   }
 
@@ -162,5 +169,6 @@ module.exports = {
   createLocalTestSecretResolver,
   validateSecretAccessContext,
   SECRET_ACCESS_CONTEXT_FIELDS,
-  ALLOWED_SECRET_ACCESS_PURPOSES
+  ALLOWED_SECRET_ACCESS_PURPOSES,
+  RESOLVABLE_SECRET_REFERENCE_STATUSES
 };
