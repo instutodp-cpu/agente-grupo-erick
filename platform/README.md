@@ -32,6 +32,7 @@ repositório.
 - **External Provider Audit, Cost and Rate Limit**: `docs/EXTERNAL_PROVIDER_AUDIT_COST_RATE_LIMIT.md`
 - **Tenant and Workspace Isolation**: `docs/TENANT_WORKSPACE_ISOLATION.md`
 - **Public Web Read-Only Sandbox**: `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`
+- **Public Web Read-Only Adapter Pilot**: `docs/PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md`
 - **Transcription Intake Sandbox**: `docs/TRANSCRIPTION_INTAKE_SANDBOX.md`
 - **Internal Business API Read-Only**: `docs/INTERNAL_BUSINESS_API_READ_ONLY.md`
 - **Personal Workspace Connector Policy**: `docs/PERSONAL_WORKSPACE_CONNECTOR_POLICY.md`
@@ -254,6 +255,14 @@ Para futura leitura segura de dados publicos da web, consulte
 `docs/PUBLIC_WEB_READ_ONLY_SANDBOX.md`. Este contrato nao implementa Firecrawl,
 Bright Data, Scrapeless, crawler, scraping, provider real, storage ou runtime,
 e mantem `real_provider_called:false` e `executed:false`.
+
+Para o primeiro piloto isolado de adapter Public Web Read-Only, consulte
+`docs/PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md`. O piloto adiciona contrato,
+adapter candidato, transports fixture/mock, transport real candidato injetavel,
+SSRF/DNS/IP/redirect/content policies, gate de canary, rate/cost metadata e
+audit sanitizado, mas nao registra o adapter automaticamente, nao altera
+`/message` ou `/confirm`, nao chama provider no CI, mantem production bloqueada,
+feature flag off e rollout 0.
 
 ## Estrutura
 

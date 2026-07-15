@@ -347,3 +347,12 @@ feature flags default off, kill switch, tenant/workspace policy, rotation and
 expiration metadata, sanitized audit candidates and no provider calls. It does
 not authorize OAuth, SDK setup, secrets, runtime environment credentials or
 external API calls.
+
+## Public Web Read-Only Adapter Pilot
+
+`PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` adds concrete URL, DNS, IP, SSRF,
+redirect and content-type controls for the public web candidate. It blocks
+localhost, private/reserved IPs, metadata services, login, forms, checkout,
+purchase, reservation, browser automation, JavaScript execution, raw HTML and
+raw provider responses. External content is always untrusted and cannot alter
+tenant, workspace, system instruction or policy.

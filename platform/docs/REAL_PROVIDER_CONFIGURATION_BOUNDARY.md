@@ -43,6 +43,16 @@ not use filesystem secret paths, and do not connect to `/message` or `/confirm`.
 - `real_provider_called:false`
 - `can_trigger_real_execution:false`
 
+## Public Web Read-Only Adapter Pilot Relationship
+
+`PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` is the first consumer of this boundary
+for a provider candidate. Public web pilot configuration must remain
+reference-only, synthetic/local-test in CI, tenant-scoped and
+`structurally_ready` before any non-production canary gate can allow a future
+candidate path. The pilot does not create secrets, does not read
+environment-provider credentials, does not activate production and does not
+change `/message` or `/confirm`.
+
 ## C. Provider Configuration Contract
 
 A provider configuration record is a sanitized, non-secret descriptor for a future provider. It may reference a secret by opaque internal reference, but it must never contain the secret value.

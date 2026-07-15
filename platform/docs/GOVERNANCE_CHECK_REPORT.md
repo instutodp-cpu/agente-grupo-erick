@@ -442,3 +442,12 @@ environment credentials, missing feature flag, missing kill switch, missing
 rotation/expiration metadata, expired configuration, invalid tenant/workspace
 policy, OAuth creation, SDK setup, provider calls and any attempt to set
 `executed:true` or `real_provider_called:true`.
+
+## Public Web Read-Only Adapter Pilot
+
+`PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` is a governance check area for external
+public content. Governance must block unsafe URL/DNS/IP policy changes, SSRF
+weakening, production enablement, rollout above 1%, missing cost/rate controls,
+raw HTML storage, raw provider response exposure, browser automation, login,
+forms, checkout, purchase, reservation and any change to `/message` or
+`/confirm`.

@@ -231,3 +231,16 @@ storage or runtime integration.
 
 Next step: Public Web Read-Only Adapter Pilot readiness/configuration, not
 direct or unrestricted provider activation.
+
+## PR #63 Public Web Read-Only Adapter Pilot Foundation
+
+The Public Web Read-Only Adapter Pilot foundation is delivered as adapter,
+transport contract, fixture/mock transports, real transport candidate with
+injected dependencies, URL/DNS/IP/SSRF/redirect/content policies, content
+sanitization, pilot gate, cost/rate metadata, audit candidates and tests. It
+does not activate production, does not register the adapter in the main runtime,
+does not call providers in CI, keeps feature flag default off and keeps rollout
+at 0.
+
+Next step: Public Web Non-Production Canary Activation or Transcription
+Sanitized Adapter Pilot, not unrestricted public web integration.

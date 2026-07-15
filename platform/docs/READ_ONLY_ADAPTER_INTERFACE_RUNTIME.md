@@ -405,3 +405,12 @@ audit candidates. This adapter runtime does not read provider credentials,
 does not use provider SDKs and does not call providers. Real candidates remain
 blocked until a future PR explicitly binds lifecycle, readiness, configuration,
 feature flag, kill switch and provider execution policy.
+
+## Public Web Read-Only Adapter Pilot Relationship
+
+`PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` defines the first concrete
+`real_read_only_candidate` adapter built on this interface. The adapter can be
+registered explicitly in pilot tests, but the existing runtime still blocks
+non-mock execution. The pilot adds transport contracts and gate checks without
+importing the adapter into `src/index.js` or changing `/message` and
+`/confirm`.

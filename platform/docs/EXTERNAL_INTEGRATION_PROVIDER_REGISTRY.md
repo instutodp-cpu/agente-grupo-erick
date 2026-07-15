@@ -371,3 +371,11 @@ Provider registry candidacy does not create secrets, OAuth, SDK setup, runtime
 environment credentials or provider calls. Future providers must use validated
 secret references, tenant/workspace policy, rotation and expiration metadata,
 feature flag default off, kill switch and sanitized audit candidates.
+
+## Public Web Read-Only Adapter Pilot
+
+`PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` introduces the logical
+`public_web_provider_candidate` behind a transport contract. Provider registry
+candidacy still does not mean activation: production is blocked, real transport
+is default-off, rollout is 0, no provider is called in CI, and no commercial SDK
+or credential is required by the adapter.

@@ -425,3 +425,11 @@ read-only first, human review, governance review, `simulated:true`, `executed:fa
 requires permission-related scope evidence before mock-only or readiness
 transitions can proceed. It keeps `mock_only` as the phase ceiling and does not
 authorize write/action/send/publish/delete.
+
+## Public Web Read-Only Adapter Pilot
+
+`PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` maps public web use to read-only
+capabilities such as `public_web_search`, `public_web_read`,
+`public_web_compare`, `public_web_summarize`, price inspection and promotion
+inspection. Permission overlay does not permit login, forms, checkout,
+purchase, reservation, publish/send/write/delete or cross-tenant use.

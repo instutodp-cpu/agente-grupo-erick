@@ -131,6 +131,7 @@ const ALLOWED_OPERATION_PREFIXES = [
   'lookup',
   'compare',
   'analyze',
+  'fetch_public',
   'fetch_metadata',
   'generate_summary',
   'generate_draft_candidate',
