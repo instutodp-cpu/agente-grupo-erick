@@ -113,6 +113,7 @@ function validCanaryRequest(overrides = {}) {
     configuration_version: 3,
     readiness_evidence: readiness,
     readiness_evidence_id: hashCanaryEvidence(readiness),
+    secret_reference_id: 'public_web_local_reference',
     expires_at: '2026-07-16T12:30:00.000Z',
     simulated: true,
     executed: false,

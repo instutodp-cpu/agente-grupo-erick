@@ -408,6 +408,217 @@ test('runner handles provider HTTP statuses and report remains sanitized', async
   assertSafe(report);
 });
 
+test('runner distinguishes blocked before network from failed after network', async () => {
+  const dnsContext = validCanaryContext({
+    dnsResolver: {
+      async resolve() { return { allowed: false, blocked_reason: 'dns_policy_blocked' }; },
+      resolveSyncForPolicy: () => ['93.184.216.34']
+    }
+  });
+  const dnsSession = createApprovedActiveSession(dnsContext).session;
+  const dnsBlocked = await createPublicWebCanaryRunner(dnsContext).runCanaryRequest({
+    trace_id: 'trace_dns_block',
+    request_id: 'request_dns_block',
+    change_id: 'change_dns_block',
+    canary_session_id: dnsSession.canary_session_id,
+    target_path: dnsSession.target_path,
+    expected_version: dnsSession.version,
+    secretReference: dnsContext.secretReference,
+    secretAccessContext: dnsContext.secretAccessContext,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
+  });
+  assert.equal(dnsBlocked.executed, false);
+  assert.equal(dnsBlocked.real_provider_called, false);
+  assert.equal(dnsContext.nodeHttpsClient.calls(), 0);
+
+  const throwContext = validCanaryContext({ nodeHttpsClient: fakeNodeHttpsClient({ throw_error: true }) });
+  const throwSession = createApprovedActiveSession(throwContext).session;
+  const thrown = await createPublicWebCanaryRunner(throwContext).runCanaryRequest({
+    trace_id: 'trace_network_throw',
+    request_id: 'request_network_throw',
+    change_id: 'change_network_throw',
+    canary_session_id: throwSession.canary_session_id,
+    target_path: throwSession.target_path,
+    expected_version: throwSession.version,
+    secretReference: throwContext.secretReference,
+    secretAccessContext: throwContext.secretAccessContext,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
+  });
+  assert.equal(thrown.executed, true);
+  assert.equal(thrown.real_provider_called, true);
+  assert.equal(throwContext.nodeHttpsClient.calls(), 1);
+  assert.equal(throwContext.canarySessionRegistry.getCanarySession(throwSession.canary_session_id).canary_state, 'failed_safe');
+
+  const streamContext = validCanaryContext({
+    nodeHttpsClient: fakeNodeHttpsClient({
+      body_stream: (async function* stream() {
+        throw new Error('synthetic stream error');
+      }())
+    })
+  });
+  const streamSession = createApprovedActiveSession(streamContext).session;
+  const streamFailure = await createPublicWebCanaryRunner(streamContext).runCanaryRequest({
+    trace_id: 'trace_stream_throw',
+    request_id: 'request_stream_throw',
+    change_id: 'change_stream_throw',
+    canary_session_id: streamSession.canary_session_id,
+    target_path: streamSession.target_path,
+    expected_version: streamSession.version,
+    secretReference: streamContext.secretReference,
+    secretAccessContext: streamContext.secretAccessContext,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
+  });
+  assert.equal(streamFailure.executed, true);
+  assert.equal(streamFailure.real_provider_called, true);
+});
+
+test('runner revalidates authorities after activation before network', async () => {
+  const adapterContext = validCanaryContext();
+  const adapterSession = createApprovedActiveSession(adapterContext).session;
+  adapterContext.adapterRegistry = { getAdapter() { return null; } };
+  const adapterBlocked = await createPublicWebCanaryRunner(adapterContext).runCanaryRequest({
+    trace_id: 'trace_adapter_removed',
+    request_id: 'request_adapter_removed',
+    change_id: 'change_adapter_removed',
+    canary_session_id: adapterSession.canary_session_id,
+    target_path: adapterSession.target_path,
+    expected_version: adapterSession.version,
+    secretReference: adapterContext.secretReference,
+    secretAccessContext: adapterContext.secretAccessContext,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
+  });
+  assert.equal(adapterBlocked.error.error_code, 'CANARY_ADAPTER_BLOCKED');
+  assert.equal(adapterContext.nodeHttpsClient.calls(), 0);
+
+  const lifecycleContext = validCanaryContext();
+  const lifecycleSession = createApprovedActiveSession(lifecycleContext).session;
+  const originalConnector = lifecycleContext.lifecycleRegistry.getConnector(lifecycleSession.connector_id);
+  lifecycleContext.lifecycleRegistry = { getConnector() { return { ...originalConnector, lifecycle_version: 999 }; } };
+  const lifecycleBlocked = await createPublicWebCanaryRunner(lifecycleContext).runCanaryRequest({
+    trace_id: 'trace_lifecycle_changed',
+    request_id: 'request_lifecycle_changed',
+    change_id: 'change_lifecycle_changed',
+    canary_session_id: lifecycleSession.canary_session_id,
+    target_path: lifecycleSession.target_path,
+    expected_version: lifecycleSession.version,
+    secretReference: lifecycleContext.secretReference,
+    secretAccessContext: lifecycleContext.secretAccessContext,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
+  });
+  assert.equal(lifecycleBlocked.error.error_code, 'CANARY_LIFECYCLE_BLOCKED');
+  assert.equal(lifecycleContext.nodeHttpsClient.calls(), 0);
+
+  const readinessContext = validCanaryContext();
+  const readinessSession = createApprovedActiveSession(readinessContext).session;
+  readinessContext.readinessResult = { changed: true };
+  const readinessBlocked = await createPublicWebCanaryRunner(readinessContext).runCanaryRequest({
+    trace_id: 'trace_readiness_changed',
+    request_id: 'request_readiness_changed',
+    change_id: 'change_readiness_changed',
+    canary_session_id: readinessSession.canary_session_id,
+    target_path: readinessSession.target_path,
+    expected_version: readinessSession.version,
+    secretReference: readinessContext.secretReference,
+    secretAccessContext: readinessContext.secretAccessContext,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
+  });
+  assert.equal(readinessBlocked.error.error_code, 'CANARY_READINESS_BLOCKED');
+  assert.equal(readinessContext.nodeHttpsClient.calls(), 0);
+});
+
+test('runner enforces exact approved path and target policy limits', async () => {
+  const pathContext = validCanaryContext();
+  const pathSession = createApprovedActiveSession(pathContext).session;
+  const pathBlocked = await createPublicWebCanaryRunner(pathContext).runCanaryRequest({
+    trace_id: 'trace_path_mismatch',
+    request_id: 'request_path_mismatch',
+    change_id: 'change_path_mismatch',
+    canary_session_id: pathSession.canary_session_id,
+    target_path: '/allowed/other',
+    expected_version: pathSession.version,
+    secretReference: pathContext.secretReference,
+    secretAccessContext: pathContext.secretAccessContext,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
+  });
+  assert.equal(pathBlocked.error.error_code, 'CANARY_TARGET_NOT_ALLOWLISTED');
+  assert.equal(pathContext.nodeHttpsClient.calls(), 0);
+
+  const calls = [];
+  const limitedAllowlist = createPublicWebCanaryTargetAllowlist({
+    dnsResolver: fakeDnsResolver(),
+    clock: deterministicClock
+  });
+  assert.equal(limitedAllowlist.registerTargetPolicy(validTargetPolicy({
+    timeout_ms: 3000,
+    maximum_response_bytes: 100000
+  })).ok, true);
+  const limitedContext = validCanaryContext({
+    targetAllowlist: limitedAllowlist,
+    nodeHttpsClient: {
+      async execute(request) {
+        calls.push(request);
+        return fakeNodeHttpsClient().execute(request);
+      },
+      calls() { return calls.length; }
+    }
+  });
+  const limitedSession = createApprovedActiveSession(limitedContext).session;
+  const limitedResult = await createPublicWebCanaryRunner(limitedContext).runCanaryRequest({
+    trace_id: 'trace_policy_limits',
+    request_id: 'request_policy_limits',
+    change_id: 'change_policy_limits',
+    canary_session_id: limitedSession.canary_session_id,
+    target_path: limitedSession.target_path,
+    expected_version: limitedSession.version,
+    requested_content_types: ['text/html'],
+    secretReference: limitedContext.secretReference,
+    secretAccessContext: limitedContext.secretAccessContext,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
+  });
+  assert.equal(limitedResult.status, 'public_web_candidate_success');
+  assert.ok(calls[0].timeout_ms <= 3000);
+  assert.ok(calls[0].max_response_bytes <= 100000);
+});
+
+test('runner revalidates secret reference before network', async () => {
+  const revokedContext = validCanaryContext();
+  const revokedSession = createApprovedActiveSession(revokedContext).session;
+  const original = revokedContext.secretReferenceRegistry.getSecretReference(revokedSession.secret_reference_id);
+  revokedContext.secretReferenceRegistry = { getSecretReference() { return { ...original, status: 'revoked', revoked: true }; } };
+  const revoked = await createPublicWebCanaryRunner(revokedContext).runCanaryRequest({
+    trace_id: 'trace_secret_revoked',
+    request_id: 'request_secret_revoked',
+    change_id: 'change_secret_revoked',
+    canary_session_id: revokedSession.canary_session_id,
+    target_path: revokedSession.target_path,
+    expected_version: revokedSession.version,
+    secretReference: revokedContext.secretReference,
+    secretAccessContext: revokedContext.secretAccessContext,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
+  });
+  assert.equal(revoked.error.error_code, 'CANARY_CONFIGURATION_BLOCKED');
+  assert.equal(revoked.real_provider_called, false);
+  assert.equal(revokedContext.nodeHttpsClient.calls(), 0);
+});
+
 test('budgets block sixth hourly request and release concurrency', () => {
   const budget = createPublicWebPilotBudget({ clock: deterministicClock });
   for (let index = 0; index < 5; index += 1) {
