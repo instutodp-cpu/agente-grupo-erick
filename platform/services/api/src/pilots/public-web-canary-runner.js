@@ -191,9 +191,26 @@ function buildPublicWebRequest(input, session, targetUrl, limits) {
     action_allowed: false,
     send_allowed: false,
     publish_allowed: false,
-    delete_allowed: false,
-    secretReference: input.secretReference,
-    secretAccessContext: input.secretAccessContext
+    delete_allowed: false
+  };
+}
+
+function buildSecretAccessContext(input, session) {
+  return {
+    trace_id: input.trace_id,
+    request_id: input.request_id,
+    configuration_id: session.configuration_id,
+    connector_id: session.connector_id,
+    provider_id: session.provider_id,
+    adapter_id: session.adapter_id,
+    workspace_type: session.workspace_type,
+    tenant_id: session.tenant_id,
+    environment: 'local_test',
+    purpose: 'local_test_readiness_validation',
+    requested_by: session.operator_id,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
   };
 }
 
@@ -246,7 +263,34 @@ function createPublicWebCanaryRunner(deps = {}) {
     const limits = validateTargetPolicyLimits(input, session, binding.target_policy);
     if (!limits.valid) return buildBlockedBeforeNetworkResult(input, session, 'CANARY_TARGET_POLICY_BLOCKED', limits.reason, deps);
 
-    if (!deps.dnsResolver || typeof deps.dnsResolver.resolve !== 'function') return buildBlockedBeforeNetworkResult(input, session, 'CANARY_TARGET_POLICY_BLOCKED', 'async_dns_resolver_required', deps);
+    const began = deps.canarySessionRegistry.beginCanaryExecution({
+      canary_session_id: session.canary_session_id,
+      canary_execution_id: input.canary_execution_id || input.change_id,
+      change_id: input.change_id,
+      trace_id: input.trace_id,
+      request_id: input.request_id,
+      expected_version: session.version
+    });
+    if (!began.ok) {
+      return buildBlockedBeforeNetworkResult(input, session, began.error && began.error.error_code || 'CANARY_INTERNAL_ERROR', began.error && began.error.blocked_reason || 'canary_execution_reservation_failed', deps);
+    }
+    let executionSession = began.session;
+    const executionReservationId = began.execution_reservation_id;
+
+    function abortReservedExecution(code, reason) {
+      deps.canarySessionRegistry.abortCanaryExecution({
+        canary_session_id: executionSession.canary_session_id,
+        execution_reservation_id: executionReservationId,
+        change_id: `${input.change_id || input.request_id}:abort_pre_network`,
+        trace_id: input.trace_id,
+        request_id: input.request_id,
+        expected_version: executionSession.version,
+        reason
+      });
+      return buildBlockedBeforeNetworkResult(input, session, code, reason, deps);
+    }
+
+    if (!deps.dnsResolver || typeof deps.dnsResolver.resolve !== 'function') return abortReservedExecution('CANARY_TARGET_POLICY_BLOCKED', 'async_dns_resolver_required');
     const targetUrl = new URL(`${session.target_origin}${session.target_path}`);
     const dns = await deps.dnsResolver.resolve(targetUrl.hostname, {
       trace_id: input.trace_id,
@@ -256,7 +300,7 @@ function createPublicWebCanaryRunner(deps = {}) {
       tenant_id: session.tenant_id
     });
     if (!dns || dns.allowed !== true || typeof dns.approved_ip !== 'string' || !Array.isArray(dns.approved_ips) || dns.approved_ips.length === 0) {
-      return buildBlockedBeforeNetworkResult(input, session, 'CANARY_TARGET_POLICY_BLOCKED', dns && dns.blocked_reason || 'dns_policy_blocked', deps);
+      return abortReservedExecution('CANARY_TARGET_POLICY_BLOCKED', dns && dns.blocked_reason || 'dns_policy_blocked');
     }
 
     let networkStarted = false;
@@ -309,31 +353,56 @@ function createPublicWebCanaryRunner(deps = {}) {
         allowed_tenants: Array.isArray(deps.tenantAllowlist) ? deps.tenantAllowlist : undefined,
         allowed_workspaces: Array.isArray(deps.workspaceAllowlist) ? deps.workspaceAllowlist : undefined,
         allowed_users: Array.isArray(deps.userAllowlist) ? deps.userAllowlist : undefined,
-        secretReference: input.secretReference,
-        secretAccessContext: input.secretAccessContext,
+        secretReference: binding.secret_reference,
+        secretAccessContext: buildSecretAccessContext(input, session),
         clock: deps.clock
       });
       const normalized = normalizeNetworkResult(result, input, session, networkStarted, deps);
-      const latest = deps.canarySessionRegistry.getCanarySession(session.canary_session_id);
-      deps.canarySessionRegistry.executeCanaryRequest({
-        canary_session_id: session.canary_session_id,
-        change_id: input.change_id,
-        trace_id: input.trace_id,
-        request_id: input.request_id,
-        expected_version: latest.version
-      }, normalized);
+      executionSession = deps.canarySessionRegistry.getCanarySession(session.canary_session_id);
+      if (networkStarted) {
+        deps.canarySessionRegistry.finishCanaryExecution({
+          canary_session_id: session.canary_session_id,
+          execution_reservation_id: executionReservationId,
+          change_id: `${input.change_id || input.request_id}:finish`,
+          trace_id: input.trace_id,
+          request_id: input.request_id,
+          expected_version: executionSession.version
+        }, normalized);
+      } else {
+        deps.canarySessionRegistry.abortCanaryExecution({
+          canary_session_id: session.canary_session_id,
+          execution_reservation_id: executionReservationId,
+          change_id: `${input.change_id || input.request_id}:abort_pre_network`,
+          trace_id: input.trace_id,
+          request_id: input.request_id,
+          expected_version: executionSession.version,
+          reason: normalized.error && normalized.error.blocked_reason || 'pre_network_blocked'
+        });
+      }
       appendAudit(deps, normalized.audit_event_candidate || baseAudit(input, session, { executed: networkStarted, real_provider_called: networkStarted }));
       return normalized;
     } catch (_error) {
-      if (!networkStarted) return buildBlockedBeforeNetworkResult(input, session, 'CANARY_INTERNAL_ERROR', 'canary_request_failed_before_network', deps);
+      executionSession = deps.canarySessionRegistry.getCanarySession(session.canary_session_id);
+      if (!networkStarted) {
+        deps.canarySessionRegistry.abortCanaryExecution({
+          canary_session_id: session.canary_session_id,
+          execution_reservation_id: executionReservationId,
+          change_id: `${input.change_id || input.request_id}:abort_pre_network`,
+          trace_id: input.trace_id,
+          request_id: input.request_id,
+          expected_version: executionSession.version,
+          reason: 'canary_request_failed_before_network'
+        });
+        return buildBlockedBeforeNetworkResult(input, session, 'CANARY_INTERNAL_ERROR', 'canary_request_failed_before_network', deps);
+      }
       const failed = buildFailedAfterNetworkResult(input, session, 'CANARY_INTERNAL_ERROR', 'canary_request_failed_after_network', deps);
-      const latest = deps.canarySessionRegistry.getCanarySession(session.canary_session_id);
-      deps.canarySessionRegistry.executeCanaryRequest({
+      deps.canarySessionRegistry.finishCanaryExecution({
         canary_session_id: session.canary_session_id,
-        change_id: input.change_id,
+        execution_reservation_id: executionReservationId,
+        change_id: `${input.change_id || input.request_id}:finish`,
         trace_id: input.trace_id,
         request_id: input.request_id,
-        expected_version: latest.version
+        expected_version: executionSession.version
       }, failed);
       return failed;
     }

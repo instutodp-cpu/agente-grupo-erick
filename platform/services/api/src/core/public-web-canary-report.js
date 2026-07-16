@@ -19,7 +19,13 @@ function buildPublicWebCanaryReport(session, events = []) {
   const requestsSucceeded = safeEvents.filter((event) => event.event_name === 'public_web_canary_request_succeeded').length;
   const requestsFailedSafe = safeEvents.filter((event) => event.event_name === 'public_web_canary_request_failed_safe').length;
   const killSwitchTerminations = safeEvents.filter((event) => event.event_name === 'public_web_canary_kill_switch_terminated').length;
-  const providerCalls = safeEvents.filter((event) => event.real_provider_called === true).length;
+  const providerCallIds = new Set();
+  for (const event of safeEvents) {
+    if (event.real_provider_called !== true) continue;
+    const id = event.canary_execution_id || event.request_id || `${event.event_name}:${event.occurred_at}`;
+    providerCallIds.add(String(id));
+  }
+  const providerCalls = providerCallIds.size;
   const ssrfBlocks = safeEvents.filter((event) => String(event.blocked_reason || '').includes('ssrf')).length;
   const dnsRebindingBlocks = safeEvents.filter((event) => String(event.blocked_reason || '').includes('rebind')).length;
   const rateLimitBlocks = safeEvents.filter((event) => String(event.blocked_reason || '').includes('rate')).length;

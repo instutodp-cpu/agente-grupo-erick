@@ -159,6 +159,81 @@ test('canary session registry is private frozen replay-protected and versioned',
   assert.equal(conflict.error.error_code, 'CANARY_VERSION_CONFLICT');
 });
 
+test('canary execution reservation blocks replay version conflicts and concurrency before network', () => {
+  const context = validCanaryContext();
+  const { session } = createApprovedActiveSession(context);
+  const stale = context.canarySessionRegistry.beginCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    canary_execution_id: 'execution_stale',
+    change_id: 'change_execution_stale',
+    request_id: 'request_execution_stale',
+    expected_version: 999
+  });
+  assert.equal(stale.error.error_code, 'CANARY_VERSION_CONFLICT');
+
+  const begin = context.canarySessionRegistry.beginCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    canary_execution_id: 'execution_reserved',
+    change_id: 'change_execution_reserved',
+    request_id: 'request_execution_reserved',
+    expected_version: session.version
+  });
+  assert.equal(begin.ok, true);
+  assert.equal(begin.session.canary_state, 'executing');
+
+  const replay = context.canarySessionRegistry.beginCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    canary_execution_id: 'execution_reserved',
+    change_id: 'change_execution_reserved',
+    request_id: 'request_execution_reserved',
+    expected_version: session.version
+  });
+  assert.equal(replay.error.error_code, 'CANARY_REPLAY_DETECTED');
+
+  const concurrent = context.canarySessionRegistry.beginCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    canary_execution_id: 'execution_concurrent',
+    change_id: 'change_execution_concurrent',
+    request_id: 'request_execution_concurrent',
+    expected_version: begin.session.version
+  });
+  assert.equal(concurrent.error.error_code, 'CANARY_SESSION_NOT_ACTIVE');
+
+  const aborted = context.canarySessionRegistry.abortCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    execution_reservation_id: begin.execution_reservation_id,
+    change_id: 'change_execution_abort',
+    request_id: 'request_execution_abort',
+    expected_version: begin.session.version,
+    reason: 'pre_network_blocked'
+  });
+  assert.equal(aborted.ok, true);
+  assert.equal(aborted.session.canary_state, 'active');
+  assert.equal(aborted.session.requests_used, 0);
+
+  const finishBegin = context.canarySessionRegistry.beginCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    canary_execution_id: 'execution_finish',
+    change_id: 'change_execution_finish',
+    request_id: 'request_execution_finish',
+    expected_version: aborted.session.version
+  });
+  const finished = context.canarySessionRegistry.finishCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    execution_reservation_id: finishBegin.execution_reservation_id,
+    change_id: 'change_execution_finish_done',
+    request_id: 'request_execution_finish_done',
+    expected_version: finishBegin.session.version
+  }, {
+    status: 'public_web_candidate_success',
+    executed: true,
+    real_provider_called: true
+  });
+  assert.equal(finished.ok, true);
+  assert.equal(finished.session.requests_used, 1);
+  assert.equal(finished.session.canary_state, 'completed');
+});
+
 test('operator policy blocks common roles self-approval and approval replay', () => {
   const policy = createPublicWebCanaryOperatorPolicy();
   assert.equal(policy.canRequest({ operator_id: 'user', operator_role: 'viewer' }).allowed, false);
@@ -296,6 +371,18 @@ test('node https client blocks non read-only methods and request bodies before r
 
 test('runner blocks missing dependencies and executes one approved canary request safely', async () => {
   const context = validCanaryContext();
+  let capturedSecretAccessContext = null;
+  const originalSecretResolver = context.secretResolver;
+  context.secretResolver = {
+    ...originalSecretResolver,
+    canResolve(reference) {
+      return originalSecretResolver.canResolve(reference);
+    },
+    resolveReference(reference, accessContext) {
+      capturedSecretAccessContext = accessContext;
+      return originalSecretResolver.resolveReference(reference, accessContext);
+    }
+  };
   const { session } = createApprovedActiveSession(context);
   const runner = createPublicWebCanaryRunner(context);
   const missing = await createPublicWebCanaryRunner({}).runCanaryRequest({
@@ -318,8 +405,7 @@ test('runner blocks missing dependencies and executes one approved canary reques
     reason: 'execute one canary',
     requested_at: '2026-07-16T12:02:00.000Z',
     expected_version: session.version,
-    secretReference: context.secretReference,
-    secretAccessContext: context.secretAccessContext,
+    secretAccessContext: { provider_id: 'attacker_provider', tenant_id: 'attacker_tenant' },
     simulated: true,
     executed: false,
     real_provider_called: false
@@ -329,6 +415,9 @@ test('runner blocks missing dependencies and executes one approved canary reques
   assert.equal(result.real_provider_called, true);
   assert.equal(context.nodeHttpsClient.calls(), 1);
   assert.equal(context.canarySessionRegistry.getCanarySession(session.canary_session_id).canary_state, 'completed');
+  assert.equal(capturedSecretAccessContext.provider_id, session.provider_id);
+  assert.equal(capturedSecretAccessContext.tenant_id, session.tenant_id);
+  assert.equal(capturedSecretAccessContext.provider_id, 'public_web_provider_candidate');
   assertSafe(result);
 });
 
@@ -394,8 +483,6 @@ test('runner handles provider HTTP statuses and report remains sanitized', async
     reason: 'synthetic 429',
     requested_at: '2026-07-16T12:03:00.000Z',
     expected_version: session.version,
-    secretReference: context.secretReference,
-    secretAccessContext: context.secretAccessContext,
     simulated: true,
     executed: false,
     real_provider_called: false
@@ -423,8 +510,6 @@ test('runner distinguishes blocked before network from failed after network', as
     canary_session_id: dnsSession.canary_session_id,
     target_path: dnsSession.target_path,
     expected_version: dnsSession.version,
-    secretReference: dnsContext.secretReference,
-    secretAccessContext: dnsContext.secretAccessContext,
     simulated: true,
     executed: false,
     real_provider_called: false
@@ -442,8 +527,6 @@ test('runner distinguishes blocked before network from failed after network', as
     canary_session_id: throwSession.canary_session_id,
     target_path: throwSession.target_path,
     expected_version: throwSession.version,
-    secretReference: throwContext.secretReference,
-    secretAccessContext: throwContext.secretAccessContext,
     simulated: true,
     executed: false,
     real_provider_called: false
@@ -468,14 +551,33 @@ test('runner distinguishes blocked before network from failed after network', as
     canary_session_id: streamSession.canary_session_id,
     target_path: streamSession.target_path,
     expected_version: streamSession.version,
-    secretReference: streamContext.secretReference,
-    secretAccessContext: streamContext.secretAccessContext,
     simulated: true,
     executed: false,
     real_provider_called: false
   });
   assert.equal(streamFailure.executed, true);
   assert.equal(streamFailure.real_provider_called, true);
+
+  const oversizedContext = validCanaryContext({
+    nodeHttpsClient: fakeNodeHttpsClient({
+      content_length: 10,
+      body_stream: fakeBodyStream('x'.repeat(1048577))
+    })
+  });
+  const oversizedSession = createApprovedActiveSession(oversizedContext).session;
+  const oversized = await createPublicWebCanaryRunner(oversizedContext).runCanaryRequest({
+    trace_id: 'trace_oversized_stream',
+    request_id: 'request_oversized_stream',
+    change_id: 'change_oversized_stream',
+    canary_session_id: oversizedSession.canary_session_id,
+    target_path: oversizedSession.target_path,
+    expected_version: oversizedSession.version,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
+  });
+  assert.equal(oversized.executed, true);
+  assert.equal(oversized.real_provider_called, true);
 });
 
 test('runner revalidates authorities after activation before network', async () => {
@@ -489,8 +591,6 @@ test('runner revalidates authorities after activation before network', async () 
     canary_session_id: adapterSession.canary_session_id,
     target_path: adapterSession.target_path,
     expected_version: adapterSession.version,
-    secretReference: adapterContext.secretReference,
-    secretAccessContext: adapterContext.secretAccessContext,
     simulated: true,
     executed: false,
     real_provider_called: false
@@ -509,8 +609,6 @@ test('runner revalidates authorities after activation before network', async () 
     canary_session_id: lifecycleSession.canary_session_id,
     target_path: lifecycleSession.target_path,
     expected_version: lifecycleSession.version,
-    secretReference: lifecycleContext.secretReference,
-    secretAccessContext: lifecycleContext.secretAccessContext,
     simulated: true,
     executed: false,
     real_provider_called: false
@@ -528,8 +626,6 @@ test('runner revalidates authorities after activation before network', async () 
     canary_session_id: readinessSession.canary_session_id,
     target_path: readinessSession.target_path,
     expected_version: readinessSession.version,
-    secretReference: readinessContext.secretReference,
-    secretAccessContext: readinessContext.secretAccessContext,
     simulated: true,
     executed: false,
     real_provider_called: false
@@ -548,8 +644,6 @@ test('runner enforces exact approved path and target policy limits', async () =>
     canary_session_id: pathSession.canary_session_id,
     target_path: '/allowed/other',
     expected_version: pathSession.version,
-    secretReference: pathContext.secretReference,
-    secretAccessContext: pathContext.secretAccessContext,
     simulated: true,
     executed: false,
     real_provider_called: false
@@ -585,8 +679,6 @@ test('runner enforces exact approved path and target policy limits', async () =>
     target_path: limitedSession.target_path,
     expected_version: limitedSession.version,
     requested_content_types: ['text/html'],
-    secretReference: limitedContext.secretReference,
-    secretAccessContext: limitedContext.secretAccessContext,
     simulated: true,
     executed: false,
     real_provider_called: false
@@ -608,8 +700,6 @@ test('runner revalidates secret reference before network', async () => {
     canary_session_id: revokedSession.canary_session_id,
     target_path: revokedSession.target_path,
     expected_version: revokedSession.version,
-    secretReference: revokedContext.secretReference,
-    secretAccessContext: revokedContext.secretAccessContext,
     simulated: true,
     executed: false,
     real_provider_called: false
@@ -617,6 +707,35 @@ test('runner revalidates secret reference before network', async () => {
   assert.equal(revoked.error.error_code, 'CANARY_CONFIGURATION_BLOCKED');
   assert.equal(revoked.real_provider_called, false);
   assert.equal(revokedContext.nodeHttpsClient.calls(), 0);
+});
+
+test('runner aborts reserved execution when budget reserve blocks before network', async () => {
+  const budgetContext = validCanaryContext({
+    rateLimitBudget: {
+      check() { return { allowed: true }; },
+      reserve() { return { allowed: false, reason: 'rate_limit_budget_blocked' }; },
+      release() {},
+      record() {}
+    }
+  });
+  const session = createApprovedActiveSession(budgetContext).session;
+  const result = await createPublicWebCanaryRunner(budgetContext).runCanaryRequest({
+    trace_id: 'trace_budget_reserve_block',
+    request_id: 'request_budget_reserve_block',
+    change_id: 'change_budget_reserve_block',
+    canary_session_id: session.canary_session_id,
+    target_path: session.target_path,
+    expected_version: session.version,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
+  });
+  const current = budgetContext.canarySessionRegistry.getCanarySession(session.canary_session_id);
+  assert.equal(result.executed, false);
+  assert.equal(result.real_provider_called, false);
+  assert.equal(current.canary_state, 'active');
+  assert.equal(current.requests_used, 0);
+  assert.equal(budgetContext.nodeHttpsClient.calls(), 0);
 });
 
 test('budgets block sixth hourly request and release concurrency', () => {
