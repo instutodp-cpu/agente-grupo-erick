@@ -183,12 +183,30 @@ test('canary execution reservation blocks replay version conflicts and concurren
 
   const replay = context.canarySessionRegistry.beginCanaryExecution({
     canary_session_id: session.canary_session_id,
-    canary_execution_id: 'execution_reserved',
+    canary_execution_id: 'execution_replay_change',
     change_id: 'change_execution_reserved',
-    request_id: 'request_execution_reserved',
-    expected_version: session.version
+    request_id: 'request_execution_replay_change',
+    expected_version: begin.session.version
   });
   assert.equal(replay.error.error_code, 'CANARY_REPLAY_DETECTED');
+
+  const requestReplay = context.canarySessionRegistry.beginCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    canary_execution_id: 'execution_replay_request',
+    change_id: 'change_execution_replay_request',
+    request_id: 'request_execution_reserved',
+    expected_version: begin.session.version
+  });
+  assert.equal(requestReplay.error.error_code, 'CANARY_REPLAY_DETECTED');
+
+  const executionReplay = context.canarySessionRegistry.beginCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    canary_execution_id: 'execution_reserved',
+    change_id: 'change_execution_replay_execution',
+    request_id: 'request_execution_replay_execution',
+    expected_version: begin.session.version
+  });
+  assert.equal(executionReplay.error.error_code, 'CANARY_REPLAY_DETECTED');
 
   const concurrent = context.canarySessionRegistry.beginCanaryExecution({
     canary_session_id: session.canary_session_id,
@@ -202,25 +220,92 @@ test('canary execution reservation blocks replay version conflicts and concurren
   const aborted = context.canarySessionRegistry.abortCanaryExecution({
     canary_session_id: session.canary_session_id,
     execution_reservation_id: begin.execution_reservation_id,
+    canary_execution_id: 'wrong_execution',
+    original_change_id: 'change_execution_reserved',
+    original_request_id: 'request_execution_reserved',
     change_id: 'change_execution_abort',
     request_id: 'request_execution_abort',
     expected_version: begin.session.version,
     reason: 'pre_network_blocked'
   });
-  assert.equal(aborted.ok, true);
-  assert.equal(aborted.session.canary_state, 'active');
+  assert.equal(aborted.ok, false);
   assert.equal(aborted.session.requests_used, 0);
+
+  const abortedOriginalMismatch = context.canarySessionRegistry.abortCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    execution_reservation_id: begin.execution_reservation_id,
+    canary_execution_id: 'execution_reserved',
+    original_change_id: 'wrong_change',
+    original_request_id: 'request_execution_reserved',
+    change_id: 'change_execution_abort_original_mismatch',
+    request_id: 'request_execution_abort_original_mismatch',
+    expected_version: begin.session.version,
+    reason: 'pre_network_blocked'
+  });
+  assert.equal(abortedOriginalMismatch.ok, false);
+  assert.equal(abortedOriginalMismatch.session.requests_used, 0);
+
+  const abortValid = context.canarySessionRegistry.abortCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    execution_reservation_id: begin.execution_reservation_id,
+    canary_execution_id: 'execution_reserved',
+    original_change_id: 'change_execution_reserved',
+    original_request_id: 'request_execution_reserved',
+    change_id: 'change_execution_abort_valid',
+    request_id: 'request_execution_abort_valid',
+    expected_version: begin.session.version,
+    reason: 'pre_network_blocked'
+  });
+  assert.equal(abortValid.ok, true);
+  assert.equal(abortValid.session.canary_state, 'active');
+  assert.equal(abortValid.session.requests_used, 0);
 
   const finishBegin = context.canarySessionRegistry.beginCanaryExecution({
     canary_session_id: session.canary_session_id,
     canary_execution_id: 'execution_finish',
     change_id: 'change_execution_finish',
     request_id: 'request_execution_finish',
-    expected_version: aborted.session.version
+    expected_version: abortValid.session.version
   });
+  const mismatch = context.canarySessionRegistry.finishCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    execution_reservation_id: finishBegin.execution_reservation_id,
+    canary_execution_id: 'wrong_execution_finish',
+    original_change_id: 'change_execution_finish',
+    original_request_id: 'request_execution_finish',
+    change_id: 'change_execution_finish_execution_mismatch',
+    request_id: 'request_execution_finish_execution_mismatch',
+    expected_version: finishBegin.session.version
+  }, {
+    status: 'public_web_candidate_success',
+    executed: true,
+    real_provider_called: true
+  });
+  assert.equal(mismatch.ok, false);
+  assert.equal(mismatch.session.requests_used, 0);
+
+  const requestMismatch = context.canarySessionRegistry.finishCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    execution_reservation_id: finishBegin.execution_reservation_id,
+    canary_execution_id: 'execution_finish',
+    original_change_id: 'change_execution_finish',
+    original_request_id: 'wrong_request',
+    change_id: 'change_execution_finish_mismatch',
+    request_id: 'request_execution_finish_mismatch',
+    expected_version: finishBegin.session.version
+  }, {
+    status: 'public_web_candidate_success',
+    executed: true,
+    real_provider_called: true
+  });
+  assert.equal(requestMismatch.ok, false);
+  assert.equal(requestMismatch.session.requests_used, 0);
   const finished = context.canarySessionRegistry.finishCanaryExecution({
     canary_session_id: session.canary_session_id,
     execution_reservation_id: finishBegin.execution_reservation_id,
+    canary_execution_id: 'execution_finish',
+    original_change_id: 'change_execution_finish',
+    original_request_id: 'request_execution_finish',
     change_id: 'change_execution_finish_done',
     request_id: 'request_execution_finish_done',
     expected_version: finishBegin.session.version
@@ -232,6 +317,62 @@ test('canary execution reservation blocks replay version conflicts and concurren
   assert.equal(finished.ok, true);
   assert.equal(finished.session.requests_used, 1);
   assert.equal(finished.session.canary_state, 'completed');
+
+  const reusedExecutionId = context.canarySessionRegistry.beginCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    canary_execution_id: 'execution_finish',
+    change_id: 'change_execution_reuse_after_finish',
+    request_id: 'request_execution_reuse_after_finish',
+    expected_version: finished.session.version
+  });
+  assert.equal(reusedExecutionId.error.error_code, 'CANARY_REPLAY_DETECTED');
+
+  const repeated = context.canarySessionRegistry.finishCanaryExecution({
+    canary_session_id: session.canary_session_id,
+    execution_reservation_id: finishBegin.execution_reservation_id,
+    canary_execution_id: 'execution_finish',
+    original_change_id: 'change_execution_finish',
+    original_request_id: 'request_execution_finish',
+    change_id: 'change_execution_finish_repeat',
+    request_id: 'request_execution_finish_repeat',
+    expected_version: finished.session.version
+  }, {
+    status: 'public_web_candidate_success',
+    executed: true,
+    real_provider_called: true
+  });
+  assert.equal(repeated.error.error_code, 'CANARY_REPLAY_DETECTED');
+});
+
+test('canary execution finish blocks incoherent flags and unsafe result fields', () => {
+  for (const [suffix, result] of [
+    ['false_true', { status: 'public_web_provider_error_safe', executed: false, real_provider_called: true }],
+    ['true_false', { status: 'public_web_provider_error_safe', executed: true, real_provider_called: false }],
+    ['unsafe', { status: 'public_web_provider_error_safe', executed: true, real_provider_called: true, rawBody: 'unsafe', headers: {}, secret_handle: 'opaque' }]
+  ]) {
+    const context = validCanaryContext();
+    const { session } = createApprovedActiveSession(context);
+    const begin = context.canarySessionRegistry.beginCanaryExecution({
+      canary_session_id: session.canary_session_id,
+      canary_execution_id: `execution_${suffix}`,
+      change_id: `change_${suffix}`,
+      request_id: `request_${suffix}`,
+      expected_version: session.version
+    });
+    assert.equal(begin.ok, true);
+    const blocked = context.canarySessionRegistry.finishCanaryExecution({
+      canary_session_id: session.canary_session_id,
+      execution_reservation_id: begin.execution_reservation_id,
+      canary_execution_id: `execution_${suffix}`,
+      original_change_id: `change_${suffix}`,
+      original_request_id: `request_${suffix}`,
+      change_id: `change_${suffix}_finish`,
+      request_id: `request_${suffix}_finish`,
+      expected_version: begin.session.version
+    }, result);
+    assert.equal(blocked.ok, false);
+    assert.equal(blocked.session.requests_used, 0);
+  }
 });
 
 test('operator policy blocks common roles self-approval and approval replay', () => {
@@ -421,6 +562,57 @@ test('runner blocks missing dependencies and executes one approved canary reques
   assertSafe(result);
 });
 
+test('runner concurrent execution reserves exactly one HTTP call', async () => {
+  let calls = 0;
+  let release;
+  const firstCallStarted = new Promise((resolve) => {
+    release = resolve;
+  });
+  const context = validCanaryContext({
+    nodeHttpsClient: {
+      async execute(request) {
+        calls += 1;
+        await firstCallStarted;
+        return fakeNodeHttpsClient().execute(request);
+      },
+      calls() { return calls; }
+    }
+  });
+  const { session } = createApprovedActiveSession(context);
+  const runner = createPublicWebCanaryRunner(context);
+  const first = runner.runCanaryRequest({
+    trace_id: 'trace_concurrent_one',
+    request_id: 'request_concurrent_one',
+    change_id: 'change_concurrent_one',
+    canary_execution_id: 'execution_concurrent_one',
+    canary_session_id: session.canary_session_id,
+    target_path: session.target_path,
+    expected_version: session.version,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
+  });
+  const second = runner.runCanaryRequest({
+    trace_id: 'trace_concurrent_two',
+    request_id: 'request_concurrent_two',
+    change_id: 'change_concurrent_two',
+    canary_execution_id: 'execution_concurrent_two',
+    canary_session_id: session.canary_session_id,
+    target_path: session.target_path,
+    expected_version: session.version,
+    simulated: true,
+    executed: false,
+    real_provider_called: false
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+  release();
+  const results = await Promise.all([first, second]);
+  assert.equal(calls, 1);
+  assert.equal(results.filter((result) => result.real_provider_called === true).length, 1);
+  assert.equal(context.canarySessionRegistry.getCanarySession(session.canary_session_id).requests_used, 1);
+});
+
+
 test('runner blocks before network for feature flag kill switch inactive session and target policy', async () => {
   const context = validCanaryContext();
   const { session } = createApprovedActiveSession(context);
@@ -429,6 +621,7 @@ test('runner blocks before network for feature flag kill switch inactive session
     trace_id: 'trace_blocked',
     request_id: 'request_blocked',
     change_id: 'change_blocked',
+    canary_execution_id: 'execution_blocked',
     canary_session_id: session.canary_session_id,
     target_origin: session.target_origin,
     target_path: '/allowed/page',
@@ -450,6 +643,7 @@ test('runner blocks before network for feature flag kill switch inactive session
     trace_id: 'trace_kill',
     request_id: 'request_kill',
     change_id: 'change_kill',
+    canary_execution_id: 'execution_kill',
     canary_session_id: killSession.canary_session_id,
     target_origin: killSession.target_origin,
     target_path: '/allowed/page',
@@ -507,6 +701,7 @@ test('runner distinguishes blocked before network from failed after network', as
     trace_id: 'trace_dns_block',
     request_id: 'request_dns_block',
     change_id: 'change_dns_block',
+    canary_execution_id: 'execution_dns_block',
     canary_session_id: dnsSession.canary_session_id,
     target_path: dnsSession.target_path,
     expected_version: dnsSession.version,
@@ -524,6 +719,7 @@ test('runner distinguishes blocked before network from failed after network', as
     trace_id: 'trace_network_throw',
     request_id: 'request_network_throw',
     change_id: 'change_network_throw',
+    canary_execution_id: 'execution_network_throw',
     canary_session_id: throwSession.canary_session_id,
     target_path: throwSession.target_path,
     expected_version: throwSession.version,
@@ -548,6 +744,7 @@ test('runner distinguishes blocked before network from failed after network', as
     trace_id: 'trace_stream_throw',
     request_id: 'request_stream_throw',
     change_id: 'change_stream_throw',
+    canary_execution_id: 'execution_stream_throw',
     canary_session_id: streamSession.canary_session_id,
     target_path: streamSession.target_path,
     expected_version: streamSession.version,
@@ -569,6 +766,7 @@ test('runner distinguishes blocked before network from failed after network', as
     trace_id: 'trace_oversized_stream',
     request_id: 'request_oversized_stream',
     change_id: 'change_oversized_stream',
+    canary_execution_id: 'execution_oversized_stream',
     canary_session_id: oversizedSession.canary_session_id,
     target_path: oversizedSession.target_path,
     expected_version: oversizedSession.version,
@@ -588,6 +786,7 @@ test('runner revalidates authorities after activation before network', async () 
     trace_id: 'trace_adapter_removed',
     request_id: 'request_adapter_removed',
     change_id: 'change_adapter_removed',
+    canary_execution_id: 'execution_adapter_removed',
     canary_session_id: adapterSession.canary_session_id,
     target_path: adapterSession.target_path,
     expected_version: adapterSession.version,
@@ -606,6 +805,7 @@ test('runner revalidates authorities after activation before network', async () 
     trace_id: 'trace_lifecycle_changed',
     request_id: 'request_lifecycle_changed',
     change_id: 'change_lifecycle_changed',
+    canary_execution_id: 'execution_lifecycle_changed',
     canary_session_id: lifecycleSession.canary_session_id,
     target_path: lifecycleSession.target_path,
     expected_version: lifecycleSession.version,
@@ -623,6 +823,7 @@ test('runner revalidates authorities after activation before network', async () 
     trace_id: 'trace_readiness_changed',
     request_id: 'request_readiness_changed',
     change_id: 'change_readiness_changed',
+    canary_execution_id: 'execution_readiness_changed',
     canary_session_id: readinessSession.canary_session_id,
     target_path: readinessSession.target_path,
     expected_version: readinessSession.version,
@@ -641,6 +842,7 @@ test('runner enforces exact approved path and target policy limits', async () =>
     trace_id: 'trace_path_mismatch',
     request_id: 'request_path_mismatch',
     change_id: 'change_path_mismatch',
+    canary_execution_id: 'execution_path_mismatch',
     canary_session_id: pathSession.canary_session_id,
     target_path: '/allowed/other',
     expected_version: pathSession.version,
@@ -675,6 +877,7 @@ test('runner enforces exact approved path and target policy limits', async () =>
     trace_id: 'trace_policy_limits',
     request_id: 'request_policy_limits',
     change_id: 'change_policy_limits',
+    canary_execution_id: 'execution_policy_limits',
     canary_session_id: limitedSession.canary_session_id,
     target_path: limitedSession.target_path,
     expected_version: limitedSession.version,
@@ -697,6 +900,7 @@ test('runner revalidates secret reference before network', async () => {
     trace_id: 'trace_secret_revoked',
     request_id: 'request_secret_revoked',
     change_id: 'change_secret_revoked',
+    canary_execution_id: 'execution_secret_revoked',
     canary_session_id: revokedSession.canary_session_id,
     target_path: revokedSession.target_path,
     expected_version: revokedSession.version,
@@ -723,6 +927,7 @@ test('runner aborts reserved execution when budget reserve blocks before network
     trace_id: 'trace_budget_reserve_block',
     request_id: 'request_budget_reserve_block',
     change_id: 'change_budget_reserve_block',
+    canary_execution_id: 'execution_budget_reserve_block',
     canary_session_id: session.canary_session_id,
     target_path: session.target_path,
     expected_version: session.version,

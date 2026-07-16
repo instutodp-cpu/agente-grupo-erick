@@ -9,6 +9,7 @@ const {
   buildCanaryAuditEventCandidate,
   buildSafeCanaryError,
   clone,
+  findCanaryForbiddenFields,
   hashCanaryEvidence,
   isSessionExpired,
   parseCanaryTimestamp,
@@ -156,10 +157,17 @@ function buildReservationId(request) {
   return typeof raw === 'string' && raw.trim() !== '' ? raw : '';
 }
 
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
 function createPublicWebCanarySessionRegistry(options = {}) {
   const sessions = new Map();
   const history = new Map();
-  const processed = new Set();
+  const processedChangeIds = new Set();
+  const processedRequestIds = new Set();
+  const processedExecutionIds = new Set();
+  const finalizedReservationIds = new Set();
   const executionReservations = new Map();
   const maxHistory = Number.isInteger(options.maxHistoryPerSession) ? options.maxHistoryPerSession : 100;
   const clock = options.clock || (() => new Date().toISOString());
@@ -213,9 +221,49 @@ function createPublicWebCanarySessionRegistry(options = {}) {
   function consumeId(request) {
     const id = request && (request.change_id || request.request_id || request.approval_id);
     if (typeof id !== 'string' || id.trim() === '') return { ok: false, code: 'INVALID_CANARY_REQUEST', reason: 'request_id_required' };
-    if (processed.has(id)) return { ok: false, code: 'CANARY_REPLAY_DETECTED', reason: 'canary_replay_detected' };
-    processed.add(id);
+    if (processedChangeIds.has(id)) return { ok: false, code: 'CANARY_REPLAY_DETECTED', reason: 'canary_replay_detected' };
+    processedChangeIds.add(id);
     return { ok: true };
+  }
+
+  function validateExecutionIdsUnused(request) {
+    if (!isNonEmptyString(request && request.change_id)) return { ok: false, code: 'INVALID_CANARY_REQUEST', reason: 'change_id_required' };
+    if (!isNonEmptyString(request && request.request_id)) return { ok: false, code: 'INVALID_CANARY_REQUEST', reason: 'request_id_required' };
+    if (!isNonEmptyString(request && request.canary_execution_id)) return { ok: false, code: 'INVALID_CANARY_REQUEST', reason: 'canary_execution_id_required' };
+    if (processedChangeIds.has(request.change_id)) return { ok: false, code: 'CANARY_REPLAY_DETECTED', reason: 'change_id_replayed' };
+    if (processedRequestIds.has(request.request_id)) return { ok: false, code: 'CANARY_REPLAY_DETECTED', reason: 'request_id_replayed' };
+    if (processedExecutionIds.has(request.canary_execution_id)) return { ok: false, code: 'CANARY_REPLAY_DETECTED', reason: 'canary_execution_id_replayed' };
+    return { ok: true };
+  }
+
+  function consumeExecutionIds(request) {
+    processedChangeIds.add(request.change_id);
+    processedRequestIds.add(request.request_id);
+    processedExecutionIds.add(request.canary_execution_id);
+  }
+
+  function validateReservationBinding(session, request, reservation) {
+    if (!reservation || reservation.finalized === true || finalizedReservationIds.has(request && request.execution_reservation_id)) {
+      return { ok: false, code: 'CANARY_REPLAY_DETECTED', reason: 'canary_execution_reservation_finalized' };
+    }
+    if (session.canary_state !== 'executing') return { ok: false, code: 'CANARY_STATE_TRANSITION_INVALID', reason: 'canary_session_not_executing' };
+    if (reservation.canary_session_id !== request.canary_session_id) return { ok: false, code: 'CANARY_STATE_TRANSITION_INVALID', reason: 'canary_session_binding_mismatch' };
+    if (reservation.execution_reservation_id !== request.execution_reservation_id) return { ok: false, code: 'CANARY_STATE_TRANSITION_INVALID', reason: 'execution_reservation_id_mismatch' };
+    if (reservation.canary_execution_id !== request.canary_execution_id) return { ok: false, code: 'CANARY_STATE_TRANSITION_INVALID', reason: 'canary_execution_id_mismatch' };
+    if (reservation.change_id !== request.original_change_id) return { ok: false, code: 'CANARY_STATE_TRANSITION_INVALID', reason: 'original_change_id_mismatch' };
+    if (reservation.request_id !== request.original_request_id) return { ok: false, code: 'CANARY_STATE_TRANSITION_INVALID', reason: 'original_request_id_mismatch' };
+    if (!Number.isInteger(request.expected_version) || request.expected_version !== reservation.expected_finish_version || request.expected_version !== session.version) {
+      return { ok: false, code: 'CANARY_VERSION_CONFLICT', reason: 'canary_version_conflict' };
+    }
+    return { ok: true };
+  }
+
+  function validateResultForFinish(result) {
+    const executed = result && result.executed === true;
+    const called = result && result.real_provider_called === true;
+    if (executed !== called) return { ok: false, code: 'CANARY_INTERNAL_ERROR', reason: 'canary_execution_flags_incoherent' };
+    if (findCanaryForbiddenFields(result || {}).length > 0) return { ok: false, code: 'CANARY_INTERNAL_ERROR', reason: 'unsafe_canary_execution_result' };
+    return { ok: true, executed, called };
   }
 
   function checkVersion(session, request) {
@@ -376,30 +424,38 @@ function createPublicWebCanarySessionRegistry(options = {}) {
       ...request,
       change_id: `${request.change_id || request.request_id}:finish`,
       expected_version: begin.session.version,
-      execution_reservation_id: begin.execution_reservation_id
+      execution_reservation_id: begin.execution_reservation_id,
+      canary_execution_id: request.canary_execution_id,
+      original_change_id: request.change_id,
+      original_request_id: request.request_id
     }, result);
   }
 
   function beginCanaryExecution(request) {
-    const id = consumeId(request);
     const session = requireSession(request);
     if (!session) return response(null, request, { error_code: 'CANARY_SESSION_NOT_FOUND', blocked_reason: 'canary_session_not_found' });
-    if (!id.ok) return response(session, request, { error_code: id.code, blocked_reason: id.reason });
+    const ids = validateExecutionIdsUnused(request);
+    if (!ids.ok) return response(session, request, { error_code: ids.code, blocked_reason: ids.reason });
     const conflict = checkVersion(session, request);
     if (conflict) return conflict;
     if (session.canary_state !== 'active') return response(session, request, { error_code: 'CANARY_SESSION_NOT_ACTIVE', blocked_reason: 'canary_session_not_active' });
-    const reservationId = buildReservationId(request);
-    if (!reservationId) return response(session, request, { error_code: 'INVALID_CANARY_REQUEST', blocked_reason: 'execution_reservation_id_required' });
     if (executionReservations.has(session.canary_session_id)) {
       return response(session, request, { error_code: 'CANARY_REQUEST_LIMIT_REACHED', blocked_reason: 'canary_execution_already_reserved' });
     }
+    consumeExecutionIds(request);
+    const reservationId = request.canary_execution_id;
     const executing = storeTransition(session, request, 'executing', 'public_web_canary_request_started');
     const current = sessions.get(session.canary_session_id);
     executionReservations.set(session.canary_session_id, Object.freeze({
       execution_reservation_id: reservationId,
       canary_session_id: session.canary_session_id,
+      canary_execution_id: request.canary_execution_id,
+      change_id: request.change_id,
       request_id: request.request_id,
       trace_id: request.trace_id,
+      reserved_version: session.version,
+      expected_finish_version: current.version,
+      finalized: false,
       started_at: nowIso(),
       network_started: false
     }));
@@ -410,17 +466,13 @@ function createPublicWebCanarySessionRegistry(options = {}) {
   }
 
   function abortCanaryExecution(request) {
-    const id = consumeId(request);
     const session = requireSession(request);
     if (!session) return response(null, request, { error_code: 'CANARY_SESSION_NOT_FOUND', blocked_reason: 'canary_session_not_found' });
-    if (!id.ok) return response(session, request, { error_code: id.code, blocked_reason: id.reason });
-    const conflict = checkVersion(session, request);
-    if (conflict) return conflict;
     const reservation = executionReservations.get(session.canary_session_id);
-    if (session.canary_state !== 'executing' || !reservation || reservation.execution_reservation_id !== request.execution_reservation_id) {
-      return response(session, request, { error_code: 'CANARY_STATE_TRANSITION_INVALID', blocked_reason: 'canary_execution_reservation_invalid' });
-    }
+    const binding = validateReservationBinding(session, request, reservation);
+    if (!binding.ok) return response(session, request, { error_code: binding.code, blocked_reason: binding.reason });
     executionReservations.delete(session.canary_session_id);
+    finalizedReservationIds.add(request.execution_reservation_id);
     return storeTransition(session, request, 'active', 'public_web_canary_request_aborted_before_network', {
       terminal_reason: request.reason || 'pre_network_blocked'
     }, {
@@ -430,19 +482,17 @@ function createPublicWebCanarySessionRegistry(options = {}) {
   }
 
   function finishCanaryExecution(request, result = {}) {
-    const id = consumeId(request);
     const session = requireSession(request);
     if (!session) return response(null, request, { error_code: 'CANARY_SESSION_NOT_FOUND', blocked_reason: 'canary_session_not_found' });
-    if (!id.ok) return response(session, request, { error_code: id.code, blocked_reason: id.reason });
-    const conflict = checkVersion(session, request);
-    if (conflict) return conflict;
     const reservation = executionReservations.get(session.canary_session_id);
-    if (session.canary_state !== 'executing' || !reservation || reservation.execution_reservation_id !== request.execution_reservation_id) {
-      return response(session, request, { error_code: 'CANARY_STATE_TRANSITION_INVALID', blocked_reason: 'canary_execution_reservation_invalid' });
-    }
+    const binding = validateReservationBinding(session, request, reservation);
+    if (!binding.ok) return response(session, request, { error_code: binding.code, blocked_reason: binding.reason });
+    const resultValidation = validateResultForFinish(result);
+    if (!resultValidation.ok) return response(session, request, { error_code: resultValidation.code, blocked_reason: resultValidation.reason });
     executionReservations.delete(session.canary_session_id);
+    finalizedReservationIds.add(request.execution_reservation_id);
     const success = result.status === 'public_web_candidate_success';
-    const requestsUsed = session.requests_used + 1;
+    const requestsUsed = resultValidation.called ? session.requests_used + 1 : session.requests_used;
     const exhausted = requestsUsed >= session.maximum_requests;
     const nextState = success ? (exhausted ? 'completed' : 'active') : 'failed_safe';
     return storeTransition(session, request, nextState, success ? 'public_web_canary_request_succeeded' : 'public_web_canary_request_failed_safe', {

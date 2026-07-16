@@ -265,7 +265,7 @@ function createPublicWebCanaryRunner(deps = {}) {
 
     const began = deps.canarySessionRegistry.beginCanaryExecution({
       canary_session_id: session.canary_session_id,
-      canary_execution_id: input.canary_execution_id || input.change_id,
+      canary_execution_id: input.canary_execution_id,
       change_id: input.change_id,
       trace_id: input.trace_id,
       request_id: input.request_id,
@@ -281,6 +281,9 @@ function createPublicWebCanaryRunner(deps = {}) {
       deps.canarySessionRegistry.abortCanaryExecution({
         canary_session_id: executionSession.canary_session_id,
         execution_reservation_id: executionReservationId,
+        canary_execution_id: input.canary_execution_id,
+        original_change_id: input.change_id,
+        original_request_id: input.request_id,
         change_id: `${input.change_id || input.request_id}:abort_pre_network`,
         trace_id: input.trace_id,
         request_id: input.request_id,
@@ -363,6 +366,9 @@ function createPublicWebCanaryRunner(deps = {}) {
         deps.canarySessionRegistry.finishCanaryExecution({
           canary_session_id: session.canary_session_id,
           execution_reservation_id: executionReservationId,
+          canary_execution_id: input.canary_execution_id,
+          original_change_id: input.change_id,
+          original_request_id: input.request_id,
           change_id: `${input.change_id || input.request_id}:finish`,
           trace_id: input.trace_id,
           request_id: input.request_id,
@@ -372,6 +378,9 @@ function createPublicWebCanaryRunner(deps = {}) {
         deps.canarySessionRegistry.abortCanaryExecution({
           canary_session_id: session.canary_session_id,
           execution_reservation_id: executionReservationId,
+          canary_execution_id: input.canary_execution_id,
+          original_change_id: input.change_id,
+          original_request_id: input.request_id,
           change_id: `${input.change_id || input.request_id}:abort_pre_network`,
           trace_id: input.trace_id,
           request_id: input.request_id,
@@ -387,6 +396,9 @@ function createPublicWebCanaryRunner(deps = {}) {
         deps.canarySessionRegistry.abortCanaryExecution({
           canary_session_id: session.canary_session_id,
           execution_reservation_id: executionReservationId,
+          canary_execution_id: input.canary_execution_id,
+          original_change_id: input.change_id,
+          original_request_id: input.request_id,
           change_id: `${input.change_id || input.request_id}:abort_pre_network`,
           trace_id: input.trace_id,
           request_id: input.request_id,
@@ -399,6 +411,9 @@ function createPublicWebCanaryRunner(deps = {}) {
       deps.canarySessionRegistry.finishCanaryExecution({
         canary_session_id: session.canary_session_id,
         execution_reservation_id: executionReservationId,
+        canary_execution_id: input.canary_execution_id,
+        original_change_id: input.change_id,
+        original_request_id: input.request_id,
         change_id: `${input.change_id || input.request_id}:finish`,
         trace_id: input.trace_id,
         request_id: input.request_id,
