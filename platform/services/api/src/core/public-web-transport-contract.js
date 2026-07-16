@@ -380,7 +380,9 @@ function normalizeContentType(contentType) {
 }
 
 function isBlockedIPv4(ip) {
-  const parts = String(ip).split('.').map((part) => Number(part));
+  const input = String(ip || '').trim();
+  if (!/^(?:\d{1,3}\.){3}\d{1,3}$/.test(input)) return true;
+  const parts = input.split('.').map((part) => Number(part));
   if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
   const [a, b] = parts;
   if (a === 0) return true;
@@ -400,8 +402,23 @@ function isBlockedIPv4(ip) {
   return false;
 }
 
+function expandIpv4MappedFromHex(normalized) {
+  const parts = normalized.split(':').filter(Boolean);
+  if (parts.length < 2) return null;
+  const high = Number.parseInt(parts[parts.length - 2], 16);
+  const low = Number.parseInt(parts[parts.length - 1], 16);
+  if (!Number.isInteger(high) || !Number.isInteger(low) || high < 0 || high > 0xffff || low < 0 || low > 0xffff) return null;
+  return [
+    (high >> 8) & 0xff,
+    high & 0xff,
+    (low >> 8) & 0xff,
+    low & 0xff
+  ].join('.');
+}
+
 function isBlockedIPv6(ip) {
   const normalized = String(ip || '').toLowerCase();
+  if (normalized.includes('%')) return true;
   if (normalized === '::' || normalized === '::1') return true;
   if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
   if (normalized.startsWith('fe8') || normalized.startsWith('fe9') || normalized.startsWith('fea') || normalized.startsWith('feb')) return true;
@@ -409,6 +426,8 @@ function isBlockedIPv6(ip) {
   if (normalized.includes('ffff:')) {
     const mapped = normalized.split(':').pop();
     if (net.isIP(mapped) === 4) return isBlockedIPv4(mapped);
+    const mappedFromHex = expandIpv4MappedFromHex(normalized);
+    if (mappedFromHex) return isBlockedIPv4(mappedFromHex);
   }
   if (normalized.startsWith('2001:db8')) return true;
   return false;
@@ -483,6 +502,11 @@ function validatePublicWebTarget(target, options = {}) {
     origin: url.origin,
     protocol: scheme,
     hostname: host,
+    port: explicitPort || (scheme === 'https' ? 443 : 80),
+    approved_ip: resolvedIps[0] || null,
+    approved_ips: resolvedIps,
+    server_name: host,
+    host_header: url.host,
     resolved_ips: resolvedIps
   };
 }
@@ -646,7 +670,7 @@ function validatePublicWebTransportResponse(response) {
   if (!ALLOWED_CONTENT_TYPES.includes(normalizeContentType(response.content_type))) errors.push('content_type_not_allowed');
   if (!Array.isArray(response.structured_results)) errors.push('structured_results_must_be_array');
   if (response.simulated !== true) errors.push('simulated_must_be_true');
-  if (response.real_provider_called !== false) errors.push('real_provider_called_must_be_false');
+  if (typeof response.real_provider_called !== 'boolean') errors.push('real_provider_called_must_be_boolean');
   if (response.can_trigger_real_execution !== false) errors.push('can_trigger_real_execution_must_be_false');
   errors.push(...findForbiddenFields(response));
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
@@ -690,7 +714,7 @@ function buildPublicWebAuditEvent(context = {}) {
     rollout_percentage: Number.isFinite(context.rollout_percentage) ? context.rollout_percentage : 0,
     simulated: true,
     executed: context.executed === true,
-    real_provider_called: false,
+    real_provider_called: context.real_provider_called === true,
     duration_ms: Number.isInteger(context.duration_ms) && context.duration_ms >= 0 ? context.duration_ms : 0,
     bytes_received: Number.isInteger(context.bytes_received) && context.bytes_received >= 0 ? context.bytes_received : 0,
     redirects_followed: Number.isInteger(context.redirects_followed) && context.redirects_followed >= 0 ? context.redirects_followed : 0,
@@ -736,7 +760,7 @@ function buildTransportEnvelope(request, fields = {}) {
     cost_metadata: sanitizeObject(fields.cost_metadata || { cost_units: 0, budget_source: 'synthetic' }),
     simulated: true,
     executed: fields.executed === true,
-    real_provider_called: false,
+    real_provider_called: fields.real_provider_called === true,
     can_trigger_real_execution: false,
     error,
     audit_event_candidate: buildPublicWebAuditEvent({
@@ -753,6 +777,7 @@ function buildTransportEnvelope(request, fields = {}) {
       canary_state: fields.canary_state,
       rollout_percentage: fields.rollout_percentage,
       executed: fields.executed === true,
+      real_provider_called: fields.real_provider_called === true,
       duration_ms: fields.duration_ms,
       bytes_received: fields.bytes_received,
       redirects_followed: fields.redirects_followed,
@@ -773,12 +798,54 @@ function sanitizeTransportResponse(rawResponse, request = {}, options = {}) {
     });
   }
   const contentType = normalizeContentType(rawResponse.content_type);
+  const statusCode = Number.isInteger(rawResponse.status_code) ? rawResponse.status_code : 0;
+  const statusClass = statusCode > 0 ? `${Math.floor(statusCode / 100)}xx` : 'unknown';
+  if (statusCode >= 300 && statusCode < 400) {
+    return buildTransportEnvelope(request, {
+      status: 'public_web_redirect_blocked',
+      error_code: 'PUBLIC_WEB_REDIRECT_BLOCKED',
+      blocked_reason: 'redirect_blocked_in_current_phase',
+      content_type: 'text/plain',
+      http_status_class: '3xx',
+      executed: options.executed === true,
+      real_provider_called: options.real_provider_called === true,
+      environment: options.environment || 'local_test'
+    });
+  }
+  if (statusCode === 429) {
+    return buildTransportEnvelope(request, {
+      status: 'public_web_rate_limited',
+      error_code: 'PUBLIC_WEB_RATE_LIMITED',
+      blocked_reason: 'provider_rate_limited',
+      content_type: 'text/plain',
+      http_status_class: '4xx',
+      executed: options.executed === true,
+      real_provider_called: options.real_provider_called === true,
+      environment: options.environment || 'local_test'
+    });
+  }
+  if (statusCode >= 400) {
+    return buildTransportEnvelope(request, {
+      status: 'public_web_provider_error_safe',
+      error_code: 'PUBLIC_WEB_PROVIDER_RESPONSE_INVALID',
+      blocked_reason: statusCode >= 500 ? 'provider_5xx_safe_error' : 'provider_4xx_safe_error',
+      content_type: 'text/plain',
+      http_status_class: statusClass,
+      executed: options.executed === true,
+      real_provider_called: options.real_provider_called === true,
+      environment: options.environment || 'local_test'
+    });
+  }
   if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
     return buildTransportEnvelope(request, {
       status: 'public_web_content_type_blocked',
       error_code: 'PUBLIC_WEB_CONTENT_TYPE_BLOCKED',
       blocked_reason: 'content_type_blocked',
       content_type: 'text/plain'
+      ,
+      executed: options.executed === true,
+      real_provider_called: options.real_provider_called === true,
+      environment: options.environment || 'local_test'
     });
   }
   const contentLength = Number.isInteger(rawResponse.content_length) ? rawResponse.content_length : String(rawResponse.content || '').length;
@@ -789,14 +856,17 @@ function sanitizeTransportResponse(rawResponse, request = {}, options = {}) {
       error_code: 'PUBLIC_WEB_RESPONSE_TOO_LARGE',
       blocked_reason: 'response_too_large',
       content_type: contentType,
-      bytes_received: Math.min(contentLength, limit)
+      bytes_received: Math.min(contentLength, limit),
+      executed: options.executed === true,
+      real_provider_called: options.real_provider_called === true,
+      environment: options.environment || 'local_test'
     });
   }
   const sanitizedContent = sanitizePublicWebContent(rawResponse.content, contentType);
   return buildTransportEnvelope(request, {
-    status: rawResponse.status || 'public_web_candidate_success',
+    status: 'public_web_candidate_success',
     content_type: contentType,
-    http_status_class: rawResponse.http_status_class || `${Math.floor((rawResponse.status_code || 200) / 100)}xx`,
+    http_status_class: statusClass === 'unknown' ? '2xx' : statusClass,
     safe_summary: sanitizedContent.main_text_excerpt || 'Sanitized public web content.',
     structured_results: [{
       title: sanitizedContent.title,
@@ -812,6 +882,7 @@ function sanitizeTransportResponse(rawResponse, request = {}, options = {}) {
     bytes_received: contentLength,
     redirects_followed: Array.isArray(rawResponse.redirects) ? rawResponse.redirects.length : 0,
     executed: options.executed === true,
+    real_provider_called: options.real_provider_called === true,
     environment: options.environment || 'local_test',
     feature_flag_state: options.feature_flag_state === true,
     kill_switch_state: options.kill_switch_state === true,

@@ -16,6 +16,9 @@ const publicWebAdapter = require('../../src/adapters/public-web/public-web-read-
 const {
   createLocalTestSecretResolver
 } = require('../../src/core/provider-secret-resolver');
+const {
+  createPublicWebPilotBudget
+} = require('../../src/core/public-web-pilot-gate');
 
 function validRequest(overrides = {}) {
   return {
@@ -236,7 +239,11 @@ function fakeHttpClient(responseOverrides = {}) {
   return async () => ({
     status_code: 200,
     content_type: 'text/html',
-    content: '<html><head><title>Fake HTTP</title></head><body><p>Conteudo publico sintetico R$ 42,00.</p></body></html>',
+    content_length: 106,
+    remote_address: '93.184.216.34',
+    body_stream: (async function* bodyStream() {
+      yield '<html><head><title>Fake HTTP</title></head><body><p>Conteudo publico sintetico R$ 42,00.</p></body></html>';
+    }()),
     redirects: [],
     ...responseOverrides
   });
@@ -280,8 +287,8 @@ function validPilotContext(overrides = {}) {
     },
     readinessResult: validReadinessEvidence(),
     dnsResolver: fakeDnsResolver(),
-    costBudget: { check: () => ({ allowed: true }) },
-    rateLimitBudget: { check: () => ({ allowed: true }) },
+    costBudget: createPublicWebPilotBudget(),
+    rateLimitBudget: createPublicWebPilotBudget(),
     audit_available: true,
     environment: 'development',
     production: false,

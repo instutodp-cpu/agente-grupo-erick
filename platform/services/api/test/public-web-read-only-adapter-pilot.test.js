@@ -24,7 +24,8 @@ const {
   sanitizeTransportResponse,
   validatePublicWebTransportRequest,
   validatePublicWebTransportResponse,
-  validateTransportCapabilities
+  validateTransportCapabilities,
+  isBlockedIp
 } = require('../src/core/public-web-transport-contract');
 const {
   createPublicWebPilotBudget,
@@ -98,6 +99,7 @@ test('public web adapter pilot fixture exposes required contract terms', () => {
   assertIncludesAll(fixture.blocked_schemes, BLOCKED_SCHEMES);
   assertIncludesAll(fixture.cloud_metadata_hosts, CLOUD_METADATA_HOSTS);
   assertIncludesAll(fixture.transport_kinds, TRANSPORT_KINDS);
+  assertIncludesAll(fixture.http_client_contract_fields, ['approved_ip', 'approved_ips', 'redirect_mode', 'follow_redirects', 'abort_signal']);
   assertIncludesAll(fixture.statuses, PUBLIC_WEB_STATUSES);
   assertIncludesAll(fixture.error_codes, PUBLIC_WEB_ERROR_CODES);
   assert.equal(fixture.default_rules.deny_by_default, true);
@@ -106,6 +108,9 @@ test('public web adapter pilot fixture exposes required contract terms', () => {
   assert.equal(fixture.default_rules.feature_flag_default_off, true);
   assert.equal(fixture.default_rules.rollout_percentage_default, 0);
   assert.equal(fixture.default_rules.real_transport_enabled_by_default, false);
+  assert.equal(fixture.default_rules.real_provider_called_true_after_http_client_start, true);
+  assert.equal(fixture.default_rules.dns_binding_required, true);
+  assert.equal(fixture.default_rules.streaming_body_required_for_real_candidate, true);
   assert.equal(fixture.default_rules.raw_html_allowed, false);
   assert.equal(fixture.default_rules.retry_allowed, false);
   assert.ok(fixture.required_contract_references.includes('PUBLIC_WEB_READ_ONLY_SANDBOX.md'));
@@ -154,6 +159,11 @@ test('URL policy allows only safe public targets with injected DNS', () => {
     transport_kind: 'real_candidate',
     dnsResolver: () => ['93.184.216.34', '10.0.0.5']
   }).errors.some((error) => error.startsWith('resolved_ip_blocked::')), true);
+  assert.equal(isBlockedIp('::ffff:192.168.0.1'), true);
+  assert.equal(isBlockedIp('::ffff:c0a8:1'), true);
+  assert.equal(isBlockedIp('::ffff:7f00:1'), true);
+  assert.equal(isBlockedIp('FE80::1'), true);
+  assert.equal(isBlockedIp('fe80::1%eth0'), true);
 });
 
 test('redirect policy revalidates targets and blocks unsafe redirect behavior', () => {
@@ -230,6 +240,22 @@ test('content policy sanitizes allowed content and blocks unsafe response types 
   }, validRequest(), { max_response_bytes: REQUEST_LIMITS.default_response_bytes });
   assert.equal(large.status, 'public_web_response_too_large');
   assertNoForbiddenFields(large);
+
+  assert.equal(sanitizeTransportResponse({
+    status_code: 404,
+    content_type: 'text/plain',
+    content: 'not found'
+  }, validRequest(), { executed: true, real_provider_called: true }).status, 'public_web_provider_error_safe');
+  assert.equal(sanitizeTransportResponse({
+    status_code: 429,
+    content_type: 'text/plain',
+    content: 'rate limited'
+  }, validRequest(), { executed: true, real_provider_called: true }).status, 'public_web_rate_limited');
+  assert.equal(sanitizeTransportResponse({
+    status_code: 500,
+    content_type: 'text/plain',
+    content: 'provider error'
+  }, validRequest(), { executed: true, real_provider_called: true }).status, 'public_web_provider_error_safe');
 });
 
 test('fixture and mock transports execute deterministically without network', () => {
@@ -286,9 +312,18 @@ test('real transport candidate is default off and requires injected safe depende
 });
 
 test('real transport candidate with fake HTTP returns sanitized response only when pilot gate allows', async () => {
+  let callCount = 0;
   const transport = createPublicWebRealTransportCandidate({
     enabled: true,
-    httpClient: fakeHttpClient(),
+    httpClient: async (request) => {
+      callCount += 1;
+      assert.equal(request.redirect_mode, 'manual');
+      assert.equal(request.follow_redirects, false);
+      assert.equal(request.approved_ip, '93.184.216.34');
+      assert.equal(request.hostname, 'public-example.test');
+      assert.equal(request.host_header, 'public-example.test');
+      return fakeHttpClient()(request);
+    },
     dnsResolver: fakeDnsResolver(),
     secretResolver: validPilotContext().secretResolver,
     clock: () => '2026-07-14T12:00:00.000Z',
@@ -297,6 +332,7 @@ test('real transport candidate with fake HTTP returns sanitized response only wh
   const request = validRequest();
   const blockedProduction = await transport.execute(request, validPilotContext({ environment: 'production', production: true }));
   assert.equal(blockedProduction.status, 'public_web_production_blocked');
+  assert.equal(blockedProduction.real_provider_called, false);
   const blockedFlag = await transport.execute(request, validPilotContext({ feature_flag: false }));
   assert.equal(blockedFlag.status, 'public_web_validation_blocked');
   const blockedKill = await transport.execute(request, validPilotContext({ kill_switch: true }));
@@ -305,16 +341,134 @@ test('real transport candidate with fake HTTP returns sanitized response only wh
   assert.equal(blockedRollout.status, 'public_web_validation_blocked');
   const blockedTarget = await transport.execute(validRequest({ target: 'https://127.0.0.1/private' }), validPilotContext());
   assert.notEqual(blockedTarget.status, 'public_web_candidate_success');
+  assert.equal(blockedTarget.real_provider_called, false);
   const blockedSecretContext = await transport.execute(request, validPilotContext({ secretAccessContext: null }));
   assert.equal(blockedSecretContext.status, 'public_web_validation_blocked');
+  assert.equal(callCount, 0);
 
   const result = await transport.execute(request, validPilotContext());
   assert.equal(result.status, 'public_web_candidate_success');
   assert.equal(result.executed, true);
-  assert.equal(result.real_provider_called, false);
+  assert.equal(result.real_provider_called, true);
+  assert.equal(result.audit_event_candidate.real_provider_called, true);
   assert.equal(result.can_trigger_real_execution, false);
+  assert.equal(callCount, 1);
   assert.equal(JSON.stringify(result).includes('secret_handle'), false);
   assertNoForbiddenFields(result);
+});
+
+test('real transport candidate blocks redirects, rebinding, provider errors and unsafe streams after network start', async () => {
+  const base = {
+    enabled: true,
+    dnsResolver: fakeDnsResolver(),
+    secretResolver: validPilotContext().secretResolver,
+    clock: () => '2026-07-14T12:00:00.000Z',
+    abortControllerFactory: fakeAbortControllerFactory
+  };
+  let redirectCalls = 0;
+  const redirectTransport = createPublicWebRealTransportCandidate({
+    ...base,
+    httpClient: async () => {
+      redirectCalls += 1;
+      return fakeHttpClient({
+        status_code: 302,
+        content_type: 'text/plain',
+        remote_address: '93.184.216.34',
+        redirect_location: 'https://localhost/private',
+        body_stream: (async function* redirectStream() { yield ''; }())
+      })();
+    }
+  });
+  const redirectResult = await redirectTransport.execute(validRequest(), validPilotContext());
+  assert.equal(redirectResult.status, 'public_web_redirect_blocked');
+  assert.equal(redirectResult.real_provider_called, true);
+  assert.equal(redirectCalls, 1);
+
+  const reboundTransport = createPublicWebRealTransportCandidate({
+    ...base,
+    httpClient: fakeHttpClient({ remote_address: '93.184.216.35' })
+  });
+  const rebound = await reboundTransport.execute(validRequest(), validPilotContext());
+  assert.equal(rebound.error.error_code, 'PUBLIC_WEB_DNS_REBINDING_BLOCKED');
+  assert.equal(rebound.real_provider_called, true);
+
+  const provider429 = createPublicWebRealTransportCandidate({
+    ...base,
+    httpClient: fakeHttpClient({ status_code: 429 })
+  });
+  const rateLimited = await provider429.execute(validRequest(), validPilotContext());
+  assert.equal(rateLimited.status, 'public_web_rate_limited');
+  assert.equal(rateLimited.real_provider_called, true);
+
+  const provider500 = createPublicWebRealTransportCandidate({
+    ...base,
+    httpClient: fakeHttpClient({ status_code: 500 })
+  });
+  const providerError = await provider500.execute(validRequest(), validPilotContext());
+  assert.equal(providerError.status, 'public_web_provider_error_safe');
+  assert.equal(providerError.real_provider_called, true);
+
+  const tooLarge = createPublicWebRealTransportCandidate({
+    ...base,
+    httpClient: fakeHttpClient({
+      content_length: REQUEST_LIMITS.default_response_bytes + 1,
+      body_stream: (async function* emptyStream() { yield ''; }())
+    })
+  });
+  const largeResult = await tooLarge.execute(validRequest(), validPilotContext());
+  assert.equal(largeResult.status, 'public_web_response_too_large');
+  assert.equal(largeResult.real_provider_called, true);
+
+  const aborted = { called: false };
+  const timeoutTransport = createPublicWebRealTransportCandidate({
+    ...base,
+    abortControllerFactory: () => ({
+      signal: {},
+      abort() {
+        aborted.called = true;
+      }
+    }),
+    httpClient: async () => new Promise(() => {})
+  });
+  const timeoutResult = await timeoutTransport.execute(validRequest({ timeout_ms: 1 }), validPilotContext());
+  assert.equal(timeoutResult.status, 'public_web_timeout');
+  assert.equal(timeoutResult.real_provider_called, true);
+  assert.equal(aborted.called, true);
+});
+
+test('real transport candidate reserves budgets and does not call HTTP when reservation fails', async () => {
+  let calls = 0;
+  const transport = createPublicWebRealTransportCandidate({
+    enabled: true,
+    httpClient: async () => {
+      calls += 1;
+      return fakeHttpClient()();
+    },
+    dnsResolver: fakeDnsResolver(),
+    secretResolver: validPilotContext().secretResolver,
+    clock: () => '2026-07-14T12:00:00.000Z',
+    abortControllerFactory: fakeAbortControllerFactory
+  });
+  const rateLimitBudget = createPublicWebPilotBudget();
+  for (let i = 0; i < 5; i += 1) {
+    assert.equal(rateLimitBudget.reserve().allowed, true);
+    rateLimitBudget.release();
+  }
+  const blocked = await transport.execute(validRequest(), validPilotContext({ rateLimitBudget }));
+  assert.equal(blocked.status, 'public_web_validation_blocked');
+  assert.equal(blocked.real_provider_called, false);
+  assert.equal(calls, 0);
+
+  const costBudget = {
+    check: () => ({ allowed: true }),
+    reserve: () => ({ allowed: false, reason: 'cost_budget_exhausted' }),
+    release: () => {
+      throw new Error('release should not be required before reservation');
+    }
+  };
+  const blockedCost = await transport.execute(validRequest(), validPilotContext({ costBudget }));
+  assert.equal(blockedCost.real_provider_called, false);
+  assert.equal(calls, 0);
 });
 
 test('public web adapter metadata registers as candidate and current runtime still blocks execution', async () => {
@@ -367,6 +521,67 @@ test('public web adapter metadata registers as candidate and current runtime sti
   assert.equal(runtimeResult.real_provider_called, false);
 });
 
+test('public web adapter sanitizes unsafe transport responses and catches transport throws', async () => {
+  const request = validRequest();
+  const unsafe = await publicWebAdapter.execute(request, {
+    ...validPilotContext(),
+    dnsResolver: fakeDnsResolver(),
+    transport_kind: 'real_candidate',
+    transport: {
+      metadata: {
+        transport_id: 'public_web_mock_unsafe_transport',
+        provider_id: 'public_web_provider_candidate',
+        transport_kind: 'mock',
+        version: '1.0.0',
+        environments: ['local_test'],
+        supports_abort: true,
+        supports_stream_limit: true,
+        supports_redirect_control: true,
+        max_timeout_ms: REQUEST_LIMITS.maximum_timeout_ms,
+        max_response_bytes: REQUEST_LIMITS.maximum_response_bytes,
+        real_network: false,
+        enabled: true
+      },
+      canHandle: () => true,
+      execute: async () => ({
+        status: 'public_web_mock_success',
+        rawHtml: '<script>bad</script>',
+        secret_handle: 'secret-value'
+      })
+    }
+  });
+  assert.equal(unsafe.status, 'public_web_provider_error_safe');
+  assert.equal(unsafe.error.error_code, 'PUBLIC_WEB_PROVIDER_RESPONSE_INVALID');
+  assertNoForbiddenFields(unsafe);
+
+  const thrown = await publicWebAdapter.execute(request, {
+    ...validPilotContext(),
+    dnsResolver: fakeDnsResolver(),
+    transport: {
+      metadata: {
+        transport_id: 'public_web_mock_throw_transport',
+        provider_id: 'public_web_provider_candidate',
+        transport_kind: 'mock',
+        version: '1.0.0',
+        environments: ['local_test'],
+        supports_abort: true,
+        supports_stream_limit: true,
+        supports_redirect_control: true,
+        max_timeout_ms: REQUEST_LIMITS.maximum_timeout_ms,
+        max_response_bytes: REQUEST_LIMITS.maximum_response_bytes,
+        real_network: false,
+        enabled: true
+      },
+      canHandle: () => true,
+      execute: async () => {
+        throw new Error('unsafe stack');
+      }
+    }
+  });
+  assert.equal(thrown.status, 'public_web_provider_error_safe');
+  assertNoForbiddenFields(thrown);
+});
+
 test('pilot gate allows only a fully bound non-production synthetic canary', () => {
   const allowed = evaluatePublicWebPilotGate(validRequest(), validPilotContext());
   assert.equal(allowed.allowed, true);
@@ -407,12 +622,20 @@ test('rate and cost policy blocks hourly daily concurrency retry and fallback be
   assert.equal(hourly.check().allowed, false);
   assert.equal(hourly.check().reason, 'hourly_rate_limit_exceeded');
 
-  const daily = createPublicWebPilotBudget({ hourlyLimit: 100, dailyLimit: 20 });
+  let hour = 0;
+  const daily = createPublicWebPilotBudget({
+    hourlyLimit: 5,
+    dailyLimit: 20,
+    clock: () => `2026-07-14T${String(hour).padStart(2, '0')}:00:00.000Z`
+  });
   for (let i = 0; i < 20; i += 1) {
+    hour = Math.floor(i / 5);
     assert.equal(daily.reserve().allowed, true);
     daily.release();
   }
+  hour = 4;
   assert.equal(daily.check().reason, 'daily_rate_limit_exceeded');
+  assert.throws(() => createPublicWebPilotBudget({ hourlyLimit: 6 }), /INVALID_PUBLIC_WEB_PILOT_BUDGET_LIMITS/);
 
   const concurrent = createPublicWebPilotBudget();
   assert.equal(concurrent.reserve().allowed, true);

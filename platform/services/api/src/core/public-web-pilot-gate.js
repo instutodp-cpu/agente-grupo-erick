@@ -143,39 +143,78 @@ function createPublicWebPilotBudget(options = {}) {
   const hourlyLimit = Number.isInteger(options.hourlyLimit) ? options.hourlyLimit : 5;
   const dailyLimit = Number.isInteger(options.dailyLimit) ? options.dailyLimit : 20;
   const maxConcurrency = Number.isInteger(options.maxConcurrency) ? options.maxConcurrency : 1;
+  if (hourlyLimit < 1 || hourlyLimit > 5 || dailyLimit < 1 || dailyLimit > 20 || maxConcurrency !== 1) {
+    throw new Error('INVALID_PUBLIC_WEB_PILOT_BUDGET_LIMITS');
+  }
+  const clock = typeof options.clock === 'function' ? options.clock : () => new Date(0).toISOString();
   const state = {
     hourly: 0,
     daily: 0,
     inFlight: 0,
     providerErrors: 0,
-    retries: 0
+    retries: 0,
+    hourWindow: '',
+    dayWindow: ''
   };
-  return Object.freeze({
-    check() {
-      if (state.inFlight >= maxConcurrency) return { allowed: false, reason: 'concurrency_limit_exceeded' };
-      if (state.hourly >= hourlyLimit) return { allowed: false, reason: 'hourly_rate_limit_exceeded' };
-      if (state.daily >= dailyLimit) return { allowed: false, reason: 'daily_rate_limit_exceeded' };
-      return { allowed: true, reason: null };
-    },
-    reserve() {
-      const check = this.check();
-      if (!check.allowed) return check;
-      state.inFlight += 1;
-      state.hourly += 1;
-      state.daily += 1;
-      return { allowed: true, reason: null };
-    },
-    release(fields = {}) {
-      state.inFlight = Math.max(0, state.inFlight - 1);
-      if (fields.status_code === 429 || fields.timeout === true || fields.provider_error === true) {
-        state.retries += 0;
-        if (fields.provider_error === true) state.providerErrors += 1;
-      }
-      return this.snapshot();
-    },
-    snapshot() {
-      return { ...state, hourlyLimit, dailyLimit, maxConcurrency, retry_performed: false, fallback_performed: false };
+
+  function refreshWindows() {
+    const now = String(clock());
+    const hour = now.slice(0, 13);
+    const day = now.slice(0, 10);
+    if (state.hourWindow !== hour) {
+      state.hourWindow = hour;
+      state.hourly = 0;
     }
+    if (state.dayWindow !== day) {
+      state.dayWindow = day;
+      state.daily = 0;
+    }
+  }
+
+  function check() {
+    refreshWindows();
+    if (state.inFlight >= maxConcurrency) return { allowed: false, reason: 'concurrency_limit_exceeded' };
+    if (state.hourly >= hourlyLimit) return { allowed: false, reason: 'hourly_rate_limit_exceeded' };
+    if (state.daily >= dailyLimit) return { allowed: false, reason: 'daily_rate_limit_exceeded' };
+    return { allowed: true, reason: null };
+  }
+
+  function reserve() {
+    const verdict = check();
+    if (!verdict.allowed) return verdict;
+    state.inFlight += 1;
+    state.hourly += 1;
+    state.daily += 1;
+    return { allowed: true, reason: null };
+  }
+
+  function snapshot() {
+    refreshWindows();
+    return {
+      hourly: state.hourly,
+      daily: state.daily,
+      inFlight: state.inFlight,
+      providerErrors: state.providerErrors,
+      retries: state.retries,
+      hourlyLimit,
+      dailyLimit,
+      maxConcurrency,
+      retry_performed: false,
+      fallback_performed: false
+    };
+  }
+
+  function release(fields = {}) {
+    state.inFlight = Math.max(0, state.inFlight - 1);
+    if (fields.provider_error === true) state.providerErrors += 1;
+    return snapshot();
+  }
+
+  return Object.freeze({
+    check,
+    reserve,
+    release,
+    snapshot
   });
 }
 

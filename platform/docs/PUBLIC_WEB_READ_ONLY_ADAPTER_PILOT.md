@@ -304,6 +304,29 @@ kill switch on, without lifecycle/config/readiness binding, without a complete
 secret access context, with rollout at zero, with an unsafe target or with
 missing injected dependencies.
 
+The candidate passes only a bounded connection descriptor to `httpClient`:
+`url`, approved IPs, selected `approved_ip`, hostname, port, protocol, SNI
+server name, Host header, `redirect_mode:manual`, `follow_redirects:false`,
+timeout, maximum bytes and abort signal. The HTTP client must not perform free
+DNS resolution. The returned `remote_address` must match `approved_ip`; any
+mismatch is treated as DNS rebinding and blocked.
+
+Redirects are not followed automatically in this PR. A 3xx response is audited
+as a real provider call, then blocked before any second request. Future manual
+redirect support must validate the next URL, DNS, IPs, downgrade, credentials,
+loops and limits before each additional call.
+
+When the `httpClient` starts, `executed:true` and
+`real_provider_called:true` are used in the response and audit event, including
+timeout, 429, provider error, content-type block and response-size block. Any
+block before the network call remains `executed:false` and
+`real_provider_called:false`.
+
+The real candidate requires a streaming response. It validates content length
+before reading, reads chunks incrementally, aborts immediately above the byte
+limit, owns the timeout timer, clears it in `finally`, and never returns chunks,
+raw body or provider raw response.
+
 ## Adapter
 
 `public_web_read_only_adapter_v1` is a `real_read_only_candidate`,
@@ -328,9 +351,11 @@ Production is always blocked. The gate never executes the provider.
 ## Cost And Rate Limit
 
 The pilot policy allows at most 5 requests per hour, 20 per day and concurrency
-1. There is no retry, no retry after timeout, no automatic retry on 429, no
-fallback to another provider and no persistent Redis/database limiter in this
-PR.
+1. The real candidate reserves rate and cost budget before the HTTP call,
+compensates partial reservations, releases concurrency in `finally`, and counts
+timeouts/provider errors after network start. There is no retry, no retry after
+timeout, no automatic retry on 429, no fallback to another provider and no
+persistent Redis/database limiter in this PR.
 
 ## Audit
 
