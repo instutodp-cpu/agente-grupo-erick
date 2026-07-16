@@ -173,3 +173,11 @@ read-only first, human review, governance review, `simulated:true`, `executed:fa
 domains, capabilities and operations. Permission mapping remains mandatory, and
 the lifecycle registry does not authorize write/action/send/publish/delete or
 cross-tenant behavior.
+
+## Public Web Read-Only Adapter Pilot
+
+`PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` adds public web read-only capabilities
+for search, read, compare, summarize, price inspection and promotion
+inspection. Permission Matrix remains authoritative: no role can use the pilot
+to login, submit forms, checkout, purchase, reserve, publish, send, write,
+delete or bypass tenant isolation.

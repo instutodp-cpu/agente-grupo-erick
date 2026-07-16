@@ -375,3 +375,12 @@ identity, tenant/workspace scope, version and status, but must not include raw
 configuration, secret values, headers, cookies, credentials or provider
 payloads. Rotation and expiration metadata must be known before future provider
 configuration can advance.
+
+## Public Web Read-Only Adapter Pilot
+
+`PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` defines a pilot-specific rate and cost
+policy: maximum 5 requests per hour, 20 per day, concurrency 1, no automatic
+retry, no retry on timeout or 429 and no fallback to another provider. Audit
+uses target origin hashes and never stores full URLs with query strings, raw
+HTML, headers, cookies, provider raw responses, credentials, tokens, secrets or
+internal IPs.

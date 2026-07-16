@@ -774,3 +774,13 @@ tenant/workspace policy, private in-memory registry behavior and sanitized
 audit candidates. It does not create OAuth, secrets, SDKs, provider calls,
 persistent storage or runtime wiring, and it does not change `/message` or
 `/confirm`.
+
+## Public Web Read-Only Adapter Pilot
+
+`docs/PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` defines the first isolated Public
+Web Read-Only adapter pilot. It adds adapter metadata, fixture/mock transports,
+an injected real transport candidate, URL/DNS/IP/SSRF/redirect/content
+policies, sanitization, pilot gate, rate/cost metadata and safe audit. The
+adapter is not registered in `src/index.js`, `/message` and `/confirm` are
+unchanged, production is blocked, the feature flag remains default off, rollout
+remains 0 and provider calls are not made in CI.

@@ -437,3 +437,12 @@ read-only first, human review, governance review, `simulated:true`, `executed:fa
 ## Read-Only Adapter Interface Runtime
 
 `READ_ONLY_ADAPTER_INTERFACE_RUNTIME.md` defines the isolated adapter interface, in-memory registry and mock-only runtime for future read-only integrations. It permits only local mocks/test doubles in this PR, blocks real providers and real candidates from execution, requires readiness/feature-flag/kill-switch checks for future candidates, and does not alter `/message` or `/confirm`.
+
+## Public Web Read-Only Adapter Pilot
+
+`PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` is the first concrete pilot built from
+this sandbox. It adds adapter metadata, fixture/mock transports, an injected
+real transport candidate, URL/DNS/IP/SSRF/redirect/content policies, sanitizing,
+pilot gate, rate/cost metadata and audit candidates. It still keeps production
+blocked, feature flag default off, rollout 0, no raw HTML storage, no provider
+calls in CI and no automatic registration in the main runtime.

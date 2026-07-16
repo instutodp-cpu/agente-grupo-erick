@@ -581,3 +581,35 @@ Before any future provider configuration is accepted, operators must confirm:
 only. It does not activate providers, does not create secrets, does not connect
 to `/message` or `/confirm`, and keeps `executed:false` and
 `real_provider_called:false` mandatory.
+
+## Public Web Read-Only Adapter Pilot Checklist
+
+Before any non-production public web canary is considered, operators must
+confirm:
+
+- provider configuration is `structurally_ready`
+- secret reference is active and resolvable as a synthetic/local-test reference
+- connector lifecycle state is eligible
+- adapter is explicitly registered only in pilot setup
+- readiness evidence is valid and identity-bound
+- environment is not production
+- feature flag is explicitly enabled for the pilot
+- kill switch is checked and inactive
+- tenant, workspace and user are allowlisted
+- rollout is greater than 0 and no more than 1%
+- rate limit budget is available
+- cost budget is available
+- target URL passes URL policy
+- DNS results are validated
+- all IPs are public and allowed
+- redirects are limited and revalidated
+- content type is allowed
+- response size is bounded
+- output is sanitized and treated as untrusted public web content
+- audit candidate is present and sanitized
+- production remains blocked
+
+`PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` does not authorize automatic provider
+activation, does not alter `/message` or `/confirm`, does not store raw HTML
+and does not permit login, forms, checkout, purchase, reservation or write
+actions.

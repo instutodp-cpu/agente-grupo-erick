@@ -422,3 +422,10 @@ configuration to declare tenant and workspace policy before it can be retained
 in the private configuration registry. Configuration records cannot widen
 tenant scope, cannot use prompt text as tenant authority, cannot share secret
 references across tenants, and cannot activate real provider calls.
+
+## Public Web Read-Only Adapter Pilot
+
+`PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` requires every pilot request to remain
+workspace, tenant and user scoped. The pilot gate checks tenant/workspace/user
+allowlists, prevents external content from changing tenant identity, keeps
+public web output in the matching tenant and blocks production activation.

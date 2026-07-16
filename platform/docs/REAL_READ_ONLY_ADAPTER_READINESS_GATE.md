@@ -362,3 +362,11 @@ real provider can receive configuration. Readiness alone does not create
 secrets, OAuth, SDK setup, provider calls or runtime activation. Configuration
 must remain reference-only, feature-flagged, kill-switch protected and tenant
 scoped.
+
+## Public Web Read-Only Adapter Pilot Relationship
+
+`PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` consumes readiness evidence for
+`public_web_read_only_candidate_v1`. Readiness can make the candidate eligible
+for a future controlled PR only; the pilot gate still requires configuration,
+lifecycle, feature flag, kill switch, canary, URL, DNS, IP, rate and cost
+checks, and production remains blocked.

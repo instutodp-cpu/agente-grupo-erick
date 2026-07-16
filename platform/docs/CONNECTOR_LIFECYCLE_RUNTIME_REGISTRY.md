@@ -409,3 +409,13 @@ rotation and expiration metadata, tenant/workspace policies, private registry
 behavior and sanitized configuration audit candidates. A lifecycle state such
 as `readiness_passed` still does not activate runtime or provider calls without
 this configuration boundary and a future approved integration PR.
+
+## S. Public Web Read-Only Adapter Pilot
+
+`PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` uses connector lifecycle state as one
+of several pilot gates. A public web connector state such as
+`readiness_passed`, `configuration_pending`, `feature_flag_off` or
+`runtime_disabled` can be evaluated for a non-production canary, but it still
+does not activate production, does not call providers and does not bypass
+feature flag, kill switch, readiness, configuration, URL policy, rate limit or
+cost controls.
