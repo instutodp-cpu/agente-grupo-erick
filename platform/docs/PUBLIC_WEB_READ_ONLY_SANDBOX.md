@@ -446,3 +446,11 @@ real transport candidate, URL/DNS/IP/SSRF/redirect/content policies, sanitizing,
 pilot gate, rate/cost metadata and audit candidates. It still keeps production
 blocked, feature flag default off, rollout 0, no raw HTML storage, no provider
 calls in CI and no automatic registration in the main runtime.
+
+## Public Web Non-Production Canary Activation
+
+`PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` adds a manual development or
+staging canary path that still uses this sandbox as the source and output
+safety baseline. Production, private networks, login, forms, checkout, writes,
+raw HTML, raw body, headers, remote IP storage and automatic execution remain
+blocked.

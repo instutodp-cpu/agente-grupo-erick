@@ -181,3 +181,8 @@ for search, read, compare, summarize, price inspection and promotion
 inspection. Permission Matrix remains authoritative: no role can use the pilot
 to login, submit forms, checkout, purchase, reserve, publish, send, write,
 delete or bypass tenant isolation.
+
+## Public Web Non-Production Canary Activation
+
+`PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` does not expand permissions.
+Manual canary execution remains public-only, GET/HEAD only and read-only.

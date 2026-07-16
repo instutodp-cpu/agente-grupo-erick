@@ -613,3 +613,28 @@ confirm:
 activation, does not alter `/message` or `/confirm`, does not store raw HTML
 and does not permit login, forms, checkout, purchase, reservation or write
 actions.
+
+## Public Web Non-Production Canary Checklist
+
+Before running a manual Public Web canary, confirm:
+
+- environment is development or staging
+- production is blocked
+- session is temporal and unexpired
+- operator role is authorized
+- approval is valid, scoped and not replayed
+- target policy is active and exact-origin
+- lifecycle and configuration versions match
+- readiness evidence hash is bound
+- feature flag is enabled only for the canary
+- kill switch is inactive
+- rollout is no more than 1%
+- one tenant, one workspace and one user are allowlisted
+- rate and cost budgets are available
+- DNS is revalidated and approved IP is fixed
+- redirects are manual and blocked in this phase
+- method is GET or HEAD only
+- streaming and response size are bounded
+- audit sink is available
+- post-canary report is generated
+- session is completed, cancelled, expired or kill-switch terminated

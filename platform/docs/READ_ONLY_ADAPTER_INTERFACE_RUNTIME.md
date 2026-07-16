@@ -414,3 +414,9 @@ registered explicitly in pilot tests, but the existing runtime still blocks
 non-mock execution. The pilot adds transport contracts and gate checks without
 importing the adapter into `src/index.js` or changing `/message` and
 `/confirm`.
+
+## Public Web Non-Production Canary Activation Relationship
+
+`PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` adds a separate manual runner
+for development/staging canaries. It does not import the runner into the main
+runtime and does not change the mock-only runtime ceiling or endpoint behavior.

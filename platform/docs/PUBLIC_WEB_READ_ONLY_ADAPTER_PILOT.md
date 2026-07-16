@@ -401,3 +401,11 @@ sensitive query, internal IP or stack trace.
 - no provider calls in CI
 - no automatic runtime registration
 - `/message` and `/confirm` unchanged
+
+## Non-Production Canary Activation
+
+`PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` extends this foundation with a
+manual development/staging canary path. It requires a temporal session,
+explicit scoped approval, exact target allowlist, safe DNS/HTTPS binding,
+budget reserve/release, sanitized audit and a post-canary report. It does not
+authorize production, endpoints, schedulers or automatic runtime registration.

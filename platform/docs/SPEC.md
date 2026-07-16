@@ -784,3 +784,12 @@ policies, sanitization, pilot gate, rate/cost metadata and safe audit. The
 adapter is not registered in `src/index.js`, `/message` and `/confirm` are
 unchanged, production is blocked, the feature flag remains default off, rollout
 remains 0 and provider calls are not made in CI.
+
+## Public Web Non-Production Canary Activation
+
+`docs/PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` defines manual,
+time-limited canary sessions for the Public Web Read-Only adapter in
+development or staging only. It adds session contracts, explicit approval,
+target allowlists, safe DNS and HTTPS client contracts, a manually invoked
+runner, audit sink and sanitized report. It creates no public endpoint,
+scheduler or startup execution and does not change `/message` or `/confirm`.

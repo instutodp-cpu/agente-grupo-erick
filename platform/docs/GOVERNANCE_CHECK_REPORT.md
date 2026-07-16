@@ -451,3 +451,9 @@ weakening, production enablement, rollout above 1%, missing cost/rate controls,
 raw HTML storage, raw provider response exposure, browser automation, login,
 forms, checkout, purchase, reservation and any change to `/message` or
 `/confirm`.
+
+## Public Web Non-Production Canary Activation
+
+`PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` adds governance-visible
+approval, replay protection, audit sink and post-canary reporting for
+development/staging canaries. It does not authorize production activation.

@@ -43,6 +43,13 @@ not use filesystem secret paths, and do not connect to `/message` or `/confirm`.
 - `real_provider_called:false`
 - `can_trigger_real_execution:false`
 
+## Public Web Non-Production Canary Activation
+
+`PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` requires configuration
+readiness and active secret references before any manual development/staging
+canary. It does not add real secrets, OAuth, persistent provider configuration
+or production provider activation.
+
 ## Public Web Read-Only Adapter Pilot Relationship
 
 `PUBLIC_WEB_READ_ONLY_ADAPTER_PILOT.md` is the first consumer of this boundary
