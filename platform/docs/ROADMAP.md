@@ -244,3 +244,15 @@ at 0.
 
 Next step: Public Web Non-Production Canary Activation or Transcription
 Sanitized Adapter Pilot, not unrestricted public web integration.
+
+## PR #64 Public Web Non-Production Canary Activation Foundation
+
+The Public Web Non-Production Canary Activation foundation is delivered as
+manual session contract, private in-memory session registry, scoped operator
+approval, exact target allowlist, safe DNS/HTTPS helpers, explicit runner,
+audit sink, post-canary report, fixture and tests. It keeps production blocked,
+feature flag default off, rollout 0, no endpoint, no scheduler and no main
+runtime integration.
+
+Next step: Public Web Canary Operational Trial or Transcription Sanitized
+Adapter Pilot, not production activation.

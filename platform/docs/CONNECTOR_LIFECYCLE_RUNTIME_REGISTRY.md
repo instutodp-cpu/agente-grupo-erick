@@ -419,3 +419,10 @@ of several pilot gates. A public web connector state such as
 does not activate production, does not call providers and does not bypass
 feature flag, kill switch, readiness, configuration, URL policy, rate limit or
 cost controls.
+
+## T. Public Web Non-Production Canary Activation
+
+`PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` introduces manual canary
+sessions above lifecycle evidence. A canary session does not make production
+active and does not bypass lifecycle version binding, feature flags, kill
+switches, target allowlists, budgets or audit requirements.

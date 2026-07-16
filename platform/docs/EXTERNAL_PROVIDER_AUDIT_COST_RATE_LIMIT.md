@@ -384,3 +384,10 @@ retry, no retry on timeout or 429 and no fallback to another provider. Audit
 uses target origin hashes and never stores full URLs with query strings, raw
 HTML, headers, cookies, provider raw responses, credentials, tokens, secrets or
 internal IPs.
+
+## Public Web Non-Production Canary Activation
+
+`PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` requires budget reservation
+before a manual canary request, release in `finally`, no retry, no fallback,
+sanitized audit events and a post-canary report. Timeouts and provider errors
+after network start count as provider calls.

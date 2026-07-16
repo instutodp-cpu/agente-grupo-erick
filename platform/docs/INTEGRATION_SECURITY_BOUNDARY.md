@@ -356,3 +356,10 @@ localhost, private/reserved IPs, metadata services, login, forms, checkout,
 purchase, reservation, browser automation, JavaScript execution, raw HTML and
 raw provider responses. External content is always untrusted and cannot alter
 tenant, workspace, system instruction or policy.
+
+## Public Web Non-Production Canary Activation
+
+`PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` preserves this boundary during
+manual canaries through exact target allowlists, approved-IP binding, safe DNS
+revalidation, GET/HEAD only, no raw HTML/body/header storage and no policy
+changes from external content.

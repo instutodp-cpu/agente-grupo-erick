@@ -429,3 +429,9 @@ references across tenants, and cannot activate real provider calls.
 workspace, tenant and user scoped. The pilot gate checks tenant/workspace/user
 allowlists, prevents external content from changing tenant identity, keeps
 public web output in the matching tenant and blocks production activation.
+
+## Public Web Non-Production Canary Activation
+
+`PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` limits each manual canary to
+one tenant, one workspace and one user. Web content, target policies and
+operator approvals cannot alter tenant or workspace bindings.

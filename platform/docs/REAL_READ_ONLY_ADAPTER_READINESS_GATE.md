@@ -370,3 +370,10 @@ scoped.
 for a future controlled PR only; the pilot gate still requires configuration,
 lifecycle, feature flag, kill switch, canary, URL, DNS, IP, rate and cost
 checks, and production remains blocked.
+
+## Public Web Non-Production Canary Activation Relationship
+
+`PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` binds canary approval to a
+readiness evidence hash. Readiness remains necessary but insufficient: target
+allowlist, operator approval, feature flag, kill switch, budgets and audit are
+still required before any development/staging canary request.

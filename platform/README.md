@@ -361,3 +361,13 @@ registry behavior and sanitized audit candidates. It does not implement real
 providers, OAuth, tokens, secrets, SDKs, external API calls, persistent storage,
 or changes to `/message` and `/confirm`; `executed:false` and
 `real_provider_called:false` remain mandatory.
+
+## Public Web Non-Production Canary Activation
+
+`docs/PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` documents the manual
+non-production canary path for the Public Web Read-Only adapter. It adds
+temporal sessions, scoped approval, exact target allowlists, safe DNS/HTTPS
+helpers, manual runner, sanitized audit and post-canary reports. It does not
+alter `/message` or `/confirm`, does not create endpoints or schedulers, keeps
+production blocked, keeps feature flag default off and keeps rollout at 0 after
+merge.
