@@ -282,3 +282,235 @@ module.exports = {
   terminateCanary: (input, options) => createPublicWebCanaryRunner(options).terminateCanary(input),
   getCanaryReport: (sessionId, options) => createPublicWebCanaryRunner(options).getCanaryReport(sessionId)
 };
+
+function createHardenedPublicWebCanaryRunner(deps = {}) {
+  const { createPublicWebRealTransportCandidate } = require('../adapters/public-web/public-web-real-transport-candidate');
+  const contract = require('../core/public-web-canary-session-contract');
+  const required = [
+    'canarySessionRegistry',
+    'targetAllowlist',
+    'adapterRegistry',
+    'lifecycleRegistry',
+    'configurationRegistry',
+    'secretReferenceRegistry',
+    'secretResolver',
+    'readinessResult',
+    'nodeHttpsClient',
+    'dnsResolver',
+    'rateLimitBudget',
+    'costBudget',
+    'featureFlagResolver',
+    'killSwitchResolver',
+    'operatorPolicy',
+    'auditSink',
+    'clock'
+  ];
+
+  function hasDeps() {
+    return required.every((key) => deps[key]);
+  }
+
+  function safeError(code, reason) {
+    return {
+      status: 'public_web_canary_request_failed_safe',
+      allowed: false,
+      error: contract.buildSafeCanaryError(code, reason || code),
+      simulated: true,
+      executed: false,
+      real_provider_called: false,
+      can_trigger_real_execution: false,
+      audit_event_candidate: contract.buildCanaryAuditEventCandidate({
+        event_name: 'public_web_canary_request_failed_safe',
+        status: 'public_web_canary_request_failed_safe',
+        error_code: code,
+        blocked_reason: reason || code,
+        simulated: true,
+        executed: false,
+        real_provider_called: false,
+        can_trigger_real_execution: false,
+        occurred_at: new Date().toISOString()
+      })
+    };
+  }
+
+  function isListed(authority, value, payload) {
+    if (!authority) return false;
+    if (Array.isArray(authority)) return authority.includes(value);
+    if (typeof authority.has === 'function') return authority.has(value);
+    if (typeof authority.includes === 'function') return authority.includes(value);
+    if (typeof authority.isAllowed === 'function') return authority.isAllowed(value, payload) === true;
+    if (typeof authority.isTenantAllowed === 'function') return authority.isTenantAllowed(value, payload) === true;
+    if (typeof authority.isWorkspaceAllowed === 'function') return authority.isWorkspaceAllowed(value, payload) === true;
+    if (typeof authority.isUserAllowed === 'function') return authority.isUserAllowed(value, payload) === true;
+    return false;
+  }
+
+  async function readBodyStream(stream, maxBytes) {
+    let total = 0;
+    const chunks = [];
+    if (!stream || !stream[Symbol.asyncIterator]) return { text: '', bytes: 0 };
+    for await (const chunk of stream) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+      total += buffer.length;
+      if (total > maxBytes) throw new Error('PUBLIC_WEB_RESPONSE_TOO_LARGE');
+      chunks.push(buffer);
+    }
+    return { text: Buffer.concat(chunks).toString('utf8'), bytes: total };
+  }
+
+  async function runCanaryRequest(input = {}) {
+    if (!hasDeps()) return safeError('CANARY_INTERNAL_ERROR', 'missing_canary_dependency');
+    const session = deps.canarySessionRegistry.getCanarySession(input.canary_session_id);
+    if (!session) return safeError('CANARY_SESSION_NOT_FOUND', 'canary_session_not_found');
+    if (session.canary_state !== 'active') return safeError('CANARY_SESSION_NOT_ACTIVE', 'canary_session_not_active');
+    if (contract.isSessionExpired(session, deps.clock)) return safeError('CANARY_SESSION_EXPIRED', 'canary_session_expired');
+    if (!deps.operatorPolicy.isApprovalActive(session.approval_id, session) || deps.operatorPolicy.isApprovalRevoked(session.approval_id)) {
+      return safeError('CANARY_APPROVAL_REQUIRED', 'approval_not_active');
+    }
+    if (deps.featureFlagResolver(session) !== true) return safeError('CANARY_FEATURE_FLAG_OFF', 'feature_flag_off');
+    if (deps.killSwitchResolver(session) === true) {
+      deps.canarySessionRegistry.terminateByKillSwitch({
+        canary_session_id: session.canary_session_id,
+        change_id: `${input.change_id || input.request_id}:kill_switch`,
+        trace_id: input.trace_id,
+        expected_version: session.version
+      });
+      return safeError('CANARY_KILL_SWITCH_ACTIVE', 'kill_switch_active');
+    }
+    if (!isListed(deps.tenantAllowlist, session.tenant_id, session)) return safeError('CANARY_TENANT_NOT_ALLOWLISTED', 'tenant_not_allowlisted');
+    if (!isListed(deps.workspaceAllowlist, session.workspace_type, session)) return safeError('CANARY_WORKSPACE_NOT_ALLOWLISTED', 'workspace_not_allowlisted');
+    if (!isListed(deps.userAllowlist, session.user_id, session)) return safeError('CANARY_USER_NOT_ALLOWLISTED', 'user_not_allowlisted');
+    const allowedTarget = deps.targetAllowlist.isTargetAllowed({
+      environment: session.environment,
+      target_origin: session.target_origin,
+      target_path: input.target_path || session.target_path || '/',
+      operation: session.operation,
+      source_type: session.source_type
+    });
+    if (!allowedTarget || allowedTarget.allowed !== true) return safeError('CANARY_TARGET_NOT_ALLOWLISTED', allowedTarget && allowedTarget.blocked_reason || 'target_not_allowlisted');
+    if (!deps.dnsResolver || typeof deps.dnsResolver.resolve !== 'function') return safeError('CANARY_TARGET_POLICY_BLOCKED', 'async_dns_resolver_required');
+    const targetUrl = new URL(`${session.target_origin}${allowedTarget.target_path || input.target_path || session.target_path || '/'}`);
+    const dns = await deps.dnsResolver.resolve(targetUrl.hostname, {
+      trace_id: input.trace_id,
+      canary_session_id: session.canary_session_id,
+      environment: session.environment,
+      tenant_id: session.tenant_id
+    });
+    if (!dns || dns.allowed !== true || typeof dns.approved_ip !== 'string' || !Array.isArray(dns.approved_ips) || dns.approved_ips.length === 0) {
+      return safeError('CANARY_TARGET_POLICY_BLOCKED', dns && dns.blocked_reason || 'dns_policy_blocked');
+    }
+    const rateReservation = deps.rateLimitBudget.reserve ? deps.rateLimitBudget.reserve(session) : { allowed: false };
+    if (!rateReservation || rateReservation.allowed !== true) return safeError('CANARY_BUDGET_BLOCKED', 'rate_limit_budget_blocked');
+    let costReserved = false;
+    try {
+      const costReservation = deps.costBudget.reserve ? deps.costBudget.reserve(session) : { allowed: false };
+      if (!costReservation || costReservation.allowed !== true) {
+        if (deps.rateLimitBudget.release) deps.rateLimitBudget.release(rateReservation);
+        return safeError('CANARY_BUDGET_BLOCKED', 'cost_budget_blocked');
+      }
+      costReserved = true;
+      const raw = await deps.nodeHttpsClient.execute({
+        url: targetUrl.toString(),
+        approved_ip: dns.approved_ip,
+        approved_ips: dns.approved_ips,
+        hostname: targetUrl.hostname,
+        port: 443,
+        protocol: 'https',
+        server_name: targetUrl.hostname,
+        host_header: targetUrl.hostname,
+        redirect_mode: 'manual',
+        timeout_ms: 8000,
+        max_response_bytes: 1048576,
+        method: input.method === 'HEAD' ? 'HEAD' : 'GET'
+      });
+      const body = await readBodyStream(raw.body_stream, 1048576);
+      const statusCode = Number(raw.status_code || 0);
+      const status = statusCode === 429
+        ? 'public_web_rate_limited'
+        : (statusCode >= 200 && statusCode < 300 ? 'public_web_candidate_success' : 'public_web_provider_error_safe');
+      const result = {
+        trace_id: input.trace_id,
+        request_id: input.request_id,
+        connector_id: session.connector_id,
+        configuration_id: session.configuration_id,
+        adapter_id: session.adapter_id,
+        provider_id: session.provider_id,
+        status,
+        source_type: session.source_type,
+        requested_target_hash: require('../core/public-web-transport-contract').hashValue(session.target_origin),
+        final_target_origin: session.target_origin,
+        content_type: raw.content_type || 'text/plain',
+        http_status_class: statusCode >= 200 && statusCode < 300 ? '2xx' : (statusCode === 429 ? '429' : `${Math.floor(statusCode / 100)}xx`),
+        result_count: status === 'public_web_candidate_success' ? 1 : 0,
+        safe_summary: status === 'public_web_candidate_success' ? body.text.slice(0, 4000).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : 'Public web canary failed safely.',
+        structured_results: status === 'public_web_candidate_success' ? [{ type: 'public_web_excerpt', text: body.text.slice(0, 2000).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() }] : [],
+        warnings: [],
+        duration_ms: 0,
+        bytes_received: body.bytes,
+        redirects_followed: 0,
+        rate_limit_metadata: deps.rateLimitBudget.snapshot ? deps.rateLimitBudget.snapshot() : {},
+        cost_metadata: deps.costBudget.snapshot ? deps.costBudget.snapshot() : {},
+        simulated: true,
+        executed: true,
+        real_provider_called: true,
+        can_trigger_real_execution: false,
+        error: status === 'public_web_candidate_success' ? null : contract.buildSafeCanaryError(statusCode === 429 ? 'CANARY_BUDGET_BLOCKED' : 'CANARY_INTERNAL_ERROR', status),
+        audit_event_candidate: contract.buildCanaryAuditEventCandidate({
+          event_name: status === 'public_web_candidate_success' ? 'public_web_canary_request_succeeded' : 'public_web_canary_request_failed_safe',
+          trace_id: input.trace_id,
+          request_id: input.request_id,
+          canary_session_id: session.canary_session_id,
+          connector_id: session.connector_id,
+          configuration_id: session.configuration_id,
+          adapter_id: session.adapter_id,
+          provider_id: session.provider_id,
+          workspace_type: session.workspace_type,
+          tenant_id: session.tenant_id,
+          user_id: session.user_id,
+          operation: session.operation,
+          status,
+          applied: true,
+          executed: true,
+          real_provider_called: true,
+          can_trigger_real_execution: false,
+          occurred_at: typeof deps.clock === 'function' ? deps.clock() : new Date().toISOString()
+        })
+      };
+      const latest = deps.canarySessionRegistry.getCanarySession(session.canary_session_id);
+      deps.canarySessionRegistry.executeCanaryRequest({
+        canary_session_id: session.canary_session_id,
+        change_id: input.change_id,
+        trace_id: input.trace_id,
+        request_id: input.request_id,
+        expected_version: latest.version
+      }, result);
+      if (deps.auditSink && deps.auditSink.append) deps.auditSink.append(result.audit_event_candidate || {});
+      return result;
+    } catch (_error) {
+      const latest = deps.canarySessionRegistry.getCanarySession(session.canary_session_id);
+      deps.canarySessionRegistry.executeCanaryRequest({
+        canary_session_id: session.canary_session_id,
+        change_id: input.change_id,
+        trace_id: input.trace_id,
+        request_id: input.request_id,
+        expected_version: latest.version
+      }, { status: 'public_web_provider_error_safe' });
+      return safeError('CANARY_INTERNAL_ERROR', 'canary_request_failed_safe');
+    } finally {
+      if (deps.rateLimitBudget.release) deps.rateLimitBudget.release(rateReservation);
+      if (costReserved && deps.costBudget.release) deps.costBudget.release();
+    }
+  }
+
+  return Object.freeze({
+    runCanaryRequest,
+    async runCanarySession(input) { return runCanaryRequest(input); },
+    async terminateCanary(input) { return deps.canarySessionRegistry.terminateByKillSwitch(input); },
+    getCanaryReport(sessionId) {
+      const { buildPublicWebCanaryReport } = require('../core/public-web-canary-report');
+      return buildPublicWebCanaryReport(deps.canarySessionRegistry.getCanarySession(sessionId), deps.auditSink.list ? deps.auditSink.list({ canary_session_id: sessionId }) : []);
+    }
+  });
+}
+
+module.exports.createPublicWebCanaryRunner = createHardenedPublicWebCanaryRunner;

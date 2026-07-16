@@ -80,3 +80,85 @@ module.exports = {
   CANARY_OPERATOR_ROLES,
   createPublicWebCanaryOperatorPolicy
 };
+
+function createHardenedPublicWebCanaryOperatorPolicy(options = {}) {
+  const authorizedRoles = new Set(options.authorizedRoles || CANARY_OPERATOR_ROLES);
+  const dualApproval = options.dualApproval !== false;
+  const approvals = new Map();
+  const revokedApprovals = new Set();
+
+  function roleOf(actor) {
+    return actor && (actor.operator_role || actor.approver_role || actor.actor_role || actor.role);
+  }
+
+  function canRequest(actor) {
+    return { allowed: Boolean(actor && typeof (actor.operator_id || actor.actor_id) === 'string' && authorizedRoles.has(roleOf(actor))) };
+  }
+
+  function canApprove(approval, session) {
+    const allowed = Boolean(approval && session && authorizedRoles.has(roleOf(approval)) && !(dualApproval && approval.approved_by === session.operator_id));
+    return { allowed };
+  }
+
+  function validateApproval(approval, session) {
+    if (!canApprove(approval, session).allowed) {
+      return { allowed: false, valid: false, error_code: 'CANARY_OPERATOR_NOT_AUTHORIZED', reason: 'operator_not_authorized' };
+    }
+    if (approvals.has(approval.approval_id)) {
+      return { allowed: false, valid: false, error_code: 'CANARY_REPLAY_DETECTED', reason: 'approval_replay_detected' };
+    }
+    if (revokedApprovals.has(approval.approval_id)) {
+      return { allowed: false, valid: false, error_code: 'CANARY_APPROVAL_REQUIRED', reason: 'approval_revoked' };
+    }
+    return { allowed: true, valid: true };
+  }
+
+  function consumeApproval(approval, session) {
+    const validation = validateApproval(approval, session);
+    if (!validation.valid) return { allowed: false, consumed: false, ...validation };
+    approvals.set(approval.approval_id, Object.freeze({
+      approval_id: approval.approval_id,
+      session_id: session.canary_session_id,
+      approved_by: approval.approved_by,
+      approver_role: approval.approver_role,
+      expires_at: approval.expires_at,
+      revoked: false
+    }));
+    return { allowed: true, consumed: true, valid: true };
+  }
+
+  function isApprovalActive(approvalId, session) {
+    const approval = approvals.get(approvalId);
+    if (!approval || approval.revoked || revokedApprovals.has(approvalId)) return false;
+    return Boolean(session && approval.session_id === session.canary_session_id);
+  }
+
+  function isApprovalRevoked(approvalId) {
+    return revokedApprovals.has(approvalId) || Boolean(approvals.get(approvalId) && approvals.get(approvalId).revoked);
+  }
+
+  function isApprovalConsumedForSession(approvalId, sessionId) {
+    const approval = approvals.get(approvalId);
+    return Boolean(approval && approval.session_id === sessionId);
+  }
+
+  function revokeApproval(approvalId) {
+    if (typeof approvalId === 'string' && approvalId) revokedApprovals.add(approvalId);
+    const approval = approvals.get(approvalId);
+    if (approval) approvals.set(approvalId, Object.freeze({ ...approval, revoked: true }));
+    return { revoked: true };
+  }
+
+  return Object.freeze({
+    canRequest,
+    canApprove,
+    validateApproval,
+    consumeApproval,
+    isApprovalActive,
+    isApprovalRevoked,
+    isApprovalConsumedForSession,
+    revokeApproval
+  });
+}
+
+module.exports.createPublicWebCanaryOperatorPolicy = createHardenedPublicWebCanaryOperatorPolicy;

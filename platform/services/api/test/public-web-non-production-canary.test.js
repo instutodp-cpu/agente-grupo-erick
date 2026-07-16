@@ -91,17 +91,14 @@ function createApprovedActiveSession(context = validCanaryContext()) {
   }, context);
   assert.equal(validated.ok, true);
   const approval = validApproval(validated.session);
-  const approved = registry.approveCanary(approval);
+  const approved = registry.approveCanary(approval, context);
   assert.equal(approved.ok, true);
   const active = registry.activateCanary({
     canary_session_id: request.canary_session_id,
     change_id: 'change_activate_canary',
     request_id: 'request_activate_canary',
     expected_version: approved.session.version
-  }, {
-    feature_flag_enabled: true,
-    kill_switch_active: false
-  });
+  }, context);
   assert.equal(active.ok, true);
   return { context, request, session: active.session };
 }
@@ -180,10 +177,17 @@ test('target allowlist enforces exact HTTPS origins and scoped paths', () => {
   assert.equal(allowlist.isTargetAllowed({
     environment: 'development',
     target_origin: 'https://public-canary.test',
-    target_path: '/allowed/page?ignored=true',
+    target_path: '/allowed/page',
     operation: 'fetch_public_page_summary',
     source_type: 'public_product_page'
   }).allowed, true);
+  assert.equal(allowlist.isTargetAllowed({
+    environment: 'development',
+    target_origin: 'https://public-canary.test',
+    target_path: '/allowed/page?blocked=true',
+    operation: 'fetch_public_page_summary',
+    source_type: 'public_product_page'
+  }).allowed, false);
   assert.equal(allowlist.isTargetAllowed({
     environment: 'development',
     target_origin: 'https://public-canary.test',
@@ -329,8 +333,9 @@ test('runner blocks missing dependencies and executes one approved canary reques
 });
 
 test('runner blocks before network for feature flag kill switch inactive session and target policy', async () => {
-  const context = validCanaryContext({ featureFlagResolver: () => false });
+  const context = validCanaryContext();
   const { session } = createApprovedActiveSession(context);
+  context.featureFlagResolver = () => false;
   const result = await createPublicWebCanaryRunner(context).runCanaryRequest({
     trace_id: 'trace_blocked',
     request_id: 'request_blocked',
@@ -349,8 +354,9 @@ test('runner blocks before network for feature flag kill switch inactive session
   assert.equal(result.error.error_code, 'CANARY_FEATURE_FLAG_OFF');
   assert.equal(result.real_provider_called, false);
   assert.equal(context.nodeHttpsClient.calls(), 0);
-  const killContext = validCanaryContext({ killSwitchResolver: () => true });
+  const killContext = validCanaryContext();
   const killSession = createApprovedActiveSession(killContext).session;
+  killContext.killSwitchResolver = () => true;
   const killed = await createPublicWebCanaryRunner(killContext).runCanaryRequest({
     trace_id: 'trace_kill',
     request_id: 'request_kill',

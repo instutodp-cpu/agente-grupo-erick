@@ -17,6 +17,9 @@ const {
   createPublicWebCanaryOperatorPolicy
 } = require('../../src/core/public-web-canary-operator-policy');
 const {
+  hashCanaryEvidence
+} = require('../../src/core/public-web-canary-session-contract');
+const {
   createPublicWebCanaryAuditSink
 } = require('../../src/core/public-web-canary-audit-sink');
 const {
@@ -77,11 +80,17 @@ function fakeNodeHttpsClient(response = {}) {
 }
 
 function validCanaryRequest(overrides = {}) {
+  const readiness = validReadinessEvidence();
   return {
     trace_id: 'trace_canary',
     request_id: 'request_canary',
     change_id: 'change_request_canary',
     canary_session_id: 'canary_public_web_session',
+    connector_id: CONNECTOR_ID,
+    configuration_id: CONFIGURATION_ID,
+    adapter_id: ADAPTER_ID,
+    provider_id: PROVIDER_ID,
+    readiness_candidate_id: READINESS_CANDIDATE_ID,
     operator_id: 'operator_public_web',
     operator_role: 'integration_operator',
     environment: 'development',
@@ -89,6 +98,8 @@ function validCanaryRequest(overrides = {}) {
     target_path: '/allowed/page',
     source_type: 'public_product_page',
     operation: 'fetch_public_page_summary',
+    feature_flag_key: 'HERMES_PUBLIC_WEB_READ_ONLY_ENABLED',
+    kill_switch_key: 'HERMES_PUBLIC_WEB_READ_ONLY_KILL_SWITCH',
     reason: 'synthetic canary validation',
     requested_at: '2026-07-16T12:00:00.000Z',
     workspace_type: 'corporate',
@@ -100,7 +111,8 @@ function validCanaryRequest(overrides = {}) {
     maximum_requests: 1,
     lifecycle_version: 4,
     configuration_version: 3,
-    readiness_evidence: validReadinessEvidence(),
+    readiness_evidence: readiness,
+    readiness_evidence_id: hashCanaryEvidence(readiness),
     expires_at: '2026-07-16T12:30:00.000Z',
     simulated: true,
     executed: false,
@@ -115,15 +127,31 @@ function validApproval(session, overrides = {}) {
     request_id: 'request_canary_approval',
     change_id: 'change_approve_canary',
     canary_session_id: session.canary_session_id,
+    session_id: session.canary_session_id,
     approval_id: 'approval_public_web_canary',
     approved_by: 'security_approver',
     approver_role: 'security_operator',
     reason: 'bounded synthetic canary approval',
-    scope: 'one tenant one workspace one user one request',
+    scope: {
+      canary_session_id: session.canary_session_id,
+      tenant_id: session.tenant_id,
+      workspace_type: session.workspace_type,
+      user_id: session.user_id,
+      target_origin: session.target_origin,
+      operation: session.operation
+    },
     environment: session.environment,
     target_origin: session.target_origin,
+    target_path_hash: session.target_path_hash,
     operation: session.operation,
+    source_type: session.source_type,
     maximum_requests: session.maximum_requests,
+    rollout_percentage: session.rollout_percentage,
+    tenant_id: session.tenant_id,
+    workspace_type: session.workspace_type,
+    user_id: session.user_id,
+    feature_flag_enabled: true,
+    kill_switch_active: false,
     expires_at: session.expires_at,
     evidence_snapshot_hash: session.readiness_evidence_id,
     lifecycle_version: session.lifecycle_version,

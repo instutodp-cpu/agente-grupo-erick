@@ -438,3 +438,157 @@ module.exports = {
   ALLOWED_OPERATIONS,
   ALLOWED_CONTENT_TYPES
 };
+
+const STRICT_REQUIRED_CANARY_REQUEST_FIELDS = Object.freeze([
+  ...new Set([
+    ...(module.exports.REQUIRED_CANARY_REQUEST_FIELDS || module.exports.REQUIRED_REQUEST_FIELDS || []),
+    'workspace_type',
+    'tenant_id',
+    'user_id',
+    'rollout_percentage',
+    'maximum_requests',
+    'lifecycle_version',
+    'configuration_version',
+    'readiness_evidence_id',
+    'feature_flag_enabled',
+    'kill_switch_active',
+    'expires_at'
+  ])
+]);
+
+function parseCanaryTimestamp(value) {
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const millis = Date.parse(value);
+  if (!Number.isFinite(millis)) return null;
+  return new Date(millis);
+}
+
+function getClockDate(clock) {
+  const value = typeof clock === 'function' ? clock() : new Date();
+  if (value instanceof Date && Number.isFinite(value.getTime())) return value;
+  if (typeof value === 'string') return parseCanaryTimestamp(value);
+  return null;
+}
+
+function validateSessionWindow(candidate, clock) {
+  const startedAt = parseCanaryTimestamp(candidate && candidate.started_at || candidate && candidate.requested_at);
+  const expiresAt = parseCanaryTimestamp(candidate && candidate.expires_at);
+  const now = getClockDate(clock);
+  if (!startedAt || !expiresAt || !now) return { valid: false, reason: 'invalid_canary_timestamp' };
+  if (startedAt.getTime() >= expiresAt.getTime()) return { valid: false, reason: 'invalid_canary_window' };
+  if (expiresAt.getTime() - startedAt.getTime() > 30 * 60 * 1000) return { valid: false, reason: 'canary_window_too_long' };
+  return { valid: true };
+}
+
+function isSessionExpired(session, clock) {
+  const expiresAt = parseCanaryTimestamp(session && session.expires_at);
+  const now = getClockDate(clock);
+  if (!expiresAt || !now) return true;
+  return now.getTime() >= expiresAt.getTime();
+}
+
+function validateApprovalWindow(approval, session, clock) {
+  const approvedAt = parseCanaryTimestamp(approval && approval.approved_at);
+  const approvalExpiresAt = parseCanaryTimestamp(approval && approval.expires_at);
+  const sessionExpiresAt = parseCanaryTimestamp(session && session.expires_at);
+  const now = getClockDate(clock);
+  if (!approvedAt || !approvalExpiresAt || !sessionExpiresAt || !now) return { valid: false, reason: 'invalid_approval_timestamp' };
+  if (approvedAt.getTime() >= approvalExpiresAt.getTime()) return { valid: false, reason: 'invalid_approval_window' };
+  if (approvalExpiresAt.getTime() > sessionExpiresAt.getTime()) return { valid: false, reason: 'approval_outlives_session' };
+  if (now.getTime() >= approvalExpiresAt.getTime()) return { valid: false, reason: 'approval_expired' };
+  return { valid: true };
+}
+
+function hasRequiredFields(value, fields) {
+  return fields.every((field) => value && Object.prototype.hasOwnProperty.call(value, field));
+}
+
+function validateStrictCanaryRequest(request) {
+  const base = validateCanaryRequest(request);
+  if (!base.valid) return base;
+  if (!hasRequiredFields(request, STRICT_REQUIRED_CANARY_REQUEST_FIELDS)) {
+    return { valid: false, errors: ['missing_required_canary_request_field'] };
+  }
+  if (request.feature_flag_enabled !== true || request.kill_switch_active !== false) {
+    return { valid: false, errors: ['invalid_canary_flag_state'] };
+  }
+  if (!Number.isInteger(request.maximum_requests) || request.maximum_requests < 1 || request.maximum_requests > 5) {
+    return { valid: false, errors: ['invalid_canary_maximum_requests'] };
+  }
+  if (typeof request.rollout_percentage !== 'number' || request.rollout_percentage <= 0 || request.rollout_percentage > 1) {
+    return { valid: false, errors: ['invalid_canary_rollout'] };
+  }
+  const window = validateSessionWindow({
+    started_at: request.requested_at,
+    expires_at: request.expires_at
+  });
+  if (!window.valid) return { valid: false, errors: [window.reason] };
+  return { valid: true, errors: [] };
+}
+
+function validateStrictCanaryApproval(approval, session, options = {}) {
+  const base = validateCanaryApproval(approval, session);
+  if (!base.valid) return base;
+  const required = [
+    'approval_id',
+    'session_id',
+    'approved_by',
+    'approver_role',
+    'reason',
+    'scope',
+    'environment',
+    'target_origin',
+    'target_path_hash',
+    'operation',
+    'source_type',
+    'maximum_requests',
+    'rollout_percentage',
+    'tenant_id',
+    'workspace_type',
+    'user_id',
+    'feature_flag_enabled',
+    'kill_switch_active',
+    'evidence_snapshot_hash',
+    'lifecycle_version',
+    'configuration_version',
+    'approved_at',
+    'expires_at'
+  ];
+  if (!hasRequiredFields(approval, required)) return { valid: false, errors: ['missing_required_canary_approval_field'] };
+  const scope = approval.scope;
+  if (!scope || typeof scope !== 'object' || Array.isArray(scope)) return { valid: false, errors: ['invalid_approval_scope'] };
+  const bindings = [
+    ['evidence_snapshot_hash', 'readiness_evidence_id'],
+    ['lifecycle_version', 'lifecycle_version'],
+    ['configuration_version', 'configuration_version'],
+    ['environment', 'environment'],
+    ['target_origin', 'target_origin'],
+    ['target_path_hash', 'target_path_hash'],
+    ['operation', 'operation'],
+    ['source_type', 'source_type'],
+    ['maximum_requests', 'maximum_requests'],
+    ['rollout_percentage', 'rollout_percentage'],
+    ['tenant_id', 'tenant_id'],
+    ['workspace_type', 'workspace_type'],
+    ['user_id', 'user_id']
+  ];
+  const mismatch = bindings.find(([approvalKey, sessionKey]) => approval[approvalKey] !== session[sessionKey]);
+  if (mismatch) return { valid: false, errors: [`approval_scope_mismatch::${mismatch[0]}`] };
+  if (approval.feature_flag_enabled !== true || approval.kill_switch_active !== false) {
+    return { valid: false, errors: ['invalid_approval_flag_state'] };
+  }
+  if (options.dualApproval !== false && approval.approved_by === session.operator_id) {
+    return { valid: false, errors: ['self_approval_blocked'] };
+  }
+  const window = validateApprovalWindow(approval, session, options.clock || (() => approval.approved_at));
+  if (!window.valid) return { valid: false, errors: [window.reason] };
+  return { valid: true, errors: [] };
+}
+
+module.exports.REQUIRED_CANARY_REQUEST_FIELDS = STRICT_REQUIRED_CANARY_REQUEST_FIELDS;
+module.exports.parseCanaryTimestamp = parseCanaryTimestamp;
+module.exports.validateSessionWindow = validateSessionWindow;
+module.exports.isSessionExpired = isSessionExpired;
+module.exports.validateApprovalWindow = validateApprovalWindow;
+module.exports.validateCanaryRequest = validateStrictCanaryRequest;
+module.exports.validateCanaryApproval = validateStrictCanaryApproval;
