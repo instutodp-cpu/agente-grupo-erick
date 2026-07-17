@@ -363,3 +363,6 @@ tenant, workspace, system instruction or policy.
 manual canaries through exact target allowlists, approved-IP binding, safe DNS
 revalidation, GET/HEAD only, no raw HTML/body/header storage and no policy
 changes from external content.
+# Public Web Canary Operational Trial Reference
+
+O trial operacional de Public Web é descrito em `PUBLIC_WEB_CANARY_OPERATIONAL_TRIAL.md`. Ele preserva boundary de integração: sem secrets no arquivo local, sem headers/cookies, sem endpoint público, sem scheduler, sem execução automática e sem integração com `/message` ou `/confirm`.

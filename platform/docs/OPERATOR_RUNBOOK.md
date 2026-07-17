@@ -638,3 +638,25 @@ Before running a manual Public Web canary, confirm:
 - audit sink is available
 - post-canary report is generated
 - session is completed, cancelled, expired or kill-switch terminated
+# Public Web Canary Operational Trial Checklist
+
+1. Sincronizar `main`.
+2. Validar Docker.
+3. Preparar `public-web-canary-trial.local.json` fora do Git.
+4. Executar preflight-only.
+5. Revisar bloqueios.
+6. Executar dry-run-only.
+7. Revisar dry-run.
+8. Abrir janela operacional.
+9. Confirmar kill switch.
+10. Habilitar feature flag temporária fora do runtime principal.
+11. Executar `npm run trial:public-web -- --config ./config/public-web-canary-trial.local.json`.
+12. Digitar exatamente `EXECUTAR CANARY PUBLIC WEB`.
+13. Acompanhar uma única chamada.
+14. Gerar report.
+15. Executar cleanup.
+16. Desligar feature flag.
+17. Confirmar target policy revogada.
+18. Confirmar sessão terminal.
+19. Registrar decisão.
+20. Não repetir sem nova aprovação.

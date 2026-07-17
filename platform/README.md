@@ -371,3 +371,6 @@ helpers, manual runner, sanitized audit and post-canary reports. It does not
 alter `/message` or `/confirm`, does not create endpoints or schedulers, keeps
 production blocked, keeps feature flag default off and keeps rollout at 0 after
 merge.
+# Public Web Canary Operational Trial
+
+Referência operacional: `docs/PUBLIC_WEB_CANARY_OPERATIONAL_TRIAL.md`. O trial é manual, não produtivo, exige preflight, dry-run, confirmação interativa e cleanup. O merge mantém feature flag desligada, rollout 0, sem endpoint, sem scheduler, sem integração com `/message` ou `/confirm` e sem chamada automática de provider.

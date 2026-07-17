@@ -426,3 +426,6 @@ cost controls.
 sessions above lifecycle evidence. A canary session does not make production
 active and does not bypass lifecycle version binding, feature flags, kill
 switches, target allowlists, budgets or audit requirements.
+# Public Web Canary Operational Trial Reference
+
+`PUBLIC_WEB_CANARY_OPERATIONAL_TRIAL.md` revalida lifecycle antes da execução manual e não permite que um estado de trial ative produção, runtime principal ou execução automática.

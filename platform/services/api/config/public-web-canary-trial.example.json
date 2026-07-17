@@ -1,0 +1,22 @@
+{
+  "trial_id": "public_web_trial_001",
+  "environment": "development",
+  "target_policy_id": "target_policy_public_web_trial",
+  "target_origin": "https://example.com",
+  "target_path": "/",
+  "source_type": "public_documentation_page",
+  "operation": "fetch_public_page_summary",
+  "requested_content_types": ["text/html"],
+  "maximum_requests": 1,
+  "rollout_percentage": 1,
+  "timeout_ms": 3000,
+  "maximum_response_bytes": 100000,
+  "workspace_type": "corporate",
+  "tenant_id": "grupo_erick",
+  "user_id": "user_public_web_trial_operator",
+  "operator_id": "operator_local",
+  "operator_role": "integration_operator",
+  "approver_id": "security_approver_local",
+  "approver_role": "security_operator",
+  "reason": "manual controlled public web canary trial"
+}

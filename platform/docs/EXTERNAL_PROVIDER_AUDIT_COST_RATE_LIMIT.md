@@ -391,3 +391,6 @@ internal IPs.
 before a manual canary request, release in `finally`, no retry, no fallback,
 sanitized audit events and a post-canary report. Timeouts and provider errors
 after network start count as provider calls.
+# Public Web Canary Operational Trial Reference
+
+`PUBLIC_WEB_CANARY_OPERATIONAL_TRIAL.md` exige preflight, dry-run, budget, evidência sanitizada, audit e relatório pós-trial. O trial inicial autoriza no máximo uma chamada manual e não habilita retry, fallback ou produção.
