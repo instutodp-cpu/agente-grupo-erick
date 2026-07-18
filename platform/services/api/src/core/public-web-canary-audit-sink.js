@@ -18,7 +18,8 @@ const CANARY_AUDIT_EVENTS = [
   'public_web_canary_completed',
   'public_web_canary_expired',
   'public_web_canary_cancelled',
-  'public_web_canary_kill_switch_terminated'
+  'public_web_canary_kill_switch_terminated',
+  'public_web_canary_trial_cleanup'
 ];
 
 function createPublicWebCanaryAuditSink(options = {}) {

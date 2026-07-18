@@ -47,6 +47,70 @@ function validPlan(overrides = {}) {
   return built.plan;
 }
 
+function instrumentOperationalContext(overrides = {}) {
+  const base = validPreflightContext(overrides);
+  const counters = {
+    auditAppend: 0,
+    costRelease: 0,
+    sessionCancel: 0,
+    targetDisable: 0,
+    rateRelease: 0
+  };
+  const canarySessionRegistry = {
+    ...base.canarySessionRegistry,
+    cancelCanary(request) {
+      counters.sessionCancel += 1;
+      return base.canarySessionRegistry.cancelCanary(request);
+    }
+  };
+  const targetAllowlist = {
+    ...base.targetAllowlist,
+    disableTargetPolicy(request) {
+      counters.targetDisable += 1;
+      return base.targetAllowlist.disableTargetPolicy(request);
+    }
+  };
+  const rateLimitBudget = {
+    ...base.rateLimitBudget,
+    release(fields) {
+      counters.rateRelease += 1;
+      return base.rateLimitBudget.release(fields);
+    }
+  };
+  const costBudget = {
+    ...base.costBudget,
+    release(fields) {
+      counters.costRelease += 1;
+      return base.costBudget.release(fields);
+    }
+  };
+  const auditSink = {
+    ...base.auditSink,
+    append(event) {
+      counters.auditAppend += 1;
+      return base.auditSink.append(event);
+    }
+  };
+  return {
+    ...base,
+    auditSink,
+    canarySessionRegistry,
+    costBudget,
+    counters,
+    rateLimitBudget,
+    targetAllowlist
+  };
+}
+
+function assertCleaned(context, trialId = 'public_web_trial_test_001') {
+  const session = context.canarySessionRegistry.getCanarySession(`${trialId}_session`);
+  assert.ok(session);
+  assert.equal(['active', 'executing'].includes(session.canary_state), false);
+  const policy = context.targetAllowlist.getTargetPolicy('target_policy_public_canary');
+  assert.ok(policy);
+  assert.equal(policy.enabled === false || policy.revoked === true, true);
+}
+
 test('operational trial documentation and fixture exist with safe defaults', () => {
   assert.ok(fs.existsSync(path.join(__dirname, '../../../docs/PUBLIC_WEB_CANARY_OPERATIONAL_TRIAL.md')));
   assert.ok(fixture.trial_states.includes('not_started'));
@@ -151,6 +215,24 @@ test('trial registry is private, frozen, versioned and replay protected', () => 
   assert.notEqual(registry.getTrial(plan.trial_id).status, 'mutated');
 });
 
+test('trial registry terminal version mismatch does not consume request ids', () => {
+  const registry = createPublicWebCanaryTrialRegistry({ clock: deterministicClock });
+  const plan = validPlan({ trial_id: 'public_web_trial_terminal_conflict' });
+  assert.equal(registry.registerTrialPlan(plan, { request_id: 'terminal_r1', change_id: 'terminal_c1' }).ok, true);
+  assert.equal(registry.cancelOperationalTrial({
+    trial_id: plan.trial_id,
+    expected_version: 99,
+    request_id: 'terminal_cancel_request',
+    change_id: 'terminal_cancel_change'
+  }).ok, false);
+  assert.equal(registry.cancelOperationalTrial({
+    trial_id: plan.trial_id,
+    expected_version: 1,
+    request_id: 'terminal_cancel_request',
+    change_id: 'terminal_cancel_change'
+  }).ok, true);
+});
+
 test('authorization is confirmation-gated, scoped, expires and is use-once', () => {
   const plan = validPlan();
   const authz = createPublicWebCanaryTrialExecutionAuthorization({ clock: deterministicClock });
@@ -226,6 +308,168 @@ test('operational trial creates real canary session and sends complete runner re
   assert.ok(history.includes('public_web_canary_approved'));
   assert.ok(history.includes('public_web_canary_activated'));
   assert.equal(context.canarySessionRegistry.getCanarySession('public_web_trial_test_001_session').canary_state, 'completed');
+});
+
+test('failure after active session and before authorization cleans session and target policy', async () => {
+  const context = instrumentOperationalContext({ injectedConfirmationReader: acceptedConfirmationReader });
+  const authorizationRegistry = {
+    issueAuthorization() {
+      return { ok: false, error: { error_code: 'TRIAL_AUTHORIZATION_BLOCKED', blocked_reason: 'authorization_injected_failure' } };
+    },
+    revokeAuthorization() {
+      throw new Error('authorization should not exist');
+    }
+  };
+  const trial = createPublicWebCanaryOperationalTrial({ ...context, authorizationRegistry, clock: deterministicClock });
+  const result = await trial.executeTrial({ config: validTrialConfig({ trial_id: 'public_web_trial_auth_issue_failure' }) });
+  assert.equal(result.ok, false);
+  assert.equal(result.executed, false);
+  assert.equal(result.real_provider_called, false);
+  assertCleaned(context, 'public_web_trial_auth_issue_failure');
+  assert.equal(context.counters.targetDisable, 1);
+  assert.equal(context.counters.sessionCancel, 1);
+});
+
+test('failure after authorization and before reservation cleans same resources and revokes authorization', async () => {
+  const context = instrumentOperationalContext({ injectedConfirmationReader: acceptedConfirmationReader });
+  const realRegistry = createPublicWebCanaryTrialRegistry({ clock: deterministicClock });
+  const realAuthorization = createPublicWebCanaryTrialExecutionAuthorization({ clock: deterministicClock });
+  let revoked = 0;
+  const trialRegistry = {
+    ...realRegistry,
+    reserveOperationalTrial() {
+      return { ok: false, error: { error_code: 'TRIAL_RESERVE_BLOCKED', blocked_reason: 'reserve_injected_failure' } };
+    }
+  };
+  const authorizationRegistry = {
+    ...realAuthorization,
+    revokeAuthorization(id) {
+      revoked += 1;
+      return realAuthorization.revokeAuthorization(id);
+    }
+  };
+  const trial = createPublicWebCanaryOperationalTrial({ ...context, trialRegistry, authorizationRegistry, clock: deterministicClock });
+  const result = await trial.executeTrial({ config: validTrialConfig({ trial_id: 'public_web_trial_reserve_failure' }) });
+  assert.equal(result.ok, false);
+  assert.equal(result.executed, false);
+  assert.equal(result.real_provider_called, false);
+  assertCleaned(context, 'public_web_trial_reserve_failure');
+  assert.equal(revoked, 1);
+  assert.equal(context.counters.targetDisable, 1);
+  assert.equal(context.counters.sessionCancel, 1);
+});
+
+test('binding mismatch after reserve and start cleans session and policy before runner', async () => {
+  let afterActivation = false;
+  const context = instrumentOperationalContext({ injectedConfirmationReader: acceptedConfirmationReader });
+  const baseRegistry = context.canarySessionRegistry;
+  const baseAllowlist = context.targetAllowlist;
+  context.canarySessionRegistry = {
+    ...baseRegistry,
+    activateCanary(request, deps) {
+      const result = baseRegistry.activateCanary(request, deps);
+      afterActivation = true;
+      return result;
+    },
+    cancelCanary(request) {
+      return baseRegistry.cancelCanary(request);
+    }
+  };
+  context.targetAllowlist = {
+    ...baseAllowlist,
+    isTargetAllowed(input) {
+      if (afterActivation) return { allowed: false, blocked_reason: 'target_binding_mismatch_after_start' };
+      return baseAllowlist.isTargetAllowed(input);
+    },
+    disableTargetPolicy(request) {
+      return baseAllowlist.disableTargetPolicy(request);
+    }
+  };
+  const runner = fakeCanaryRunner();
+  const trial = createPublicWebCanaryOperationalTrial({ ...context, canaryRunner: runner, clock: deterministicClock });
+  const result = await trial.executeTrial({ config: validTrialConfig({ trial_id: 'public_web_trial_binding_mismatch' }) });
+  assert.equal(result.ok, false);
+  assert.equal(result.executed, false);
+  assert.equal(result.real_provider_called, false);
+  assert.equal(runner.calls, 0);
+  assertCleaned(context, 'public_web_trial_binding_mismatch');
+  assert.equal(context.counters.targetDisable, 1);
+  assert.equal(context.counters.sessionCancel, 1);
+});
+
+test('consume authorization failure cleanup uses the same operational context once', async () => {
+  const context = instrumentOperationalContext({ injectedConfirmationReader: acceptedConfirmationReader });
+  const realAuthorization = createPublicWebCanaryTrialExecutionAuthorization({ clock: deterministicClock });
+  let revoked = 0;
+  const authorizationRegistry = {
+    ...realAuthorization,
+    consumeAuthorization() {
+      return { ok: false, error: { error_code: 'TRIAL_AUTHORIZATION_BLOCKED', blocked_reason: 'consume_injected_failure' } };
+    },
+    revokeAuthorization(id) {
+      revoked += 1;
+      return realAuthorization.revokeAuthorization(id);
+    }
+  };
+  const trial = createPublicWebCanaryOperationalTrial({ ...context, authorizationRegistry, clock: deterministicClock });
+  const result = await trial.executeTrial({ config: validTrialConfig({ trial_id: 'public_web_trial_consume_failure' }) });
+  assert.equal(result.ok, false);
+  assert.equal(result.executed, false);
+  assert.equal(result.real_provider_called, false);
+  assertCleaned(context, 'public_web_trial_consume_failure');
+  assert.equal(revoked, 1);
+  assert.equal(context.counters.targetDisable, 1);
+  assert.equal(context.counters.sessionCancel, 1);
+});
+
+test('runner throws before network preserves false flags and cleanup is idempotent', async () => {
+  const context = instrumentOperationalContext({ injectedConfirmationReader: acceptedConfirmationReader });
+  const runner = {
+    async runCanaryRequest() {
+      throw new Error('runner_failed_before_network');
+    }
+  };
+  const trial = createPublicWebCanaryOperationalTrial({ ...context, canaryRunner: runner, clock: deterministicClock });
+  const result = await trial.executeTrial({ config: validTrialConfig({ trial_id: 'public_web_trial_runner_pre_network_throw' }) });
+  assert.equal(result.ok, false);
+  assert.equal(result.executed, false);
+  assert.equal(result.real_provider_called, false);
+  assertCleaned(context, 'public_web_trial_runner_pre_network_throw');
+  assert.equal(context.counters.targetDisable, 1);
+  assert.equal(context.counters.sessionCancel, 1);
+  assert.equal(context.counters.rateRelease, 1);
+  assert.equal(context.counters.costRelease, 1);
+});
+
+test('post-network report failure preserves true flags and cleanup remains complete', async () => {
+  const base = validPreflightContext({ injectedConfirmationReader: acceptedConfirmationReader });
+  let cleanupAuditRegistered = false;
+  const context = instrumentOperationalContext({
+    injectedConfirmationReader: acceptedConfirmationReader,
+    auditSink: {
+      ...base.auditSink,
+      append(event) {
+        if (event.event_name === 'public_web_canary_trial_cleanup') cleanupAuditRegistered = true;
+        return base.auditSink.append(event);
+      },
+      list(filters) {
+        if (cleanupAuditRegistered) throw new Error('report_audit_list_failed');
+        return base.auditSink.list(filters);
+      }
+    }
+  });
+  const runner = fakeCanaryRunner();
+  const trial = createPublicWebCanaryOperationalTrial({ ...context, canaryRunner: runner, clock: deterministicClock });
+  const result = await trial.executeTrial({ config: validTrialConfig({ trial_id: 'public_web_trial_report_failure' }) });
+  assert.equal(result.ok, false);
+  assert.equal(result.executed, true);
+  assert.equal(result.real_provider_called, true);
+  assert.equal(result.decision.decision, 'remediation_required');
+  assertCleaned(context, 'public_web_trial_report_failure');
+  assert.equal(context.counters.targetDisable, 1);
+  assert.equal(context.counters.sessionCancel, 1);
+  assert.equal(context.counters.rateRelease, 1);
+  assert.equal(context.counters.costRelease, 1);
 });
 
 test('cleanup and post-network failures drive remediation without masking flags', async () => {

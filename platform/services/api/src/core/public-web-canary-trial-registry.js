@@ -240,11 +240,11 @@ function createPublicWebCanaryTrialRegistry(options = {}) {
     return function terminalAction(request) {
       const trial = getTrialOrBlock(request);
       if (!trial) return response(null, request, { error_code: 'INVALID_TRIAL_PLAN', blocked_reason: 'trial_not_found' });
-      const replay = consume(request);
-      if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
       const conflict = versionConflict(trial, request);
       if (conflict) return conflict;
       if (TERMINAL_STATES.includes(trial.status)) return response(trial, request, { error_code: 'TRIAL_STATE_BLOCKED', blocked_reason: 'trial_terminal' });
+      const replay = consume(request);
+      if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
       return transition(trial, request, state, { terminal_reason: request.reason || state }, { event_name: name });
     };
   }

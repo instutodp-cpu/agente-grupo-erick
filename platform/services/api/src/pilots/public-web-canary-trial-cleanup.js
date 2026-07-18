@@ -10,7 +10,8 @@ async function runPublicWebCanaryTrialCleanup(input = {}, context = {}) {
     authorization_revoked: false,
     rate_budget_released: false,
     cost_budget_released: false,
-    feature_flag_disabled: false
+    feature_flag_disabled: false,
+    audit_registered: false
   };
   try {
     if (context.targetAllowlist && typeof context.targetAllowlist.disableTargetPolicy === 'function' && input.target_policy_id) {
@@ -86,7 +87,7 @@ async function runPublicWebCanaryTrialCleanup(input = {}, context = {}) {
   }
   try {
     if (context.auditSink && typeof context.auditSink.append === 'function') {
-      context.auditSink.append({
+      const audit = context.auditSink.append({
         event_name: 'public_web_canary_trial_cleanup',
         trial_id: input.trial_id,
         canary_session_id: input.canary_session_id,
@@ -94,6 +95,10 @@ async function runPublicWebCanaryTrialCleanup(input = {}, context = {}) {
         executed: false,
         real_provider_called: false
       });
+      confirmations.audit_registered = Boolean(audit && audit.canary_session_id === input.canary_session_id);
+      if (!confirmations.audit_registered) warnings.push('audit_cleanup_not_confirmed');
+    } else {
+      warnings.push('audit_sink_missing');
     }
   } catch (error) {
     warnings.push('audit_cleanup_failed');

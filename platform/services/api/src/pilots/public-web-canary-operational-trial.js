@@ -139,8 +139,45 @@ function createPublicWebCanaryOperationalTrial(options = {}) {
     let plan = null;
     let authorization = null;
     let cleanup = null;
+    let operationalContext = null;
+    let cleanupAttempted = false;
+    let cleanupResult = null;
     let activeSession = null;
     let executionFlags = { executed: false, real_provider_called: false };
+
+    async function ensureCleanup() {
+      if (cleanupAttempted) return cleanupResult;
+      cleanupAttempted = true;
+      if (!operationalContext || !plan || !activeSession) {
+        cleanupResult = sanitizeTrialData({
+          status: 'cleanup_skipped',
+          warnings: ['cleanup_context_missing'],
+          executed: executionFlags.executed === true,
+          real_provider_called: executionFlags.real_provider_called === true
+        });
+        return cleanupResult;
+      }
+      try {
+        cleanupResult = await runPublicWebCanaryTrialCleanup({
+          ...plan,
+          canary_session_id: activeSession.canary_session_id,
+          authorization_id: authorization && authorization.authorization_id
+        }, {
+          ...operationalContext,
+          authorizationRegistry
+        });
+      } catch (error) {
+        cleanupResult = sanitizeTrialData({
+          status: 'cleanup_failed_safe',
+          warnings: ['cleanup_failed_safe'],
+          error: buildSafeTrialError('TRIAL_CLEANUP_FAILED_SAFE', error && error.message || 'trial_cleanup_failed_safe'),
+          executed: executionFlags.executed === true,
+          real_provider_called: executionFlags.real_provider_called === true
+        });
+      }
+      return cleanupResult;
+    }
+
     try {
       if (!isBootstrapConfigured(input, options)) {
         return buildTrialBlockedBeforeNetwork('TRIAL_OPERATIONAL_BOOTSTRAP_NOT_CONFIGURED', 'trial_operational_bootstrap_not_configured');
@@ -153,8 +190,8 @@ function createPublicWebCanaryOperationalTrial(options = {}) {
       const confirmation = await readConfirmation(plan, input);
       if (confirmation !== REQUIRED_CONFIRMATION) return buildTrialBlockedBeforeNetwork('TRIAL_CONFIRMATION_REQUIRED', 'operator_confirmation_required');
 
-      const context = mergeContext(options, input, plan, prepared.preflight);
-      const canary = prepareOperationalCanarySession(plan, context, {
+      operationalContext = mergeContext(options, input, plan, prepared.preflight);
+      const canary = prepareOperationalCanarySession(plan, operationalContext, {
         suffix: 'operational',
         trace_id: `${plan.trial_id}_operational_trace`,
         request_id: `${plan.trial_id}_operational_request_canary`,
@@ -179,7 +216,10 @@ function createPublicWebCanaryOperationalTrial(options = {}) {
         configuration_version: activeSession.configuration_version,
         readiness_evidence_id: activeSession.readiness_evidence_id
       });
-      if (!issued.ok) return issued;
+      if (!issued.ok) {
+        await ensureCleanup();
+        return sanitizeTrialData({ ...issued, cleanup: cleanupResult, executed: false, real_provider_called: false });
+      }
       authorization = issued.authorization;
 
       const executionId = `${plan.trial_id}_execution`;
@@ -190,14 +230,20 @@ function createPublicWebCanaryOperationalTrial(options = {}) {
         change_id: `${plan.trial_id}_reserve_change`,
         execution_id: executionId
       });
-      if (!reserve.ok) return reserve;
+      if (!reserve.ok) {
+        await ensureCleanup();
+        return sanitizeTrialData({ ...reserve, cleanup: cleanupResult, executed: false, real_provider_called: false });
+      }
       const start = trialRegistry.startOperationalTrial({
         trial_id: plan.trial_id,
         expected_version: 4,
         request_id: `${plan.trial_id}_start`,
         change_id: `${plan.trial_id}_start_change`
       });
-      if (!start.ok) return start;
+      if (!start.ok) {
+        await ensureCleanup();
+        return sanitizeTrialData({ ...start, cleanup: cleanupResult, executed: false, real_provider_called: false });
+      }
 
       const runnerRequest = buildRunnerRequest(plan, activeSession, {
         trace_id: `${plan.trial_id}_execution_trace`,
@@ -205,15 +251,21 @@ function createPublicWebCanaryOperationalTrial(options = {}) {
         change_id: `${plan.trial_id}_execution_change`,
         canary_execution_id: executionId
       });
-      const binding = validateCanaryExecutionBindings(activeSession, context, runnerRequest, { requireApproval: true });
-      if (!binding.valid) return buildTrialBlockedBeforeNetwork('TRIAL_AUTHORIZATION_BLOCKED', binding.reason);
+      const binding = validateCanaryExecutionBindings(activeSession, operationalContext, runnerRequest, { requireApproval: true });
+      if (!binding.valid) {
+        await ensureCleanup();
+        return buildTrialBlockedBeforeNetwork('TRIAL_AUTHORIZATION_BLOCKED', binding.reason);
+      }
 
       const consume = authorizationRegistry.consumeAuthorization(authorization.authorization_id, {
         trial: authorizationTrialSnapshot(plan, activeSession, canary.target_policy)
       });
-      if (!consume.ok) return consume;
+      if (!consume.ok) {
+        await ensureCleanup();
+        return sanitizeTrialData({ ...consume, cleanup: cleanupResult, executed: false, real_provider_called: false });
+      }
 
-      const runner = input.canaryRunner || options.canaryRunner || createPublicWebCanaryRunner(context);
+      const runner = input.canaryRunner || options.canaryRunner || createPublicWebCanaryRunner(operationalContext);
       const result = await runner.runCanaryRequest(runnerRequest);
       executionFlags = {
         executed: result.executed === true,
@@ -255,10 +307,9 @@ function createPublicWebCanaryOperationalTrial(options = {}) {
       }, evidence);
       if (!finished.ok) throw new Error(finished.error && finished.error.blocked_reason || 'trial_finish_failed');
 
-      const sessionAfterExecution = context.canarySessionRegistry.getCanarySession(activeSession.canary_session_id);
-      cleanup = await runPublicWebCanaryTrialCleanup({ ...plan, authorization_id: authorization.authorization_id }, { ...context, authorizationRegistry });
-      const sessionAfterCleanup = context.canarySessionRegistry.getCanarySession(activeSession.canary_session_id);
-      const report = buildReport(plan, sessionAfterCleanup || sessionAfterExecution, context.auditSink, evidence, cleanup);
+      cleanup = await ensureCleanup();
+      const sessionAfterCleanup = operationalContext.canarySessionRegistry.getCanarySession(activeSession.canary_session_id);
+      const report = buildReport(plan, sessionAfterCleanup, operationalContext.auditSink, evidence, cleanup);
       const reportRecord = trialRegistry.recordTrialReport({
         trial_id: plan.trial_id,
         expected_version: 6,
@@ -288,13 +339,16 @@ function createPublicWebCanaryOperationalTrial(options = {}) {
         real_provider_called: evidence.real_provider_called
       });
     } catch (error) {
+      if (operationalContext && activeSession && !cleanupAttempted) {
+        await ensureCleanup();
+      }
       if (executionFlags.real_provider_called === true) {
         return buildTrialFailedAfterNetwork('TRIAL_INTERNAL_ERROR', 'trial_failed_safe_after_network');
       }
       return buildTrialBlockedBeforeNetwork('TRIAL_INTERNAL_ERROR', 'trial_internal_error_safe');
     } finally {
-      if (plan && authorization && cleanup == null && activeSession) {
-        await runPublicWebCanaryTrialCleanup({ ...plan, authorization_id: authorization.authorization_id }, { ...options, ...input, authorizationRegistry });
+      if (operationalContext && activeSession && !cleanupAttempted) {
+        await ensureCleanup();
       }
     }
   }
