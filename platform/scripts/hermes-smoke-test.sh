@@ -21,9 +21,9 @@ resolve_binary() {
   return 1
 }
 
-PYTHON_BIN="$(resolve_binary \
-  python3 \
-  python)"
+NODE_BIN="$(resolve_binary \
+  node \
+  node.exe)"
 
 CURL_BIN="$(resolve_binary \
   curl \
@@ -31,8 +31,8 @@ CURL_BIN="$(resolve_binary \
   "/mnt/c/Windows/System32/curl.exe" \
   "/c/Windows/System32/curl.exe")"
 
-if [[ -z "$PYTHON_BIN" ]]; then
-  printf 'smoke test failed: python runtime not found\n' >&2
+if [[ -z "$NODE_BIN" ]]; then
+  printf 'smoke test failed: node runtime not found\n' >&2
   exit 1
 fi
 
@@ -98,60 +98,45 @@ json_get() {
   local json="$1"
   local path="$2"
 
-  JSON_INPUT="$json" "$PYTHON_BIN" - "$path" <<'PY'
-import json
-import os
-import sys
+  JSON_INPUT="$json" "$NODE_BIN" - "$path" <<'JS'
+const path = process.argv[2].split(".");
+let value = JSON.parse(process.env.JSON_INPUT);
+for (const key of path) {
+  if (!value || typeof value !== "object" || !(key in value)) process.exit(2);
+  value = value[key];
+}
 
-path = sys.argv[1].split(".")
-value = json.loads(os.environ["JSON_INPUT"])
-for key in path:
-    if not isinstance(value, dict) or key not in value:
-        sys.exit(2)
-    value = value[key]
-
-if value is None:
-    sys.stdout.write("null")
-elif isinstance(value, bool):
-    sys.stdout.write("true" if value else "false")
-elif isinstance(value, (dict, list)):
-    sys.stdout.write(json.dumps(value, separators=(",", ":")))
-else:
-    sys.stdout.write(str(value))
-PY
+if (value === null) process.stdout.write("null");
+else if (typeof value === "boolean") process.stdout.write(value ? "true" : "false");
+else if (typeof value === "object") process.stdout.write(JSON.stringify(value));
+else process.stdout.write(String(value));
+JS
 }
 
 assert_has_field() {
   local json="$1"
   local field="$2"
-  JSON_INPUT="$json" "$PYTHON_BIN" - "$field" <<'PY'
-import json
-import os
-import sys
-
-field = sys.argv[1]
-data = json.loads(os.environ["JSON_INPUT"])
-if field not in data:
-    sys.exit(3)
-PY
+  JSON_INPUT="$json" "$NODE_BIN" - "$field" <<'JS'
+const field = process.argv[2];
+const data = JSON.parse(process.env.JSON_INPUT);
+if (!data || typeof data !== "object" || !(field in data)) process.exit(3);
+JS
 }
 
 assert_missing_fields() {
   local json="$1"
   local fields="$2"
 
-  JSON_INPUT="$json" "$PYTHON_BIN" - "$fields" <<'PY'
-import json
-import os
-import sys
-
-forbidden = [field for field in sys.argv[1].split(",") if field]
-data = json.loads(os.environ["JSON_INPUT"])
-for field in forbidden:
-    if field in data:
-        print(f"Forbidden field present: {field}", file=sys.stderr)
-        sys.exit(4)
-PY
+  JSON_INPUT="$json" "$NODE_BIN" - "$fields" <<'JS'
+const forbidden = process.argv[2].split(",").filter(Boolean);
+const data = JSON.parse(process.env.JSON_INPUT);
+for (const field of forbidden) {
+  if (data && typeof data === "object" && field in data) {
+    console.error(`Forbidden field present: ${field}`);
+    process.exit(4);
+  }
+}
+JS
 }
 
 assert_equal() {

@@ -261,3 +261,6 @@ No recommendation authorizes production.
 - `PERMISSION_MATRIX.md`
 - `GOVERNANCE_CHECK_REPORT.md`
 - `OPERATOR_RUNBOOK.md`
+# Public Web Canary Operational Trial Relationship
+
+`PUBLIC_WEB_CANARY_OPERATIONAL_TRIAL.md` usa os contratos de sessão, aprovação, target allowlist, DNS seguro, HTTPS client, runner, audit e report desta ativação. A execução operacional continua manual, temporal, não produtiva, sem endpoint, sem scheduler e sem integração com `/message` ou `/confirm`.

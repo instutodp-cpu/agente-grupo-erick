@@ -435,3 +435,6 @@ public web output in the matching tenant and blocks production activation.
 `PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` limits each manual canary to
 one tenant, one workspace and one user. Web content, target policies and
 operator approvals cannot alter tenant or workspace bindings.
+# Public Web Canary Operational Trial Reference
+
+O operational trial é limitado a um tenant, um workspace e um usuário allowlisted. Conteúdo público externo não pode alterar tenant, workspace, usuário, approval ou políticas.

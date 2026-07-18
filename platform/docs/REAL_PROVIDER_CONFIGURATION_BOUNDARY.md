@@ -716,3 +716,6 @@ All results remain:
 - `executed:false`
 - `real_provider_called:false`
 - `can_trigger_real_execution:false`
+# Public Web Canary Operational Trial Reference
+
+O operational trial usa a configuration boundary apenas como pré-condição estrutural. Ele não cria secrets, não lê `.env`, não inclui secret reference real em template e não ativa provider automaticamente.

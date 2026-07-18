@@ -457,3 +457,6 @@ forms, checkout, purchase, reservation and any change to `/message` or
 `PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` adds governance-visible
 approval, replay protection, audit sink and post-canary reporting for
 development/staging canaries. It does not authorize production activation.
+# Public Web Canary Operational Trial Reference
+
+O trial operacional adiciona decisão formal `remain_disabled`, `remediation_required`, `eligible_for_second_trial` ou `terminate_candidate`. Nenhuma decisão aprova produção, runtime irrestrito ou ativação automática.

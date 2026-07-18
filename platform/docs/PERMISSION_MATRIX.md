@@ -186,3 +186,6 @@ delete or bypass tenant isolation.
 
 `PUBLIC_WEB_NON_PRODUCTION_CANARY_ACTIVATION.md` does not expand permissions.
 Manual canary execution remains public-only, GET/HEAD only and read-only.
+# Public Web Canary Operational Trial Reference
+
+O trial operacional não amplia permissões do usuário final. A execução é manual, por operador/aprovador sintético autorizado, fora de `/message` e `/confirm`, com produção bloqueada e uma única chamada permitida no trial inicial.

@@ -256,3 +256,6 @@ runtime integration.
 
 Next step: Public Web Canary Operational Trial or Transcription Sanitized
 Adapter Pilot, not production activation.
+# Public Web Canary Operational Trial
+
+Após o merge desta PR, marcar como entregue apenas a fundação de `Public Web Canary Operational Trial`. Próxima etapa: executar primeiro trial manual supervisionado ou iniciar `Transcription Sanitized Adapter Pilot`. Não declarar provider ativo, produção pronta ou trial executado apenas pelo merge.

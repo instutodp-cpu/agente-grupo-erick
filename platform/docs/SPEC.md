@@ -793,3 +793,6 @@ development or staging only. It adds session contracts, explicit approval,
 target allowlists, safe DNS and HTTPS client contracts, a manually invoked
 runner, audit sink and sanitized report. It creates no public endpoint,
 scheduler or startup execution and does not change `/message` or `/confirm`.
+# Public Web Canary Operational Trial
+
+O contrato `PUBLIC_WEB_CANARY_OPERATIONAL_TRIAL.md` adiciona o pacote operacional manual para um trial não produtivo do Public Web Read-Only Adapter. O trial não declara produção ativa, não altera `/message` ou `/confirm`, não cria endpoint e mantém feature flag default off e rollout 0.

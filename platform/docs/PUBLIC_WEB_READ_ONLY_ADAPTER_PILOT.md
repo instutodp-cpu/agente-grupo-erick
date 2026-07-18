@@ -409,3 +409,6 @@ manual development/staging canary path. It requires a temporal session,
 explicit scoped approval, exact target allowlist, safe DNS/HTTPS binding,
 budget reserve/release, sanitized audit and a post-canary report. It does not
 authorize production, endpoints, schedulers or automatic runtime registration.
+# Public Web Canary Operational Trial Relationship
+
+`PUBLIC_WEB_CANARY_OPERATIONAL_TRIAL.md` é a camada operacional manual construída sobre o pilot foundation. O real transport candidate continua isolado; CI e testes usam fakes; produção permanece bloqueada; feature flag fica default off e rollout default 0.
