@@ -59,6 +59,11 @@ function createPublicWebCanaryTrialExecutionAuthorization(options = {}) {
       target_origin_hash: hashValue(trial.target_origin),
       target_path_hash: trial.target_path_hash,
       operation: trial.operation,
+      canary_session_version: input.canary_session_version,
+      target_policy_version: input.target_policy_version,
+      lifecycle_version: input.lifecycle_version,
+      configuration_version: input.configuration_version,
+      readiness_evidence_id: input.readiness_evidence_id,
       expires_at: new Date(expiresMs).toISOString(),
       used: false,
       version: 1
@@ -80,7 +85,12 @@ function createPublicWebCanaryTrialExecutionAuthorization(options = {}) {
       trial.plan_hash !== authorization.plan_hash ||
       hashValue(trial.target_origin) !== authorization.target_origin_hash ||
       trial.target_path_hash !== authorization.target_path_hash ||
-      trial.operation !== authorization.operation
+      trial.operation !== authorization.operation ||
+      (authorization.canary_session_version != null && trial.canary_session_version !== authorization.canary_session_version) ||
+      (authorization.target_policy_version != null && trial.target_policy_version !== authorization.target_policy_version) ||
+      (authorization.lifecycle_version != null && trial.lifecycle_version !== authorization.lifecycle_version) ||
+      (authorization.configuration_version != null && trial.configuration_version !== authorization.configuration_version) ||
+      (authorization.readiness_evidence_id != null && trial.readiness_evidence_id !== authorization.readiness_evidence_id)
     ) {
       return fail('TRIAL_AUTHORIZATION_BLOCKED', 'authorization_scope_mismatch');
     }

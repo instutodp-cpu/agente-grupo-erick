@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const { spawnSync } = require('node:child_process');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
@@ -21,12 +22,13 @@ const { evaluateTrialDecision } = require('../src/core/public-web-canary-trial-d
 const { loadTrialConfig, buildTrialPlanFromConfig } = require('../src/pilots/public-web-canary-trial-config-loader');
 const { runTrialPreflight } = require('../src/pilots/public-web-canary-trial-preflight');
 const { runTrialDryRun } = require('../src/pilots/public-web-canary-trial-dry-run');
+const { createPublicWebCanaryRunner } = require('../src/pilots/public-web-canary-runner');
 const { createPublicWebCanaryOperationalTrial } = require('../src/pilots/public-web-canary-operational-trial');
 const {
   acceptedConfirmationReader,
   deterministicClock,
   fakeCanaryRunner,
-  fakeDryRunRunner,
+  fakeNodeHttpsClient,
   rejectedConfirmationReader,
   validPreflightContext,
   validTrialConfig
@@ -90,14 +92,47 @@ test('preflight validates dependencies and never calls network', () => {
   assert.equal(runTrialPreflight(validPlan(), { ...context, adapterRegistry: { getAdapter: () => null } }).passed, false);
 });
 
-test('dry-run uses fakes, requires exactly one fake provider call and reports no real provider call', async () => {
-  const passed = await runTrialDryRun(validPlan(), { fakeCanaryRunner: fakeDryRunRunner() });
+test('preflight uses real policy interfaces and validates deep bindings', () => {
+  const plan = validPlan();
+  let targetInput = null;
+  const base = validPreflightContext();
+  const targetAllowlist = {
+    ...base.targetAllowlist,
+    isTargetAllowed(input) {
+      targetInput = input;
+      return base.targetAllowlist.isTargetAllowed(input);
+    }
+  };
+  assert.equal(runTrialPreflight(plan, { ...base, targetAllowlist }).passed, true);
+  assert.deepEqual(targetInput, {
+    environment: plan.environment,
+    target_origin: plan.target_origin,
+    target_path: plan.target_path,
+    operation: plan.operation,
+    source_type: plan.source_type
+  });
+
+  assert.equal(runTrialPreflight(plan, { ...base, operatorPolicy: { ...base.operatorPolicy, canRequest: () => true } }).passed, false);
+  assert.ok(runTrialPreflight(plan, { ...base, lifecycleRegistry: { getConnector: () => ({ ...base.lifecycleRegistry.getConnector(plan.connector_id), lifecycle_state: 'retired' }) } }).blocking_reasons.includes('lifecycle_state_invalid'));
+  assert.ok(runTrialPreflight(plan, { ...base, configurationRegistry: { getConfiguration: () => ({ ...base.configurationRegistry.getConfiguration(plan.configuration_id), configuration_status: 'pending' }) } }).blocking_reasons.includes('configuration_not_structurally_ready'));
+  assert.ok(runTrialPreflight({ ...plan, readiness_evidence_id: 'mismatch' }, base).blocking_reasons.includes('readiness_hash_mismatch'));
+  assert.ok(runTrialPreflight(plan, { ...base, secretReferenceRegistry: { getSecretReference: () => ({ ...base.secretReferenceRegistry.getSecretReference('public_web_local_reference'), revoked: true, status: 'revoked' }) } }).blocking_reasons.includes('secret_reference_not_resolvable'));
+});
+
+test('dry-run uses real canary components with fake network and reports no real provider call', async () => {
+  const context = validPreflightContext();
+  const plan = validPlan();
+  const preflight = runTrialPreflight(plan, context);
+  const passed = await runTrialDryRun(plan, { ...context, preflight });
   assert.equal(passed.dry_run_passed, true);
   assert.equal(passed.fake_provider_calls, 1);
+  assert.equal(passed.fake_network_called, true);
+  assert.equal(passed.replay_blocked, true);
+  assert.equal(passed.kill_switch_blocked, true);
+  assert.equal(passed.cleanup_status, 'cleanup_completed');
+  assert.equal(passed.actual_state, 'completed');
   assert.equal(passed.executed, true);
   assert.equal(passed.real_provider_called, false);
-  const failed = await runTrialDryRun(validPlan(), { fakeCanaryRunner: fakeCanaryRunner({ fake_provider_calls: 2, real_provider_called: false }) });
-  assert.equal(failed.dry_run_passed, false);
 });
 
 test('trial registry is private, frozen, versioned and replay protected', () => {
@@ -125,17 +160,22 @@ test('authorization is confirmation-gated, scoped, expires and is use-once', () 
     operator_confirmation: 'EXECUTAR CANARY PUBLIC WEB',
     preflight_evidence_hash: 'preflight',
     dry_run_evidence_hash: 'dry',
+    canary_session_version: 5,
+    target_policy_version: 1,
+    lifecycle_version: 4,
+    configuration_version: 3,
+    readiness_evidence_id: 'readiness',
     expires_at: '2026-01-01T00:01:00.000Z'
   });
   assert.equal(issued.ok, true);
   assert.equal(issued.authorization.operator_confirmation_hash.includes('EXECUTAR'), false);
-  assert.equal(authz.consumeAuthorization(issued.authorization.authorization_id, { trial: plan }).ok, true);
+  assert.equal(authz.consumeAuthorization(issued.authorization.authorization_id, { trial: { ...plan, canary_session_version: 5, target_policy_version: 1, lifecycle_version: 4, configuration_version: 3, readiness_evidence_id: 'readiness' } }).ok, true);
   assert.equal(authz.consumeAuthorization(issued.authorization.authorization_id, { trial: plan }).ok, false);
 });
 
 test('operational runner blocks before network on preflight, dry-run or confirmation failure', async () => {
   const runner = fakeCanaryRunner();
-  const context = validPreflightContext({ canaryRunner: runner, fakeCanaryRunner: fakeDryRunRunner(), injectedConfirmationReader: rejectedConfirmationReader });
+  const context = validPreflightContext({ canaryRunner: runner, injectedConfirmationReader: rejectedConfirmationReader });
   const trial = createPublicWebCanaryOperationalTrial({ ...context, clock: deterministicClock });
   const result = await trial.executeTrial({ config: validTrialConfig() });
   assert.equal(result.ok, false);
@@ -145,17 +185,89 @@ test('operational runner blocks before network on preflight, dry-run or confirma
 });
 
 test('operational runner calls canary runner exactly once after explicit confirmation and records evidence', async () => {
-  const runner = fakeCanaryRunner();
-  const context = validPreflightContext({ canaryRunner: runner, fakeCanaryRunner: fakeDryRunRunner(), injectedConfirmationReader: acceptedConfirmationReader });
+  const context = validPreflightContext({ injectedConfirmationReader: acceptedConfirmationReader });
   const trial = createPublicWebCanaryOperationalTrial({ ...context, clock: deterministicClock });
   const result = await trial.executeTrial({ config: validTrialConfig() });
   assert.equal(result.ok, true);
-  assert.equal(runner.calls, 1);
+  assert.equal(context.nodeHttpsClient.calls(), 1);
   assert.equal(result.evidence.executed, true);
   assert.equal(result.evidence.real_provider_called, true);
   assert.ok(['eligible_for_second_trial', 'remediation_required'].includes(result.decision.decision));
   assert.equal(JSON.stringify(result).includes('secret_handle'), false);
   assert.equal(JSON.stringify(result).includes('rawBody'), false);
+});
+
+test('operational trial creates real canary session and sends complete runner request', async () => {
+  const context = validPreflightContext({ injectedConfirmationReader: acceptedConfirmationReader });
+  const authorizationRegistry = createPublicWebCanaryTrialExecutionAuthorization({ clock: deterministicClock });
+  let capturedRequest = null;
+  const realRunner = createPublicWebCanaryRunner(context);
+  const runner = {
+    async runCanaryRequest(input) {
+      capturedRequest = input;
+      const auth = authorizationRegistry.getAuthorization('public_web_trial_test_001_authorization');
+      assert.equal(auth.used, true);
+      return realRunner.runCanaryRequest(input);
+    }
+  };
+  const trial = createPublicWebCanaryOperationalTrial({ ...context, authorizationRegistry, canaryRunner: runner, clock: deterministicClock });
+  const result = await trial.executeTrial({ config: validTrialConfig() });
+  assert.equal(result.ok, true);
+  assert.equal(capturedRequest.change_id, 'public_web_trial_test_001_execution_change');
+  assert.equal(capturedRequest.executed, false);
+  assert.equal(capturedRequest.real_provider_called, false);
+  assert.equal(capturedRequest.simulated, true);
+  assert.equal(capturedRequest.expected_version, 5);
+  assert.equal(capturedRequest.target_origin, undefined);
+  assert.equal(capturedRequest.operation, undefined);
+  const history = context.canarySessionRegistry.getCanaryHistory('public_web_trial_test_001_session').map((event) => event.event_name);
+  assert.ok(history.includes('public_web_canary_requested'));
+  assert.ok(history.includes('public_web_canary_validation_passed'));
+  assert.ok(history.includes('public_web_canary_approved'));
+  assert.ok(history.includes('public_web_canary_activated'));
+  assert.equal(context.canarySessionRegistry.getCanarySession('public_web_trial_test_001_session').canary_state, 'completed');
+});
+
+test('cleanup and post-network failures drive remediation without masking flags', async () => {
+  const cleanupContext = validPreflightContext({ injectedConfirmationReader: acceptedConfirmationReader });
+  cleanupContext.targetAllowlist = {
+    ...cleanupContext.targetAllowlist,
+    disableTargetPolicy() {
+      return { ok: false, applied: false };
+    }
+  };
+  const cleanupTrial = createPublicWebCanaryOperationalTrial({ ...cleanupContext, clock: deterministicClock });
+  const cleanupResult = await cleanupTrial.executeTrial({ config: validTrialConfig({ trial_id: 'public_web_trial_cleanup_partial' }) });
+  assert.equal(cleanupResult.cleanup.status, 'cleanup_partial');
+  assert.equal(cleanupResult.decision.decision, 'remediation_required');
+
+  const networkContext = validPreflightContext({
+    injectedConfirmationReader: acceptedConfirmationReader,
+    nodeHttpsClient: fakeNodeHttpsClient({ throw_error: true })
+  });
+  const failedTrial = createPublicWebCanaryOperationalTrial({ ...networkContext, clock: deterministicClock });
+  const failed = await failedTrial.executeTrial({ config: validTrialConfig({ trial_id: 'public_web_trial_network_failure' }) });
+  assert.equal(failed.evidence.status, 'trial_failed_safe');
+  assert.equal(failed.evidence.executed, true);
+  assert.equal(failed.evidence.real_provider_called, true);
+  assert.equal(failed.decision.decision, 'remediation_required');
+});
+
+test('prepare preflight-only does not run dry-run and CLI execute blocks without bootstrap', async () => {
+  const context = validPreflightContext();
+  const trial = createPublicWebCanaryOperationalTrial({ ...context, clock: deterministicClock });
+  const prepared = await trial.prepareTrial({ config: validTrialConfig(), preflightOnly: true });
+  assert.equal(prepared.ok, true);
+  assert.equal(prepared.dry_run, undefined);
+  assert.equal(context.nodeHttpsClient.calls(), 0);
+
+  const configPath = tempConfig(validTrialConfig({ trial_id: 'public_web_trial_cli_bootstrap' }));
+  const cli = spawnSync(process.execPath, ['scripts/public-web-canary-operational-trial.js', '--config', configPath], {
+    cwd: path.resolve(__dirname, '..'),
+    encoding: 'utf8'
+  });
+  assert.equal(cli.status, 2);
+  assert.match(cli.stdout, /TRIAL_OPERATIONAL_BOOTSTRAP_NOT_CONFIGURED/);
 });
 
 test('evidence and decision contracts never approve production', () => {

@@ -14,6 +14,7 @@ const {
 } = require('./public-web-canary-trial-contract');
 
 const TERMINAL_STATES = Object.freeze(['eligible_for_second_trial', 'remediation_required', 'terminated', 'cancelled', 'expired']);
+const EXECUTION_TERMINAL_STATES = Object.freeze(['execution_succeeded', 'execution_failed_safe']);
 
 function createPublicWebCanaryTrialRegistry(options = {}) {
   const trials = new Map();
@@ -63,16 +64,29 @@ function createPublicWebCanaryTrialRegistry(options = {}) {
     });
   }
 
-  function consume(request) {
+  function isNonEmptyString(value) {
+    return typeof value === 'string' && value.trim() !== '';
+  }
+
+  function validateUniqueIds(request, options = {}) {
     const requestId = request && request.request_id;
     const changeId = request && request.change_id;
     const executionId = request && request.execution_id;
+    if (!isNonEmptyString(requestId)) return { ok: false, reason: 'request_id_required' };
+    if (!isNonEmptyString(changeId)) return { ok: false, reason: 'change_id_required' };
+    if (options.executionRequired === true && !isNonEmptyString(executionId)) return { ok: false, reason: 'execution_id_required' };
     if (requestId && requestIds.has(requestId)) return { ok: false, reason: 'request_id_replayed' };
     if (changeId && changeIds.has(changeId)) return { ok: false, reason: 'change_id_replayed' };
     if (executionId && executionIds.has(executionId)) return { ok: false, reason: 'execution_id_replayed' };
-    if (requestId) requestIds.add(requestId);
-    if (changeId) changeIds.add(changeId);
-    if (executionId) executionIds.add(executionId);
+    return { ok: true };
+  }
+
+  function consume(request, options = {}) {
+    const valid = validateUniqueIds(request, options);
+    if (!valid.ok) return valid;
+    requestIds.add(request.request_id);
+    changeIds.add(request.change_id);
+    if (request.execution_id) executionIds.add(request.execution_id);
     return { ok: true };
   }
 
@@ -107,11 +121,11 @@ function createPublicWebCanaryTrialRegistry(options = {}) {
   }
 
   function registerTrialPlan(plan, request = {}) {
-    const replay = consume(request);
-    if (!replay.ok) return response(null, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     if (trials.has(plan && plan.trial_id)) return response(null, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: 'trial_id_replayed' });
     const validation = validateTrialPlan(plan);
     if (!validation.valid) return response(null, request, { error_code: 'INVALID_TRIAL_PLAN', blocked_reason: validation.errors[0] });
+    const replay = consume(request);
+    if (!replay.ok) return response(null, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     const trial = Object.freeze({
       ...clone(plan),
       status: 'configuration_pending',
@@ -130,11 +144,11 @@ function createPublicWebCanaryTrialRegistry(options = {}) {
   function recordPreflight(request, result) {
     const trial = getTrialOrBlock(request);
     if (!trial) return response(null, request, { error_code: 'INVALID_TRIAL_PLAN', blocked_reason: 'trial_not_found' });
-    const replay = consume(request);
-    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     const conflict = versionConflict(trial, request);
     if (conflict) return conflict;
     const validation = validateTrialPreflightResult(result);
+    const replay = consume(request);
+    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     if (!validation.valid || result.passed !== true) return transition(trial, request, 'preflight_blocked', { preflight_result: clone(result) }, { event_name: 'public_web_canary_trial_preflight_blocked' });
     return transition(trial, request, 'preflight_passed', { preflight_result: clone(result) }, { event_name: 'public_web_canary_trial_preflight_passed' });
   }
@@ -142,12 +156,12 @@ function createPublicWebCanaryTrialRegistry(options = {}) {
   function recordDryRun(request, result) {
     const trial = getTrialOrBlock(request);
     if (!trial) return response(null, request, { error_code: 'INVALID_TRIAL_PLAN', blocked_reason: 'trial_not_found' });
-    const replay = consume(request);
-    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     const conflict = versionConflict(trial, request);
     if (conflict) return conflict;
     if (trial.status !== 'preflight_passed') return response(trial, request, { error_code: 'TRIAL_STATE_BLOCKED', blocked_reason: 'preflight_required' });
     const validation = validateTrialDryRunResult(result);
+    const replay = consume(request);
+    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     if (!validation.valid) return transition(trial, request, 'dry_run_blocked', { dry_run_result: clone(result) }, { event_name: 'public_web_canary_trial_dry_run_blocked' });
     return transition(trial, request, 'dry_run_passed', { dry_run_result: clone(result) }, { event_name: 'public_web_canary_trial_dry_run_passed' });
   }
@@ -155,34 +169,41 @@ function createPublicWebCanaryTrialRegistry(options = {}) {
   function reserveOperationalTrial(request) {
     const trial = getTrialOrBlock(request);
     if (!trial) return response(null, request, { error_code: 'INVALID_TRIAL_PLAN', blocked_reason: 'trial_not_found' });
-    const replay = consume(request);
-    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     const conflict = versionConflict(trial, request);
     if (conflict) return conflict;
     if (trial.status !== 'dry_run_passed') return response(trial, request, { error_code: 'TRIAL_STATE_BLOCKED', blocked_reason: 'dry_run_required' });
+    const replay = consume(request, { executionRequired: true });
+    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     return transition(trial, request, 'execution_reserved', { execution_id: request.execution_id }, { event_name: 'public_web_canary_trial_execution_reserved' });
   }
 
   function startOperationalTrial(request) {
     const trial = getTrialOrBlock(request);
     if (!trial) return response(null, request, { error_code: 'INVALID_TRIAL_PLAN', blocked_reason: 'trial_not_found' });
-    const replay = consume(request);
-    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     const conflict = versionConflict(trial, request);
     if (conflict) return conflict;
     if (trial.status !== 'execution_reserved') return response(trial, request, { error_code: 'TRIAL_STATE_BLOCKED', blocked_reason: 'trial_not_reserved' });
+    const replay = consume(request);
+    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     return transition(trial, request, 'execution_started', {}, { event_name: 'public_web_canary_trial_execution_started' });
   }
 
   function finishOperationalTrial(request, evidence) {
     const trial = getTrialOrBlock(request);
     if (!trial) return response(null, request, { error_code: 'INVALID_TRIAL_PLAN', blocked_reason: 'trial_not_found' });
-    const replay = consume(request);
-    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     const conflict = versionConflict(trial, request);
     if (conflict) return conflict;
     const validation = validateTrialExecutionEvidence(evidence);
     if (!validation.valid) return response(trial, request, { error_code: 'INVALID_TRIAL_EVIDENCE', blocked_reason: validation.errors[0] });
+    if (trial.status !== 'execution_started') return response(trial, request, { error_code: 'TRIAL_STATE_BLOCKED', blocked_reason: 'trial_not_started' });
+    if (trial.execution_id !== evidence.canary_execution_id) return response(trial, request, { error_code: 'INVALID_TRIAL_EVIDENCE', blocked_reason: 'execution_id_mismatch' });
+    if (evidence.trial_id !== trial.trial_id) return response(trial, request, { error_code: 'INVALID_TRIAL_EVIDENCE', blocked_reason: 'trial_id_mismatch' });
+    if (evidence.canary_session_id !== trial.canary_session_id) return response(trial, request, { error_code: 'INVALID_TRIAL_EVIDENCE', blocked_reason: 'canary_session_id_mismatch' });
+    if (evidence.plan_hash !== trial.plan_hash) return response(trial, request, { error_code: 'INVALID_TRIAL_EVIDENCE', blocked_reason: 'plan_hash_mismatch' });
+    if (!isNonEmptyString(evidence.authorization_hash)) return response(trial, request, { error_code: 'INVALID_TRIAL_EVIDENCE', blocked_reason: 'authorization_hash_missing' });
+    if (evidence.executed !== evidence.real_provider_called) return response(trial, request, { error_code: 'INVALID_TRIAL_EVIDENCE', blocked_reason: 'trial_execution_flags_incoherent' });
+    const replay = consume(request);
+    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     const status = evidence.status === 'trial_success' ? 'execution_succeeded' : 'execution_failed_safe';
     return transition(trial, request, status, { execution_evidence: clone(evidence) }, {
       event_name: `public_web_canary_trial_${status}`,
@@ -194,22 +215,24 @@ function createPublicWebCanaryTrialRegistry(options = {}) {
   function recordTrialReport(request, report) {
     const trial = getTrialOrBlock(request);
     if (!trial) return response(null, request, { error_code: 'INVALID_TRIAL_PLAN', blocked_reason: 'trial_not_found' });
-    const replay = consume(request);
-    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     const conflict = versionConflict(trial, request);
     if (conflict) return conflict;
+    if (!EXECUTION_TERMINAL_STATES.includes(trial.status)) return response(trial, request, { error_code: 'TRIAL_STATE_BLOCKED', blocked_reason: 'execution_terminal_required' });
+    const replay = consume(request);
+    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     return transition(trial, request, 'report_completed', { report: clone(report), report_hash: hashTrialEvidence(report) }, { event_name: 'public_web_canary_trial_report_completed' });
   }
 
   function recordTrialDecision(request, decision) {
     const trial = getTrialOrBlock(request);
     if (!trial) return response(null, request, { error_code: 'INVALID_TRIAL_PLAN', blocked_reason: 'trial_not_found' });
-    const replay = consume(request);
-    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     const conflict = versionConflict(trial, request);
     if (conflict) return conflict;
+    if (trial.status !== 'report_completed') return response(trial, request, { error_code: 'TRIAL_STATE_BLOCKED', blocked_reason: 'report_required' });
     const validation = validateTrialDecision(decision);
     if (!validation.valid) return response(trial, request, { error_code: 'INVALID_TRIAL_DECISION', blocked_reason: validation.errors[0] });
+    const replay = consume(request);
+    if (!replay.ok) return response(trial, request, { error_code: 'TRIAL_REPLAY_DETECTED', blocked_reason: replay.reason });
     return transition(trial, request, decision.decision, { decision: clone(decision) }, { event_name: 'public_web_canary_trial_decision_recorded' });
   }
 

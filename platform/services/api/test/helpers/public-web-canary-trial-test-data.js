@@ -5,9 +5,12 @@ const {
   CONFIGURATION_ID,
   CONNECTOR_ID,
   PROVIDER_ID,
-  READINESS_CANDIDATE_ID,
-  hashValue
+  READINESS_CANDIDATE_ID
 } = require('../../src/core/public-web-transport-contract');
+const {
+  validCanaryContext,
+  fakeNodeHttpsClient
+} = require('./public-web-canary-test-data');
 
 function deterministicClock() {
   return '2026-01-01T00:00:00.000Z';
@@ -17,10 +20,10 @@ function validTrialConfig(overrides = {}) {
   return {
     trial_id: 'public_web_trial_test_001',
     environment: 'development',
-    target_policy_id: 'target_policy_public_web_trial',
+    target_policy_id: 'target_policy_public_canary',
     target_origin: 'https://public-canary.test',
-    target_path: '/docs',
-    source_type: 'public_documentation_page',
+    target_path: '/allowed/page',
+    source_type: 'public_product_page',
     operation: 'fetch_public_page_summary',
     requested_content_types: ['text/html'],
     maximum_requests: 1,
@@ -29,127 +32,22 @@ function validTrialConfig(overrides = {}) {
     maximum_response_bytes: 100000,
     workspace_type: 'corporate',
     tenant_id: 'grupo_erick',
-    user_id: 'user_public_web_trial_operator',
-    operator_id: 'operator_local',
+    user_id: 'user_public_web_synthetic',
+    operator_id: 'operator_public_web',
     operator_role: 'integration_operator',
-    approver_id: 'security_approver_local',
+    approver_id: 'security_approver',
     approver_role: 'security_operator',
     reason: 'manual controlled public web canary trial',
     ...overrides
   };
 }
 
-function validTargetAllowlist() {
-  return {
-    isTargetAllowed(origin, path) {
-      return {
-        allowed: origin === 'https://public-canary.test' && path === '/docs',
-        target_policy: {
-          target_policy_id: 'target_policy_public_web_trial',
-          enabled: true,
-          revoked: false,
-          timeout_ms: 3000,
-          maximum_response_bytes: 100000,
-          maximum_requests: 1,
-          allowed_content_types: ['text/html'],
-          redirects_allowed: false
-        }
-      };
-    },
-    disableTargetPolicy() {
-      return { ok: true, applied: true };
-    }
-  };
-}
-
-function fakeAuditSink() {
-  const events = [];
-  return {
-    append(event) {
-      events.push(JSON.parse(JSON.stringify(event)));
-      return { ok: true };
-    },
-    list() {
-      return events.map((event) => JSON.parse(JSON.stringify(event)));
-    }
-  };
-}
-
 function validPreflightContext(overrides = {}) {
-  return {
+  const context = validCanaryContext({
     clock: deterministicClock,
-    featureFlagResolver: () => true,
-    killSwitchResolver: () => false,
-    adapterRegistry: {
-      getAdapter: () => ({ metadata: { adapter_id: ADAPTER_ID, provider_id: PROVIDER_ID, readiness_candidate_id: READINESS_CANDIDATE_ID } })
-    },
-    lifecycleRegistry: {
-      getConnector: () => ({
-        connector_id: CONNECTOR_ID,
-        provider_id: PROVIDER_ID,
-        adapter_id: ADAPTER_ID,
-        lifecycle_version: 1,
-        lifecycle_state: 'readiness_passed'
-      })
-    },
-    configurationRegistry: {
-      getConfiguration: () => ({
-        configuration_id: CONFIGURATION_ID,
-        provider_id: PROVIDER_ID,
-        adapter_id: ADAPTER_ID,
-        configuration_status: 'structurally_ready',
-        configuration_version: 1,
-        secret_reference_id: 'secret_ref_local_test'
-      })
-    },
-    secretReferenceRegistry: {
-      getSecretReference: () => ({
-        reference_id: 'secret_ref_local_test',
-        provider_id: PROVIDER_ID,
-        tenant_id: 'grupo_erick',
-        workspace_type: 'corporate',
-        environment: 'local_test',
-        reference_type: 'local_test_double_reference',
-        status: 'reference_registered',
-        revoked: false,
-        disabled: false,
-        synthetic: true
-      })
-    },
-    secretResolver: {
-      canResolve: () => true
-    },
-    readinessResult: {
-      ready: true,
-      status: 'configuration_structurally_ready',
-      readiness_candidate_id: READINESS_CANDIDATE_ID,
-      evidence_hash: hashValue('readiness')
-    },
-    targetAllowlist: validTargetAllowlist(),
-    tenantAllowlist: ['grupo_erick'],
-    workspaceAllowlist: ['corporate'],
-    userAllowlist: ['user_public_web_trial_operator'],
-    operatorPolicy: {
-      canRequest: () => true,
-      canApprove: () => true
-    },
-    rateLimitBudget: {
-      check: () => ({ allowed: true }),
-      release: () => ({ ok: true })
-    },
-    costBudget: {
-      check: () => ({ allowed: true }),
-      release: () => ({ ok: true })
-    },
-    auditSink: fakeAuditSink(),
-    dnsResolver: {
-      resolve: async () => ({ allowed: true, approved_ip: '93.184.216.34', approved_ips: ['93.184.216.34'] })
-    },
-    nodeHttpsClient: {
-      execute: async () => ({ status_code: 200 })
-    },
     ...overrides
-  };
+  });
+  return context;
 }
 
 function fakeCanaryRunner(result = {}) {
@@ -190,10 +88,16 @@ function rejectedConfirmationReader() {
 }
 
 module.exports = {
+  ADAPTER_ID,
+  CONFIGURATION_ID,
+  CONNECTOR_ID,
+  PROVIDER_ID,
+  READINESS_CANDIDATE_ID,
   deterministicClock,
   validTrialConfig,
   validPreflightContext,
   fakeCanaryRunner,
+  fakeNodeHttpsClient,
   fakeDryRunRunner,
   acceptedConfirmationReader,
   rejectedConfirmationReader
