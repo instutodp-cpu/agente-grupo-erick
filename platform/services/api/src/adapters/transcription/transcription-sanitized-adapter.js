@@ -1,5 +1,11 @@
 'use strict';
 
+const dns = require('node:dns');
+const http = require('node:http');
+const https = require('node:https');
+const net = require('node:net');
+const tls = require('node:tls');
+
 const {
   TRANSCRIPTION_ADAPTER_ID,
   TRANSCRIPTION_PROVIDER_ID,
@@ -11,6 +17,10 @@ const {
   validateTranscriptionRequest,
   validateTranscriptionResult
 } = require('../../core/transcription-contract');
+
+const TRANSCRIPTION_NETWORK_ACCESS_BLOCKED = 'TRANSCRIPTION_NETWORK_ACCESS_BLOCKED';
+
+let networkHarnessLock = Promise.resolve();
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -82,13 +92,21 @@ function blocked(request, reason, fields = {}) {
     network_attempts: Number.isInteger(fields.network_attempts) ? fields.network_attempts : 0,
     can_trigger_real_execution: false,
     blocking_reasons: [reason],
-    error: buildSafeTranscriptionError('INVALID_ADAPTER_REQUEST', reason),
+    error: buildSafeTranscriptionError(fields.error_code || 'INVALID_ADAPTER_REQUEST', reason),
     audit_event_candidate: buildTranscriptionAuditEvent({
       ...request,
       status: 'transcription_mock_blocked',
       blocked_reason: reason
     })
   });
+}
+
+function buildNetworkAccessBlockedError(api) {
+  const error = new Error('NETWORK_ACCESS_BLOCKED');
+  error.code = TRANSCRIPTION_NETWORK_ACCESS_BLOCKED;
+  error.blocked_reason = 'NETWORK_ACCESS_BLOCKED';
+  error.network_api = api;
+  return error;
 }
 
 function validateSyntheticProvider(provider) {
@@ -112,15 +130,84 @@ function validateSyntheticProvider(provider) {
 
 function createNetworkDenyProbe() {
   let attempts = 0;
+  function recordAttempt(api = 'network') {
+    attempts += 1;
+    return {
+      allowed: false,
+      blocked_reason: 'external_network_blocked',
+      error_code: TRANSCRIPTION_NETWORK_ACCESS_BLOCKED,
+      network_api: api
+    };
+  }
   return Object.freeze({
-    recordAttempt() {
-      attempts += 1;
-      return { allowed: false, blocked_reason: 'external_network_blocked' };
+    block(api = 'network') {
+      recordAttempt(api);
+      throw buildNetworkAccessBlockedError(api);
+    },
+    recordAttempt(api = 'network') {
+      return recordAttempt(api);
     },
     attempts() {
       return attempts;
     }
   });
+}
+
+function replaceNetworkMethod(target, key, apiName, restoreFns, networkProbe) {
+  const descriptor = Object.getOwnPropertyDescriptor(target, key);
+  restoreFns.push(() => {
+    if (descriptor) {
+      Object.defineProperty(target, key, descriptor);
+    } else {
+      delete target[key];
+    }
+  });
+  Object.defineProperty(target, key, {
+    configurable: true,
+    writable: true,
+    value: function blockedNetworkAccess() {
+      return networkProbe.block(apiName);
+    }
+  });
+}
+
+function installNetworkDenyHarness(networkProbe) {
+  const restoreFns = [];
+  replaceNetworkMethod(globalThis, 'fetch', 'globalThis.fetch', restoreFns, networkProbe);
+  replaceNetworkMethod(http, 'request', 'http.request', restoreFns, networkProbe);
+  replaceNetworkMethod(http, 'get', 'http.get', restoreFns, networkProbe);
+  replaceNetworkMethod(https, 'request', 'https.request', restoreFns, networkProbe);
+  replaceNetworkMethod(https, 'get', 'https.get', restoreFns, networkProbe);
+  replaceNetworkMethod(net, 'connect', 'net.connect', restoreFns, networkProbe);
+  replaceNetworkMethod(net, 'createConnection', 'net.createConnection', restoreFns, networkProbe);
+  replaceNetworkMethod(tls, 'connect', 'tls.connect', restoreFns, networkProbe);
+  replaceNetworkMethod(dns, 'lookup', 'dns.lookup', restoreFns, networkProbe);
+  replaceNetworkMethod(dns, 'resolve', 'dns.resolve', restoreFns, networkProbe);
+  replaceNetworkMethod(dns, 'resolve4', 'dns.resolve4', restoreFns, networkProbe);
+  replaceNetworkMethod(dns, 'resolve6', 'dns.resolve6', restoreFns, networkProbe);
+  return function restoreNetworkDenyHarness() {
+    for (const restore of restoreFns.reverse()) restore();
+  };
+}
+
+async function runWithNetworkBlocked(networkProbe, callback) {
+  let releaseLock;
+  const previousLock = networkHarnessLock;
+  networkHarnessLock = new Promise((resolve) => {
+    releaseLock = resolve;
+  });
+  await previousLock;
+  let restore = () => {};
+  try {
+    restore = installNetworkDenyHarness(networkProbe);
+    return await callback();
+  } finally {
+    try {
+      restore();
+    } finally {
+      releaseLock();
+    }
+  }
 }
 
 function createTranscriptionSanitizedAdapter(options = {}) {
@@ -174,14 +261,17 @@ function createTranscriptionSanitizedAdapter(options = {}) {
     let rawResult;
     state.lifecycle_state = 'running';
     try {
-      if (typeof options.provider_call_probe === 'function') options.provider_call_probe({ transcription_id: request.transcription_id });
-      rawResult = await provider.summarize(safeRequest);
-    } catch (_error) {
+      rawResult = await runWithNetworkBlocked(networkProbe, async () => {
+        if (typeof options.provider_call_probe === 'function') options.provider_call_probe({ transcription_id: request.transcription_id });
+        return provider.summarize(safeRequest);
+      });
+    } catch (error) {
       state.lifecycle_state = 'initialized';
       const afterErrorCalls = typeof provider.calls === 'function' ? provider.calls() : beforeCalls;
+      const networkBlocked = error && error.code === TRANSCRIPTION_NETWORK_ACCESS_BLOCKED;
       return sanitizeTranscriptionData({
-        status: 'transcription_mock_error_safe',
-        safe_summary: 'Transcription fake provider failed safely.',
+        status: networkBlocked ? 'transcription_network_blocked' : 'transcription_mock_error_safe',
+        safe_summary: networkBlocked ? 'Transcription dry-run network access blocked.' : 'Transcription fake provider failed safely.',
         data: {},
         sanitized_output: {},
         simulated: true,
@@ -193,15 +283,35 @@ function createTranscriptionSanitizedAdapter(options = {}) {
         external_network_called: networkProbe.attempts() > 0,
         network_attempts: networkProbe.attempts(),
         can_trigger_real_execution: false,
-        error: buildSafeTranscriptionError('INTERNAL_ADAPTER_ERROR', 'fake_provider_failed_safe'),
-        audit_event_candidate: buildTranscriptionAuditEvent({ ...request, status: 'transcription_mock_error_safe', executed: true })
+        error: buildSafeTranscriptionError(
+          networkBlocked ? TRANSCRIPTION_NETWORK_ACCESS_BLOCKED : 'INTERNAL_ADAPTER_ERROR',
+          networkBlocked ? 'NETWORK_ACCESS_BLOCKED' : 'fake_provider_failed_safe'
+        ),
+        audit_event_candidate: buildTranscriptionAuditEvent({
+          ...request,
+          status: networkBlocked ? 'transcription_network_blocked' : 'transcription_mock_error_safe',
+          executed: true,
+          blocked_reason: networkBlocked ? 'NETWORK_ACCESS_BLOCKED' : 'fake_provider_failed_safe'
+        })
       });
     }
     state.lifecycle_state = 'initialized';
     const afterCalls = typeof provider.calls === 'function' ? provider.calls() : beforeCalls;
     const resultValidation = validateTranscriptionResult(rawResult);
     const resultForbidden = findTranscriptionForbiddenFields(rawResult);
-    if (!resultValidation.valid || resultForbidden.length > 0 || networkProbe.attempts() > 0) {
+    if (networkProbe.attempts() > 0) {
+      return blocked(request, 'NETWORK_ACCESS_BLOCKED', {
+        status: 'transcription_network_blocked',
+        error_code: TRANSCRIPTION_NETWORK_ACCESS_BLOCKED,
+        executed: true,
+        fake_provider_called: afterCalls > beforeCalls,
+        fake_provider_calls: Math.max(0, afterCalls - beforeCalls),
+        provider_call_count: afterCalls,
+        network_attempts: networkProbe.attempts(),
+        external_network_called: true
+      });
+    }
+    if (!resultValidation.valid || resultForbidden.length > 0) {
       return blocked(request, resultForbidden[0] || resultValidation.errors[0] || 'transcription_result_invalid', {
         status: 'transcription_result_blocked',
         executed: true,
@@ -221,7 +331,7 @@ function createTranscriptionSanitizedAdapter(options = {}) {
       simulated: true,
       executed: true,
       real_provider_called: false,
-      external_network_called: false,
+      external_network_called: networkProbe.attempts() > 0,
       network_attempts: networkProbe.attempts(),
       can_trigger_real_execution: false,
       fake_provider_called: true,
@@ -251,9 +361,11 @@ function createTranscriptionSanitizedAdapter(options = {}) {
 }
 
 module.exports = {
+  TRANSCRIPTION_NETWORK_ACCESS_BLOCKED,
   createNetworkDenyProbe,
   createFakeTranscriptionProvider,
   createTranscriptionSanitizedAdapter,
+  runWithNetworkBlocked,
   validateSyntheticProvider,
   metadata
 };

@@ -1,7 +1,11 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const dns = require('node:dns');
 const fs = require('node:fs');
+const http = require('node:http');
+const https = require('node:https');
+const net = require('node:net');
 const path = require('node:path');
 const test = require('node:test');
 
@@ -78,6 +82,63 @@ function invalidProvider(overrides = {}) {
     },
     ...overrides
   };
+}
+
+function captureNetworkMethods() {
+  return {
+    fetch: globalThis.fetch,
+    httpGet: http.get,
+    httpsRequest: https.request,
+    netConnect: net.connect,
+    dnsLookup: dns.lookup
+  };
+}
+
+function assertNetworkMethodsRestored(originals) {
+  assert.equal(globalThis.fetch, originals.fetch);
+  assert.equal(http.get, originals.httpGet);
+  assert.equal(https.request, originals.httpsRequest);
+  assert.equal(net.connect, originals.netConnect);
+  assert.equal(dns.lookup, originals.dnsLookup);
+}
+
+function syntheticNetworkProvider(attempt) {
+  let calls = 0;
+  return {
+    metadata: {
+      provider_kind: 'synthetic_test_double',
+      network_capable: false,
+      real_provider: false
+    },
+    async summarize(request) {
+      calls += 1;
+      try {
+        await attempt();
+      } catch (error) {
+        assert.equal(error.code, 'TRANSCRIPTION_NETWORK_ACCESS_BLOCKED');
+      }
+      return {
+        segments: [{ start_ms: 0, end_ms: request.duration_ms, text: 'ok' }],
+        text: 'ok',
+        confidence: 0.9,
+        language_detected: 'pt-BR',
+        duration_ms: request.duration_ms
+      };
+    },
+    calls() {
+      return calls;
+    }
+  };
+}
+
+async function runNetworkBlockedProvider(attempt) {
+  const originals = captureNetworkMethods();
+  const provider = syntheticNetworkProvider(attempt);
+  const adapter = createTranscriptionSanitizedAdapter({ provider });
+  adapter.initialize();
+  const result = await adapter.dryRun(transcriptionRequest());
+  assertNetworkMethodsRestored(originals);
+  return { result, provider };
 }
 
 test('transcription sanitized adapter pilot docs fixture and safe example config exist', () => {
@@ -269,31 +330,63 @@ test('segments reject unknown fields bad duration ordering overlap and confidenc
   assert.ok(validateTranscriptionResult({ ...base, segments: [{ ...base.segments[0], confidence: 2 }] }).errors.includes('segment_confidence_out_of_bounds::0'));
 });
 
-test('network probe derives external network fields and blocks dry-run if attempted', async () => {
-  const networkProbe = createNetworkDenyProbe();
-  const provider = createFakeTranscriptionProvider();
-  const adapter = createTranscriptionSanitizedAdapter({ provider, networkProbe });
-  adapter.initialize();
-  const success = await adapter.dryRun(transcriptionRequest());
+test('network deny harness blocks real network APIs during fake provider dry-run', { concurrency: false }, async () => {
+  const cases = [
+    ['globalThis.fetch', () => globalThis.fetch('https://example.invalid/audio')],
+    ['http.get', () => http.get('http://127.0.0.1:9/audio')],
+    ['https.request', () => https.request('https://example.invalid/audio')],
+    ['net.connect', () => net.connect({ host: '127.0.0.1', port: 9 })],
+    ['dns.lookup', () => dns.lookup('example.invalid', () => {})]
+  ];
+
+  for (const [api, attempt] of cases) {
+    const { result, provider } = await runNetworkBlockedProvider(attempt);
+    assert.equal(result.status, 'transcription_network_blocked', api);
+    assert.equal(result.executed, true, api);
+    assert.equal(result.fake_provider_called, true, api);
+    assert.equal(result.real_provider_called, false, api);
+    assert.equal(result.network_attempts, 1, api);
+    assert.equal(result.external_network_called, true, api);
+    assert.equal(result.can_trigger_real_execution, false, api);
+    assert.equal(result.error.error_code, 'TRANSCRIPTION_NETWORK_ACCESS_BLOCKED', api);
+    assert.equal(provider.calls(), 1, api);
+  }
+});
+
+test('network deny harness restores methods after success exception and repeated runs', { concurrency: false }, async () => {
+  const successOriginals = captureNetworkMethods();
+  const successProvider = createFakeTranscriptionProvider();
+  const successAdapter = createTranscriptionSanitizedAdapter({ provider: successProvider });
+  successAdapter.initialize();
+  const success = await successAdapter.dryRun(transcriptionRequest({ transcription_id: 'transcription_network_success_restore' }));
+  assert.equal(success.status, 'transcription_mock_success');
   assert.equal(success.network_attempts, 0);
   assert.equal(success.external_network_called, false);
+  assertNetworkMethodsRestored(successOriginals);
 
-  const blockedProbe = createNetworkDenyProbe();
-  const networkAwareProvider = createFakeTranscriptionProvider();
-  const wrapped = {
-    ...networkAwareProvider,
-    async summarize(request) {
-      blockedProbe.recordAttempt();
-      return networkAwareProvider.summarize(request);
+  const exceptionOriginals = captureNetworkMethods();
+  let calls = 0;
+  const throwingProvider = {
+    metadata: { provider_kind: 'synthetic_test_double', network_capable: false, real_provider: false },
+    async summarize() {
+      calls += 1;
+      throw new Error('synthetic failure');
+    },
+    calls() {
+      return calls;
     }
   };
-  const blockedAdapter = createTranscriptionSanitizedAdapter({ provider: wrapped, networkProbe: blockedProbe });
-  blockedAdapter.initialize();
-  const blocked = await blockedAdapter.dryRun(transcriptionRequest({ transcription_id: 'transcription_network_probe' }));
-  assert.equal(blocked.status, 'transcription_result_blocked');
-  assert.equal(blocked.network_attempts, 1);
-  assert.equal(blocked.external_network_called, true);
-  assert.equal(blocked.real_provider_called, false);
+  const throwingAdapter = createTranscriptionSanitizedAdapter({ provider: throwingProvider });
+  throwingAdapter.initialize();
+  const failure = await throwingAdapter.dryRun(transcriptionRequest({ transcription_id: 'transcription_network_exception_restore' }));
+  assert.equal(failure.status, 'transcription_mock_error_safe');
+  assert.equal(failure.network_attempts, 0);
+  assertNetworkMethodsRestored(exceptionOriginals);
+
+  const first = await runNetworkBlockedProvider(() => http.get('http://127.0.0.1:9/first'));
+  const second = await runNetworkBlockedProvider(() => http.get('http://127.0.0.1:9/second'));
+  assert.equal(first.result.network_attempts, 1);
+  assert.equal(second.result.network_attempts, 1);
 });
 
 test('shutdown blocks dryRun and simulate without reinitializing adapter', async () => {
@@ -450,6 +543,8 @@ test('governance isolation keeps transcription pilot out of runtime endpoints an
     assert.equal(source.includes('transcription-sanitized-adapter-pilot'), false);
     assert.equal(source.includes('transcription-sanitized-adapter'), false);
     assert.equal(source.includes('/transcription'), false);
+    assert.equal(source.includes("require('node:http')"), false);
+    assert.equal(source.includes("require('node:https')"), false);
   }
 
   const pilotFiles = [
@@ -460,8 +555,6 @@ test('governance isolation keeps transcription pilot out of runtime endpoints an
   for (const file of pilotFiles) {
     const source = fs.readFileSync(file, 'utf8');
     assert.equal(source.includes('process.env'), false);
-    assert.equal(source.includes("require('node:https')"), false);
-    assert.equal(source.includes("require('node:http')"), false);
     assert.equal(source.includes('fetch('), false);
     assert.equal(source.includes('axios'), false);
     assert.equal(source.includes('setInterval('), false);

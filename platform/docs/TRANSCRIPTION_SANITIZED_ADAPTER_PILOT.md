@@ -80,9 +80,17 @@ that raw result is validated for forbidden fields, segment boundaries, size and
 URLs before any sanitized response is built. Sanitization cannot turn an
 invalid request or result into success.
 
-The dry-run also uses a network deny probe. It exposes only counters, starts at
-zero, and fails the dry-run if any network attempt is recorded. The final
-evidence derives `external_network_called` from `network_attempts > 0`.
+The dry-run also runs `provider.summarize()` inside a local network deny
+harness. The harness temporarily intercepts `globalThis.fetch`, `http`,
+`https`, `net`, `tls` and `dns` entry points, increments `network_attempts` and
+throws `TRANSCRIPTION_NETWORK_ACCESS_BLOCKED` before any connection can be
+opened. Interceptors are guarded by a process-local mutex and restored in
+`finally`; this harness is only for local/test dry-runs and is not a production
+network sandbox.
+
+The provider metadata remains a precondition, but absence of network is proven
+only by the harness counter. Final evidence derives `external_network_called`
+from `network_attempts > 0`.
 
 ## Lifecycle And Readiness
 
