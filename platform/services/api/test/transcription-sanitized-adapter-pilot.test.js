@@ -19,9 +19,11 @@ const {
   validateTranscriptionResult
 } = require('../src/core/transcription-contract');
 const {
+  createNetworkDenyProbe,
   createFakeTranscriptionProvider,
   createTranscriptionSanitizedAdapter,
-  metadata
+  metadata,
+  validateSyntheticProvider
 } = require('../src/adapters/transcription/transcription-sanitized-adapter');
 const {
   change,
@@ -51,6 +53,31 @@ function assertNoForbidden(value) {
   for (const field of FORBIDDEN_TRANSCRIPTION_FIELDS) {
     assert.equal(json.includes(`"${field}"`), false, `leaked forbidden field ${field}`);
   }
+}
+
+function invalidProvider(overrides = {}) {
+  let calls = 0;
+  return {
+    metadata: {
+      provider_kind: 'synthetic_test_double',
+      network_capable: false,
+      real_provider: false
+    },
+    async summarize() {
+      calls += 1;
+      return {
+        segments: [{ start_ms: 0, end_ms: 100, text: 'unsafe should not run' }],
+        text: 'unsafe should not run',
+        confidence: 0.5,
+        language_detected: 'pt-BR',
+        duration_ms: 100
+      };
+    },
+    calls() {
+      return calls;
+    },
+    ...overrides
+  };
 }
 
 test('transcription sanitized adapter pilot docs fixture and safe example config exist', () => {
@@ -147,39 +174,193 @@ test('adapter is isolated and dry-run uses only fake provider once', async () =>
   assert.equal(dryRun.status, 'transcription_mock_success');
   assert.equal(dryRun.executed, true);
   assert.equal(dryRun.real_provider_called, false);
+  assert.equal(dryRun.external_network_called, false);
+  assert.equal(dryRun.network_attempts, 0);
   assert.equal(dryRun.can_trigger_real_execution, false);
   assert.equal(provider.calls(), 1);
-  assert.equal((await adapter.simulate(transcriptionRequest({ transcription_id: 'transcription_pilot_fixture_002' }))).real_provider_called, false);
-  assert.equal(provider.calls(), 2);
   assert.equal(adapter.shutdown().ok, true);
   assertNoForbidden(dryRun);
+});
+
+test('adapter blocks injected providers without strict synthetic metadata before summarize', async () => {
+  const cases = [
+    invalidProvider({ metadata: undefined }),
+    invalidProvider({ metadata: { provider_kind: 'named_fake', network_capable: false, real_provider: false } }),
+    invalidProvider({ metadata: { provider_kind: 'synthetic_test_double', network_capable: true, real_provider: false } }),
+    invalidProvider({ metadata: { provider_kind: 'synthetic_test_double', network_capable: false, real_provider: true } }),
+    invalidProvider({ endpoint: 'https://provider.example/transcribe' }),
+    invalidProvider({ url: 'https://provider.example/transcribe' }),
+    invalidProvider({ token: 'never' }),
+    invalidProvider({ headers: { authorization: 'never' } })
+  ];
+
+  for (const provider of cases) {
+    const adapter = createTranscriptionSanitizedAdapter({ provider });
+    adapter.initialize();
+    const result = await adapter.dryRun(transcriptionRequest());
+    assert.equal(result.status, 'transcription_request_blocked');
+    assert.equal(result.error.blocked_reason, 'transcription_provider_not_synthetic');
+    assert.equal(result.executed, false);
+    assert.equal(result.fake_provider_called, false);
+    assert.equal(result.provider_call_count, 0);
+    assert.equal(result.real_provider_called, false);
+    assert.equal(result.external_network_called, false);
+    assert.equal(provider.calls(), 0);
+  }
+  assert.equal(validateSyntheticProvider(createFakeTranscriptionProvider()).valid, true);
+});
+
+test('request forbidden fields are blocked before sanitization and fake provider is not called', async () => {
+  const invalidRequests = [
+    { rawAudio: Buffer.from('audio') },
+    { binary: Buffer.from('audio') },
+    { audioUrl: 'https://example.invalid/audio.wav' },
+    { transcript_hint: 'A'.repeat(4096) },
+    { nested: { token: 'never' } }
+  ];
+  for (const override of invalidRequests) {
+    const provider = createFakeTranscriptionProvider();
+    const adapter = createTranscriptionSanitizedAdapter({ provider });
+    adapter.initialize();
+    const result = await adapter.dryRun(transcriptionRequest(override));
+    assert.equal(result.status, 'transcription_request_blocked');
+    assert.equal(result.executed, false);
+    assert.equal(result.fake_provider_called, false);
+    assert.equal(result.fake_provider_calls, 0);
+    assert.equal(result.provider_call_count, 0);
+    assert.equal(provider.calls(), 0);
+  }
+});
+
+test('raw result is validated before sanitization and unsafe output is blocked', async () => {
+  const cases = [
+    { secret: 'never', segments: [{ start_ms: 0, end_ms: 100, text: 'ok' }], text: 'ok', confidence: 0.9, language_detected: 'pt-BR', duration_ms: 100 },
+    { segments: [{ start_ms: 0, end_ms: 100, text: 'ok' }], text: 'https://example.invalid/result', confidence: 0.9, language_detected: 'pt-BR', duration_ms: 100 },
+    { segments: [{ start_ms: 0, end_ms: 100, text: 'ok' }], text: 'x'.repeat(5000), confidence: 0.9, language_detected: 'pt-BR', duration_ms: 100 }
+  ];
+  for (const rawResult of cases) {
+    const provider = createFakeTranscriptionProvider(rawResult);
+    const adapter = createTranscriptionSanitizedAdapter({ provider });
+    adapter.initialize();
+    const result = await adapter.dryRun(transcriptionRequest());
+    assert.equal(result.status, 'transcription_result_blocked');
+    assert.equal(result.executed, true);
+    assert.equal(result.fake_provider_called, true);
+    assert.equal(result.fake_provider_calls, 1);
+    assert.equal(result.real_provider_called, false);
+    assert.equal(result.external_network_called, false);
+    assert.equal(provider.calls(), 1);
+  }
+});
+
+test('segments reject unknown fields bad duration ordering overlap and confidence', () => {
+  const base = {
+    segments: [{ start_ms: 0, end_ms: 100, text: 'ok', confidence: 0.9, speaker_label: 'speaker_1' }],
+    text: 'ok',
+    confidence: 0.9,
+    language_detected: 'pt-BR',
+    duration_ms: 100
+  };
+  assert.equal(validateTranscriptionResult(base).valid, true);
+  assert.ok(validateTranscriptionResult({ ...base, segments: [{ ...base.segments[0], rawTranscript: 'never' }] }).errors.includes('segment_field_not_allowed::rawTranscript'));
+  assert.ok(validateTranscriptionResult({ ...base, segments: [{ start_ms: 0, end_ms: 101, text: 'ok' }] }).errors.includes('segment_outside_duration::0'));
+  assert.ok(validateTranscriptionResult({ ...base, segments: [{ start_ms: 50, end_ms: 100, text: 'first' }, { start_ms: 10, end_ms: 60, text: 'second' }] }).errors.includes('segment_overlap_or_out_of_order::1'));
+  assert.ok(validateTranscriptionResult({ ...base, segments: [{ start_ms: 0, end_ms: 50, text: 'first' }, { start_ms: 25, end_ms: 75, text: 'second' }] }).errors.includes('segment_overlap_or_out_of_order::1'));
+  assert.ok(validateTranscriptionResult({ ...base, segments: [{ ...base.segments[0], confidence: 2 }] }).errors.includes('segment_confidence_out_of_bounds::0'));
+});
+
+test('network probe derives external network fields and blocks dry-run if attempted', async () => {
+  const networkProbe = createNetworkDenyProbe();
+  const provider = createFakeTranscriptionProvider();
+  const adapter = createTranscriptionSanitizedAdapter({ provider, networkProbe });
+  adapter.initialize();
+  const success = await adapter.dryRun(transcriptionRequest());
+  assert.equal(success.network_attempts, 0);
+  assert.equal(success.external_network_called, false);
+
+  const blockedProbe = createNetworkDenyProbe();
+  const networkAwareProvider = createFakeTranscriptionProvider();
+  const wrapped = {
+    ...networkAwareProvider,
+    async summarize(request) {
+      blockedProbe.recordAttempt();
+      return networkAwareProvider.summarize(request);
+    }
+  };
+  const blockedAdapter = createTranscriptionSanitizedAdapter({ provider: wrapped, networkProbe: blockedProbe });
+  blockedAdapter.initialize();
+  const blocked = await blockedAdapter.dryRun(transcriptionRequest({ transcription_id: 'transcription_network_probe' }));
+  assert.equal(blocked.status, 'transcription_result_blocked');
+  assert.equal(blocked.network_attempts, 1);
+  assert.equal(blocked.external_network_called, true);
+  assert.equal(blocked.real_provider_called, false);
+});
+
+test('shutdown blocks dryRun and simulate without reinitializing adapter', async () => {
+  const provider = createFakeTranscriptionProvider();
+  const adapter = createTranscriptionSanitizedAdapter({ provider });
+  assert.equal(adapter.initialize().ok, true);
+  assert.equal(adapter.shutdown().ok, true);
+  assert.equal(adapter.initialize().ok, false);
+  const dryRun = await adapter.dryRun(transcriptionRequest());
+  const simulate = await adapter.simulate(transcriptionRequest({ transcription_id: 'transcription_after_shutdown' }));
+  assert.equal(dryRun.status, 'transcription_request_blocked');
+  assert.equal(dryRun.error.blocked_reason, 'transcription_adapter_shutdown');
+  assert.equal(simulate.status, 'transcription_request_blocked');
+  assert.equal(provider.calls(), 0);
+});
+
+test('adapter blocks concurrent dryRun while running', async () => {
+  let release;
+  let calls = 0;
+  const provider = {
+    metadata: { provider_kind: 'synthetic_test_double', network_capable: false, real_provider: false },
+    async summarize(request) {
+      calls += 1;
+      await new Promise((resolve) => { release = resolve; });
+      return {
+        segments: [{ start_ms: 0, end_ms: request.duration_ms, text: 'ok' }],
+        text: 'ok',
+        confidence: 0.9,
+        language_detected: 'pt-BR',
+        duration_ms: request.duration_ms
+      };
+    },
+    calls() {
+      return calls;
+    }
+  };
+  const adapter = createTranscriptionSanitizedAdapter({ provider });
+  adapter.initialize();
+  const first = adapter.dryRun(transcriptionRequest({ transcription_id: 'transcription_running_first' }));
+  const second = await adapter.dryRun(transcriptionRequest({ transcription_id: 'transcription_running_second' }));
+  assert.equal(second.status, 'transcription_request_blocked');
+  assert.equal(second.error.blocked_reason, 'transcription_adapter_already_running');
+  assert.equal(second.executed, false);
+  release();
+  const completed = await first;
+  assert.equal(completed.status, 'transcription_mock_success');
+  assert.equal(provider.calls(), 1);
 });
 
 test('pilot reuses configuration secret lifecycle readiness and audit components', async () => {
   const context = createPilotContext();
   assert.equal(context.configurationRegistry.getConfiguration(TRANSCRIPTION_CONFIGURATION_ID).configuration_status, 'descriptor_registered');
   assert.equal(context.secretReferenceRegistry.getSecretReference(TRANSCRIPTION_SECRET_REFERENCE_ID).status, 'reference_registered');
-  assert.equal(context.lifecycleRegistry.getConnector(TRANSCRIPTION_CONNECTOR_ID).lifecycle_state, 'readiness_passed');
+  assert.equal(context.lifecycleRegistry.getConnector(TRANSCRIPTION_CONNECTOR_ID).lifecycle_state, 'registered');
   assert.equal(validateProviderConfiguration(providerConfiguration(), { now: '2026-07-18T00:00:00.000Z' }).valid, true);
-  const readiness = evaluateProviderConfigurationReadiness(providerConfiguration({
-    configuration_status: 'validation_pending',
-    configuration_version: 4
-  }), {
-    now: '2026-07-18T00:00:00.000Z',
-    lifecycleRegistry: context.lifecycleRegistry,
-    adapterRegistry: context.adapterRegistry,
-    secretReferenceRegistry: context.secretReferenceRegistry,
-    secretResolver: context.secretResolver,
-    clock: () => '2026-07-18T00:00:00.000Z'
-  });
-  assert.equal(readiness.ready, true);
-  assert.equal(readiness.executed, false);
-  assert.equal(readiness.real_provider_called, false);
 
   const dryRun = await runTranscriptionSanitizedAdapterDryRun();
   assert.equal(dryRun.ok, true);
+  assert.equal(dryRun.lifecycle_registry_state.lifecycle_state, 'readiness_passed');
+  assert.equal(dryRun.lifecycle_probe.lifecycle_record.lifecycle_state, dryRun.lifecycle_registry_state.lifecycle_state);
+  assert.equal(dryRun.readiness.ready, true);
+  assert.equal(dryRun.readiness.executed, false);
+  assert.equal(dryRun.readiness.real_provider_called, false);
   assert.deepEqual(dryRun.configuration_transitions, ['reference_pending', 'reference_registered', 'validation_pending', 'structurally_ready']);
   assert.equal(dryRun.dry_run.provider_call_count, 1);
+  assert.equal(dryRun.fake_provider_calls, 1);
+  assert.equal(dryRun.network_attempts, 0);
   assert.equal(dryRun.external_network_called, false);
   assert.equal(dryRun.real_transcription_performed, false);
   assert.equal(dryRun.real_provider_called, false);
@@ -218,7 +399,13 @@ test('readiness blocks revoked secret and production-enabled lifecycle', () => {
   assert.equal(revokedReadiness.ready, false);
   assert.ok(revokedReadiness.blocking_reasons.includes('secret_reference_revoked'));
 
-  const productionContext = createPilotContext({ lifecycle: lifecycleRecord({ real_provider_enabled: true }) });
+  const productionContext = createPilotContext({
+    lifecycleRegistry: {
+      getConnector() {
+        return lifecycleRecord({ lifecycle_state: 'readiness_passed', lifecycle_version: 4, real_provider_enabled: true });
+      }
+    }
+  });
   const productionReadiness = evaluateProviderConfigurationReadiness(providerConfiguration({
     configuration_status: 'validation_pending',
     configuration_version: 4

@@ -26,6 +26,12 @@
     "duration_ms"
   ],
   "default_rules": {
+    "provider_kind": "synthetic_test_double",
+    "provider_network_capable": false,
+    "provider_real_provider": false,
+    "raw_request_validated_before_sanitize": true,
+    "raw_result_validated_before_sanitize": true,
+    "network_probe_required": true,
     "real_provider_calls_allowed": false,
     "real_transcription_allowed": false,
     "external_network_allowed_in_ci": false,
@@ -41,6 +47,12 @@
     "can_trigger_real_execution": false,
     "sanitized_output_only": true
   },
+  "dry_run_evidence_fields": [
+    "fake_provider_calls",
+    "network_attempts",
+    "external_network_called",
+    "real_provider_called"
+  ],
   "reused_components": [
     "provider-configuration-registry",
     "provider-secret-reference-registry",
@@ -66,6 +78,8 @@
     "fullTranscript",
     "audioUrl",
     "fileUrl",
-    "downloadUrl"
+    "downloadUrl",
+    "endpoint",
+    "url"
   ]
 }

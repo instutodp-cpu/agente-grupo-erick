@@ -28,6 +28,8 @@ const MAX_SEGMENTS = 20;
 const MAX_DURATION_MS = 30 * 60 * 1000;
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_BASE64_CHARS = 2048;
+const ALLOWED_SEGMENT_FIELDS = Object.freeze(['start_ms', 'end_ms', 'text', 'confidence', 'speaker_label']);
+const MAX_SPEAKER_LABEL_CHARS = 64;
 
 const FORBIDDEN_TRANSCRIPTION_FIELDS = uniqueSorted([
   'rawAudio',
@@ -44,6 +46,8 @@ const FORBIDDEN_TRANSCRIPTION_FIELDS = uniqueSorted([
   'authorization',
   'provider_token',
   'providerToken',
+  'endpoint',
+  'url',
   'provider_response_raw',
   'providerResponseRaw',
   'rawProviderResponse',
@@ -233,14 +237,29 @@ function validateTranscriptionResult(result) {
   if (!ALLOWED_LANGUAGES.includes(result.language_detected)) errors.push('language_detected_not_allowed');
   if (!Number.isInteger(result.duration_ms) || result.duration_ms < 0 || result.duration_ms > MAX_DURATION_MS) errors.push('duration_ms_out_of_bounds');
   if (Array.isArray(result.segments)) {
+    let previousEnd = 0;
     for (const [index, segment] of result.segments.entries()) {
       if (!isPlainObject(segment)) {
         errors.push(`segment_invalid::${index}`);
         continue;
       }
+      for (const key of Object.keys(segment)) {
+        if (!ALLOWED_SEGMENT_FIELDS.includes(key)) errors.push(`segment_field_not_allowed::${key}`);
+      }
       if (typeof segment.text !== 'string' || segment.text.trim() === '') errors.push(`segment_text_invalid::${index}`);
+      if (typeof segment.text === 'string' && segment.text.length > MAX_TEXT_CHARS) errors.push(`segment_text_too_large::${index}`);
       if (!Number.isInteger(segment.start_ms) || !Number.isInteger(segment.end_ms) || segment.start_ms < 0 || segment.end_ms < segment.start_ms) {
         errors.push(`segment_timing_invalid::${index}`);
+      } else {
+        if (segment.end_ms > result.duration_ms) errors.push(`segment_outside_duration::${index}`);
+        if (index > 0 && segment.start_ms < previousEnd) errors.push(`segment_overlap_or_out_of_order::${index}`);
+        previousEnd = segment.end_ms;
+      }
+      if (segment.confidence !== undefined && (typeof segment.confidence !== 'number' || segment.confidence < 0 || segment.confidence > 1)) {
+        errors.push(`segment_confidence_out_of_bounds::${index}`);
+      }
+      if (segment.speaker_label !== undefined && (!isNonEmptyString(segment.speaker_label) || segment.speaker_label.length > MAX_SPEAKER_LABEL_CHARS || findTranscriptionForbiddenFields(segment.speaker_label).length > 0)) {
+        errors.push(`segment_speaker_label_invalid::${index}`);
       }
     }
   }
@@ -279,6 +298,7 @@ module.exports = {
   ALLOWED_LANGUAGES,
   ALLOWED_MEDIA_TYPES,
   ALLOWED_RESULT_FIELDS,
+  ALLOWED_SEGMENT_FIELDS,
   FORBIDDEN_TRANSCRIPTION_FIELDS,
   MAX_BASE64_CHARS,
   MAX_DURATION_MS,

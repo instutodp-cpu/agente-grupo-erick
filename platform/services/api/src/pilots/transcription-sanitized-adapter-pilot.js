@@ -1,8 +1,8 @@
 'use strict';
 
 const { buildAdapterAuditEvent, sanitizeAdapterAuditEvent, validateAdapterAuditEvent } = require('../core/adapter-audit-event');
+const { createConnectorRuntimeRegistry } = require('../core/connector-runtime-registry');
 const { createReadOnlyAdapterRegistry } = require('../core/read-only-adapter-registry');
-const { applyLifecycleTransition } = require('../core/connector-lifecycle-state-machine');
 const { createProviderConfigurationRegistry } = require('../core/provider-configuration-registry');
 const { evaluateProviderConfigurationReadiness } = require('../core/provider-configuration-readiness');
 const { createProviderSecretReferenceRegistry } = require('../core/provider-secret-reference-registry');
@@ -18,6 +18,7 @@ const {
   sanitizeTranscriptionData
 } = require('../core/transcription-contract');
 const {
+  createNetworkDenyProbe,
   createFakeTranscriptionProvider,
   createTranscriptionSanitizedAdapter
 } = require('../adapters/transcription/transcription-sanitized-adapter');
@@ -39,7 +40,7 @@ function clock() {
 }
 
 function transcriptionRequest(overrides = {}) {
-  return sanitizeTranscriptionData({
+  return {
     transcription_id: 'transcription_pilot_fixture_001',
     provider_id: TRANSCRIPTION_PROVIDER_ID,
     adapter_id: TRANSCRIPTION_ADAPTER_ID,
@@ -56,7 +57,7 @@ function transcriptionRequest(overrides = {}) {
     executed: false,
     real_provider_called: false,
     ...overrides
-  });
+  };
 }
 
 function secretReference(overrides = {}) {
@@ -145,8 +146,8 @@ function lifecycleRecord(overrides = {}) {
     adapter_id: TRANSCRIPTION_ADAPTER_ID,
     adapter_kind: 'real_read_only_candidate',
     readiness_candidate_id: TRANSCRIPTION_READINESS_CANDIDATE_ID,
-    lifecycle_state: 'readiness_passed',
-    lifecycle_version: 4,
+    lifecycle_state: 'registered',
+    lifecycle_version: 1,
     workspace_types: ['corporate'],
     tenant_strategy: 'corporate_grupo_erick',
     domains: ['treinamento', 'atendimento', 'desenvolvimento'],
@@ -176,8 +177,11 @@ function lifecycleRecord(overrides = {}) {
 }
 
 function createPilotContext(overrides = {}) {
+  const networkProbe = overrides.networkProbe || createNetworkDenyProbe();
   const adapter = overrides.adapter || createTranscriptionSanitizedAdapter({
-    provider: overrides.provider || createFakeTranscriptionProvider(overrides.fakeResult)
+    provider: overrides.provider || createFakeTranscriptionProvider(overrides.fakeResult),
+    networkProbe,
+    provider_call_probe: overrides.provider_call_probe
   });
   const adapterRegistry = overrides.adapterRegistry || createReadOnlyAdapterRegistry([adapter]);
   const reference = overrides.reference || secretReference();
@@ -191,11 +195,7 @@ function createPilotContext(overrides = {}) {
     context: { now }
   });
   const lifecycle = overrides.lifecycle || lifecycleRecord();
-  const lifecycleRegistry = overrides.lifecycleRegistry || {
-    getConnector(connectorId) {
-      return connectorId === lifecycle.connector_id ? sanitizeTranscriptionData(lifecycle) : null;
-    }
-  };
+  const lifecycleRegistry = overrides.lifecycleRegistry || createConnectorRuntimeRegistry({ initialRecords: [lifecycle] });
   return Object.freeze({
     adapter,
     adapterRegistry,
@@ -203,6 +203,7 @@ function createPilotContext(overrides = {}) {
     configurationRegistry,
     lifecycle,
     lifecycleRegistry,
+    networkProbe,
     secretReferenceRegistry,
     secretResolver: overrides.secretResolver || createLocalTestSecretResolver({ now }),
     clock,
@@ -244,25 +245,36 @@ function readinessForLifecycle(record) {
   };
 }
 
-async function runTranscriptionSanitizedAdapterDryRun(input = {}, overrides = {}) {
-  const context = createPilotContext(overrides);
-  const registeredConfig = context.configurationRegistry.getConfiguration(TRANSCRIPTION_CONFIGURATION_ID);
-  const registeredReference = context.secretReferenceRegistry.getSecretReference(TRANSCRIPTION_SECRET_REFERENCE_ID);
-  const lifecycleProbe = applyLifecycleTransition(lifecycleRecord({ lifecycle_state: 'readiness_pending', lifecycle_version: 3 }), {
-    trace_id: 'trace_transcription_lifecycle',
-    transition_id: 'transition_transcription_ready',
+function lifecycleTransition(event, expectedVersion, suffix) {
+  return {
+    trace_id: `trace_transcription_lifecycle_${suffix}`,
+    transition_id: `transition_transcription_${suffix}`,
     connector_id: TRANSCRIPTION_CONNECTOR_ID,
-    transition_event: 'pass_readiness',
-    expected_version: 3,
+    transition_event: event,
+    expected_version: expectedVersion,
     actor_id: 'operator_transcription_fixture',
     actor_role: 'platform_operator',
     reason: 'transcription sanitized adapter readiness',
     requested_at: now,
-    evidence: { readiness_result: readinessForLifecycle(context.lifecycle) },
+    evidence: {},
     simulated: true,
     executed: false,
     real_provider_called: false
+  };
+}
+
+async function runTranscriptionSanitizedAdapterDryRun(input = {}, overrides = {}) {
+  const context = createPilotContext(overrides);
+  const registeredConfig = context.configurationRegistry.getConfiguration(TRANSCRIPTION_CONFIGURATION_ID);
+  const registeredReference = context.secretReferenceRegistry.getSecretReference(TRANSCRIPTION_SECRET_REFERENCE_ID);
+  const nominated = context.lifecycleRegistry.transitionConnector(lifecycleTransition('nominate_candidate', 1, 'nominate'), { adapterRegistry: context.adapterRegistry, clock });
+  const requestedReadiness = context.lifecycleRegistry.transitionConnector(lifecycleTransition('request_readiness_review', 2, 'request_readiness'), { adapterRegistry: context.adapterRegistry, clock });
+  const readinessEvidenceRecord = context.lifecycleRegistry.getConnector(TRANSCRIPTION_CONNECTOR_ID);
+  const lifecycleProbe = context.lifecycleRegistry.transitionConnector({
+    ...lifecycleTransition('pass_readiness', 3, 'pass_readiness'),
+    evidence: { readiness_result: readinessForLifecycle(readinessEvidenceRecord) }
   }, { adapterRegistry: context.adapterRegistry, clock });
+  const lifecycleReady = context.lifecycleRegistry.getConnector(TRANSCRIPTION_CONNECTOR_ID);
 
   const referencePending = context.configurationRegistry.applyConfigurationChange(change(TRANSCRIPTION_CONFIGURATION_ID, 'register_synthetic_reference', 1, 'reference_pending'), {}, { now, clock });
   const referenceRegistered = context.configurationRegistry.applyConfigurationChange(change(TRANSCRIPTION_CONFIGURATION_ID, 'register_synthetic_reference', 2, 'reference_registered'), {}, { now, clock });
@@ -292,6 +304,7 @@ async function runTranscriptionSanitizedAdapterDryRun(input = {}, overrides = {}
   });
 
   const request = transcriptionRequest(input);
+  context.adapter.initialize();
   const dryRun = await context.adapter.dryRun(request);
   const shutdown = context.adapter.shutdown();
   const audit = buildAdapterAuditEvent({
@@ -309,7 +322,11 @@ async function runTranscriptionSanitizedAdapterDryRun(input = {}, overrides = {}
   const passed = Boolean(
     registeredConfig &&
     registeredReference &&
+    nominated.applied === true &&
+    requestedReadiness.applied === true &&
     lifecycleProbe.applied === true &&
+    lifecycleReady &&
+    lifecycleReady.lifecycle_state === 'readiness_passed' &&
     referencePending.applied === true &&
     referenceRegistered.applied === true &&
     validationPending.applied === true &&
@@ -319,6 +336,7 @@ async function runTranscriptionSanitizedAdapterDryRun(input = {}, overrides = {}
     dryRun.executed === true &&
     dryRun.real_provider_called === false &&
     dryRun.provider_call_count === 1 &&
+    dryRun.network_attempts === 0 &&
     shutdown.ok === true &&
     auditValidation.valid === true
   );
@@ -328,6 +346,7 @@ async function runTranscriptionSanitizedAdapterDryRun(input = {}, overrides = {}
     status: passed ? 'transcription_pilot_dry_run_passed' : 'transcription_pilot_dry_run_blocked',
     lifecycle_states: TRANSCRIPTION_PILOT_LIFECYCLE_STATES,
     lifecycle_probe: lifecycleProbe,
+    lifecycle_registry_state: lifecycleReady,
     configuration_transitions: [
       referencePending.current_status,
       referenceRegistered.current_status,
@@ -342,8 +361,10 @@ async function runTranscriptionSanitizedAdapterDryRun(input = {}, overrides = {}
     simulated: true,
     executed: dryRun.executed === true,
     real_provider_called: false,
+    fake_provider_calls: dryRun.fake_provider_calls,
+    network_attempts: dryRun.network_attempts,
     can_trigger_real_execution: false,
-    external_network_called: false,
+    external_network_called: dryRun.network_attempts > 0,
     real_transcription_performed: false,
     production_enabled: false,
     error: passed ? null : buildSafeTranscriptionError('INTERNAL_ADAPTER_ERROR', 'transcription_pilot_dry_run_blocked')

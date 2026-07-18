@@ -60,9 +60,29 @@ This phase is fail-closed:
 - external network calls are not allowed in CI
 - no secret values are introduced
 
-The dry-run uses a fake provider object only. The fake provider proves the
-adapter path can sanitize output and emit audit evidence without contacting any
-external service.
+The dry-run uses a fake provider object only. Injected providers must carry an
+explicit synthetic contract:
+
+- `provider_kind: synthetic_test_double`
+- `network_capable: false`
+- `real_provider: false`
+- a `summarize()` function
+- a call probe
+- no endpoint, URL, token, headers, cookies, credentials or secret fields
+
+Providers that do not meet that contract are blocked before `summarize()` with
+`executed:false`, `real_provider_called:false`, `external_network_called:false`
+and `can_trigger_real_execution:false`.
+
+The adapter validates the raw request before sanitization, then passes only a
+sanitized copy to the fake provider. The fake provider returns a raw result;
+that raw result is validated for forbidden fields, segment boundaries, size and
+URLs before any sanitized response is built. Sanitization cannot turn an
+invalid request or result into success.
+
+The dry-run also uses a network deny probe. It exposes only counters, starts at
+zero, and fails the dry-run if any network attempt is recorded. The final
+evidence derives `external_network_called` from `network_attempts > 0`.
 
 ## Lifecycle And Readiness
 
@@ -76,7 +96,9 @@ The pilot documents these product-level states:
 - `production_blocked`
 
 Internally, it maps readiness to the existing Hermes Core lifecycle and
-configuration readiness mechanisms. A provider can only pass readiness when the
+configuration readiness mechanisms. The dry-run registers a connector in the
+real lifecycle registry, applies real lifecycle transitions, and uses that same
+updated registry for readiness. A provider can only pass readiness when the
 adapter is loaded, configuration is valid, the local synthetic secret reference
 is resolvable, lifecycle is eligible, the real provider is disabled and runtime
 remains disabled.
