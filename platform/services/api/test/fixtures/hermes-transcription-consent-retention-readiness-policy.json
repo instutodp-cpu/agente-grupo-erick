@@ -1,0 +1,130 @@
+{
+  "policy_name": "transcription_consent_retention_readiness_policy",
+  "reused_modules": [
+    "transcription-contract",
+    "transcription-sanitized-adapter",
+    "provider-configuration-registry",
+    "provider-secret-reference-registry",
+    "provider-secret-resolver",
+    "connector-runtime-registry",
+    "provider-configuration-readiness",
+    "read-only-adapter-registry",
+    "execution-policy",
+    "adapter-audit-event",
+    "tenant-workspace-isolation",
+    "external-provider-permission-overlay",
+    "integration-security-boundary",
+    "governance-check-report",
+    "external-provider-audit-cost-rate-limit",
+    "public-web-canary patterns"
+  ],
+  "default_rules": {
+    "simulated": true,
+    "executed": false,
+    "real_provider_called": false,
+    "external_network_called": false,
+    "can_trigger_real_execution": false,
+    "rollout_percentage": 0,
+    "production_blocked": true,
+    "feature_flag_enabled": false,
+    "runtime_integration_added": false,
+    "endpoint_added": false,
+    "message_integration_added": false,
+    "confirm_integration_added": false,
+    "upload_added": false,
+    "worker_added": false,
+    "scheduler_added": false,
+    "queue_added": false,
+    "storage_added": false,
+    "provider_real_enabled": false,
+    "secret_real_added": false,
+    "raw_media_retention_days": 0,
+    "legal_hold": false,
+    "operator_approval_single_use": true
+  },
+  "consent_statuses": [
+    "requested",
+    "granted",
+    "denied",
+    "expired",
+    "revoked"
+  ],
+  "allowed_consent_purposes": [
+    "training_summary",
+    "customer_service_review",
+    "internal_meeting_summary",
+    "development_test"
+  ],
+  "allowed_operator_approval_operations": [
+    "evaluate_transcription_candidate",
+    "simulate_transcription_readiness"
+  ],
+  "retention_limits": {
+    "metadata_retention_days_max": 90,
+    "transcript_retention_days_max": 30,
+    "raw_media_retention_days_required": 0
+  },
+  "budget_limits": {
+    "currency": "BRL",
+    "environment_allowed": [
+      "local_test",
+      "non_production"
+    ],
+    "rollout_percentage_required": 0,
+    "concurrent_request_limit_max": 1
+  },
+  "readiness_terminal_guarantees": {
+    "ready_for_real_execution": false,
+    "ready_for_production": false,
+    "verdict_when_satisfied": "READY_FOR_CONTROLLED_CANARY_REVIEW"
+  },
+  "synthetic_fixture_cases": [
+    "valid transcription candidate",
+    "missing consent",
+    "expired consent",
+    "revoked consent",
+    "cross-tenant consent",
+    "invalid retention policy",
+    "raw media retention greater than zero",
+    "unlimited budget",
+    "production candidate",
+    "rollout greater than zero",
+    "missing operator approval",
+    "self-approved request",
+    "expired approval",
+    "consumed approval",
+    "mismatched provider binding",
+    "secret value accidentally included",
+    "forbidden raw audio field",
+    "candidate ready only for controlled canary review"
+  ],
+  "forbidden_fields": [
+    "audio",
+    "raw_audio",
+    "audio_bytes",
+    "buffer",
+    "binary",
+    "blob",
+    "base64",
+    "waveform",
+    "raw_media",
+    "raw_transcript",
+    "raw_provider_response",
+    "provider_response",
+    "token",
+    "api_key",
+    "authorization",
+    "headers",
+    "cookie",
+    "password",
+    "secret",
+    "secret_value",
+    "credential",
+    "endpoint",
+    "provider_url",
+    "upload_url",
+    "storage_url",
+    "signed_url",
+    "presigned_url"
+  ]
+}
