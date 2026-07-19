@@ -1,0 +1,89 @@
+{
+  "pilot_name": "transcription_sanitized_adapter_pilot",
+  "lifecycle_states": [
+    "registered",
+    "configured",
+    "validated",
+    "ready",
+    "pilot_enabled",
+    "production_blocked"
+  ],
+  "required_contract_fields": [
+    "transcription_id",
+    "provider_id",
+    "adapter_id",
+    "media_type",
+    "language",
+    "duration_ms",
+    "size_bytes",
+    "created_at"
+  ],
+  "allowed_result_fields": [
+    "segments",
+    "text",
+    "confidence",
+    "language_detected",
+    "duration_ms"
+  ],
+  "default_rules": {
+    "provider_kind": "synthetic_test_double",
+    "provider_network_capable": false,
+    "provider_real_provider": false,
+    "raw_request_validated_before_sanitize": true,
+    "raw_result_validated_before_sanitize": true,
+    "network_probe_required": true,
+    "network_deny_harness_required": true,
+    "network_deny_harness_mutex": "process_local",
+    "network_deny_harness_restores_in_finally": true,
+    "network_block_error_code": "TRANSCRIPTION_NETWORK_ACCESS_BLOCKED",
+    "real_provider_calls_allowed": false,
+    "real_transcription_allowed": false,
+    "external_network_allowed_in_ci": false,
+    "production_enabled": false,
+    "endpoint_added": false,
+    "message_integration_added": false,
+    "confirm_integration_added": false,
+    "scheduler_added": false,
+    "background_worker_added": false,
+    "secrets_added": false,
+    "simulated": true,
+    "real_provider_called": false,
+    "can_trigger_real_execution": false,
+    "sanitized_output_only": true
+  },
+  "dry_run_evidence_fields": [
+    "fake_provider_calls",
+    "network_attempts",
+    "external_network_called",
+    "real_provider_called"
+  ],
+  "reused_components": [
+    "provider-configuration-registry",
+    "provider-secret-reference-registry",
+    "provider-secret-resolver",
+    "connector-lifecycle-state-machine",
+    "provider-configuration-readiness",
+    "read-only-adapter-registry",
+    "adapter-audit-event",
+    "public-web canary compatible safety flags"
+  ],
+  "forbidden_fields": [
+    "rawAudio",
+    "raw_audio",
+    "binary",
+    "waveform",
+    "credentials",
+    "request_headers",
+    "headers",
+    "cookies",
+    "provider_token",
+    "provider_response_raw",
+    "rawTranscript",
+    "fullTranscript",
+    "audioUrl",
+    "fileUrl",
+    "downloadUrl",
+    "endpoint",
+    "url"
+  ]
+}
