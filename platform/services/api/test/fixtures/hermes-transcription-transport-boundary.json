@@ -1,0 +1,43 @@
+{
+  "transport_contract_id": "transport_contract_deepgram_future_v1",
+  "contract_version": "transcription_transport_contract_v1",
+  "transport_version": 1,
+  "validator_version": "transcription_transport_validator_v1",
+  "provider_slug": "deepgram",
+  "transport_type": "http_future",
+  "transport_state": "BLOCKED",
+  "review_phase": "draft_review",
+  "transport_policy": {
+    "open_socket_blocked": true,
+    "open_connection_blocked": true,
+    "resolve_dns_blocked": true,
+    "create_client_blocked": true,
+    "create_session_blocked": true,
+    "create_channel_blocked": true,
+    "retry_real": false,
+    "transport_simulated": true,
+    "network": false,
+    "connected": false
+  },
+  "transport_readiness": {
+    "readiness_status": "NOT_READY",
+    "ready_for_network": false,
+    "ready_for_provider": false,
+    "ready_for_production": false
+  },
+  "environment": "non_production",
+  "rollout_percentage": 0,
+  "runtime_enabled": false,
+  "provider_enabled": false,
+  "network_enabled": false,
+  "secret_resolved": false,
+  "simulated": true,
+  "executed": false,
+  "real_provider_called": false,
+  "external_network_called": false,
+  "can_trigger_real_execution": false,
+  "production_blocked": true,
+  "provider_runtime_enabled": false,
+  "provider_selected_for_execution": false,
+  "transport_enabled": false
+}
