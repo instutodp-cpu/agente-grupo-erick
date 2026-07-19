@@ -18,7 +18,10 @@ const {
   validateProviderEvaluationCriteria
 } = require('../src/core/transcription-provider-evaluation-criteria');
 const { scoreTranscriptionProviderCandidate } = require('../src/core/transcription-provider-scoring');
-const { buildCompatibilityMatrix } = require('../src/core/transcription-provider-compatibility-matrix');
+const {
+  buildCompatibilityMatrix,
+  validateTranscriptionProviderCompatibilityMatrix
+} = require('../src/core/transcription-provider-compatibility-matrix');
 const { buildRiskRecord, summarizeProviderRisks, validateProviderRisk } = require('../src/core/transcription-provider-risk-register');
 const { evaluateTranscriptionProviderSelection } = require('../src/core/transcription-provider-selection-policy');
 const { buildTranscriptionProviderSelectionReport, PROHIBITED_STEPS } = require('../src/core/transcription-provider-selection-report');
@@ -60,7 +63,7 @@ function matrix(overrides = {}) {
     candidates: dataset.candidates,
     criteria: TRANSCRIPTION_PROVIDER_CRITERIA,
     risks: dataset.risks,
-    context: { now },
+    context: { now, dataset_version: dataset.dataset_version, criteria_version: dataset.criteria_version, evaluation_expires_at: dataset.evaluation_expires_at },
     ...overrides
   });
 }
@@ -76,6 +79,18 @@ function selection(overrides = {}) {
     production_blocked: true,
     ...overrides
   }, { now });
+}
+
+function assertNotRecommendedForInvalidCandidate(overrides, reason, expectedStatus = 'INELIGIBLE') {
+  const built = matrix({ candidates: [candidate('openai', overrides)], risks: [] });
+  const row = built.rows[0];
+  assert.equal(row.compatibility_status, expectedStatus);
+  assert.equal(row.candidate_contract_valid, false);
+  assert.equal(row.scoring_valid, false);
+  assertBlocks(row.candidate_validation_errors, reason);
+  assertBlocks(row.blockers, reason);
+  assert.notEqual(row.compatibility_status, 'RECOMMENDED_FOR_CONTRACT_REVIEW');
+  assert.notEqual(row.compatibility_status, 'FALLBACK_CANDIDATE');
 }
 
 function assertSafe(result) {
@@ -269,6 +284,47 @@ test('compatibility matrix never emits execution statuses', () => {
   for (const row of matrix().rows) assert.equal(forbidden.includes(row.compatibility_status), false);
 });
 
+test('compatibility matrix propagates invalid candidate contract errors fail closed', () => {
+  assertNotRecommendedForInvalidCandidate({ evaluation_expires_at: expired }, 'evaluation_expired');
+  assertNotRecommendedForInvalidCandidate({ candidate_version: 0 }, 'candidate_version_invalid');
+  assertNotRecommendedForInvalidCandidate({ evaluation_version: 0 }, 'evaluation_version_invalid');
+  assertNotRecommendedForInvalidCandidate({ rollout_percentage: 1 }, 'rollout_percentage_must_be_zero');
+  assertNotRecommendedForInvalidCandidate({ production_blocked: false }, 'production_blocked_must_be_true');
+  assertNotRecommendedForInvalidCandidate({ provider_runtime_enabled: true }, 'provider_runtime_enabled_must_be_false');
+  assertNotRecommendedForInvalidCandidate({ provider_selected_for_execution: true }, 'provider_selected_for_execution_must_be_false');
+  assertNotRecommendedForInvalidCandidate({ external_network_called: true }, 'external_network_called_must_be_false');
+  assertNotRecommendedForInvalidCandidate({ operational_endpoint: 'provider-runtime' }, 'operational_endpoint_blocked');
+  assertNotRecommendedForInvalidCandidate({ supported_languages: ['pt-BR', 'en-US', 'pt-BR'] }, 'supported_languages_must_be_sorted_unique');
+  assertNotRecommendedForInvalidCandidate({ source_references: ['https://example.invalid/document'] }, 'unexpected_url::source_references[0]');
+});
+
+test('compatibility matrix keeps draft incomplete and rejected candidates out of eligible ranking', () => {
+  const draft = matrix({ candidates: [candidate('openai', { evaluation_status: 'draft', estimated_cost_per_minute_minor: 0 }), candidate('aws_transcribe')], risks: [] });
+  const draftRow = draft.rows.find((row) => row.provider_slug === 'openai');
+  assert.equal(draftRow.compatibility_status, 'INCOMPLETE');
+  assert.equal(draft.rows.some((row) => row.provider_slug === 'openai' && ['RECOMMENDED_FOR_CONTRACT_REVIEW', 'FALLBACK_CANDIDATE'].includes(row.compatibility_status)), false);
+
+  const incomplete = matrix({ candidates: [candidate('openai', { evaluation_status: 'incomplete' }), candidate('aws_transcribe')], risks: [] });
+  assert.notEqual(incomplete.rows.find((row) => row.provider_slug === 'openai').compatibility_status, 'FALLBACK_CANDIDATE');
+
+  const rejected = matrix({ candidates: [candidate('openai', { evaluation_status: 'rejected' }), candidate('aws_transcribe')], risks: [] });
+  assert.equal(rejected.rows.find((row) => row.provider_slug === 'openai').compatibility_status, 'REJECTED');
+  assert.notEqual(rejected.rows.find((row) => row.provider_slug === 'openai').compatibility_status, 'FALLBACK_CANDIDATE');
+
+  const recommended = draft.rows.filter((row) => ['RECOMMENDED_FOR_CONTRACT_REVIEW', 'FALLBACK_CANDIDATE'].includes(row.compatibility_status));
+  assert.ok(recommended.every((row) => row.candidate_contract_valid === true && row.scoring_valid === true && ['evaluable', 'recommended_for_contract_review'].includes(row.support_status)));
+});
+
+test('compatibility matrix validator blocks partial and forged snapshots', () => {
+  assertBlocks(validateTranscriptionProviderCompatibilityMatrix({ rows: [] }, { now, dataset_version: dataset.dataset_version, criteria_version: dataset.criteria_version }).errors, 'matrix_id_invalid');
+  const forged = deepClone(matrix());
+  forged.rows[0].normalized_score = 100;
+  forged.rows[0].provider_slug = 'unknown_provider';
+  forged.rows[0].compatibility_status = 'READY_FOR_EXECUTION';
+  assertBlocks(validateTranscriptionProviderCompatibilityMatrix(forged, { now, dataset_version: dataset.dataset_version, criteria_version: dataset.criteria_version }).errors, 'row_provider_slug_unknown::unknown_provider');
+  assertBlocks(validateTranscriptionProviderCompatibilityMatrix(forged, { now, dataset_version: dataset.dataset_version, criteria_version: dataset.criteria_version }).errors, 'row_compatibility_status_unknown::READY_FOR_EXECUTION');
+});
+
 test('risk register accepts low medium high and critical risk records', () => {
   for (const severity of ['low', 'medium', 'high', 'critical']) {
     const record = buildRiskRecord(risk({ severity, mitigation: severity === 'high' ? 'Mitigated in review.' : 'Documented mitigation.', blocks_recommendation: severity === 'critical' }));
@@ -305,24 +361,104 @@ test('selection policy identifies primary and fallback only for contract review'
   assert.equal(selected.selection_decision, 'PRIMARY_AND_FALLBACK_IDENTIFIED');
   assert.ok(selected.recommended_primary_for_contract_review);
   assert.ok(selected.recommended_fallback_for_contract_review);
+  assert.equal(selected.score_delta_satisfied, true);
   assert.equal(selected.provider_selected_for_execution, false);
   assertSafe(selected);
 });
 
 test('selection policy returns no provider eligible when all rows are ineligible', () => {
-  const selected = selection({ matrix: { rows: [{ provider_slug: 'openai', compatibility_status: 'INELIGIBLE' }] } });
+  const selected = selection({ matrix: matrix({ candidates: [candidate('openai', { supports_pt_br: false })], risks: [] }) });
   assert.equal(selected.selection_decision, 'NO_PROVIDER_ELIGIBLE');
 });
 
 test('selection policy returns evidence incomplete for incomplete rows or expired dataset', () => {
-  assert.equal(selection({ matrix: { rows: [{ provider_slug: 'openai', compatibility_status: 'INCOMPLETE' }] } }).selection_decision, 'EVIDENCE_INCOMPLETE');
+  assert.equal(selection({ matrix: matrix({ candidates: [candidate('assemblyai')], risks: [] }) }).selection_decision, 'EVIDENCE_INCOMPLETE');
   assert.equal(selection({ evaluation_expires_at: expired }).selection_decision, 'EVIDENCE_INCOMPLETE');
 });
 
 test('selection policy requires manual review for low score critical risk and bad rollout', () => {
-  assert.equal(selection({ matrix: { rows: [{ provider_slug: 'openai', compatibility_status: 'RECOMMENDED_FOR_CONTRACT_REVIEW', normalized_score: 10, risks: [] }] } }).selection_decision, 'MANUAL_REVIEW_REQUIRED');
-  assert.equal(selection({ matrix: { rows: [{ provider_slug: 'openai', compatibility_status: 'RECOMMENDED_FOR_CONTRACT_REVIEW', normalized_score: 90, risks: [{ severity: 'critical', blocks_recommendation: true }] }] } }).selection_decision, 'MANUAL_REVIEW_REQUIRED');
+  assert.equal(selection({ minimum_score: 101 }).selection_decision, 'MANUAL_REVIEW_REQUIRED');
+  assert.equal(selection({ matrix: matrix({ risks: [risk({ risk_id: 'risk_deepgram_critical', provider_candidate_id: candidate('deepgram').provider_candidate_id, severity: 'critical', blocks_recommendation: true })] }) }).selection_decision, 'MANUAL_REVIEW_REQUIRED');
   assertBlocks(selection({ rollout_percentage: 1 }).blockers, 'rollout_percentage_must_be_zero');
+});
+
+test('selection policy blocks partial and forged matrices before trusting recommendations', () => {
+  assertBlocks(selection({ matrix: { rows: [{ provider_slug: 'openai', compatibility_status: 'RECOMMENDED_FOR_CONTRACT_REVIEW', normalized_score: 100 }] } }).blockers, 'matrix_id_invalid');
+  const forged = deepClone(matrix());
+  const primaryIndex = forged.rows.findIndex((row) => row.compatibility_status === 'RECOMMENDED_FOR_CONTRACT_REVIEW');
+  forged.rows[primaryIndex].candidate_contract_valid = false;
+  forged.rows[primaryIndex].blockers = [];
+  assert.equal(selection({ matrix: forged }).selection_decision, 'MANUAL_REVIEW_REQUIRED');
+  assertBlocks(selection({ matrix: forged }).blockers, 'recommended_candidate_contract_invalid');
+});
+
+test('selection policy validates forged status provider scores duplicates versions and safety flags', () => {
+  const unknownStatus = deepClone(matrix());
+  unknownStatus.rows[0].compatibility_status = 'READY_FOR_EXECUTION';
+  assertBlocks(selection({ matrix: unknownStatus }).blockers, 'row_compatibility_status_unknown::READY_FOR_EXECUTION');
+
+  const unknownProvider = deepClone(matrix());
+  unknownProvider.rows[0].provider_slug = 'unknown_provider';
+  assertBlocks(selection({ matrix: unknownProvider }).blockers, 'row_provider_slug_unknown::unknown_provider');
+
+  const badScore = deepClone(matrix());
+  badScore.rows[0].normalized_score = NaN;
+  assertBlocks(selection({ matrix: badScore }).blockers, 'normalized_score_not_finite');
+  badScore.rows[0].normalized_score = Infinity;
+  assertBlocks(selection({ matrix: badScore }).blockers, 'normalized_score_not_finite');
+
+  const duplicate = deepClone(matrix());
+  duplicate.rows[1].provider_slug = duplicate.rows[0].provider_slug;
+  assertBlocks(selection({ matrix: duplicate }).blockers, 'duplicate_provider_slug');
+
+  const versionMismatch = deepClone(matrix());
+  versionMismatch.criteria_version = 'criteria_other';
+  assertBlocks(selection({ matrix: versionMismatch, criteria_version: dataset.criteria_version }).blockers, 'matrix_criteria_version_mismatch');
+  versionMismatch.criteria_version = dataset.criteria_version;
+  versionMismatch.dataset_version = 'dataset_other';
+  assertBlocks(selection({ matrix: versionMismatch, dataset_version: dataset.dataset_version }).blockers, 'matrix_dataset_version_mismatch');
+
+  const unsafe = deepClone(matrix());
+  unsafe.external_network_called = true;
+  assertBlocks(selection({ matrix: unsafe }).blockers, 'matrix_external_network_called_must_be_false');
+});
+
+test('selection policy blocks duplicate recommendations and malformed primary fallback rows', () => {
+  const twoPrimary = deepClone(matrix());
+  const fallbackIndex = twoPrimary.rows.findIndex((row) => row.compatibility_status === 'FALLBACK_CANDIDATE');
+  twoPrimary.rows[fallbackIndex].compatibility_status = 'RECOMMENDED_FOR_CONTRACT_REVIEW';
+  assertBlocks(selection({ matrix: twoPrimary }).blockers, 'multiple_primary_recommendations');
+
+  const fallbackOnly = deepClone(matrix());
+  const primaryIndex = fallbackOnly.rows.findIndex((row) => row.compatibility_status === 'RECOMMENDED_FOR_CONTRACT_REVIEW');
+  fallbackOnly.rows[primaryIndex].compatibility_status = 'COMPATIBLE_FOR_DOCUMENT_REVIEW';
+  assertBlocks(selection({ matrix: fallbackOnly }).blockers, 'fallback_without_primary');
+
+  const mandatoryFailure = deepClone(matrix());
+  const mandatoryPrimaryIndex = mandatoryFailure.rows.findIndex((row) => row.compatibility_status === 'RECOMMENDED_FOR_CONTRACT_REVIEW');
+  mandatoryFailure.rows[mandatoryPrimaryIndex].mandatory_requirements_failed = ['mandatory::supports_pt_br'];
+  assertBlocks(selection({ matrix: mandatoryFailure }).blockers, 'recommended_mandatory_failures_present');
+
+  const missingEvidence = deepClone(matrix());
+  const missingPrimaryIndex = missingEvidence.rows.findIndex((row) => row.compatibility_status === 'RECOMMENDED_FOR_CONTRACT_REVIEW');
+  missingEvidence.rows[missingPrimaryIndex].missing_evidence = ['candidate_evidence_incomplete'];
+  assertBlocks(selection({ matrix: missingEvidence }).blockers, 'recommended_missing_evidence_present');
+});
+
+test('selection policy applies deterministic minimum primary fallback score delta', () => {
+  assert.equal(selection({ minimum_primary_fallback_score_delta: 1 }).selection_decision, 'PRIMARY_AND_FALLBACK_IDENTIFIED');
+  const insufficient = selection({ minimum_primary_fallback_score_delta: 2 });
+  assert.equal(insufficient.selection_decision, 'MANUAL_REVIEW_REQUIRED');
+  assert.equal(insufficient.score_delta_satisfied, false);
+  assertBlocks(insufficient.blockers, 'primary_fallback_score_delta_insufficient');
+
+  const tied = selection({ matrix: matrix({ candidates: [candidate('deepgram'), candidate('google_cloud_speech', { idempotency_supported: true })], risks: [] }) });
+  assert.equal(tied.selection_decision, 'MANUAL_REVIEW_REQUIRED');
+  assert.equal(tied.primary_fallback_score_delta, 0);
+
+  for (const value of [-1, NaN, Infinity, 101]) {
+    assertBlocks(selection({ minimum_primary_fallback_score_delta: value }).blockers, 'minimum_primary_fallback_score_delta_invalid');
+  }
 });
 
 test('selection policy handles ties deterministically through matrix ranking', () => {
@@ -364,8 +500,9 @@ test('selection report preserves absence of provider runtime network and product
 });
 
 test('selection report defaults to no next step when no provider is eligible', () => {
-  const selected = evaluateTranscriptionProviderSelection({ criteria: TRANSCRIPTION_PROVIDER_CRITERIA, matrix: { rows: [{ provider_slug: 'openai', compatibility_status: 'INELIGIBLE' }] }, evaluation_expires_at: dataset.evaluation_expires_at, rollout_percentage: 0, production_blocked: true }, { now });
-  const report = buildTranscriptionProviderSelectionReport({ selection: selected, matrix: { rows: [] } }, { now });
+  const ineligibleMatrix = matrix({ candidates: [candidate('openai', { supports_pt_br: false })], risks: [] });
+  const selected = evaluateTranscriptionProviderSelection({ criteria: TRANSCRIPTION_PROVIDER_CRITERIA, matrix: ineligibleMatrix, evaluation_expires_at: dataset.evaluation_expires_at, rollout_percentage: 0, production_blocked: true }, { now });
+  const report = buildTranscriptionProviderSelectionReport({ selection: selected, matrix: ineligibleMatrix }, { now });
   assert.equal(report.next_allowed_step, 'no_next_step');
 });
 

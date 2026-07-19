@@ -94,6 +94,8 @@ Todos os resultados preservam:
 - `provider_runtime_enabled: false`
 - `provider_selected_for_execution: false`
 
+The default minimum primary/fallback score delta is `1`. When scores are tied, non-finite, negative, above 100, or below the configured delta, the decision is `MANUAL_REVIEW_REQUIRED` and no strong winner is inferred.
+
 ## Critérios para PR #70
 
 A próxima PR só pode criar um contrato de provider escolhido após revisão legal, segurança, custo e evidência documental atualizada. Ainda assim, qualquer integração real exigirá nova aprovação explícita e não é autorizada por esta matriz.
