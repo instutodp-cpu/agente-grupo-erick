@@ -8,6 +8,7 @@ const {
   safeTransportResult,
   validateTranscriptionTransportContract
 } = require('./transcription-transport-contract');
+const { transitionTranscriptionTransportLifecycle } = require('./transcription-transport-lifecycle');
 
 function cloneFrozen(value) {
   return deepFreeze(deepClone(sanitizeTranscriptionData(value)));
@@ -45,7 +46,8 @@ function createTranscriptionTransportRegistry({ historyLimit = 20 } = {}) {
       transport_contract_id: id,
       transport_version: record.transport_version,
       provider_slug: record.provider_slug,
-      transport_state: record.transport_state
+      transport_state: record.transport_state,
+      review_phase: record.review_phase
     }].slice(-historyLimit));
     return safeTransportResult({ ok: true, transport_contract_id: id, transport_version: record.transport_version });
   }
@@ -54,11 +56,30 @@ function createTranscriptionTransportRegistry({ historyLimit = 20 } = {}) {
     const errors = [];
     if (!transition.transition_id) errors.push('transition_id_required');
     if (!transition.transport_contract_id) errors.push('transport_contract_id_required');
-    if (!records.has(transition.transport_contract_id)) errors.push('transport_contract_not_found');
+    const current = records.get(transition.transport_contract_id);
+    if (!current) errors.push('transport_contract_not_found');
     if (transition.transition_id && transitions.has(transition.transition_id)) errors.push('transport_transition_replay');
+    if (current) {
+      const lifecycle = transitionTranscriptionTransportLifecycle(current, transition);
+      if (!lifecycle.ok) errors.push(...lifecycle.errors);
+    }
     if (errors.length > 0) return safeTransportResult({ ok: false, errors: uniqueSorted(errors) });
     transitions.add(transition.transition_id);
-    return safeTransportResult({ ok: true, transition_id: transition.transition_id });
+    const storedTransition = cloneFrozen({
+      transition_id: transition.transition_id,
+      transport_contract_id: transition.transport_contract_id,
+      provider_slug: transition.provider_slug,
+      contract_version: transition.contract_version,
+      validator_version: transition.validator_version,
+      current_version: transition.current_version,
+      expected_version: transition.expected_version,
+      transport_state: 'BLOCKED',
+      from_state: transition.from_state,
+      to_state: transition.to_state,
+      review_phase: transition.review_phase
+    });
+    history.set(transition.provider_slug, [...(history.get(transition.provider_slug) || []), storedTransition].slice(-historyLimit));
+    return safeTransportResult({ ok: true, transition_id: transition.transition_id, transport_state: 'BLOCKED', review_phase: transition.review_phase });
   }
 
   return Object.freeze({
@@ -69,6 +90,9 @@ function createTranscriptionTransportRegistry({ historyLimit = 20 } = {}) {
     },
     getTransportHistory(providerSlug) {
       return cloneFrozen(history.get(providerSlug) || []);
+    },
+    getTransitionHistory(providerSlug) {
+      return cloneFrozen((history.get(providerSlug) || []).filter((entry) => entry.transition_id));
     }
   });
 }

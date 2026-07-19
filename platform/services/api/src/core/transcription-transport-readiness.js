@@ -2,7 +2,11 @@
 
 const { sanitizeTranscriptionData } = require('./transcription-contract');
 const { uniqueSorted } = require('./read-only-adapter-contract');
-const { deepFreeze, TRANSPORT_SAFE_FLAGS } = require('./transcription-transport-contract');
+const {
+  deepFreeze,
+  TRANSPORT_SAFE_FLAGS,
+  validateTranscriptionTransportMockResult
+} = require('./transcription-transport-contract');
 const { validateTranscriptionTransportBoundary } = require('./transcription-transport-validator');
 
 const TRANSPORT_READINESS_DECISIONS = Object.freeze([
@@ -17,9 +21,10 @@ function evaluateTranscriptionTransportReadiness(input = {}, context = {}) {
   const validation = validateTranscriptionTransportBoundary(input.contract, context);
   if (validation.valid) satisfied.push('transport_boundary_valid');
   else blockers.push(...validation.errors);
-  if (input.mock && input.mock.transport_simulated === true && input.mock.network === false && input.mock.connected === false) satisfied.push('transport_mock_safe');
-  else blockers.push('transport_mock_safe_required');
-  if (input.lifecycle_state === 'blocked') satisfied.push('transport_lifecycle_blocked');
+  const mockValidation = validateTranscriptionTransportMockResult(input.mock, input.contract);
+  if (mockValidation.valid) satisfied.push('transport_mock_official_valid');
+  else blockers.push(...mockValidation.errors.map((error) => `transport_mock::${error}`));
+  if (input.lifecycle_state === 'BLOCKED') satisfied.push('transport_lifecycle_blocked');
   else blockers.push('transport_lifecycle_must_be_blocked');
 
   let readiness = 'NOT_READY';

@@ -1,9 +1,12 @@
 {
   "transport_contract_id": "transport_contract_deepgram_future_v1",
+  "contract_version": "transcription_transport_contract_v1",
   "transport_version": 1,
+  "validator_version": "transcription_transport_validator_v1",
   "provider_slug": "deepgram",
   "transport_type": "http_future",
-  "transport_state": "blocked",
+  "transport_state": "BLOCKED",
+  "review_phase": "draft_review",
   "transport_policy": {
     "open_socket_blocked": true,
     "open_connection_blocked": true,

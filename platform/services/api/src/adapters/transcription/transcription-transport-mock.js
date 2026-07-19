@@ -2,7 +2,11 @@
 
 const { deepClone } = require('../../core/transcription-contract');
 const { validateTranscriptionTransportBoundary } = require('../../core/transcription-transport-validator');
-const { validateTranscriptionTransportContract, safeTransportResult } = require('../../core/transcription-transport-contract');
+const {
+  buildTranscriptionTransportMockResult,
+  validateTranscriptionTransportContract,
+  safeTransportResult
+} = require('../../core/transcription-transport-contract');
 const { validateTranscriptionTransportPolicy } = require('../../core/transcription-transport-policy');
 const { buildTranscriptionTransportMetadata } = require('../../core/transcription-transport-metadata');
 
@@ -41,6 +45,9 @@ function createTranscriptionTransportMock({ contract } = {}) {
     }
     return safeTransportResult({
       status: 'transport_mock_connect_simulated',
+      mock_result: buildTranscriptionTransportMockResult(raw, {
+        generated_at: context.now || new Date(0).toISOString()
+      }),
       transport_contract_id: raw.transport_contract_id,
       provider_slug: raw.provider_slug,
       transport_type: raw.transport_type,

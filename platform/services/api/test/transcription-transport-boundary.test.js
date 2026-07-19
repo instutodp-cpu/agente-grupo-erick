@@ -7,7 +7,11 @@ const test = require('node:test');
 
 const { deepClone, findTranscriptionForbiddenFields } = require('../src/core/transcription-contract');
 const {
+  TRANSPORT_REVIEW_PHASES,
+  buildTranscriptionTransportMockResult,
   normalizeTranscriptionTransportContract,
+  signTransportMockResult,
+  validateTranscriptionTransportMockResult,
   validateTranscriptionTransportContract
 } = require('../src/core/transcription-transport-contract');
 const {
@@ -56,7 +60,7 @@ test('transport boundary docs and fixture exist', () => {
 
 test('transport fixture is synthetic blocked and has no forbidden fields', () => {
   assert.equal(findTranscriptionForbiddenFields(fixture).length, 0);
-  assert.equal(fixture.transport_state, 'blocked');
+  assert.equal(fixture.transport_state, 'BLOCKED');
   assert.equal(fixture.rollout_percentage, 0);
   assert.equal(fixture.production_blocked, true);
 });
@@ -71,7 +75,8 @@ test('transport contract accepts blocked future transport contract', () => {
   ['invalid version', transport({ transport_version: 0 }), 'transport_version_invalid'],
   ['unknown provider', transport({ provider_slug: 'unknown_provider' }), 'provider_slug_not_allowed::unknown_provider'],
   ['invalid type', transport({ transport_type: 'smtp_future' }), 'transport_type_not_allowed::smtp_future'],
-  ['not blocked state', transport({ transport_state: 'mocked' }), 'transport_state_must_be_blocked'],
+  ['not blocked state', transport({ transport_state: 'mocked' }), 'transport_state_not_allowed::mocked'],
+  ['invalid review phase', transport({ review_phase: 'execution_review' }), 'review_phase_not_allowed::execution_review'],
   ['production', transport({ environment: 'production' }), 'environment_not_allowed'],
   ['rollout invalid', transport({ rollout_percentage: 1 }), 'rollout_percentage_must_be_0'],
   ['provider enabled', transport({ provider_enabled: true }), 'provider_enabled_must_be_false'],
@@ -172,6 +177,7 @@ test('transport mock metadata validate connect disconnect and health never conne
   assert.equal(connected.network, false);
   assert.equal(connected.connected, false);
   assert.equal(connected.status, 'transport_mock_connect_simulated');
+  assert.equal(validateTranscriptionTransportMockResult(connected.mock_result, transport()).valid, true);
   assert.equal(mock.simulateDisconnect().connected, false);
   assert.equal(mock.health().status, 'transport_mock_healthy');
   assertSafe(connected);
@@ -197,10 +203,11 @@ test('transport mock does not mutate input and returns immutable output', () => 
 
 test('transport readiness never releases network provider or production', () => {
   const mock = createTranscriptionTransportMock({ contract: transport() });
+  const connect = mock.simulateConnect();
   const readiness = evaluateTranscriptionTransportReadiness({
     contract: transport(),
-    mock: mock.simulateConnect(),
-    lifecycle_state: 'blocked'
+    mock: connect.mock_result,
+    lifecycle_state: 'BLOCKED'
   }, { now: '2026-07-19T00:00:00.000Z' });
   assert.equal(readiness.readiness_decision, 'READY_FOR_PROVIDER_ADAPTER_REVIEW');
   assert.equal(readiness.ready_for_network, false);
@@ -212,22 +219,77 @@ test('transport readiness never releases network provider or production', () => 
 test('transport readiness blocks missing mock and unblocked lifecycle', () => {
   const readiness = evaluateTranscriptionTransportReadiness({ contract: transport(), lifecycle_state: 'mocked' });
   assert.equal(readiness.readiness_decision, 'READY_FOR_TRANSPORT_REVIEW');
-  assertBlocks(readiness.blocking_requirements, 'transport_mock_safe_required');
+  assertBlocks(readiness.blocking_requirements, 'transport_mock::transport_mock_result_must_be_object');
   assertBlocks(readiness.blocking_requirements, 'transport_lifecycle_must_be_blocked');
 });
 
-test('transport lifecycle allows only blocked review transitions', () => {
-  const first = transitionTranscriptionTransportLifecycle({ transport_contract_id: 'tc1', transport_state: 'absent', transport_version: 1 }, { transition_id: 'tr1', expected_version: 1, to_state: 'mocked' });
+test('transport readiness rejects forged incomplete and tampered mock results', () => {
+  const official = buildTranscriptionTransportMockResult(transport());
+  assert.equal(validateTranscriptionTransportMockResult(official, transport()).valid, true);
+  assertBlocks(validateTranscriptionTransportMockResult({ transport_simulated: true, network: false, connected: false }, transport()).errors, 'missing_transport_contract_id');
+  assertBlocks(validateTranscriptionTransportMockResult({ ...official, extra: 'field' }, transport()).errors, 'unexpected_mock_result_field::extra');
+  assertBlocks(validateTranscriptionTransportMockResult({ ...official, transport_signature: 'bad_signature' }, transport()).errors, 'transport_signature_invalid');
+  assertBlocks(validateTranscriptionTransportMockResult({ ...official, validator_version: 'old_validator' }, transport()).errors, 'validator_version_invalid');
+  assertBlocks(validateTranscriptionTransportMockResult({ ...official, contract_version: 'old_contract' }, transport()).errors, 'contract_version_invalid');
+  assertBlocks(validateTranscriptionTransportMockResult({ ...official, provider_slug: 'google_cloud_speech' }, transport()).errors, 'provider_slug_mismatch');
+  assertBlocks(validateTranscriptionTransportMockResult({ ...official, transport_state: 'mocked' }, transport()).errors, 'transport_state_must_be_BLOCKED');
+  assertBlocks(validateTranscriptionTransportMockResult({ ...official, provider_state: 'provider_enabled' }, transport()).errors, 'provider_state_not_allowed::provider_enabled');
+  const missing = { ...official };
+  delete missing.generated_by;
+  assertBlocks(validateTranscriptionTransportMockResult(missing, transport()).errors, 'missing_generated_by');
+});
+
+test('transport readiness rejects forged mock before review approval', () => {
+  const forged = {
+    transport_contract_id: fixture.transport_contract_id,
+    provider_slug: 'deepgram',
+    contract_version: fixture.contract_version,
+    transport_version: 1,
+    mock_version: 'transcription_transport_mock_v1',
+    validator_version: fixture.validator_version,
+    transport_state: 'BLOCKED',
+    provider_state: 'provider_disabled',
+    readiness_context: {},
+    safety_flags: { simulated: true },
+    transport_signature: 'bad',
+    generated_by: 'manual_object',
+    generated_at: '2026-07-19T00:00:00.000Z',
+    validation_status: 'VALID',
+    simulated: true,
+    executed: false,
+    external_network_called: false,
+    production_blocked: true
+  };
+  const readiness = evaluateTranscriptionTransportReadiness({ contract: transport(), mock: forged, lifecycle_state: 'BLOCKED' });
+  assert.notEqual(readiness.readiness_decision, 'READY_FOR_PROVIDER_ADAPTER_REVIEW');
+  assertBlocks(readiness.blocking_requirements, 'transport_mock::transport_signature_invalid');
+});
+
+test('transport lifecycle keeps transport state BLOCKED through review phases', () => {
+  const first = transitionTranscriptionTransportLifecycle(transport(), { transition_id: 'tr1', provider_slug: 'deepgram', transport_contract_id: fixture.transport_contract_id, contract_version: fixture.contract_version, validator_version: fixture.validator_version, expected_version: 1, current_version: 1, from_state: 'BLOCKED', to_state: 'BLOCKED', review_phase: 'mock_review', safety_flags: transport() });
   assert.equal(first.ok, true);
-  assert.equal(first.to_state, 'mocked');
-  const blocked = transitionTranscriptionTransportLifecycle({ transport_contract_id: 'tc1', transport_state: 'blocked', transport_version: 2 }, { transition_id: 'tr2', expected_version: 2, to_state: 'mocked' });
+  assert.equal(first.from_state, 'BLOCKED');
+  assert.equal(first.to_state, 'BLOCKED');
+  assert.equal(first.transport_state, 'BLOCKED');
+  const blocked = transitionTranscriptionTransportLifecycle(transport({ review_phase: 'validation_review' }), { transition_id: 'tr2', provider_slug: 'deepgram', transport_contract_id: fixture.transport_contract_id, contract_version: fixture.contract_version, validator_version: fixture.validator_version, expected_version: 1, current_version: 1, from_state: 'BLOCKED', to_state: 'mocked', review_phase: 'mock_review', safety_flags: transport() });
   assert.equal(blocked.ok, false);
-  assertBlocks(blocked.errors, 'transport_transition_not_allowed::blocked->mocked');
+  assertBlocks(blocked.errors, 'to_state_must_be_BLOCKED');
 });
 
 test('transport lifecycle blocks optimistic version conflict and missing transition id', () => {
-  assertBlocks(transitionTranscriptionTransportLifecycle({ transport_contract_id: 'tc1', transport_state: 'absent', transport_version: 1 }, { transition_id: 'tr1', expected_version: 2, to_state: 'mocked' }).errors, 'transport_version_conflict');
-  assertBlocks(transitionTranscriptionTransportLifecycle({ transport_contract_id: 'tc1', transport_state: 'absent', transport_version: 1 }, { expected_version: 1, to_state: 'mocked' }).errors, 'transition_id_required');
+  assertBlocks(transitionTranscriptionTransportLifecycle(transport(), { transition_id: 'tr1', provider_slug: 'deepgram', transport_contract_id: fixture.transport_contract_id, contract_version: fixture.contract_version, validator_version: fixture.validator_version, expected_version: 2, current_version: 1, from_state: 'BLOCKED', to_state: 'BLOCKED', review_phase: 'mock_review', safety_flags: transport() }).errors, 'transport_version_conflict');
+  assertBlocks(transitionTranscriptionTransportLifecycle(transport(), { provider_slug: 'deepgram', transport_contract_id: fixture.transport_contract_id, contract_version: fixture.contract_version, validator_version: fixture.validator_version, expected_version: 1, current_version: 1, from_state: 'BLOCKED', to_state: 'BLOCKED', review_phase: 'mock_review', safety_flags: transport() }).errors, 'transition_id_required');
+});
+
+test('transport lifecycle validates every allowed review phase without changing transport state', () => {
+  assert.deepEqual(TRANSPORT_REVIEW_PHASES, ['draft_review', 'mock_review', 'contract_review', 'validation_review']);
+  const mockReview = transitionTranscriptionTransportLifecycle(transport({ review_phase: 'draft_review' }), { transition_id: 'phase_1', provider_slug: 'deepgram', transport_contract_id: fixture.transport_contract_id, contract_version: fixture.contract_version, validator_version: fixture.validator_version, expected_version: 1, current_version: 1, from_state: 'BLOCKED', to_state: 'BLOCKED', review_phase: 'mock_review', safety_flags: transport() });
+  const contractReview = transitionTranscriptionTransportLifecycle(transport({ review_phase: 'mock_review' }), { transition_id: 'phase_2', provider_slug: 'deepgram', transport_contract_id: fixture.transport_contract_id, contract_version: fixture.contract_version, validator_version: fixture.validator_version, expected_version: 1, current_version: 1, from_state: 'BLOCKED', to_state: 'BLOCKED', review_phase: 'contract_review', safety_flags: transport() });
+  const validationReview = transitionTranscriptionTransportLifecycle(transport({ review_phase: 'contract_review' }), { transition_id: 'phase_3', provider_slug: 'deepgram', transport_contract_id: fixture.transport_contract_id, contract_version: fixture.contract_version, validator_version: fixture.validator_version, expected_version: 1, current_version: 1, from_state: 'BLOCKED', to_state: 'BLOCKED', review_phase: 'validation_review', safety_flags: transport() });
+  for (const result of [mockReview, contractReview, validationReview]) {
+    assert.equal(result.ok, true);
+    assert.equal(result.transport_state, 'BLOCKED');
+  }
 });
 
 test('transport registry stores immutable defensive clones', () => {
@@ -262,8 +324,28 @@ test('transport registry blocks invalid fingerprint without storing or history',
 test('transport registry records transition replay protection', () => {
   const registry = createTranscriptionTransportRegistry();
   assert.equal(registry.registerTransportContract(transport()).ok, true);
-  assert.equal(registry.recordTransition({ transition_id: 'transition_1', transport_contract_id: fixture.transport_contract_id }).ok, true);
-  assertBlocks(registry.recordTransition({ transition_id: 'transition_1', transport_contract_id: fixture.transport_contract_id }).errors, 'transport_transition_replay');
+  const transition = { transition_id: 'transition_1', provider_slug: 'deepgram', transport_contract_id: fixture.transport_contract_id, contract_version: fixture.contract_version, validator_version: fixture.validator_version, expected_version: 1, current_version: 1, from_state: 'BLOCKED', to_state: 'BLOCKED', review_phase: 'mock_review', safety_flags: transport() };
+  assert.equal(registry.recordTransition(transition).ok, true);
+  assertBlocks(registry.recordTransition(transition).errors, 'transport_transition_replay');
+  assert.equal(registry.getTransitionHistory('deepgram').length, 1);
+});
+
+[
+  ['provider different', { provider_slug: 'google_cloud_speech' }, 'provider_slug_mismatch'],
+  ['contract different', { transport_contract_id: 'other_contract' }, 'transport_contract_not_found'],
+  ['lifecycle invalid', { review_phase: 'validation_review' }, 'review_phase_transition_not_allowed::draft_review->validation_review'],
+  ['expected version incorrect', { expected_version: 2 }, 'transport_version_conflict'],
+  ['current version incorrect', { current_version: 2 }, 'current_version_mismatch'],
+  ['validator version incorrect', { validator_version: 'old_validator' }, 'validator_version_invalid'],
+  ['safety flags invalid', { safety_flags: transport({ transport_enabled: true }) }, 'transition_transport_enabled_must_be_false']
+].forEach(([name, override, reason]) => {
+  test(`transport registry rejects invalid transition ${name} without writing`, () => {
+    const registry = createTranscriptionTransportRegistry();
+    assert.equal(registry.registerTransportContract(transport()).ok, true);
+    const transition = { transition_id: `transition_${name.replaceAll(' ', '_')}`, provider_slug: 'deepgram', transport_contract_id: fixture.transport_contract_id, contract_version: fixture.contract_version, validator_version: fixture.validator_version, expected_version: 1, current_version: 1, from_state: 'BLOCKED', to_state: 'BLOCKED', review_phase: 'mock_review', safety_flags: transport(), ...override };
+    assertBlocks(registry.recordTransition(transition).errors, reason);
+    assert.equal(registry.getTransitionHistory('deepgram').length, 0);
+  });
 });
 
 test('regression keeps transport boundary out of runtime message confirm endpoint scheduler worker surfaces', () => {

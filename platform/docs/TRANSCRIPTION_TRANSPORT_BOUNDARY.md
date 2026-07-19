@@ -34,6 +34,30 @@ Todas as tentativas conceituais de transporte sao bloqueadas por contrato:
 - criar sessao;
 - criar canal.
 
+## Mock oficial
+
+O mock de transporte emite um resultado completo e assinado com:
+
+- `generated_by: hermes_core_transcription_transport_mock`;
+- `validation_status: VALID`;
+- versoes de contrato, mock e validator;
+- `transport_state: BLOCKED`;
+- `provider_state` documental;
+- `safety_flags` completas.
+
+A readiness valida a assinatura e todos os vinculos contra o contrato atual. Objetos manuais com apenas booleans de seguranca nao sao aceitos.
+
+## Lifecycle documental
+
+`transport_state` permanece sempre `BLOCKED`. O progresso de revisao usa somente `review_phase`:
+
+- `draft_review`;
+- `mock_review`;
+- `contract_review`;
+- `validation_review`.
+
+Nenhum `review_phase` representa transporte operacional, client, canal, rede ou provider habilitado.
+
 ## Rollout e producao
 
 Todos os resultados preservam `rollout_percentage: 0`, `production_blocked: true`, `simulated: true`, `executed: false`, `external_network_called: false` e `secret_resolved: false`.
