@@ -14,7 +14,7 @@ const { validateTranscriptionProviderRequest } = require('../src/core/transcript
 const { validateTranscriptionProviderResponse } = require('../src/core/transcription-provider-response-contract');
 const { classifyTranscriptionProviderError, validateProviderError } = require('../src/core/transcription-provider-error-taxonomy');
 const { evaluateTranscriptionProviderContractReadiness } = require('../src/core/transcription-provider-contract-readiness');
-const { createTranscriptionProviderContractRegistry } = require('../src/core/transcription-provider-contract-registry');
+const { createTranscriptionProviderContractRegistry, stablePayload } = require('../src/core/transcription-provider-contract-registry');
 const { createTranscriptionProviderMockParityAdapter } = require('../src/adapters/transcription/transcription-provider-mock-parity-adapter');
 
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -67,6 +67,27 @@ function assertSafe(value) {
 }
 function assertBlocks(errors, reason) {
   assert.ok(errors.includes(reason) || errors.some((error) => String(error).includes(reason)), `${reason} not found in ${errors.join(',')}`);
+}
+function readiness(overrides = {}) {
+  return {
+    readiness_evaluation_id: 'readiness_contract_v1',
+    readiness_evaluation_version: 1,
+    provider_slug: 'deepgram',
+    readiness_decision: 'READY_FOR_TRANSPORT_CONTRACT_REVIEW',
+    evaluated_at: now,
+    simulated: true,
+    executed: false,
+    real_provider_called: false,
+    external_network_called: false,
+    can_trigger_real_execution: false,
+    rollout_percentage: 0,
+    production_blocked: true,
+    provider_runtime_enabled: false,
+    provider_selected_for_execution: false,
+    transport_enabled: false,
+    secret_resolved: false,
+    ...overrides
+  };
 }
 
 test('provider contract boundary docs and fixture exist', () => {
@@ -285,6 +306,50 @@ test('mock parity adapter blocks invalid provider and invalid request', () => {
   assert.equal(adapter.simulateRequest(request({ audio: 'raw' })).status, 'mock_parity_simulation_blocked');
 });
 
+[
+  ['missing contract', { contract: null, configuration: config(), request: request() }, 'provider_contract_missing'],
+  ['missing configuration', { contract: contract('deepgram'), configuration: null, request: request() }, 'provider_configuration_missing'],
+  ['invalid contract', { contract: contract('deepgram', { transport_enabled: true }), configuration: config(), request: request() }, 'contract::transport_enabled_must_be_false'],
+  ['google contract', { contract: contract('google_cloud_speech'), configuration: config({ provider_contract_id: contract('google_cloud_speech').provider_contract_id, provider_slug: 'google_cloud_speech' }), request: request({ provider_contract_id: contract('google_cloud_speech').provider_contract_id, provider_slug: 'google_cloud_speech' }) }, 'mock_parity_provider_must_be_deepgram'],
+  ['invalid configuration', { contract: contract('deepgram'), configuration: config({ transport_enabled: true }), request: request() }, 'configuration::transport_enabled_must_be_false'],
+  ['configuration provider mismatch', { contract: contract('deepgram'), configuration: config({ provider_slug: 'google_cloud_speech' }), request: request() }, 'configuration_provider_slug_mismatch'],
+  ['configuration contract mismatch', { contract: contract('deepgram'), configuration: config({ provider_contract_id: 'other_contract' }), request: request() }, 'configuration_provider_contract_id_mismatch'],
+  ['tenant mismatch', { contract: contract('deepgram'), configuration: config({ tenant_id: 'tenant_other' }), request: request() }, 'request_tenant_id_mismatch'],
+  ['workspace mismatch', { contract: contract('deepgram'), configuration: config({ workspace_type: 'other_workspace' }), request: request() }, 'request_workspace_type_mismatch'],
+  ['runtime enabled', { contract: contract('deepgram', { provider_runtime_enabled: true }), configuration: config(), request: request() }, 'contract_provider_runtime_enabled_must_be_false'],
+  ['transport enabled', { contract: contract('deepgram', { transport_enabled: true }), configuration: config(), request: request() }, 'contract_transport_enabled_must_be_false'],
+  ['secret resolved', { contract: contract('deepgram', { secret_resolved: true }), configuration: config(), request: request() }, 'contract_secret_resolved_must_be_false'],
+  ['rollout greater than zero', { contract: contract('deepgram', { rollout_percentage: 1 }), configuration: config(), request: request() }, 'contract_rollout_percentage_must_be_zero'],
+  ['production not blocked', { contract: contract('deepgram', { production_blocked: false }), configuration: config(), request: request() }, 'contract_production_blocked_must_be_true'],
+  ['request timeout above configuration', { contract: contract('deepgram'), configuration: config({ timeout_ms: 1000 }), request: request({ timeout_ms: 2000 }) }, 'request_timeout_exceeds_configuration_timeout'],
+  ['request duration above configuration', { contract: contract('deepgram'), configuration: config({ max_duration_ms: 1000 }), request: request({ duration_ms: 2000 }) }, 'request_duration_exceeds_configuration_max'],
+  ['request size above configuration', { contract: contract('deepgram'), configuration: config({ max_size_bytes: 1000 }), request: request({ size_bytes: 2000 }) }, 'request_size_exceeds_configuration_max']
+].forEach(([name, setup, reason]) => {
+  test(`mock parity simulateRequest blocks ${name} before running`, () => {
+    const adapter = createTranscriptionProviderMockParityAdapter({ contract: setup.contract, configuration: setup.configuration });
+    const result = adapter.simulateRequest(setup.request);
+    assert.equal(result.status, 'mock_parity_simulation_blocked');
+    assert.equal(result.response, null);
+    assertBlocks(result.blockers, reason);
+    assertSafe(result);
+    const validAdapter = createTranscriptionProviderMockParityAdapter({ contract: contract('deepgram'), configuration: config() });
+    assert.equal(validAdapter.simulateRequest(request()).status, 'mock_parity_simulation_completed');
+  });
+});
+
+test('mock parity adapter valid flow is deterministic and output immutable after stronger checks', () => {
+  const adapter = createTranscriptionProviderMockParityAdapter({ contract: contract('deepgram'), configuration: config() });
+  const input = request();
+  const before = deepClone(input);
+  const first = adapter.simulateRequest(input);
+  const second = adapter.simulateRequest(input);
+  assert.deepEqual(input, before);
+  assert.deepEqual(first, second);
+  assert.equal(Object.isFrozen(first), true);
+  assert.equal(Object.isFrozen(first.response), true);
+  assertSafe(first);
+});
+
 test('contract readiness reaches maximum transport contract review only synthetically', () => {
   const readiness = evaluateTranscriptionProviderContractReadiness({
     contract: contract('deepgram'),
@@ -320,7 +385,9 @@ test('registry registers and returns defensive clones', () => {
   const registry = createTranscriptionProviderContractRegistry();
   assert.equal(registry.registerContract(contract('deepgram')).ok, true);
   const stored = registry.getContract(contract('deepgram').provider_contract_id);
-  stored.provider_slug = 'mutated';
+  assert.throws(() => {
+    stored.provider_slug = 'mutated';
+  }, TypeError);
   assert.equal(registry.getContract(contract('deepgram').provider_contract_id).provider_slug, 'deepgram');
 });
 
@@ -339,7 +406,70 @@ test('registry stores capabilities configuration secret and readiness records', 
   assert.equal(registry.getCapabilities('deepgram').length > 0, true);
   assert.equal(registry.registerConfiguration(config()).ok, true);
   assert.equal(registry.registerSecretReference(secret()).ok, true);
-  assert.equal(registry.registerReadinessEvaluation({ readiness_evaluation_id: 'readiness_contract_v1', readiness_evaluation_version: 1, provider_slug: 'deepgram', simulated: true }).ok, true);
+  assert.equal(registry.registerReadinessEvaluation(readiness()).ok, true);
+});
+
+test('stable payload canonicalizes shallow and nested object key order', () => {
+  assert.equal(stablePayload({ b: 2, a: 1 }), stablePayload({ a: 1, b: 2 }));
+  assert.equal(stablePayload({ b: { y: 2, x: 1 }, a: [{ z: 3, c: 4 }] }), stablePayload({ a: [{ c: 4, z: 3 }], b: { x: 1, y: 2 } }));
+});
+
+test('stable payload changes for nested and array differences', () => {
+  assert.notEqual(stablePayload({ a: { b: 1 } }), stablePayload({ a: { b: 2 } }));
+  assert.notEqual(stablePayload({ a: [1, 2] }), stablePayload({ a: [2, 1] }));
+});
+
+[
+  ['cyclic object', () => { const value = {}; value.self = value; return value; }, 'cyclic_reference_not_serializable'],
+  ['NaN', () => ({ value: NaN }), 'non_finite_number_not_serializable'],
+  ['Infinity', () => ({ value: Infinity }), 'non_finite_number_not_serializable'],
+  ['undefined', () => ({ value: undefined }), 'undefined_not_serializable'],
+  ['function', () => ({ value() {} }), 'function_not_serializable'],
+  ['Buffer', () => ({ value: Buffer.from('x') }), 'binary_not_serializable']
+].forEach(([name, build, reason]) => {
+  test(`stable payload blocks ${name}`, () => {
+    assert.throws(() => stablePayload(build()), new RegExp(reason));
+  });
+});
+
+test('registry fingerprint failure does not store record version or history', () => {
+  const registry = createTranscriptionProviderContractRegistry({
+    validateContract: () => ({ valid: true, errors: [] })
+  });
+  const invalid = { provider_contract_id: 'contract_invalid', provider_slug: 'deepgram', contract_version: 1, nested: { value: undefined } };
+  assertBlocks(registry.registerContract(invalid).errors, 'contract_fingerprint_invalid');
+  assert.equal(registry.getContract('contract_invalid'), null);
+  assert.deepEqual(registry.getContractHistory('deepgram'), []);
+  const valid = { provider_contract_id: 'contract_valid', provider_slug: 'deepgram', contract_version: 1, nested: { value: 'ok' } };
+  assert.equal(registry.registerContract(valid).ok, true);
+});
+
+test('registry canonical replay and payload mismatch remain enforced', () => {
+  const registry = createTranscriptionProviderContractRegistry({
+    validateContract: () => ({ valid: true, errors: [] })
+  });
+  const first = { provider_contract_id: 'contract_replay', provider_slug: 'deepgram', contract_version: 1, nested: { b: 2, a: 1 } };
+  assert.equal(registry.registerContract(first).ok, true);
+  assertBlocks(registry.registerContract({ provider_contract_id: 'contract_replay', provider_slug: 'deepgram', contract_version: 1, nested: { a: 1, b: 2 } }).errors, 'contract_replay_duplicate');
+  assertBlocks(registry.registerContract({ provider_contract_id: 'contract_replay', provider_slug: 'deepgram', contract_version: 1, nested: { a: 1, b: 3 } }).errors, 'contract_replay_payload_mismatch');
+});
+
+test('registry returns deeply frozen clones and protects internal nested state', () => {
+  const registry = createTranscriptionProviderContractRegistry();
+  assert.equal(registry.registerContract(contract('deepgram')).ok, true);
+  const stored = registry.getContract(contract('deepgram').provider_contract_id);
+  assert.equal(Object.isFrozen(stored), true);
+  assert.equal(Object.isFrozen(stored.supported_operations), true);
+  assert.throws(() => stored.supported_operations.push('mutated'), TypeError);
+  assert.equal(registry.getContract(contract('deepgram').provider_contract_id).supported_operations.includes('mutated'), false);
+});
+
+test('registry rejects invalid readiness and accepts structurally valid readiness', () => {
+  const registry = createTranscriptionProviderContractRegistry();
+  assertBlocks(registry.registerReadinessEvaluation({ readiness_evaluation_id: 'ready_bad' }).errors, 'readiness_evaluation_version_invalid');
+  assert.equal(registry.getReadinessEvaluation('ready_bad'), null);
+  assert.equal(registry.registerReadinessEvaluation(readiness()).ok, true);
+  assert.equal(registry.getReadinessEvaluation('readiness_contract_v1').readiness_decision, 'READY_FOR_TRANSPORT_CONTRACT_REVIEW');
 });
 
 test('regression keeps provider contract modules out of runtime message confirm endpoint scheduler worker surfaces', () => {
