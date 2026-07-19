@@ -12,10 +12,14 @@ const { validateTranscriptionOperatorApproval } = require('./transcription-opera
 const { validateTranscriptionRetentionPolicy } = require('./transcription-retention-policy');
 const {
   buildTranscriptionCanaryAuditEvent,
+  isIso,
   isTranscriptionCanarySessionExpired,
   nowIso,
+  nowMs,
   validateTranscriptionCanarySession
 } = require('./transcription-canary-session-contract');
+
+const MAX_TRANSCRIPTION_CANARY_PREFLIGHT_RESULT_MS = 60 * 1000;
 
 const TRANSCRIPTION_CANARY_PREFLIGHT_REQUIREMENTS = Object.freeze([
   'readiness_ready_for_controlled_canary_review',
@@ -58,6 +62,75 @@ function validateSyntheticEvidence(evidence = {}) {
   if (evidence.can_trigger_real_execution !== false) errors.push('can_trigger_real_execution_must_be_false');
   errors.push(...findTranscriptionForbiddenFields(evidence));
   return uniqueSorted(errors);
+}
+
+function preflightExpiresAt(context = {}) {
+  return new Date(nowMs(context) + MAX_TRANSCRIPTION_CANARY_PREFLIGHT_RESULT_MS).toISOString();
+}
+
+function preflightEvaluationId(session = {}, evaluatedAt) {
+  return `preflight_${session.session_id || 'session_not_available'}_${session.session_version || 0}_${Date.parse(evaluatedAt) || 0}`;
+}
+
+function validateTranscriptionCanaryPreflightResult(result, session, context = {}) {
+  const errors = [];
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return { valid: false, errors: ['preflight_result_missing'] };
+  const required = [
+    'preflight_evaluation_id',
+    'session_id',
+    'session_version',
+    'candidate_id',
+    'readiness_evaluation_id',
+    'transcription_id',
+    'consent_id',
+    'approval_id',
+    'retention_policy_id',
+    'budget_policy_id',
+    'tenant_id',
+    'workspace_type',
+    'environment',
+    'evaluated_at',
+    'expires_at',
+    'allowed',
+    'allowed_for_synthetic_simulation',
+    'rollout_percentage',
+    'production_blocked',
+    'simulated',
+    'executed',
+    'real_provider_called',
+    'external_network_called',
+    'can_trigger_real_execution'
+  ];
+  for (const field of required) {
+    if (!Object.prototype.hasOwnProperty.call(result, field)) errors.push(`missing_${field}`);
+  }
+  for (const field of ['preflight_evaluation_id', 'session_id', 'candidate_id', 'readiness_evaluation_id', 'transcription_id', 'consent_id', 'approval_id', 'retention_policy_id', 'budget_policy_id', 'tenant_id', 'workspace_type', 'environment', 'evaluated_at', 'expires_at']) {
+    if (typeof result[field] !== 'string' || result[field].trim() === '') errors.push(`invalid_${field}`);
+  }
+  if (!Number.isInteger(result.session_version) || result.session_version < 1) errors.push('session_version_invalid');
+  if (!isIso(result.evaluated_at)) errors.push('evaluated_at_invalid');
+  if (!isIso(result.expires_at)) errors.push('expires_at_invalid');
+  if (isIso(result.evaluated_at) && isIso(result.expires_at)) {
+    const windowMs = Date.parse(result.expires_at) - Date.parse(result.evaluated_at);
+    if (windowMs <= 0) errors.push('preflight_result_window_invalid');
+    if (windowMs > MAX_TRANSCRIPTION_CANARY_PREFLIGHT_RESULT_MS) errors.push('preflight_result_window_exceeds_limit');
+  }
+  if (isIso(result.expires_at) && Date.parse(result.expires_at) <= nowMs(context)) errors.push('preflight_result_expired');
+  if (result.allowed !== true) errors.push('preflight_not_allowed');
+  if (result.allowed_for_synthetic_simulation !== true) errors.push('preflight_not_allowed_for_synthetic_simulation');
+  if (result.simulated !== true) errors.push('simulated_must_be_true');
+  for (const field of ['executed', 'real_provider_called', 'external_network_called', 'can_trigger_real_execution']) {
+    if (result[field] !== false) errors.push(`${field}_must_be_false`);
+  }
+  if (result.production_blocked !== true) errors.push('production_blocked_must_be_true');
+  if (result.rollout_percentage !== 0) errors.push('rollout_percentage_must_be_zero');
+  if (session && typeof session === 'object') {
+    for (const field of ['session_id', 'session_version', 'candidate_id', 'readiness_evaluation_id', 'transcription_id', 'consent_id', 'approval_id', 'retention_policy_id', 'budget_policy_id', 'tenant_id', 'workspace_type', 'environment']) {
+      if (result[field] !== session[field]) errors.push(`preflight_${field}_mismatch`);
+    }
+  }
+  errors.push(...findTranscriptionForbiddenFields(result));
+  return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }
 
 function evaluateTranscriptionCanaryPreflight(session, context = {}) {
@@ -130,7 +203,9 @@ function evaluateTranscriptionCanaryPreflight(session, context = {}) {
 
   const blocking = uniqueSorted(status.blocking);
   const allowed = blocking.length === 0;
+  const evaluatedAt = now;
   const result = sanitizeTranscriptionData({
+    preflight_evaluation_id: preflightEvaluationId(session, evaluatedAt),
     preflight_status: allowed ? 'transcription_canary_preflight_passed' : 'transcription_canary_preflight_blocked',
     allowed,
     allowed_for_synthetic_simulation: allowed,
@@ -139,6 +214,19 @@ function evaluateTranscriptionCanaryPreflight(session, context = {}) {
     allowed_for_network: false,
     allowed_for_production: false,
     session_id: session && session.session_id || 'session_not_available',
+    session_version: session && session.session_version || 0,
+    candidate_id: session && session.candidate_id || 'candidate_not_available',
+    readiness_evaluation_id: session && session.readiness_evaluation_id || 'readiness_not_available',
+    transcription_id: session && session.transcription_id || 'transcription_not_available',
+    consent_id: session && session.consent_id || 'consent_not_available',
+    approval_id: session && session.approval_id || 'approval_not_available',
+    retention_policy_id: session && session.retention_policy_id || 'retention_not_available',
+    budget_policy_id: session && session.budget_policy_id || 'budget_not_available',
+    tenant_id: session && session.tenant_id || 'tenant_not_available',
+    workspace_type: session && session.workspace_type || 'workspace_not_available',
+    environment: session && session.environment || 'environment_not_available',
+    evaluated_at: evaluatedAt,
+    expires_at: preflightExpiresAt({ ...context, now: evaluatedAt }),
     satisfied_requirements: uniqueSorted(status.satisfied),
     blocking_requirements: blocking,
     warnings: allowed ? ['real_execution_still_blocked', 'production_still_blocked', 'rollout_zero'] : [],
@@ -162,7 +250,9 @@ function evaluateTranscriptionCanaryPreflight(session, context = {}) {
 }
 
 module.exports = {
+  MAX_TRANSCRIPTION_CANARY_PREFLIGHT_RESULT_MS,
   TRANSCRIPTION_CANARY_PREFLIGHT_REQUIREMENTS,
   evaluateTranscriptionCanaryPreflight,
-  validateSyntheticEvidence
+  validateSyntheticEvidence,
+  validateTranscriptionCanaryPreflightResult
 };

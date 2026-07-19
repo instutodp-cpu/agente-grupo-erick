@@ -17,6 +17,11 @@ const {
   safeTranscriptionCanaryResponse
 } = require('./transcription-canary-session-contract');
 const { buildTranscriptionCanaryEvidenceBundle } = require('./transcription-canary-evidence');
+const { validateAuthorizationRecord } = require('./transcription-canary-authorization');
+const {
+  evaluateTranscriptionCanaryPreflight,
+  validateTranscriptionCanaryPreflightResult
+} = require('./transcription-canary-preflight');
 
 const EXTRA_FORBIDDEN_RUNNER_FIELDS = Object.freeze([
   'bytes',
@@ -111,6 +116,9 @@ async function runTranscriptionSyntheticCanary(input = {}, deps = {}, context = 
   if (!authorizationRegistry || typeof authorizationRegistry.consumeAuthorization !== 'function') {
     return blocked(input, 'authorization_registry_missing', { occurred_at: now });
   }
+  if (typeof authorizationRegistry.getAuthorization !== 'function') {
+    return blocked(input, 'authorization_registry_missing_get_authorization', { occurred_at: now });
+  }
   const session = sessionRegistry.getSession(input.session_id);
   if (!session) return blocked(input, 'session_not_found', { occurred_at: now });
   if (session.candidate_id !== input.candidate_id || session.transcription_id !== input.transcription_id) {
@@ -118,16 +126,44 @@ async function runTranscriptionSyntheticCanary(input = {}, deps = {}, context = 
   }
   if (session.session_status !== 'authorized') return blocked(input, 'session_not_authorized', { occurred_at: now });
   const preflight = deps.preflightResult;
-  if (!preflight || preflight.allowed !== true) return blocked(input, 'preflight_required', { occurred_at: now });
-  const consumed = authorizationRegistry.consumeAuthorization({
-    authorization_id: input.authorization_id,
+  if (!preflight) return blocked(input, 'preflight_required', { occurred_at: now });
+  const preflightValidation = validateTranscriptionCanaryPreflightResult(preflight, session, context);
+  if (!preflightValidation.valid) {
+    return blocked(input, preflightValidation.errors[0] || 'preflight_result_invalid', {
+      blocking_reasons: preflightValidation.errors,
+      occurred_at: now
+    });
+  }
+  if (typeof deps.evaluatePreflight !== 'function' && deps.evaluatePreflight !== undefined) {
+    return blocked(input, 'preflight_revalidation_invalid', { occurred_at: now });
+  }
+  const revalidated = typeof deps.evaluatePreflight === 'function'
+    ? deps.evaluatePreflight(session, { ...(deps.preflightContext || {}), ...context, now })
+    : evaluateTranscriptionCanaryPreflight(session, { ...(deps.preflightContext || {}), ...context, now });
+  const revalidation = validateTranscriptionCanaryPreflightResult(revalidated, session, context);
+  if (!revalidation.valid) {
+    const revalidationReasons = revalidated && Array.isArray(revalidated.blocking_requirements) && revalidated.blocking_requirements.length > 0
+      ? revalidated.blocking_requirements
+      : revalidation.errors;
+    return blocked(input, revalidationReasons[0] || 'preflight_revalidation_blocked', {
+      blocking_reasons: revalidationReasons,
+      occurred_at: now
+    });
+  }
+  const currentAuthorization = authorizationRegistry.getAuthorization(input.authorization_id);
+  if (!currentAuthorization) return blocked(input, 'authorization_not_found', { occurred_at: now });
+  const authorizationValidation = validateAuthorizationRecord(currentAuthorization, {
+    ...context,
     session_id: session.session_id,
     candidate_id: session.candidate_id,
     tenant_id: session.tenant_id,
-    consumed_at: now
-  }, context);
-  if (!consumed || consumed.consumed !== true) {
-    return blocked(input, consumed && consumed.blocking_reasons && consumed.blocking_reasons[0] || 'authorization_blocked', { occurred_at: now });
+    environment: session.environment
+  });
+  if (!authorizationValidation.valid) {
+    return blocked(input, authorizationValidation.errors[0] || 'authorization_blocked', {
+      blocking_reasons: authorizationValidation.errors,
+      occurred_at: now
+    });
   }
   const running = sessionRegistry.transitionSession({
     session_id: session.session_id,
@@ -137,6 +173,25 @@ async function runTranscriptionSyntheticCanary(input = {}, deps = {}, context = 
     event_name: 'simulation_started'
   }, {}, context);
   if (running.applied !== true) return blocked(input, running.blocking_reasons && running.blocking_reasons[0] || 'simulation_start_blocked', { occurred_at: now });
+  const consumed = authorizationRegistry.consumeAuthorization({
+    authorization_id: input.authorization_id,
+    session_id: session.session_id,
+    candidate_id: session.candidate_id,
+    tenant_id: session.tenant_id,
+    consumed_at: now
+  }, context);
+  if (!consumed || consumed.consumed !== true) {
+    if (running.session && running.session.session_status === 'running_simulation') {
+      sessionRegistry.transitionSession({
+        session_id: running.session.session_id,
+        expected_version: running.session.session_version,
+        transition_id: `${input.start_transition_id}_authorization_blocked`,
+        next_status: 'blocked',
+        event_name: 'simulation_blocked'
+      }, {}, context);
+    }
+    return blocked(input, consumed && consumed.blocking_reasons && consumed.blocking_reasons[0] || 'authorization_blocked', { occurred_at: now });
+  }
   const runningSession = running.session;
   const syntheticSummary = input.synthetic_text_placeholder.slice(0, 240);
   const completed = sessionRegistry.transitionSession({

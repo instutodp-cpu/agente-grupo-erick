@@ -18,7 +18,10 @@ const {
   validateTranscriptionCanarySession
 } = require('../src/core/transcription-canary-session-contract');
 const { createTranscriptionCanarySessionRegistry } = require('../src/core/transcription-canary-session-registry');
-const { evaluateTranscriptionCanaryPreflight } = require('../src/core/transcription-canary-preflight');
+const {
+  evaluateTranscriptionCanaryPreflight,
+  validateTranscriptionCanaryPreflightResult
+} = require('../src/core/transcription-canary-preflight');
 const {
   createTranscriptionCanaryAuthorizationRegistry,
   validateAuthorizationRecord
@@ -42,6 +45,8 @@ const soon = '2026-07-19T00:05:00.000Z';
 const future = '2026-07-19T00:15:00.000Z';
 const later = '2026-07-19T00:20:00.000Z';
 const past = '2026-07-18T00:00:00.000Z';
+const nearExpiry = '2026-07-19T00:00:30.000Z';
+const afterNearExpiry = '2026-07-19T00:00:45.000Z';
 
 function session(overrides = {}) {
   return {
@@ -276,12 +281,36 @@ function assertBlocks(errors, reason) {
   assert.ok(errors.includes(reason) || errors.some((error) => error.includes(reason)), `${reason} not found in ${errors.join(',')}`);
 }
 
-function createAuthorizedSession() {
+function createAuthorizedSession(overrides = {}) {
   const registry = createTranscriptionCanarySessionRegistry({ clock: () => now });
-  assert.equal(registry.createSession(session(), { now }).ok, true);
-  assert.equal(registry.transitionSession({ session_id: session().session_id, expected_version: 1, transition_id: 'transition_preflight', next_status: 'preflight_passed' }, {}, { now }).applied, true);
-  assert.equal(registry.transitionSession({ session_id: session().session_id, expected_version: 2, transition_id: 'transition_authorized', next_status: 'authorized' }, {}, { now }).applied, true);
+  const seeded = session(overrides);
+  assert.equal(registry.createSession(seeded, { now }).ok, true);
+  assert.equal(registry.transitionSession({ session_id: seeded.session_id, expected_version: 1, transition_id: 'transition_preflight', next_status: 'preflight_passed' }, {}, { now }).applied, true);
+  assert.equal(registry.transitionSession({ session_id: seeded.session_id, expected_version: 2, transition_id: 'transition_authorized', next_status: 'authorized' }, {}, { now }).applied, true);
   return registry;
+}
+
+function currentSession(registry) {
+  return registry.getSession(session().session_id);
+}
+
+function buildPreflightForCurrentSession(registry, contextOverrides = {}) {
+  return evaluateTranscriptionCanaryPreflight(currentSession(registry), preflightContext(contextOverrides));
+}
+
+function runnerDeps(sessionRegistry, authorizationRegistry, options = {}) {
+  const snapshotContext = preflightContext(options.snapshotContext || {});
+  const revalidationContext = preflightContext(options.revalidationContext || {});
+  return {
+    sessionRegistry,
+    authorizationRegistry,
+    preflightContext: revalidationContext,
+    preflightResult: options.preflightResult || evaluateTranscriptionCanaryPreflight(currentSession(sessionRegistry), snapshotContext),
+    evaluatePreflight: options.evaluatePreflight || ((activeSession, runtimeContext = {}) => evaluateTranscriptionCanaryPreflight(activeSession, {
+      ...revalidationContext,
+      ...runtimeContext
+    }))
+  };
 }
 
 test('transcription controlled canary docs and fixture exist', () => {
@@ -463,11 +492,7 @@ test('runner completes a valid synthetic canary without provider or network', as
   const sessionRegistry = createAuthorizedSession();
   const authorizationRegistry = createTranscriptionCanaryAuthorizationRegistry({ clock: () => now });
   authorizationRegistry.issueAuthorization(authorization(), { now });
-  const result = await runTranscriptionSyntheticCanary(runnerInput(), {
-    sessionRegistry,
-    authorizationRegistry,
-    preflightResult: evaluateTranscriptionCanaryPreflight(session(), preflightContext())
-  }, { now, clock: () => now });
+  const result = await runTranscriptionSyntheticCanary(runnerInput(), runnerDeps(sessionRegistry, authorizationRegistry), { now, clock: () => now });
   assert.equal(result.status, 'transcription_canary_simulation_completed');
   assert.equal(result.synthetic_segments_count, 2);
   assert.equal(sessionRegistry.getSession(session().session_id).session_status, 'completed');
@@ -479,7 +504,8 @@ test('runner blocks missing session preflight and authorization', async () => {
   assertBlocks((await runTranscriptionSyntheticCanary(runnerInput(), {}, { now })).blocking_reasons, 'session_registry_missing');
   const sessionRegistry = createAuthorizedSession();
   assertBlocks((await runTranscriptionSyntheticCanary(runnerInput(), { sessionRegistry, authorizationRegistry: createTranscriptionCanaryAuthorizationRegistry(), preflightResult: null }, { now })).blocking_reasons, 'preflight_required');
-  assertBlocks((await runTranscriptionSyntheticCanary(runnerInput({ authorization_id: 'missing' }), { sessionRegistry, authorizationRegistry: createTranscriptionCanaryAuthorizationRegistry(), preflightResult: evaluateTranscriptionCanaryPreflight(session(), preflightContext()) }, { now })).blocking_reasons, 'authorization_not_found');
+  const auth = createTranscriptionCanaryAuthorizationRegistry();
+  assertBlocks((await runTranscriptionSyntheticCanary(runnerInput({ authorization_id: 'missing' }), runnerDeps(sessionRegistry, auth), { now })).blocking_reasons, 'authorization_not_found');
 });
 
 test('runner blocks unauthorized or mismatched session', async () => {
@@ -487,7 +513,11 @@ test('runner blocks unauthorized or mismatched session', async () => {
   registry.createSession(session(), { now });
   const auth = createTranscriptionCanaryAuthorizationRegistry({ clock: () => now });
   auth.issueAuthorization(authorization(), { now });
-  assertBlocks((await runTranscriptionSyntheticCanary(runnerInput(), { sessionRegistry: registry, authorizationRegistry: auth, preflightResult: evaluateTranscriptionCanaryPreflight(session(), preflightContext()) }, { now })).blocking_reasons, 'session_not_authorized');
+  assertBlocks((await runTranscriptionSyntheticCanary(runnerInput(), {
+    sessionRegistry: registry,
+    authorizationRegistry: auth,
+    preflightResult: evaluateTranscriptionCanaryPreflight(registry.getSession(session().session_id), preflightContext())
+  }, { now })).blocking_reasons, 'session_not_authorized');
 });
 
 test('evidence bundle is sanitized immutable and serializable', () => {
@@ -592,9 +622,163 @@ test('runner blocks session binding mismatch before simulation', async () => {
   const result = await runTranscriptionSyntheticCanary(runnerInput({ candidate_id: 'candidate_other' }), {
     sessionRegistry,
     authorizationRegistry,
-    preflightResult: evaluateTranscriptionCanaryPreflight(session(), preflightContext())
+    preflightResult: buildPreflightForCurrentSession(sessionRegistry),
+    evaluatePreflight: (activeSession, runtimeContext = {}) => evaluateTranscriptionCanaryPreflight(activeSession, { ...preflightContext(), ...runtimeContext })
   }, { now });
   assertBlocks(result.blocking_reasons, 'session_binding_mismatch');
+});
+
+test('runner blocks forged partial preflight result and preserves authorization', async () => {
+  const sessionRegistry = createAuthorizedSession();
+  const authorizationRegistry = createTranscriptionCanaryAuthorizationRegistry({ clock: () => now });
+  authorizationRegistry.issueAuthorization(authorization(), { now });
+  const result = await runTranscriptionSyntheticCanary(runnerInput(), runnerDeps(sessionRegistry, authorizationRegistry, {
+    preflightResult: { allowed: true }
+  }), { now });
+  assertBlocks(result.blocking_reasons, 'invalid_preflight_evaluation_id');
+  assert.equal(authorizationRegistry.getAuthorization(authorization().authorization_id).authorization_status, 'issued');
+  assert.equal(currentSession(sessionRegistry).session_status, 'authorized');
+});
+
+test('runner blocks preflight snapshots that do not match current session bindings', async () => {
+  for (const [field, value, reason] of [
+    ['session_id', 'session_other', 'preflight_session_id_mismatch'],
+    ['session_version', 2, 'preflight_session_version_mismatch'],
+    ['candidate_id', 'candidate_other', 'preflight_candidate_id_mismatch'],
+    ['tenant_id', 'tenant_other', 'preflight_tenant_id_mismatch'],
+    ['transcription_id', 'transcription_other', 'preflight_transcription_id_mismatch'],
+    ['consent_id', 'consent_other', 'preflight_consent_id_mismatch'],
+    ['approval_id', 'approval_other', 'preflight_approval_id_mismatch'],
+    ['readiness_evaluation_id', 'readiness_other', 'preflight_readiness_evaluation_id_mismatch']
+  ]) {
+    const sessionRegistry = createAuthorizedSession();
+    const authorizationRegistry = createTranscriptionCanaryAuthorizationRegistry({ clock: () => now });
+    authorizationRegistry.issueAuthorization(authorization(), { now });
+    const result = await runTranscriptionSyntheticCanary(runnerInput(), runnerDeps(sessionRegistry, authorizationRegistry, {
+      preflightResult: { ...buildPreflightForCurrentSession(sessionRegistry), [field]: value }
+    }), { now });
+    assertBlocks(result.blocking_reasons, reason);
+    assert.equal(authorizationRegistry.getAuthorization(authorization().authorization_id).authorization_status, 'issued');
+    assert.equal(currentSession(sessionRegistry).session_status, 'authorized');
+  }
+});
+
+test('runner blocks expired and unsafe preflight snapshots before authorization consumption', async () => {
+  for (const [patch, reason] of [
+    [{ expires_at: now }, 'preflight_result_expired'],
+    [{ executed: true }, 'executed_must_be_false'],
+    [{ real_provider_called: true }, 'real_provider_called_must_be_false'],
+    [{ external_network_called: true }, 'external_network_called_must_be_false'],
+    [{ can_trigger_real_execution: true }, 'can_trigger_real_execution_must_be_false'],
+    [{ production_blocked: false }, 'production_blocked_must_be_true'],
+    [{ rollout_percentage: 1 }, 'rollout_percentage_must_be_zero']
+  ]) {
+    const sessionRegistry = createAuthorizedSession();
+    const authorizationRegistry = createTranscriptionCanaryAuthorizationRegistry({ clock: () => now });
+    authorizationRegistry.issueAuthorization(authorization(), { now });
+    const result = await runTranscriptionSyntheticCanary(runnerInput(), runnerDeps(sessionRegistry, authorizationRegistry, {
+      preflightResult: { ...buildPreflightForCurrentSession(sessionRegistry), ...patch }
+    }), { now });
+    assertBlocks(result.blocking_reasons, reason);
+    assert.equal(authorizationRegistry.getAuthorization(authorization().authorization_id).authorization_status, 'issued');
+  }
+});
+
+test('preflight result validator accepts only complete bound synthetic snapshots', () => {
+  const sessionRegistry = createAuthorizedSession();
+  const activeSession = currentSession(sessionRegistry);
+  const valid = buildPreflightForCurrentSession(sessionRegistry);
+  assert.equal(validateTranscriptionCanaryPreflightResult(valid, activeSession, { now }).valid, true);
+  const partial = validateTranscriptionCanaryPreflightResult({ allowed: true }, activeSession, { now });
+  assert.equal(partial.valid, false);
+  assertBlocks(partial.errors, 'missing_session_id');
+});
+
+test('runner revalidates consent approval and safety context immediately before start', async () => {
+  for (const [revalidationContext, reason] of [
+    [{ consentRecord: consent({ expires_at: past }) }, 'consent_expired'],
+    [{ consentRecord: consent({ consent_status: 'revoked', revocation_status: 'revoked', revoked_at: now, revocation_reason: 'synthetic_review_revoked' }) }, 'consent_revoked'],
+    [{ operatorApproval: operatorApproval({ expires_at: past }) }, 'operator_approval_expired'],
+    [{ operatorApproval: operatorApproval({ consumed_at: now }) }, 'operator_approval_consumed'],
+    [{ featureFlagEnabled: true }, 'feature_flag_enabled_or_missing'],
+    [{ networkBlocked: false }, 'network_not_blocked']
+  ]) {
+    const sessionRegistry = createAuthorizedSession();
+    const authorizationRegistry = createTranscriptionCanaryAuthorizationRegistry({ clock: () => now });
+    authorizationRegistry.issueAuthorization(authorization(), { now });
+    const result = await runTranscriptionSyntheticCanary(runnerInput(), runnerDeps(sessionRegistry, authorizationRegistry, { revalidationContext }), { now });
+    assertBlocks(result.blocking_reasons, reason);
+    assert.equal(authorizationRegistry.getAuthorization(authorization().authorization_id).authorization_status, 'issued');
+    assert.equal(currentSession(sessionRegistry).session_status, 'authorized');
+  }
+});
+
+test('runner revalidates session expiration between preflight and start', async () => {
+  const sessionRegistry = createAuthorizedSession({ expires_at: nearExpiry });
+  const authorizationRegistry = createTranscriptionCanaryAuthorizationRegistry({ clock: () => now });
+  authorizationRegistry.issueAuthorization(authorization(), { now });
+  const result = await runTranscriptionSyntheticCanary(runnerInput(), runnerDeps(sessionRegistry, authorizationRegistry), {
+    now: afterNearExpiry,
+    clock: () => afterNearExpiry
+  });
+  assertBlocks(result.blocking_reasons, 'session_expired');
+  assert.equal(authorizationRegistry.getAuthorization(authorization().authorization_id).authorization_status, 'issued');
+  assert.equal(currentSession(sessionRegistry).session_status, 'authorized');
+});
+
+test('runner blocks canary authorization consumed between preflight and start without session start', async () => {
+  const sessionRegistry = createAuthorizedSession();
+  const authorizationRegistry = createTranscriptionCanaryAuthorizationRegistry({ clock: () => now });
+  authorizationRegistry.issueAuthorization(authorization(), { now });
+  authorizationRegistry.consumeAuthorization({
+    authorization_id: authorization().authorization_id,
+    session_id: session().session_id,
+    candidate_id: TRANSCRIPTION_READINESS_CANDIDATE_ID,
+    tenant_id: 'grupo_erick',
+    consumed_at: now
+  }, { now });
+  const result = await runTranscriptionSyntheticCanary(runnerInput(), runnerDeps(sessionRegistry, authorizationRegistry), { now });
+  assertBlocks(result.blocking_reasons, 'authorization_already_consumed');
+  assert.equal(currentSession(sessionRegistry).session_status, 'authorized');
+});
+
+test('runner start version conflict and transition replay do not consume authorization', async () => {
+  for (const reason of ['session_version_conflict', 'transition_replay_detected']) {
+    const sessionRegistry = createAuthorizedSession();
+    const authorizationRegistry = createTranscriptionCanaryAuthorizationRegistry({ clock: () => now });
+    authorizationRegistry.issueAuthorization(authorization(), { now });
+    const wrappedRegistry = {
+      getSession: sessionRegistry.getSession,
+      getHistory: sessionRegistry.getHistory,
+      transitionSession() {
+        return { applied: false, blocking_reasons: [reason] };
+      }
+    };
+    const result = await runTranscriptionSyntheticCanary(runnerInput(), {
+      ...runnerDeps(sessionRegistry, authorizationRegistry),
+      sessionRegistry: wrappedRegistry
+    }, { now });
+    assertBlocks(result.blocking_reasons, reason);
+    assert.equal(authorizationRegistry.getAuthorization(authorization().authorization_id).authorization_status, 'issued');
+    assert.equal(currentSession(sessionRegistry).session_status, 'authorized');
+  }
+});
+
+test('runner compensates consume failure after start and does not leave session running', async () => {
+  const sessionRegistry = createAuthorizedSession();
+  const authorizationRegistry = createTranscriptionCanaryAuthorizationRegistry({ clock: () => now });
+  authorizationRegistry.issueAuthorization(authorization(), { now });
+  const wrappedAuthorizationRegistry = {
+    getAuthorization: authorizationRegistry.getAuthorization,
+    consumeAuthorization() {
+      return { consumed: false, blocking_reasons: ['authorization_blocked_after_start'] };
+    }
+  };
+  const result = await runTranscriptionSyntheticCanary(runnerInput(), runnerDeps(sessionRegistry, wrappedAuthorizationRegistry), { now });
+  assertBlocks(result.blocking_reasons, 'authorization_blocked_after_start');
+  assert.notEqual(currentSession(sessionRegistry).session_status, 'running_simulation');
+  assert.equal(currentSession(sessionRegistry).session_status, 'blocked');
+  assert.equal(authorizationRegistry.getAuthorization(authorization().authorization_id).authorization_status, 'issued');
 });
 
 test('report never emits real execution or production decisions', () => {
@@ -615,11 +799,7 @@ test('runner evidence preserves false safety flags after simulation', async () =
   const sessionRegistry = createAuthorizedSession();
   const authorizationRegistry = createTranscriptionCanaryAuthorizationRegistry({ clock: () => now });
   authorizationRegistry.issueAuthorization(authorization(), { now });
-  const result = await runTranscriptionSyntheticCanary(runnerInput(), {
-    sessionRegistry,
-    authorizationRegistry,
-    preflightResult: evaluateTranscriptionCanaryPreflight(session(), preflightContext())
-  }, { now });
+  const result = await runTranscriptionSyntheticCanary(runnerInput(), runnerDeps(sessionRegistry, authorizationRegistry), { now });
   assertSafe(result.evidence_bundle);
   assert.equal(result.evidence_bundle.safety_flags.rollout_percentage, 0);
 });
