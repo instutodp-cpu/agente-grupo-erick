@@ -127,6 +127,9 @@ function buildTranscriptionOperatorApprovalAuditEvent(input = {}) {
 function createTranscriptionOperatorApprovalRegistry(options = {}) {
   const approvals = new Map();
   const consumedApprovalIds = new Set();
+  function blocked(blocked_reason, errors = [blocked_reason]) {
+    return { ok: false, consumed: false, blocked_reason, errors: uniqueSorted(errors), simulated: true, executed: false, real_provider_called: false };
+  }
   function registerApproval(approval, context = {}) {
     const validation = validateTranscriptionOperatorApproval(approval, { ...options.context, ...context });
     if (!validation.valid) return { ok: false, blocked_reason: validation.errors[0], errors: validation.errors, simulated: true, executed: false, real_provider_called: false };
@@ -137,12 +140,23 @@ function createTranscriptionOperatorApprovalRegistry(options = {}) {
   function getApproval(approvalId) {
     return approvals.has(approvalId) ? deepClone(approvals.get(approvalId)) : null;
   }
-  function consumeApproval({ approval_id, candidate_id, tenant_id, consumed_at } = {}) {
+  function consumeApproval({ approval_id, candidate_id, tenant_id, consumed_at } = {}, context = {}) {
     const current = approvals.get(approval_id);
-    if (!current) return { ok: false, consumed: false, blocked_reason: 'operator_approval_not_found', simulated: true, executed: false, real_provider_called: false };
-    if (consumedApprovalIds.has(approval_id) || current.consumed_at !== null) return { ok: false, consumed: false, blocked_reason: 'operator_approval_reuse_blocked', simulated: true, executed: false, real_provider_called: false };
-    if (current.candidate_id !== candidate_id) return { ok: false, consumed: false, blocked_reason: 'approval_candidate_mismatch', simulated: true, executed: false, real_provider_called: false };
-    if (current.tenant_id !== tenant_id) return { ok: false, consumed: false, blocked_reason: 'approval_tenant_mismatch', simulated: true, executed: false, real_provider_called: false };
+    if (!current) return blocked('operator_approval_not_found');
+    if (consumedApprovalIds.has(approval_id) || current.consumed_at !== null) return blocked('operator_approval_reuse_blocked');
+    if (current.approval_status !== 'approved') return blocked(`approval_${current.approval_status || 'missing'}`);
+    if (current.single_use !== true) return blocked('single_use_must_be_true');
+    if (current.candidate_id !== candidate_id) return blocked('approval_candidate_mismatch');
+    if (current.tenant_id !== tenant_id) return blocked('approval_tenant_mismatch');
+    if (!isIso(current.expires_at)) return blocked('expires_at_invalid');
+    if (!isIso(current.approved_at)) return blocked('approved_at_invalid');
+    if (Date.parse(current.expires_at) <= nowMs({ ...options.context, ...context })) return blocked('operator_approval_expired');
+    if (!isIso(consumed_at)) return blocked('consumed_at_invalid');
+    if (Date.parse(consumed_at) < Date.parse(current.approved_at)) return blocked('consumed_at_before_approved_at');
+    if (Date.parse(consumed_at) > Date.parse(current.expires_at)) return blocked('consumption_after_expiration');
+    if (current.environment === 'production' || context.environment === 'production') return blocked('production_blocked');
+    if (!['local_test', 'non_production'].includes(current.environment)) return blocked('approval_environment_not_allowed');
+    if (!ALLOWED_APPROVAL_OPERATIONS.includes(current.allowed_operation)) return blocked(`approval_operation_not_allowed::${current.allowed_operation}`);
     const next = sanitizeTranscriptionData({ ...current, approval_status: 'consumed', consumed_at });
     approvals.set(approval_id, next);
     consumedApprovalIds.add(approval_id);

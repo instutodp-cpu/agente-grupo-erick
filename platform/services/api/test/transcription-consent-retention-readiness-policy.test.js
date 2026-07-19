@@ -18,6 +18,7 @@ const {
 const {
   createTranscriptionConsentRegistry,
   evaluateTranscriptionConsent,
+  validateTranscriptionConsentRecord,
   validateTranscriptionConsent
 } = require('../src/core/transcription-consent-policy');
 const {
@@ -321,12 +322,86 @@ test('consent policy blocks invalid version purpose and write operation', () => 
 test('consent registry blocks replay payload mismatch and revoked-to-granted resurrection', () => {
   const registry = createTranscriptionConsentRegistry();
   assert.equal(registry.registerConsent(consent()).ok, true);
+  assert.equal(registry.registerConsent(consent()).blocked_reason, 'consent_replay_duplicate');
   assert.equal(registry.registerConsent(consent({ purpose: 'development_test' })).blocked_reason, 'consent_replay_payload_mismatch');
   assert.equal(registry.revokeConsent({ consent_id: 'consent_transcription_fixture_001', expected_version: 1, revoked_at: now, revocation_reason: 'synthetic_revocation' }).ok, true);
   assert.equal(registry.revokeConsent({ consent_id: 'consent_transcription_fixture_001', expected_version: 2, revoked_at: now }).blocked_reason, 'consent_revoked_cannot_return_to_granted');
   const stored = registry.getConsent('consent_transcription_fixture_001');
   stored.tenant_id = 'mutated';
   assert.equal(registry.getConsent('consent_transcription_fixture_001').tenant_id, 'grupo_erick');
+});
+
+test('consent registry rejects structurally invalid records and does not store them', () => {
+  const cases = [
+    ['missing_required', (() => { const item = consent(); delete item.tenant_id; return item; })(), 'missing_tenant_id'],
+    ['invalid_version', consent({ consent_version: 0 }), 'consent_version_invalid'],
+    ['invalid_date', consent({ requested_at: 'not-a-date' }), 'requested_at_invalid'],
+    ['invalid_purpose', consent({ purpose: 'generic' }), 'consent_purpose_not_allowed'],
+    ['invalid_tenant', consent({ tenant_id: '' }), 'invalid_tenant_id'],
+    ['forbidden_field', consent({ token: 'never' }), 'forbidden_field::token'],
+    ['forbidden_operation', consent({ allowed_operations: ['send'] }), 'consent_operation_not_allowed::send'],
+    ['simulated_false', consent({ simulated: false }), 'simulated_must_be_true'],
+    ['implicit_consent', consent({ implicit_consent: true }), 'implicit_or_adapter_created_consent_blocked'],
+    ['presumed_consent', consent({ presumed_consent: true }), 'implicit_or_adapter_created_consent_blocked'],
+    ['adapter_created', consent({ created_by_adapter: true }), 'implicit_or_adapter_created_consent_blocked']
+  ];
+  for (const [suffix, record, reason] of cases) {
+    const registry = createTranscriptionConsentRegistry();
+    record.consent_id = `consent_invalid_${suffix}`;
+    const result = registry.registerConsent(record, { now });
+    assert.equal(result.ok, false, suffix);
+    assertBlocks(result.errors || [result.blocked_reason], reason);
+    assert.equal(registry.getConsent(record.consent_id), null);
+  }
+});
+
+test('consent record validation supports only structurally valid historical states', () => {
+  const requested = consent({
+    consent_id: 'consent_requested_fixture',
+    consent_status: 'requested',
+    granted_at: null,
+    granted_by: null
+  });
+  assert.equal(validateTranscriptionConsentRecord(requested, { now }).valid, true);
+  const denied = consent({
+    consent_id: 'consent_denied_fixture',
+    consent_status: 'denied',
+    granted_at: null,
+    granted_by: null
+  });
+  assert.equal(validateTranscriptionConsentRecord(denied, { now }).valid, true);
+  const expired = consent({
+    consent_id: 'consent_expired_fixture',
+    granted_at: '2019-01-01T00:00:00.000Z',
+    consent_status: 'expired',
+    expires_at: past
+  });
+  assert.equal(validateTranscriptionConsentRecord(expired, { now }).valid, true);
+  const revoked = consent({
+    consent_id: 'consent_revoked_fixture',
+    consent_status: 'revoked',
+    revocation_status: 'revoked',
+    revoked_at: now,
+    revocation_reason: 'synthetic_revocation'
+  });
+  assert.equal(validateTranscriptionConsentRecord(revoked, { now }).valid, true);
+
+  const registry = createTranscriptionConsentRegistry();
+  assert.equal(registry.registerConsent(requested, { now }).ok, true);
+  assert.equal(registry.registerConsent(denied, { now }).ok, true);
+  assert.equal(registry.registerConsent(expired, { now }).ok, true);
+  assert.equal(registry.registerConsent(revoked, { now }).ok, true);
+});
+
+test('consent registry stores only sanitized copies after raw validation', () => {
+  const registry = createTranscriptionConsentRegistry();
+  const record = consent({ consent_id: 'consent_sanitized_storage_fixture' });
+  const registered = registry.registerConsent(record, { now });
+  assert.equal(registered.ok, true);
+  assert.equal(Object.isFrozen(registered), true);
+  record.tenant_id = 'mutated_after_register';
+  const stored = registry.getConsent('consent_sanitized_storage_fixture');
+  assert.equal(stored.tenant_id, 'grupo_erick');
 });
 
 test('retention policy accepts sanitized metadata and transcript retention only', () => {
@@ -411,8 +486,95 @@ test('operator approval registry blocks replay and reuse after consumption', () 
   const registry = createTranscriptionOperatorApprovalRegistry();
   assert.equal(registry.registerApproval(approval(), { now }).ok, true);
   assert.equal(registry.registerApproval(approval(), { now }).blocked_reason, 'operator_approval_replay_duplicate');
-  assert.equal(registry.consumeApproval({ approval_id: 'approval_transcription_fixture_001', candidate_id: TRANSCRIPTION_READINESS_CANDIDATE_ID, tenant_id: 'grupo_erick', consumed_at: now }).ok, true);
-  assert.equal(registry.consumeApproval({ approval_id: 'approval_transcription_fixture_001', candidate_id: TRANSCRIPTION_READINESS_CANDIDATE_ID, tenant_id: 'grupo_erick', consumed_at: now }).blocked_reason, 'operator_approval_reuse_blocked');
+  assert.equal(registry.consumeApproval({ approval_id: 'approval_transcription_fixture_001', candidate_id: TRANSCRIPTION_READINESS_CANDIDATE_ID, tenant_id: 'grupo_erick', consumed_at: now }, { now }).ok, true);
+  assert.equal(registry.consumeApproval({ approval_id: 'approval_transcription_fixture_001', candidate_id: TRANSCRIPTION_READINESS_CANDIDATE_ID, tenant_id: 'grupo_erick', consumed_at: now }, { now }).blocked_reason, 'operator_approval_reuse_blocked');
+});
+
+test('operator approval consumption validates deterministic time before mutating state', () => {
+  const registry = createTranscriptionOperatorApprovalRegistry();
+  const record = approval({
+    approval_id: 'approval_consumption_fixture',
+    approved_at: '2026-07-19T00:00:00.000Z',
+    expires_at: '2026-07-20T00:00:00.000Z'
+  });
+  assert.equal(registry.registerApproval(record, { now: '2026-07-19T00:00:00.000Z' }).ok, true);
+
+  const invalidTimestamp = registry.consumeApproval({
+    approval_id: 'approval_consumption_fixture',
+    candidate_id: TRANSCRIPTION_READINESS_CANDIDATE_ID,
+    tenant_id: 'grupo_erick',
+    consumed_at: 'not-a-date'
+  }, { now: '2026-07-19T01:00:00.000Z' });
+  assert.equal(invalidTimestamp.blocked_reason, 'consumed_at_invalid');
+  assert.equal(registry.getApproval('approval_consumption_fixture').approval_status, 'approved');
+  assert.equal(registry.getApproval('approval_consumption_fixture').consumed_at, null);
+
+  const beforeApproval = registry.consumeApproval({
+    approval_id: 'approval_consumption_fixture',
+    candidate_id: TRANSCRIPTION_READINESS_CANDIDATE_ID,
+    tenant_id: 'grupo_erick',
+    consumed_at: '2026-07-18T23:59:59.000Z'
+  }, { now: '2026-07-19T01:00:00.000Z' });
+  assert.equal(beforeApproval.blocked_reason, 'consumed_at_before_approved_at');
+  assert.equal(registry.getApproval('approval_consumption_fixture').approval_status, 'approved');
+
+  const afterExpirationTimestamp = registry.consumeApproval({
+    approval_id: 'approval_consumption_fixture',
+    candidate_id: TRANSCRIPTION_READINESS_CANDIDATE_ID,
+    tenant_id: 'grupo_erick',
+    consumed_at: '2026-07-20T00:00:01.000Z'
+  }, { now: '2026-07-19T01:00:00.000Z' });
+  assert.equal(afterExpirationTimestamp.blocked_reason, 'consumption_after_expiration');
+  assert.equal(registry.getApproval('approval_consumption_fixture').approval_status, 'approved');
+
+  const consumed = registry.consumeApproval({
+    approval_id: 'approval_consumption_fixture',
+    candidate_id: TRANSCRIPTION_READINESS_CANDIDATE_ID,
+    tenant_id: 'grupo_erick',
+    consumed_at: '2026-07-19T01:00:00.000Z'
+  }, { clock: () => '2026-07-19T01:00:00.000Z' });
+  assert.equal(consumed.ok, true);
+  const stored = registry.getApproval('approval_consumption_fixture');
+  assert.equal(stored.approval_status, 'consumed');
+  assert.equal(stored.consumed_at, '2026-07-19T01:00:00.000Z');
+  stored.tenant_id = 'mutated';
+  assert.equal(registry.getApproval('approval_consumption_fixture').tenant_id, 'grupo_erick');
+  assert.equal(registry.consumeApproval({
+    approval_id: 'approval_consumption_fixture',
+    candidate_id: TRANSCRIPTION_READINESS_CANDIDATE_ID,
+    tenant_id: 'grupo_erick',
+    consumed_at: '2026-07-19T01:00:00.000Z'
+  }, { now: '2026-07-19T01:00:00.000Z' }).blocked_reason, 'operator_approval_reuse_blocked');
+});
+
+test('operator approval registered before expiration cannot be consumed after expiration', () => {
+  const registry = createTranscriptionOperatorApprovalRegistry();
+  assert.equal(registry.registerApproval(approval({
+    approval_id: 'approval_expiring_fixture',
+    expires_at: '2026-07-20T00:00:00.000Z'
+  }), { now: '2026-07-19T00:00:00.000Z' }).ok, true);
+  const result = registry.consumeApproval({
+    approval_id: 'approval_expiring_fixture',
+    candidate_id: TRANSCRIPTION_READINESS_CANDIDATE_ID,
+    tenant_id: 'grupo_erick',
+    consumed_at: '2026-07-20T00:00:01.000Z'
+  }, { now: '2026-07-20T00:00:01.000Z' });
+  assert.equal(result.blocked_reason, 'operator_approval_expired');
+  assert.equal(registry.getApproval('approval_expiring_fixture').approval_status, 'approved');
+  assert.equal(registry.getApproval('approval_expiring_fixture').consumed_at, null);
+  const mismatch = registry.consumeApproval({
+    approval_id: 'approval_expiring_fixture',
+    candidate_id: 'candidate_other',
+    tenant_id: 'grupo_erick',
+    consumed_at: '2026-07-19T01:00:00.000Z'
+  }, { now: '2026-07-19T01:00:00.000Z' });
+  assert.equal(mismatch.blocked_reason, 'approval_candidate_mismatch');
+  assert.equal(registry.getApproval('approval_expiring_fixture').consumed_at, null);
+});
+
+test('operator approval consumption blocks non approved records before mutation', () => {
+  const denied = validateTranscriptionOperatorApproval(approval({ approval_status: 'denied' }), { now });
+  assertBlocks(denied.errors, 'approval_denied');
 });
 
 test('readiness passes only for controlled canary review with all synthetic requirements satisfied', () => {
@@ -425,6 +587,31 @@ test('readiness passes only for controlled canary review with all synthetic requ
   assert.equal(result.rollout_percentage, 0);
   assert.equal(result.production_blocked, true);
   assertSafeEnvelope(result);
+});
+
+test('readiness and consumption reject approval that expires after registration', () => {
+  const registry = createTranscriptionOperatorApprovalRegistry();
+  const expiringApproval = approval({
+    approval_id: 'approval_readiness_expiring_fixture',
+    expires_at: '2026-07-20T00:00:00.000Z'
+  });
+  assert.equal(registry.registerApproval(expiringApproval, { now: '2026-07-19T00:00:00.000Z' }).ok, true);
+  const storedApproval = registry.getApproval('approval_readiness_expiring_fixture');
+  const readiness = evaluateTranscriptionProviderReadiness(candidate(), validReadinessContext({
+    operatorApproval: storedApproval,
+    now: '2026-07-20T00:00:01.000Z',
+    clock: () => '2026-07-20T00:00:01.000Z'
+  }));
+  assert.equal(readiness.ready_for_next_review, false);
+  assertBlocks(readiness.blocking_requirements, 'operator_approval_expired');
+  const consumed = registry.consumeApproval({
+    approval_id: 'approval_readiness_expiring_fixture',
+    candidate_id: TRANSCRIPTION_READINESS_CANDIDATE_ID,
+    tenant_id: 'grupo_erick',
+    consumed_at: '2026-07-20T00:00:01.000Z'
+  }, { now: '2026-07-20T00:00:01.000Z' });
+  assert.equal(consumed.blocked_reason, 'operator_approval_expired');
+  assert.equal(registry.getApproval('approval_readiness_expiring_fixture').consumed_at, null);
 });
 
 test('readiness blocks absence of each mandatory policy', () => {

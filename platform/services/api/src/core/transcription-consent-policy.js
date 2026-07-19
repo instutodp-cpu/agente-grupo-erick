@@ -43,6 +43,8 @@ const REQUIRED_CONSENT_FIELDS = Object.freeze([
   'consent_version',
   'granted_by',
   'revocation_status',
+  'revoked_at',
+  'revocation_reason',
   'allowed_operations',
   'data_classification',
   'simulated'
@@ -90,30 +92,30 @@ function safeResult(consent, blockingReasons, fields = {}) {
   });
 }
 
-function validateTranscriptionConsent(consent, context = {}) {
+function validateTranscriptionConsentRecord(consent, context = {}) {
   const errors = [];
   if (!isPlainObject(consent)) return { valid: false, errors: ['consent_missing'] };
   for (const field of REQUIRED_CONSENT_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(consent, field)) errors.push(`missing_${field}`);
   }
-  for (const field of ['consent_id', 'transcription_id', 'tenant_id', 'workspace_type', 'subject_type', 'purpose', 'capture_source', 'consent_status', 'granted_by', 'data_classification']) {
+  for (const field of ['consent_id', 'transcription_id', 'tenant_id', 'workspace_type', 'subject_type', 'purpose', 'capture_source', 'consent_status', 'revocation_status', 'data_classification']) {
     if (!isNonEmptyString(consent[field])) errors.push(`invalid_${field}`);
   }
   if (!CONSENT_STATUSES.includes(consent.consent_status)) errors.push('consent_status_not_allowed');
-  if (consent.consent_status !== 'granted') errors.push(`consent_${consent.consent_status || 'missing'}`);
   if (!ALLOWED_CONSENT_PURPOSES.includes(consent.purpose)) errors.push('consent_purpose_not_allowed');
   if (!Number.isInteger(consent.consent_version) || consent.consent_version < 1) errors.push('consent_version_invalid');
   if (!isIso(consent.requested_at)) errors.push('requested_at_invalid');
-  if (!isIso(consent.granted_at)) errors.push('granted_at_invalid');
   if (!isIso(consent.expires_at)) errors.push('expires_at_invalid');
+  if (consent.granted_at !== null && consent.granted_at !== undefined && !isIso(consent.granted_at)) errors.push('granted_at_invalid');
   if (isIso(consent.granted_at) && isIso(consent.expires_at) && Date.parse(consent.granted_at) > Date.parse(consent.expires_at)) {
     errors.push('granted_at_after_expires_at');
   }
-  if (isIso(consent.expires_at) && Date.parse(consent.expires_at) <= nowMs(context)) errors.push('consent_expired');
   if (consent.consent_status === 'revoked' || consent.revocation_status === 'revoked') {
-    errors.push('consent_revoked');
     if (!isIso(consent.revoked_at)) errors.push('revoked_at_required');
   }
+  if (consent.consent_status !== 'revoked' && consent.revocation_status === 'revoked') errors.push('revocation_status_mismatch');
+  if (consent.consent_status === 'revoked' && consent.revocation_status !== 'revoked') errors.push('revocation_status_required');
+  if (consent.consent_status === 'granted' && !isIso(consent.granted_at)) errors.push('granted_at_invalid');
   if (consent.consent_status === 'granted' && !isNonEmptyString(consent.granted_by)) errors.push('granted_by_required');
   if (!Array.isArray(consent.allowed_operations) || consent.allowed_operations.length === 0) {
     errors.push('allowed_operations_required');
@@ -132,6 +134,16 @@ function validateTranscriptionConsent(consent, context = {}) {
     errors.push('implicit_or_adapter_created_consent_blocked');
   }
   errors.push(...findTranscriptionForbiddenFields(consent));
+  return { valid: errors.length === 0, errors: uniqueSorted(errors) };
+}
+
+function validateTranscriptionConsent(consent, context = {}) {
+  const recordValidation = validateTranscriptionConsentRecord(consent, context);
+  const errors = [...recordValidation.errors];
+  if (!isPlainObject(consent)) return { valid: false, errors: uniqueSorted(errors) };
+  if (consent.consent_status !== 'granted') errors.push(`consent_${consent.consent_status || 'missing'}`);
+  if (isIso(consent.expires_at) && Date.parse(consent.expires_at) <= nowMs(context)) errors.push('consent_expired');
+  if (consent.consent_status === 'revoked' || consent.revocation_status === 'revoked') errors.push('consent_revoked');
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }
 
@@ -172,10 +184,8 @@ function createTranscriptionConsentRegistry(options = {}) {
   const payloadHashes = new Map();
   const consumedConsentIds = new Set();
   function registerConsent(consent, context = {}) {
-    const validation = validateTranscriptionConsent(consent, { ...options.context, ...context, allowNonGranted: true });
-    if (!isPlainObject(consent) || validation.errors.some((error) => error.startsWith('forbidden_'))) {
-      return { ok: false, blocked_reason: validation.errors[0] || 'consent_invalid', simulated: true, executed: false, real_provider_called: false };
-    }
+    const validation = validateTranscriptionConsentRecord(consent, { ...options.context, ...context });
+    if (!validation.valid) return { ok: false, blocked_reason: validation.errors[0] || 'consent_invalid', errors: validation.errors, simulated: true, executed: false, real_provider_called: false };
     const existing = consents.get(consent.consent_id);
     const nextHash = hashRecord(consent);
     if (existing) {
@@ -223,5 +233,6 @@ module.exports = {
   buildTranscriptionConsentAuditEvent,
   createTranscriptionConsentRegistry,
   evaluateTranscriptionConsent,
+  validateTranscriptionConsentRecord,
   validateTranscriptionConsent
 };
