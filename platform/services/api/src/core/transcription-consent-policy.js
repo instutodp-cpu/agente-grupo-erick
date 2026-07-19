@@ -61,6 +61,10 @@ function nowMs(context = {}) {
   return Date.parse(value || new Date(0).toISOString());
 }
 
+function hasTemporalContext(context = {}) {
+  return typeof context.clock === 'function' || Object.prototype.hasOwnProperty.call(context, 'now');
+}
+
 function hashRecord(record) {
   return JSON.stringify(record, Object.keys(record || {}).sort());
 }
@@ -109,6 +113,12 @@ function validateTranscriptionConsentRecord(consent, context = {}) {
   if (consent.granted_at !== null && consent.granted_at !== undefined && !isIso(consent.granted_at)) errors.push('granted_at_invalid');
   if (isIso(consent.granted_at) && isIso(consent.expires_at) && Date.parse(consent.granted_at) > Date.parse(consent.expires_at)) {
     errors.push('granted_at_after_expires_at');
+  }
+  if (hasTemporalContext(context) && isIso(consent.expires_at) && consent.consent_status === 'granted' && Date.parse(consent.expires_at) <= nowMs(context)) {
+    errors.push('consent_expired');
+  }
+  if (hasTemporalContext(context) && isIso(consent.expires_at) && consent.consent_status === 'expired' && Date.parse(consent.expires_at) > nowMs(context)) {
+    errors.push('expired_status_not_effective');
   }
   if (consent.consent_status === 'revoked' || consent.revocation_status === 'revoked') {
     if (!isIso(consent.revoked_at)) errors.push('revoked_at_required');

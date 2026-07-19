@@ -336,6 +336,7 @@ test('consent registry rejects structurally invalid records and does not store t
     ['missing_required', (() => { const item = consent(); delete item.tenant_id; return item; })(), 'missing_tenant_id'],
     ['invalid_version', consent({ consent_version: 0 }), 'consent_version_invalid'],
     ['invalid_date', consent({ requested_at: 'not-a-date' }), 'requested_at_invalid'],
+    ['stale_granted', consent({ expires_at: past }), 'consent_expired'],
     ['invalid_purpose', consent({ purpose: 'generic' }), 'consent_purpose_not_allowed'],
     ['invalid_tenant', consent({ tenant_id: '' }), 'invalid_tenant_id'],
     ['forbidden_field', consent({ token: 'never' }), 'forbidden_field::token'],
@@ -377,6 +378,11 @@ test('consent record validation supports only structurally valid historical stat
     expires_at: past
   });
   assert.equal(validateTranscriptionConsentRecord(expired, { now }).valid, true);
+  assertBlocks(validateTranscriptionConsentRecord(consent({
+    consent_id: 'consent_future_expired_status_fixture',
+    consent_status: 'expired',
+    expires_at: future
+  }), { now }).errors, 'expired_status_not_effective');
   const revoked = consent({
     consent_id: 'consent_revoked_fixture',
     consent_status: 'revoked',
