@@ -35,19 +35,36 @@ const FORBIDDEN_TRANSCRIPTION_FIELDS = uniqueSorted([
   'rawAudio',
   'raw_audio',
   'audio',
+  'audio_bytes',
   'audioBuffer',
   'audio_buffer',
+  'buffer',
   'binary',
+  'blob',
+  'base64',
   'waveform',
+  'raw_media',
   'request_headers',
   'headers',
+  'cookie',
   'cookies',
   'credentials',
+  'credential',
   'authorization',
+  'password',
+  'api_key',
   'provider_token',
   'providerToken',
+  'secret_value',
   'endpoint',
   'url',
+  'provider_url',
+  'upload_url',
+  'storage_url',
+  'signed_url',
+  'presigned_url',
+  'raw_provider_response',
+  'provider_response',
   'provider_response_raw',
   'providerResponseRaw',
   'rawProviderResponse',
@@ -200,6 +217,18 @@ function sanitizeTranscriptionData(value) {
   return sanitize(value);
 }
 
+function sanitizeTranscriptionBlockedReason(reason) {
+  if (!isNonEmptyString(reason)) return reason || null;
+  const normalized = reason.toLowerCase();
+  for (const field of FORBIDDEN_TRANSCRIPTION_FIELDS) {
+    if (normalized.includes(String(field).toLowerCase())) return 'forbidden_transcription_field_detected';
+  }
+  if (normalized.includes('unexpected_url')) return 'forbidden_transcription_field_detected';
+  if (normalized.includes('base64')) return 'forbidden_transcription_field_detected';
+  if (normalized.includes('binary')) return 'forbidden_transcription_field_detected';
+  return reason;
+}
+
 function validateTranscriptionRequest(request) {
   const errors = [];
   if (!isPlainObject(request)) return { valid: false, errors: ['transcription_request_must_be_object'] };
@@ -269,7 +298,7 @@ function validateTranscriptionResult(result) {
 
 function buildSafeTranscriptionError(code, reason) {
   return buildSafeAdapterError(code || 'INVALID_ADAPTER_REQUEST', 'Transcription adapter operation blocked safely.', {
-    blocked_reason: reason || 'transcription_blocked'
+    blocked_reason: sanitizeTranscriptionBlockedReason(reason) || 'transcription_blocked'
   });
 }
 
@@ -289,7 +318,7 @@ function buildTranscriptionAuditEvent(input = {}) {
     executed: input.executed === true,
     real_provider_called: false,
     can_trigger_real_execution: false,
-    blocked_reason: input.blocked_reason || null,
+    blocked_reason: sanitizeTranscriptionBlockedReason(input.blocked_reason) || null,
     occurred_at: input.occurred_at || new Date(0).toISOString()
   });
 }
@@ -317,6 +346,7 @@ module.exports = {
   deepClone,
   findTranscriptionForbiddenFields,
   sanitizeTranscriptionData,
+  sanitizeTranscriptionBlockedReason,
   validateTranscriptionRequest,
   validateTranscriptionResult
 };
