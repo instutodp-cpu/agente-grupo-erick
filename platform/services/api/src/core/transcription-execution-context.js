@@ -11,6 +11,7 @@ const EXECUTION_CONTEXT_FIELDS = Object.freeze([
   'transport',
   'consent',
   'readiness',
+  'selection',
   'mock',
   'audit',
   'result'

@@ -87,11 +87,13 @@ function buildTranscriptionResponse(context = {}) {
   const transportContract = context.transport_contract || {};
   const audit = context.audit || {};
   const status = context.status || (context.blockers && context.blockers.length > 0 ? 'BLOCKED' : 'SIMULATED_SUCCESS');
+  const selectedProviderSlug = context.selection && context.selection.result ? context.selection.result.selected_provider_slug : null;
+  const selectedProviderVersion = context.selection && context.selection.result ? context.selection.result.selected_provider_version : null;
   const response = {
     response_id: `response_${request.request_id || 'missing'}`,
     request_id: request.request_id || 'request_not_available',
-    provider_slug: request.provider_slug || adapterMetadata.provider_slug || 'provider_not_available',
-    provider_version: adapterMetadata.provider_version || 'provider_version_not_available',
+    provider_slug: selectedProviderSlug || request.provider_slug || adapterMetadata.provider_slug || 'provider_not_available',
+    provider_version: selectedProviderVersion || adapterMetadata.provider_version || 'provider_version_not_available',
     adapter_version: Number.isInteger(adapterMetadata.adapter_version) ? adapterMetadata.adapter_version : 0,
     transport_version: Number.isInteger(transportContract.transport_version) ? transportContract.transport_version : 0,
     execution_mode: 'mock_transcription_orchestrator',

@@ -1,0 +1,21 @@
+{
+  "dataset_version": "transcription_provider_selection_engine_fixture_v1",
+  "simulation": true,
+  "network_used": false,
+  "provider_called": false,
+  "executed": false,
+  "production_blocked": true,
+  "rollout_percentage": 0,
+  "scenarios": [
+    "perfect_tie",
+    "cheapest_provider",
+    "fastest_provider",
+    "maximum_compatibility",
+    "missing_language",
+    "missing_format",
+    "missing_required_feature",
+    "limits_exceeded",
+    "allowlist_blocked",
+    "denylist_blocked"
+  ]
+}
