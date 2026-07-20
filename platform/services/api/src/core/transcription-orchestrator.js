@@ -23,6 +23,7 @@ const { buildTranscriptionOrchestratorAudit } = require('./transcription-orchest
 const { buildTranscriptionResponse } = require('./transcription-response-contract');
 const { createTranscriptionExecutionContext } = require('./transcription-execution-context');
 const { stablePayload } = require('./transcription-provider-contract-registry');
+const { selectTranscriptionProvider } = require('./transcription-provider-selection-engine');
 
 const TRANSCRIPTION_ORCHESTRATOR_VALIDATOR_VERSION = 'transcription_orchestrator_validator_v1';
 const ORCHESTRATOR_REQUEST_FIELDS = Object.freeze([
@@ -52,6 +53,7 @@ const ORCHESTRATOR_STATUSES = Object.freeze([
 ]);
 const PIPELINE_STEPS = Object.freeze([
   'validateRequest',
+  'selectProvider',
   'validateConsent',
   'validateProvider',
   'validateAdapter',
@@ -135,6 +137,20 @@ function validateRequest(context) {
   return appendStep(context, 'validateRequest', { request_validation: validation });
 }
 
+function selectProvider(context) {
+  if (context.blockers.length > 0) return context;
+  if (context.request.provider_slug !== 'AUTO') return appendStep(context, 'selectProvider', { selection: null });
+  const selection = selectTranscriptionProvider({
+    request: context.selection_request || {},
+    profiles: context.selection_profiles || []
+  });
+  if (!selection.result || selection.result.status !== 'SELECTED_SIMULATION') {
+    const reason = selection.result ? selection.result.decision_reason : 'provider_selection_failed';
+    return block(context, 'selectProvider', 'PROVIDER_BLOCKED', selection.errors && selection.errors.length > 0 ? selection.errors : [reason]);
+  }
+  return appendStep(context, 'selectProvider', { selection });
+}
+
 function validateConsent(context) {
   if (context.blockers.length > 0) return context;
   const consent = context.request.consent_context.consent;
@@ -150,6 +166,9 @@ function validateConsent(context) {
 
 function validateProvider(context) {
   if (context.blockers.length > 0) return context;
+  if (context.request.provider_slug === 'AUTO') {
+    return appendStep(context, 'validateProvider', { provider: context.selection.result });
+  }
   const providerContract = context.provider_contract;
   const validation = validateProviderContract(providerContract);
   const errors = [...validation.errors];
@@ -165,7 +184,7 @@ function validateAdapter(context) {
   const metadata = implementationValidation.valid ? adapter.metadata() : {};
   const metadataValidation = validateProviderAdapterMetadata(metadata);
   const errors = [...implementationValidation.errors, ...metadataValidation.errors];
-  if (metadata.provider_slug && metadata.provider_slug !== context.request.provider_slug) errors.push('adapter_provider_slug_mismatch');
+  if (context.request.provider_slug !== 'AUTO' && metadata.provider_slug && metadata.provider_slug !== context.request.provider_slug) errors.push('adapter_provider_slug_mismatch');
   if (context.request.adapter_context && context.request.adapter_context.adapter_id && metadata.adapter_id !== context.request.adapter_context.adapter_id) {
     errors.push('adapter_id_mismatch');
   }
@@ -191,7 +210,7 @@ function validateTransport(context) {
     ...boundaryValidation.errors,
     ...policyValidation.errors
   ];
-  if (context.transport_contract && context.transport_contract.provider_slug !== context.request.provider_slug) errors.push('transport_provider_slug_mismatch');
+  if (context.request.provider_slug !== 'AUTO' && context.transport_contract && context.transport_contract.provider_slug !== context.request.provider_slug) errors.push('transport_provider_slug_mismatch');
   if (!contractValidation.valid || !boundaryValidation.valid || !policyValidation.valid || errors.length > 0) {
     return block(context, 'validateTransport', 'TRANSPORT_BLOCKED', errors);
   }
@@ -203,7 +222,7 @@ function validateLifecycle(context) {
   const lifecycle = context.transport_lifecycle || {};
   const errors = [];
   if (lifecycle.transport_state !== 'BLOCKED') errors.push('lifecycle_transport_state_must_be_BLOCKED');
-  if (lifecycle.provider_slug !== context.request.provider_slug) errors.push('lifecycle_provider_slug_mismatch');
+  if (context.request.provider_slug !== 'AUTO' && lifecycle.provider_slug !== context.request.provider_slug) errors.push('lifecycle_provider_slug_mismatch');
   if (lifecycle.transport_contract_id !== context.transport_contract.transport_contract_id) errors.push('lifecycle_transport_contract_id_mismatch');
   if (lifecycle.runtime_enabled !== false) errors.push('lifecycle_runtime_enabled_must_be_false');
   if (lifecycle.provider_enabled !== false) errors.push('lifecycle_provider_enabled_must_be_false');
@@ -218,7 +237,7 @@ function executeMock(context) {
   const adapter = context.adapter || createTranscriptionProviderAdapterMock();
   const input = {
     adapter_id: context.adapter_metadata.adapter_id,
-    provider_slug: context.request.provider_slug,
+    provider_slug: context.request.provider_slug === 'AUTO' ? context.adapter_metadata.provider_slug : context.request.provider_slug,
     operation: 'validate',
     request_id: context.request.request_id,
     simulated: true
@@ -261,6 +280,7 @@ function buildResponse(context) {
       transport: context.transport || null,
       consent: context.consent || null,
       readiness: context.readiness || null,
+      selection: context.selection || null,
       mock: context.mock || null,
       audit: context.audit || null,
       result: response
@@ -275,6 +295,8 @@ function runMockTranscriptionOrchestrator(input = {}) {
     adapter: input.adapter || createTranscriptionProviderAdapterMock(),
     transport_contract: input.transport_contract || null,
     transport_lifecycle: input.transport_lifecycle || null,
+    selection_request: input.selection_request || null,
+    selection_profiles: input.selection_profiles || [],
     readiness: input.readiness || null,
     status: 'BLOCKED',
     blockers: [],
@@ -287,6 +309,7 @@ function runMockTranscriptionOrchestrator(input = {}) {
   return PIPELINE_STEPS.reduce((context, step) => {
     const handlers = {
       validateRequest,
+      selectProvider,
       validateConsent,
       validateProvider,
       validateAdapter,
@@ -311,6 +334,7 @@ module.exports = {
   executeMock,
   runMockTranscriptionOrchestrator,
   sanitizeResult,
+  selectProvider,
   validateAdapter,
   validateConsent,
   validateLifecycle,

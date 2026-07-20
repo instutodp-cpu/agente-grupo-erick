@@ -18,6 +18,7 @@ const REQUIRED_ORCHESTRATOR_AUDIT_FIELDS = Object.freeze([
   'adapter_id',
   'transport_contract_id',
   'decision',
+  'selection',
   'blockers',
   'simulation',
   'network',
@@ -83,6 +84,11 @@ function buildTranscriptionOrchestratorAudit(context = {}) {
     adapter_id: adapterMetadata.adapter_id || 'adapter_not_available',
     transport_contract_id: transportContract.transport_contract_id || 'transport_not_available',
     decision: context.status || 'BLOCKED',
+    selection: context.selection ? {
+      decision: context.selection.result.decision,
+      selected_provider_slug: context.selection.result.selected_provider_slug,
+      selection_request_id: context.selection.result.selection_request_id
+    } : null,
     blockers: uniqueSorted(context.blockers || []),
     simulation: true,
     network: false,
