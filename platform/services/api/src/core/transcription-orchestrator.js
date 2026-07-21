@@ -25,6 +25,7 @@ const { createTranscriptionExecutionContext } = require('./transcription-executi
 const { stablePayload } = require('./transcription-provider-contract-registry');
 const { selectTranscriptionProvider } = require('./transcription-provider-selection-engine');
 const { resolveTranscriptionSecretReference } = require('./transcription-secret-resolution-boundary');
+const { evaluateNetworkPermission } = require('./transcription-network-permission-boundary');
 
 const TRANSCRIPTION_ORCHESTRATOR_VALIDATOR_VERSION = 'transcription_orchestrator_validator_v1';
 const ORCHESTRATOR_REQUEST_FIELDS = Object.freeze([
@@ -56,6 +57,7 @@ const PIPELINE_STEPS = Object.freeze([
   'validateRequest',
   'selectProvider',
   'validateSecretResolution',
+  'validateNetworkPermission',
   'validateConsent',
   'validateProvider',
   'validateAdapter',
@@ -168,6 +170,24 @@ function validateSecretResolution(context) {
     secret_resolution: resolution,
     secret_policy_decision: resolution.policy,
     secret_reference_fingerprint: resolution.secret_reference_fingerprint
+  });
+}
+
+function validateNetworkPermission(context) {
+  if (context.blockers.length > 0) return context;
+  if (!context.network_permission_request) return appendStep(context, 'validateNetworkPermission', {
+    network_permission: null,
+    network_policy_decision: null,
+    destination_reference_fingerprint: null
+  });
+  const permission = evaluateNetworkPermission(context.network_permission_request);
+  if (!permission.result || permission.result.network_allowed !== false || permission.result.network_used !== false || permission.result.provider_called !== false || permission.result.executed !== false) {
+    return block(context, 'validateNetworkPermission', 'TRANSPORT_BLOCKED', ['network_permission_unsafe_result']);
+  }
+  return appendStep(context, 'validateNetworkPermission', {
+    network_permission: permission,
+    network_policy_decision: permission.policy,
+    destination_reference_fingerprint: permission.destination_reference_fingerprint
   });
 }
 
@@ -304,6 +324,9 @@ function buildResponse(context) {
       secret_resolution: context.secret_resolution || null,
       secret_policy_decision: context.secret_policy_decision || null,
       secret_reference_fingerprint: context.secret_reference_fingerprint || null,
+      network_permission: context.network_permission || null,
+      network_policy_decision: context.network_policy_decision || null,
+      destination_reference_fingerprint: context.destination_reference_fingerprint || null,
       mock: context.mock || null,
       audit: context.audit || null,
       result: response
@@ -321,6 +344,7 @@ function runMockTranscriptionOrchestrator(input = {}) {
     selection_request: input.selection_request || null,
     selection_profiles: input.selection_profiles || [],
     secret_resolution_request: input.secret_resolution_request || null,
+    network_permission_request: input.network_permission_request || null,
     readiness: input.readiness || null,
     status: 'BLOCKED',
     blockers: [],
@@ -335,6 +359,7 @@ function runMockTranscriptionOrchestrator(input = {}) {
       validateRequest,
       selectProvider,
       validateSecretResolution,
+      validateNetworkPermission,
       validateConsent,
       validateProvider,
       validateAdapter,
@@ -361,6 +386,7 @@ module.exports = {
   sanitizeResult,
   selectProvider,
   validateSecretResolution,
+  validateNetworkPermission,
   validateAdapter,
   validateConsent,
   validateLifecycle,

@@ -20,6 +20,7 @@ const REQUIRED_ORCHESTRATOR_AUDIT_FIELDS = Object.freeze([
   'decision',
   'selection',
   'secret_resolution',
+  'network_permission',
   'blockers',
   'simulation',
   'network',
@@ -97,6 +98,14 @@ function buildTranscriptionOrchestratorAudit(context = {}) {
       secret_reference_fingerprint: context.secret_resolution.secret_reference_fingerprint,
       secret_material_returned: false,
       secret_resolved: false
+    } : null,
+    network_permission: context.network_permission ? {
+      status: context.network_permission.result.status,
+      decision: context.network_permission.result.decision,
+      destination_ref_id: context.network_permission.result.destination_ref_id,
+      destination_reference_fingerprint: context.network_permission.destination_reference_fingerprint,
+      network_allowed: false,
+      network_used: false
     } : null,
     blockers: uniqueSorted(context.blockers || []),
     simulation: true,
