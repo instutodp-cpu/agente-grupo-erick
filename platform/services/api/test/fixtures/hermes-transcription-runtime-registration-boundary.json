@@ -1,0 +1,105 @@
+{
+  "fixture_version": "hermes_transcription_runtime_registration_boundary_fixture_v1",
+  "simulation": true,
+  "production_blocked": true,
+  "runtime_enabled": false,
+  "registration_allowed": false,
+  "components_registered": false,
+  "components_initialized": false,
+  "components_activated": false,
+  "descriptors": [
+    {
+      "component_ref_id": "runtime-registration-provider-adapter-mock-a",
+      "component_ref_version": 1,
+      "component_type": "PROVIDER_ADAPTER",
+      "component_id": "adapter_mock_a",
+      "component_alias": "mock_adapter_a",
+      "tenant_id": "tenant_runtime",
+      "environment": "DEVELOPMENT",
+      "entrypoint_reference": "RUNTIME_LOGICAL_REF_PROVIDER_ADAPTER_MOCK_A",
+      "capabilities_declared": ["synthetic_transcription_capability"],
+      "depends_on": [],
+      "active": false,
+      "registered": false,
+      "initialized": false,
+      "activated": false,
+      "simulation": true,
+      "production_blocked": true,
+      "runtime_enabled": false,
+      "validator_version": "transcription_runtime_registration_boundary_validator_v1"
+    },
+    {
+      "component_ref_id": "runtime-registration-capability-profile-mock-a",
+      "component_ref_version": 1,
+      "component_type": "CAPABILITY_PROFILE",
+      "component_id": "capability_profile_mock_a",
+      "component_alias": "mock_capability_profile_a",
+      "tenant_id": "tenant_runtime",
+      "environment": "STAGING",
+      "entrypoint_reference": "RUNTIME_LOGICAL_REF_CAPABILITY_PROFILE_MOCK_A",
+      "capabilities_declared": [],
+      "depends_on": [],
+      "active": false,
+      "registered": false,
+      "initialized": false,
+      "activated": false,
+      "simulation": true,
+      "production_blocked": true,
+      "runtime_enabled": false,
+      "validator_version": "transcription_runtime_registration_boundary_validator_v1"
+    },
+    {
+      "component_ref_id": "runtime-registration-selection-engine-mock",
+      "component_ref_version": 1,
+      "component_type": "SELECTION_ENGINE",
+      "component_id": "selection_engine_mock",
+      "component_alias": "mock_selection_engine",
+      "tenant_id": "tenant_runtime",
+      "environment": "DEVELOPMENT",
+      "entrypoint_reference": "RUNTIME_LOGICAL_REF_SELECTION_ENGINE_MOCK",
+      "capabilities_declared": [],
+      "depends_on": ["runtime-registration-provider-adapter-mock-a"],
+      "active": false,
+      "registered": false,
+      "initialized": false,
+      "activated": false,
+      "simulation": true,
+      "production_blocked": true,
+      "runtime_enabled": false,
+      "validator_version": "transcription_runtime_registration_boundary_validator_v1"
+    }
+  ],
+  "graphs": [
+    {
+      "graph_id": "graph-runtime-registration-provider-adapter-only",
+      "graph_version": 1,
+      "nodes": [
+        { "node_id": "runtime-registration-provider-adapter-mock-a", "component_type": "PROVIDER_ADAPTER", "version": 1 }
+      ],
+      "edges": [],
+      "bindings": [],
+      "topological_order": ["runtime-registration-provider-adapter-mock-a"],
+      "simulation": true,
+      "production_blocked": true,
+      "validator_version": "transcription_runtime_registration_boundary_validator_v1"
+    },
+    {
+      "graph_id": "graph-runtime-registration-selection-engine-with-adapter",
+      "graph_version": 1,
+      "nodes": [
+        { "node_id": "runtime-registration-provider-adapter-mock-a", "component_type": "PROVIDER_ADAPTER", "version": 1 },
+        { "node_id": "runtime-registration-selection-engine-mock", "component_type": "SELECTION_ENGINE", "version": 1 }
+      ],
+      "edges": [
+        { "from": "runtime-registration-selection-engine-mock", "to": "runtime-registration-provider-adapter-mock-a" }
+      ],
+      "bindings": [
+        { "node_id": "runtime-registration-selection-engine-mock", "binds_to": "runtime-registration-provider-adapter-mock-a", "binding_type": "PROVIDER_ADAPTER", "required_version": 1 }
+      ],
+      "topological_order": ["runtime-registration-provider-adapter-mock-a", "runtime-registration-selection-engine-mock"],
+      "simulation": true,
+      "production_blocked": true,
+      "validator_version": "transcription_runtime_registration_boundary_validator_v1"
+    }
+  ]
+}

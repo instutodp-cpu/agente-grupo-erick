@@ -18,6 +18,9 @@ const EXECUTION_CONTEXT_FIELDS = Object.freeze([
   'network_permission',
   'network_policy_decision',
   'destination_reference_fingerprint',
+  'runtime_registration',
+  'runtime_registration_policy_decision',
+  'runtime_registration_plan_fingerprint',
   'mock',
   'audit',
   'result'

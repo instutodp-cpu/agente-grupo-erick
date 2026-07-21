@@ -26,6 +26,7 @@ const { stablePayload } = require('./transcription-provider-contract-registry');
 const { selectTranscriptionProvider } = require('./transcription-provider-selection-engine');
 const { resolveTranscriptionSecretReference } = require('./transcription-secret-resolution-boundary');
 const { evaluateNetworkPermission } = require('./transcription-network-permission-boundary');
+const { evaluateRuntimeRegistration } = require('./transcription-runtime-registration-boundary');
 
 const TRANSCRIPTION_ORCHESTRATOR_VALIDATOR_VERSION = 'transcription_orchestrator_validator_v1';
 const ORCHESTRATOR_REQUEST_FIELDS = Object.freeze([
@@ -58,6 +59,7 @@ const PIPELINE_STEPS = Object.freeze([
   'selectProvider',
   'validateSecretResolution',
   'validateNetworkPermission',
+  'validateRuntimeRegistration',
   'validateConsent',
   'validateProvider',
   'validateAdapter',
@@ -188,6 +190,32 @@ function validateNetworkPermission(context) {
     network_permission: permission,
     network_policy_decision: permission.policy,
     destination_reference_fingerprint: permission.destination_reference_fingerprint
+  });
+}
+
+function validateRuntimeRegistration(context) {
+  if (context.blockers.length > 0) return context;
+  if (!context.runtime_registration_request) return appendStep(context, 'validateRuntimeRegistration', {
+    runtime_registration: null,
+    runtime_registration_policy_decision: null,
+    runtime_registration_plan_fingerprint: null
+  });
+  const registration = evaluateRuntimeRegistration(context.runtime_registration_request);
+  if (
+    !registration.result ||
+    registration.result.registration_allowed !== false ||
+    registration.result.runtime_mutated !== false ||
+    registration.result.components_registered !== false ||
+    registration.result.components_initialized !== false ||
+    registration.result.components_activated !== false ||
+    registration.result.executed !== false
+  ) {
+    return block(context, 'validateRuntimeRegistration', 'TRANSPORT_BLOCKED', ['runtime_registration_unsafe_result']);
+  }
+  return appendStep(context, 'validateRuntimeRegistration', {
+    runtime_registration: registration,
+    runtime_registration_policy_decision: registration.policy,
+    runtime_registration_plan_fingerprint: registration.plan_fingerprint
   });
 }
 
@@ -327,6 +355,9 @@ function buildResponse(context) {
       network_permission: context.network_permission || null,
       network_policy_decision: context.network_policy_decision || null,
       destination_reference_fingerprint: context.destination_reference_fingerprint || null,
+      runtime_registration: context.runtime_registration || null,
+      runtime_registration_policy_decision: context.runtime_registration_policy_decision || null,
+      runtime_registration_plan_fingerprint: context.runtime_registration_plan_fingerprint || null,
       mock: context.mock || null,
       audit: context.audit || null,
       result: response
@@ -345,6 +376,7 @@ function runMockTranscriptionOrchestrator(input = {}) {
     selection_profiles: input.selection_profiles || [],
     secret_resolution_request: input.secret_resolution_request || null,
     network_permission_request: input.network_permission_request || null,
+    runtime_registration_request: input.runtime_registration_request || null,
     readiness: input.readiness || null,
     status: 'BLOCKED',
     blockers: [],
@@ -360,6 +392,7 @@ function runMockTranscriptionOrchestrator(input = {}) {
       selectProvider,
       validateSecretResolution,
       validateNetworkPermission,
+      validateRuntimeRegistration,
       validateConsent,
       validateProvider,
       validateAdapter,
@@ -387,6 +420,7 @@ module.exports = {
   selectProvider,
   validateSecretResolution,
   validateNetworkPermission,
+  validateRuntimeRegistration,
   validateAdapter,
   validateConsent,
   validateLifecycle,
