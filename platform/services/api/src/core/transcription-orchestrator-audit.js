@@ -19,6 +19,7 @@ const REQUIRED_ORCHESTRATOR_AUDIT_FIELDS = Object.freeze([
   'transport_contract_id',
   'decision',
   'selection',
+  'secret_resolution',
   'blockers',
   'simulation',
   'network',
@@ -88,6 +89,14 @@ function buildTranscriptionOrchestratorAudit(context = {}) {
       decision: context.selection.result.decision,
       selected_provider_slug: context.selection.result.selected_provider_slug,
       selection_request_id: context.selection.result.selection_request_id
+    } : null,
+    secret_resolution: context.secret_resolution ? {
+      status: context.secret_resolution.result.status,
+      decision: context.secret_resolution.result.decision,
+      secret_ref_id: context.secret_resolution.result.secret_ref_id,
+      secret_reference_fingerprint: context.secret_resolution.secret_reference_fingerprint,
+      secret_material_returned: false,
+      secret_resolved: false
     } : null,
     blockers: uniqueSorted(context.blockers || []),
     simulation: true,
