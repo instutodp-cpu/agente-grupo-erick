@@ -1,0 +1,1029 @@
+{
+  "fixture_version": "hermes_agent_core_contracts_fixture_v1",
+  "simulation": true,
+  "production_blocked": true,
+  "runtime_enabled": false,
+  "execution_enabled": false,
+  "llm_enabled": false,
+  "tools_enabled": false,
+  "memory_enabled": false,
+  "network_enabled": false,
+  "rollout_percentage": 0,
+  "agents": {
+    "general-assistant-agent": {
+      "identity": {
+        "agent_id": "agent_general_assistant_001",
+        "agent_slug": "general-assistant",
+        "agent_version": 1,
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "agent_type": "GENERAL_ASSISTANT",
+        "display_name": "General Assistant Agent",
+        "description": "Synthetic general purpose assistant used to validate the Hermes Agent Core contracts.",
+        "owner_type": "TENANT",
+        "owner_id": "tenant_demo_general",
+        "visibility": "TENANT",
+        "status": "DRAFT",
+        "created_at_logical": "logical_seq_general_assistant_000001",
+        "identity_version": 1,
+        "validator_version": "agent_identity_contract_validator_v1"
+      },
+      "metadata": {
+        "metadata_id": "metadata_general_assistant",
+        "agent_id": "agent_general_assistant_001",
+        "tenant_id": "tenant_demo_general",
+        "category": "GENERAL",
+        "tags": [
+          "general-assistant",
+          "synthetic"
+        ],
+        "business_domain": "general_support",
+        "supported_locales": [
+          "en",
+          "pt-BR"
+        ],
+        "declared_purpose": "Answer general synthetic questions for demonstration purposes only.",
+        "risk_classification": "LOW",
+        "data_classification": "INTERNAL",
+        "compliance_labels": [
+          "internal-review"
+        ],
+        "metadata_version": 1,
+        "validator_version": "agent_metadata_contract_validator_v1"
+      },
+      "context": {
+        "context_id": "context_general_assistant",
+        "context_version": 1,
+        "agent_id": "agent_general_assistant_001",
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "session_reference": {
+          "session_ref_id": "session_ref_general_assistant",
+          "session_ref_version": 1,
+          "session_present": false,
+          "session_loaded": false,
+          "session_mutated": false
+        },
+        "conversation_reference": {
+          "conversation_ref_id": "conversation_ref_general_assistant",
+          "conversation_ref_version": 1,
+          "conversation_present": false,
+          "history_loaded": false,
+          "history_mutated": false
+        },
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_general_assistant",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "request_context": {
+          "request_id": "request_general_assistant",
+          "request_type": "chat_message",
+          "request_intent": "general_inquiry",
+          "input_reference_id": "input_ref_general_assistant",
+          "input_present": true,
+          "input_loaded": false,
+          "input_processed": false,
+          "validator_version": "agent_request_context_validator_v1"
+        },
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "channel": "WEB",
+        "correlation_id": "correlation_general_assistant",
+        "causation_id": "causation_general_assistant",
+        "trace_id": "trace_general_assistant",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "metadata": {
+          "note": "synthetic context fixture for general_assistant"
+        },
+        "validator_version": "agent_context_contract_validator_v1"
+      },
+      "lifecycle": {
+        "lifecycle_id": "lifecycle_general_assistant",
+        "agent_id": "agent_general_assistant_001",
+        "tenant_id": "tenant_demo_general",
+        "current_state": "DRAFT",
+        "previous_state": "DRAFT",
+        "requested_transition": "VALIDATED",
+        "transition_allowed": true,
+        "transition_applied": false,
+        "transition_reason": "lifecycle_transition_reviewed_simulation_only",
+        "lifecycle_version": 1,
+        "validator_version": "agent_lifecycle_contract_validator_v1"
+      },
+      "capabilities": [
+        {
+          "capability_id": "capability_general_assistant",
+          "capability_version": 1,
+          "agent_id": "agent_general_assistant_001",
+          "tenant_id": "tenant_demo_general",
+          "capability_type": "INFORMATION_RETRIEVAL",
+          "capability_slug": "information-retrieval",
+          "description": "Retrieves synthetic reference information for demonstration only.",
+          "input_contract_ref": "input_contract_ref_general_assistant",
+          "output_contract_ref": "output_contract_ref_general_assistant",
+          "policy_refs": [
+            "policy_ref_general_assistant"
+          ],
+          "dependency_refs": [],
+          "declared": true,
+          "enabled": false,
+          "execution_allowed": false,
+          "network_required": false,
+          "tools_required": false,
+          "memory_required": false,
+          "llm_required": false,
+          "simulation": true,
+          "production_blocked": true,
+          "rollout_percentage": 0,
+          "validator_version": "agent_capability_contract_validator_v1"
+        }
+      ]
+    },
+    "retail-operations-agent": {
+      "identity": {
+        "agent_id": "agent_retail_operations_001",
+        "agent_slug": "retail-operations",
+        "agent_version": 1,
+        "tenant_id": "tenant_demo_retail",
+        "organization_id": "tenant_demo_retail:org-main",
+        "agent_type": "OPERATIONS_AGENT",
+        "display_name": "Retail Operations Agent",
+        "description": "Synthetic agent for reviewing retail operational workflows in a fully simulated setting.",
+        "owner_type": "TENANT",
+        "owner_id": "tenant_demo_retail",
+        "visibility": "TENANT",
+        "status": "DRAFT",
+        "created_at_logical": "logical_seq_retail_operations_000001",
+        "identity_version": 1,
+        "validator_version": "agent_identity_contract_validator_v1"
+      },
+      "metadata": {
+        "metadata_id": "metadata_retail_operations",
+        "agent_id": "agent_retail_operations_001",
+        "tenant_id": "tenant_demo_retail",
+        "category": "RETAIL",
+        "tags": [
+          "retail-operations",
+          "synthetic"
+        ],
+        "business_domain": "store_operations",
+        "supported_locales": [
+          "en",
+          "pt-BR"
+        ],
+        "declared_purpose": "Review synthetic store operations checklists for demonstration purposes only.",
+        "risk_classification": "MODERATE",
+        "data_classification": "INTERNAL",
+        "compliance_labels": [
+          "internal-review"
+        ],
+        "metadata_version": 1,
+        "validator_version": "agent_metadata_contract_validator_v1"
+      },
+      "context": {
+        "context_id": "context_retail_operations",
+        "context_version": 1,
+        "agent_id": "agent_retail_operations_001",
+        "tenant_id": "tenant_demo_retail",
+        "organization_id": "tenant_demo_retail:org-main",
+        "session_reference": {
+          "session_ref_id": "session_ref_retail_operations",
+          "session_ref_version": 1,
+          "session_present": false,
+          "session_loaded": false,
+          "session_mutated": false
+        },
+        "conversation_reference": {
+          "conversation_ref_id": "conversation_ref_retail_operations",
+          "conversation_ref_version": 1,
+          "conversation_present": false,
+          "history_loaded": false,
+          "history_mutated": false
+        },
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_retail_operations",
+          "actor_role": "SUPERVISOR",
+          "tenant_id": "tenant_demo_retail",
+          "organization_id": "tenant_demo_retail:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "request_context": {
+          "request_id": "request_retail_operations",
+          "request_type": "operations_review",
+          "request_intent": "store_checklist_review",
+          "input_reference_id": "input_ref_retail_operations",
+          "input_present": true,
+          "input_loaded": false,
+          "input_processed": false,
+          "validator_version": "agent_request_context_validator_v1"
+        },
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "channel": "WEB",
+        "correlation_id": "correlation_retail_operations",
+        "causation_id": "causation_retail_operations",
+        "trace_id": "trace_retail_operations",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "metadata": {
+          "note": "synthetic context fixture for retail_operations"
+        },
+        "validator_version": "agent_context_contract_validator_v1"
+      },
+      "lifecycle": {
+        "lifecycle_id": "lifecycle_retail_operations",
+        "agent_id": "agent_retail_operations_001",
+        "tenant_id": "tenant_demo_retail",
+        "current_state": "DRAFT",
+        "previous_state": "DRAFT",
+        "requested_transition": "VALIDATED",
+        "transition_allowed": true,
+        "transition_applied": false,
+        "transition_reason": "lifecycle_transition_reviewed_simulation_only",
+        "lifecycle_version": 1,
+        "validator_version": "agent_lifecycle_contract_validator_v1"
+      },
+      "capabilities": [
+        {
+          "capability_id": "capability_retail_operations",
+          "capability_version": 1,
+          "agent_id": "agent_retail_operations_001",
+          "tenant_id": "tenant_demo_retail",
+          "capability_type": "ROUTING",
+          "capability_slug": "operations-routing",
+          "description": "Routes synthetic operational review requests for demonstration only.",
+          "input_contract_ref": "input_contract_ref_retail_operations",
+          "output_contract_ref": "output_contract_ref_retail_operations",
+          "policy_refs": [
+            "policy_ref_retail_operations"
+          ],
+          "dependency_refs": [],
+          "declared": true,
+          "enabled": false,
+          "execution_allowed": false,
+          "network_required": false,
+          "tools_required": false,
+          "memory_required": false,
+          "llm_required": false,
+          "simulation": true,
+          "production_blocked": true,
+          "rollout_percentage": 0,
+          "validator_version": "agent_capability_contract_validator_v1"
+        }
+      ]
+    },
+    "finance-analytics-agent": {
+      "identity": {
+        "agent_id": "agent_finance_analytics_001",
+        "agent_slug": "finance-analytics",
+        "agent_version": 1,
+        "tenant_id": "tenant_demo_finance",
+        "organization_id": "tenant_demo_finance:org-main",
+        "agent_type": "ANALYTICS_AGENT",
+        "display_name": "Finance Analytics Agent",
+        "description": "Synthetic agent for reviewing finance analytics summaries in a fully simulated setting.",
+        "owner_type": "TENANT",
+        "owner_id": "tenant_demo_finance",
+        "visibility": "TENANT",
+        "status": "DRAFT",
+        "created_at_logical": "logical_seq_finance_analytics_000001",
+        "identity_version": 1,
+        "validator_version": "agent_identity_contract_validator_v1"
+      },
+      "metadata": {
+        "metadata_id": "metadata_finance_analytics",
+        "agent_id": "agent_finance_analytics_001",
+        "tenant_id": "tenant_demo_finance",
+        "category": "FINANCE",
+        "tags": [
+          "finance-analytics",
+          "synthetic"
+        ],
+        "business_domain": "financial_reporting",
+        "supported_locales": [
+          "en",
+          "pt-BR"
+        ],
+        "declared_purpose": "Summarize synthetic financial reporting metrics for demonstration purposes only.",
+        "risk_classification": "HIGH",
+        "data_classification": "CONFIDENTIAL",
+        "compliance_labels": [
+          "internal-review"
+        ],
+        "metadata_version": 1,
+        "validator_version": "agent_metadata_contract_validator_v1"
+      },
+      "context": {
+        "context_id": "context_finance_analytics",
+        "context_version": 1,
+        "agent_id": "agent_finance_analytics_001",
+        "tenant_id": "tenant_demo_finance",
+        "organization_id": "tenant_demo_finance:org-main",
+        "session_reference": {
+          "session_ref_id": "session_ref_finance_analytics",
+          "session_ref_version": 1,
+          "session_present": false,
+          "session_loaded": false,
+          "session_mutated": false
+        },
+        "conversation_reference": {
+          "conversation_ref_id": "conversation_ref_finance_analytics",
+          "conversation_ref_version": 1,
+          "conversation_present": false,
+          "history_loaded": false,
+          "history_mutated": false
+        },
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_finance_analytics",
+          "actor_role": "MANAGER",
+          "tenant_id": "tenant_demo_finance",
+          "organization_id": "tenant_demo_finance:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "request_context": {
+          "request_id": "request_finance_analytics",
+          "request_type": "analytics_review",
+          "request_intent": "financial_summary_review",
+          "input_reference_id": "input_ref_finance_analytics",
+          "input_present": true,
+          "input_loaded": false,
+          "input_processed": false,
+          "validator_version": "agent_request_context_validator_v1"
+        },
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "channel": "WEB",
+        "correlation_id": "correlation_finance_analytics",
+        "causation_id": "causation_finance_analytics",
+        "trace_id": "trace_finance_analytics",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "metadata": {
+          "note": "synthetic context fixture for finance_analytics"
+        },
+        "validator_version": "agent_context_contract_validator_v1"
+      },
+      "lifecycle": {
+        "lifecycle_id": "lifecycle_finance_analytics",
+        "agent_id": "agent_finance_analytics_001",
+        "tenant_id": "tenant_demo_finance",
+        "current_state": "DRAFT",
+        "previous_state": "DRAFT",
+        "requested_transition": "VALIDATED",
+        "transition_allowed": true,
+        "transition_applied": false,
+        "transition_reason": "lifecycle_transition_reviewed_simulation_only",
+        "lifecycle_version": 1,
+        "validator_version": "agent_lifecycle_contract_validator_v1"
+      },
+      "capabilities": [
+        {
+          "capability_id": "capability_finance_analytics",
+          "capability_version": 1,
+          "agent_id": "agent_finance_analytics_001",
+          "tenant_id": "tenant_demo_finance",
+          "capability_type": "ANALYSIS",
+          "capability_slug": "financial-analysis",
+          "description": "Analyzes synthetic financial reference figures for demonstration only.",
+          "input_contract_ref": "input_contract_ref_finance_analytics",
+          "output_contract_ref": "output_contract_ref_finance_analytics",
+          "policy_refs": [
+            "policy_ref_finance_analytics"
+          ],
+          "dependency_refs": [],
+          "declared": true,
+          "enabled": false,
+          "execution_allowed": false,
+          "network_required": false,
+          "tools_required": false,
+          "memory_required": false,
+          "llm_required": false,
+          "simulation": true,
+          "production_blocked": true,
+          "rollout_percentage": 0,
+          "validator_version": "agent_capability_contract_validator_v1"
+        }
+      ]
+    },
+    "pharmacy-specialist-agent": {
+      "identity": {
+        "agent_id": "agent_pharmacy_specialist_001",
+        "agent_slug": "pharmacy-specialist",
+        "agent_version": 1,
+        "tenant_id": "tenant_demo_pharmacy",
+        "organization_id": "tenant_demo_pharmacy:org-main",
+        "agent_type": "SPECIALIST_AGENT",
+        "display_name": "Pharmacy Specialist Agent",
+        "description": "Synthetic agent for classifying pharmacy reference categories in a fully simulated setting.",
+        "owner_type": "TENANT",
+        "owner_id": "tenant_demo_pharmacy",
+        "visibility": "TENANT",
+        "status": "DRAFT",
+        "created_at_logical": "logical_seq_pharmacy_specialist_000001",
+        "identity_version": 1,
+        "validator_version": "agent_identity_contract_validator_v1"
+      },
+      "metadata": {
+        "metadata_id": "metadata_pharmacy_specialist",
+        "agent_id": "agent_pharmacy_specialist_001",
+        "tenant_id": "tenant_demo_pharmacy",
+        "category": "PHARMACY",
+        "tags": [
+          "pharmacy-specialist",
+          "synthetic"
+        ],
+        "business_domain": "pharmacy_reference",
+        "supported_locales": [
+          "en",
+          "pt-BR"
+        ],
+        "declared_purpose": "Classify synthetic pharmacy reference categories for demonstration purposes only.",
+        "risk_classification": "RESTRICTED",
+        "data_classification": "RESTRICTED",
+        "compliance_labels": [
+          "internal-review"
+        ],
+        "metadata_version": 1,
+        "validator_version": "agent_metadata_contract_validator_v1"
+      },
+      "context": {
+        "context_id": "context_pharmacy_specialist",
+        "context_version": 1,
+        "agent_id": "agent_pharmacy_specialist_001",
+        "tenant_id": "tenant_demo_pharmacy",
+        "organization_id": "tenant_demo_pharmacy:org-main",
+        "session_reference": {
+          "session_ref_id": "session_ref_pharmacy_specialist",
+          "session_ref_version": 1,
+          "session_present": false,
+          "session_loaded": false,
+          "session_mutated": false
+        },
+        "conversation_reference": {
+          "conversation_ref_id": "conversation_ref_pharmacy_specialist",
+          "conversation_ref_version": 1,
+          "conversation_present": false,
+          "history_loaded": false,
+          "history_mutated": false
+        },
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_pharmacy_specialist",
+          "actor_role": "AUDITOR",
+          "tenant_id": "tenant_demo_pharmacy",
+          "organization_id": "tenant_demo_pharmacy:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "request_context": {
+          "request_id": "request_pharmacy_specialist",
+          "request_type": "classification_review",
+          "request_intent": "pharmacy_category_review",
+          "input_reference_id": "input_ref_pharmacy_specialist",
+          "input_present": true,
+          "input_loaded": false,
+          "input_processed": false,
+          "validator_version": "agent_request_context_validator_v1"
+        },
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "channel": "WEB",
+        "correlation_id": "correlation_pharmacy_specialist",
+        "causation_id": "causation_pharmacy_specialist",
+        "trace_id": "trace_pharmacy_specialist",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "metadata": {
+          "note": "synthetic context fixture for pharmacy_specialist"
+        },
+        "validator_version": "agent_context_contract_validator_v1"
+      },
+      "lifecycle": {
+        "lifecycle_id": "lifecycle_pharmacy_specialist",
+        "agent_id": "agent_pharmacy_specialist_001",
+        "tenant_id": "tenant_demo_pharmacy",
+        "current_state": "DRAFT",
+        "previous_state": "DRAFT",
+        "requested_transition": "VALIDATED",
+        "transition_allowed": true,
+        "transition_applied": false,
+        "transition_reason": "lifecycle_transition_reviewed_simulation_only",
+        "lifecycle_version": 1,
+        "validator_version": "agent_lifecycle_contract_validator_v1"
+      },
+      "capabilities": [
+        {
+          "capability_id": "capability_pharmacy_specialist",
+          "capability_version": 1,
+          "agent_id": "agent_pharmacy_specialist_001",
+          "tenant_id": "tenant_demo_pharmacy",
+          "capability_type": "CLASSIFICATION",
+          "capability_slug": "pharmacy-classification",
+          "description": "Classifies synthetic pharmacy reference categories for demonstration only.",
+          "input_contract_ref": "input_contract_ref_pharmacy_specialist",
+          "output_contract_ref": "output_contract_ref_pharmacy_specialist",
+          "policy_refs": [
+            "policy_ref_pharmacy_specialist"
+          ],
+          "dependency_refs": [],
+          "declared": true,
+          "enabled": false,
+          "execution_allowed": false,
+          "network_required": false,
+          "tools_required": false,
+          "memory_required": false,
+          "llm_required": false,
+          "simulation": true,
+          "production_blocked": true,
+          "rollout_percentage": 0,
+          "validator_version": "agent_capability_contract_validator_v1"
+        }
+      ]
+    },
+    "training-agent": {
+      "identity": {
+        "agent_id": "agent_training_001",
+        "agent_slug": "training-agent",
+        "agent_version": 1,
+        "tenant_id": "tenant_demo_training",
+        "organization_id": "tenant_demo_training:org-main",
+        "agent_type": "TRAINING_AGENT",
+        "display_name": "Training Agent",
+        "description": "Synthetic agent for reviewing training material outlines in a fully simulated setting.",
+        "owner_type": "TENANT",
+        "owner_id": "tenant_demo_training",
+        "visibility": "TENANT",
+        "status": "DRAFT",
+        "created_at_logical": "logical_seq_training_000001",
+        "identity_version": 1,
+        "validator_version": "agent_identity_contract_validator_v1"
+      },
+      "metadata": {
+        "metadata_id": "metadata_training",
+        "agent_id": "agent_training_001",
+        "tenant_id": "tenant_demo_training",
+        "category": "TRAINING",
+        "tags": [
+          "synthetic",
+          "training"
+        ],
+        "business_domain": "workforce_training",
+        "supported_locales": [
+          "en",
+          "pt-BR"
+        ],
+        "declared_purpose": "Outline synthetic training material structure for demonstration purposes only.",
+        "risk_classification": "LOW",
+        "data_classification": "INTERNAL",
+        "compliance_labels": [
+          "internal-review"
+        ],
+        "metadata_version": 1,
+        "validator_version": "agent_metadata_contract_validator_v1"
+      },
+      "context": {
+        "context_id": "context_training",
+        "context_version": 1,
+        "agent_id": "agent_training_001",
+        "tenant_id": "tenant_demo_training",
+        "organization_id": "tenant_demo_training:org-main",
+        "session_reference": {
+          "session_ref_id": "session_ref_training",
+          "session_ref_version": 1,
+          "session_present": false,
+          "session_loaded": false,
+          "session_mutated": false
+        },
+        "conversation_reference": {
+          "conversation_ref_id": "conversation_ref_training",
+          "conversation_ref_version": 1,
+          "conversation_present": false,
+          "history_loaded": false,
+          "history_mutated": false
+        },
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_training",
+          "actor_role": "COLLABORATOR",
+          "tenant_id": "tenant_demo_training",
+          "organization_id": "tenant_demo_training:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "request_context": {
+          "request_id": "request_training",
+          "request_type": "training_review",
+          "request_intent": "training_outline_review",
+          "input_reference_id": "input_ref_training",
+          "input_present": true,
+          "input_loaded": false,
+          "input_processed": false,
+          "validator_version": "agent_request_context_validator_v1"
+        },
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "channel": "WEB",
+        "correlation_id": "correlation_training",
+        "causation_id": "causation_training",
+        "trace_id": "trace_training",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "metadata": {
+          "note": "synthetic context fixture for training"
+        },
+        "validator_version": "agent_context_contract_validator_v1"
+      },
+      "lifecycle": {
+        "lifecycle_id": "lifecycle_training",
+        "agent_id": "agent_training_001",
+        "tenant_id": "tenant_demo_training",
+        "current_state": "DRAFT",
+        "previous_state": "DRAFT",
+        "requested_transition": "VALIDATED",
+        "transition_allowed": true,
+        "transition_applied": false,
+        "transition_reason": "lifecycle_transition_reviewed_simulation_only",
+        "lifecycle_version": 1,
+        "validator_version": "agent_lifecycle_contract_validator_v1"
+      },
+      "capabilities": [
+        {
+          "capability_id": "capability_training",
+          "capability_version": 1,
+          "agent_id": "agent_training_001",
+          "tenant_id": "tenant_demo_training",
+          "capability_type": "TRAINING",
+          "capability_slug": "training-outline",
+          "description": "Outlines synthetic training material structure for demonstration only.",
+          "input_contract_ref": "input_contract_ref_training",
+          "output_contract_ref": "output_contract_ref_training",
+          "policy_refs": [
+            "policy_ref_training"
+          ],
+          "dependency_refs": [],
+          "declared": true,
+          "enabled": false,
+          "execution_allowed": false,
+          "network_required": false,
+          "tools_required": false,
+          "memory_required": false,
+          "llm_required": false,
+          "simulation": true,
+          "production_blocked": true,
+          "rollout_percentage": 0,
+          "validator_version": "agent_capability_contract_validator_v1"
+        }
+      ]
+    },
+    "audit-agent": {
+      "identity": {
+        "agent_id": "agent_audit_001",
+        "agent_slug": "audit-agent",
+        "agent_version": 1,
+        "tenant_id": "tenant_demo_audit",
+        "organization_id": "tenant_demo_audit:org-main",
+        "agent_type": "AUDIT_AGENT",
+        "display_name": "Audit Agent",
+        "description": "Synthetic agent for reviewing audit reference checklists in a fully simulated setting.",
+        "owner_type": "TENANT",
+        "owner_id": "tenant_demo_audit",
+        "visibility": "TENANT",
+        "status": "DRAFT",
+        "created_at_logical": "logical_seq_audit_000001",
+        "identity_version": 1,
+        "validator_version": "agent_identity_contract_validator_v1"
+      },
+      "metadata": {
+        "metadata_id": "metadata_audit",
+        "agent_id": "agent_audit_001",
+        "tenant_id": "tenant_demo_audit",
+        "category": "AUDIT",
+        "tags": [
+          "audit",
+          "synthetic"
+        ],
+        "business_domain": "internal_audit",
+        "supported_locales": [
+          "en",
+          "pt-BR"
+        ],
+        "declared_purpose": "Review synthetic audit reference checklists for demonstration purposes only.",
+        "risk_classification": "HIGH",
+        "data_classification": "CONFIDENTIAL",
+        "compliance_labels": [
+          "internal-review"
+        ],
+        "metadata_version": 1,
+        "validator_version": "agent_metadata_contract_validator_v1"
+      },
+      "context": {
+        "context_id": "context_audit",
+        "context_version": 1,
+        "agent_id": "agent_audit_001",
+        "tenant_id": "tenant_demo_audit",
+        "organization_id": "tenant_demo_audit:org-main",
+        "session_reference": {
+          "session_ref_id": "session_ref_audit",
+          "session_ref_version": 1,
+          "session_present": false,
+          "session_loaded": false,
+          "session_mutated": false
+        },
+        "conversation_reference": {
+          "conversation_ref_id": "conversation_ref_audit",
+          "conversation_ref_version": 1,
+          "conversation_present": false,
+          "history_loaded": false,
+          "history_mutated": false
+        },
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_audit",
+          "actor_role": "AUDITOR",
+          "tenant_id": "tenant_demo_audit",
+          "organization_id": "tenant_demo_audit:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "request_context": {
+          "request_id": "request_audit",
+          "request_type": "audit_review",
+          "request_intent": "audit_checklist_review",
+          "input_reference_id": "input_ref_audit",
+          "input_present": true,
+          "input_loaded": false,
+          "input_processed": false,
+          "validator_version": "agent_request_context_validator_v1"
+        },
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "channel": "WEB",
+        "correlation_id": "correlation_audit",
+        "causation_id": "causation_audit",
+        "trace_id": "trace_audit",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "metadata": {
+          "note": "synthetic context fixture for audit"
+        },
+        "validator_version": "agent_context_contract_validator_v1"
+      },
+      "lifecycle": {
+        "lifecycle_id": "lifecycle_audit",
+        "agent_id": "agent_audit_001",
+        "tenant_id": "tenant_demo_audit",
+        "current_state": "DRAFT",
+        "previous_state": "DRAFT",
+        "requested_transition": "VALIDATED",
+        "transition_allowed": true,
+        "transition_applied": false,
+        "transition_reason": "lifecycle_transition_reviewed_simulation_only",
+        "lifecycle_version": 1,
+        "validator_version": "agent_lifecycle_contract_validator_v1"
+      },
+      "capabilities": [
+        {
+          "capability_id": "capability_audit",
+          "capability_version": 1,
+          "agent_id": "agent_audit_001",
+          "tenant_id": "tenant_demo_audit",
+          "capability_type": "AUDIT",
+          "capability_slug": "audit-checklist-review",
+          "description": "Reviews synthetic audit reference checklists for demonstration only.",
+          "input_contract_ref": "input_contract_ref_audit",
+          "output_contract_ref": "output_contract_ref_audit",
+          "policy_refs": [
+            "policy_ref_audit"
+          ],
+          "dependency_refs": [],
+          "declared": true,
+          "enabled": false,
+          "execution_allowed": false,
+          "network_required": false,
+          "tools_required": false,
+          "memory_required": false,
+          "llm_required": false,
+          "simulation": true,
+          "production_blocked": true,
+          "rollout_percentage": 0,
+          "validator_version": "agent_capability_contract_validator_v1"
+        }
+      ]
+    },
+    "system-agent": {
+      "identity": {
+        "agent_id": "agent_system_001",
+        "agent_slug": "system-agent",
+        "agent_version": 1,
+        "tenant_id": "SYSTEM",
+        "organization_id": "SYSTEM:org-system",
+        "agent_type": "SYSTEM_AGENT",
+        "display_name": "System Agent",
+        "description": "Synthetic system level agent used to validate system scoped contract handling.",
+        "owner_type": "SYSTEM",
+        "owner_id": "SYSTEM",
+        "visibility": "TENANT",
+        "status": "DRAFT",
+        "created_at_logical": "logical_seq_system_000001",
+        "identity_version": 1,
+        "validator_version": "agent_identity_contract_validator_v1"
+      },
+      "metadata": {
+        "metadata_id": "metadata_system",
+        "agent_id": "agent_system_001",
+        "tenant_id": "SYSTEM",
+        "category": "SYSTEM",
+        "tags": [
+          "synthetic",
+          "system"
+        ],
+        "business_domain": "platform_internal",
+        "supported_locales": [
+          "en",
+          "pt-BR"
+        ],
+        "declared_purpose": "Validate synthetic system scoped contract handling for demonstration purposes only.",
+        "risk_classification": "MODERATE",
+        "data_classification": "INTERNAL",
+        "compliance_labels": [
+          "internal-review"
+        ],
+        "metadata_version": 1,
+        "validator_version": "agent_metadata_contract_validator_v1"
+      },
+      "context": {
+        "context_id": "context_system",
+        "context_version": 1,
+        "agent_id": "agent_system_001",
+        "tenant_id": "SYSTEM",
+        "organization_id": "SYSTEM:org-system",
+        "session_reference": {
+          "session_ref_id": "session_ref_system",
+          "session_ref_version": 1,
+          "session_present": false,
+          "session_loaded": false,
+          "session_mutated": false
+        },
+        "conversation_reference": {
+          "conversation_ref_id": "conversation_ref_system",
+          "conversation_ref_version": 1,
+          "conversation_present": false,
+          "history_loaded": false,
+          "history_mutated": false
+        },
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_system",
+          "actor_role": "SYSTEM_SERVICE",
+          "tenant_id": "SYSTEM",
+          "organization_id": "SYSTEM:org-system",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "request_context": {
+          "request_id": "request_system",
+          "request_type": "system_review",
+          "request_intent": "system_contract_review",
+          "input_reference_id": "input_ref_system",
+          "input_present": true,
+          "input_loaded": false,
+          "input_processed": false,
+          "validator_version": "agent_request_context_validator_v1"
+        },
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "channel": "WEB",
+        "correlation_id": "correlation_system",
+        "causation_id": "causation_system",
+        "trace_id": "trace_system",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "metadata": {
+          "note": "synthetic context fixture for system"
+        },
+        "validator_version": "agent_context_contract_validator_v1"
+      },
+      "lifecycle": {
+        "lifecycle_id": "lifecycle_system",
+        "agent_id": "agent_system_001",
+        "tenant_id": "SYSTEM",
+        "current_state": "DRAFT",
+        "previous_state": "DRAFT",
+        "requested_transition": "VALIDATED",
+        "transition_allowed": true,
+        "transition_applied": false,
+        "transition_reason": "lifecycle_transition_reviewed_simulation_only",
+        "lifecycle_version": 1,
+        "validator_version": "agent_lifecycle_contract_validator_v1"
+      },
+      "capabilities": [
+        {
+          "capability_id": "capability_system",
+          "capability_version": 1,
+          "agent_id": "agent_system_001",
+          "tenant_id": "SYSTEM",
+          "capability_type": "VALIDATION",
+          "capability_slug": "system-validation",
+          "description": "Validates synthetic system scoped contracts for demonstration only.",
+          "input_contract_ref": "input_contract_ref_system",
+          "output_contract_ref": "output_contract_ref_system",
+          "policy_refs": [
+            "policy_ref_system"
+          ],
+          "dependency_refs": [],
+          "declared": true,
+          "enabled": false,
+          "execution_allowed": false,
+          "network_required": false,
+          "tools_required": false,
+          "memory_required": false,
+          "llm_required": false,
+          "simulation": true,
+          "production_blocked": true,
+          "rollout_percentage": 0,
+          "validator_version": "agent_capability_contract_validator_v1"
+        }
+      ]
+    }
+  }
+}
