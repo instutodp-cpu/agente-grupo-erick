@@ -12,6 +12,9 @@ const EXECUTION_CONTEXT_FIELDS = Object.freeze([
   'consent',
   'readiness',
   'selection',
+  'secret_resolution',
+  'secret_policy_decision',
+  'secret_reference_fingerprint',
   'mock',
   'audit',
   'result'

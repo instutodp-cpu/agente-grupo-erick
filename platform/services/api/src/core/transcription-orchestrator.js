@@ -24,6 +24,7 @@ const { buildTranscriptionResponse } = require('./transcription-response-contrac
 const { createTranscriptionExecutionContext } = require('./transcription-execution-context');
 const { stablePayload } = require('./transcription-provider-contract-registry');
 const { selectTranscriptionProvider } = require('./transcription-provider-selection-engine');
+const { resolveTranscriptionSecretReference } = require('./transcription-secret-resolution-boundary');
 
 const TRANSCRIPTION_ORCHESTRATOR_VALIDATOR_VERSION = 'transcription_orchestrator_validator_v1';
 const ORCHESTRATOR_REQUEST_FIELDS = Object.freeze([
@@ -54,6 +55,7 @@ const ORCHESTRATOR_STATUSES = Object.freeze([
 const PIPELINE_STEPS = Object.freeze([
   'validateRequest',
   'selectProvider',
+  'validateSecretResolution',
   'validateConsent',
   'validateProvider',
   'validateAdapter',
@@ -149,6 +151,24 @@ function selectProvider(context) {
     return block(context, 'selectProvider', 'PROVIDER_BLOCKED', selection.errors && selection.errors.length > 0 ? selection.errors : [reason]);
   }
   return appendStep(context, 'selectProvider', { selection });
+}
+
+function validateSecretResolution(context) {
+  if (context.blockers.length > 0) return context;
+  if (!context.secret_resolution_request) return appendStep(context, 'validateSecretResolution', {
+    secret_resolution: null,
+    secret_policy_decision: null,
+    secret_reference_fingerprint: null
+  });
+  const resolution = resolveTranscriptionSecretReference(context.secret_resolution_request);
+  if (!resolution.result || resolution.result.secret_material_returned !== false || resolution.result.secret_resolved !== false || resolution.result.network_used !== false || resolution.result.provider_called !== false || resolution.result.executed !== false) {
+    return block(context, 'validateSecretResolution', 'PROVIDER_BLOCKED', ['secret_resolution_unsafe_result']);
+  }
+  return appendStep(context, 'validateSecretResolution', {
+    secret_resolution: resolution,
+    secret_policy_decision: resolution.policy,
+    secret_reference_fingerprint: resolution.secret_reference_fingerprint
+  });
 }
 
 function validateConsent(context) {
@@ -281,6 +301,9 @@ function buildResponse(context) {
       consent: context.consent || null,
       readiness: context.readiness || null,
       selection: context.selection || null,
+      secret_resolution: context.secret_resolution || null,
+      secret_policy_decision: context.secret_policy_decision || null,
+      secret_reference_fingerprint: context.secret_reference_fingerprint || null,
       mock: context.mock || null,
       audit: context.audit || null,
       result: response
@@ -297,6 +320,7 @@ function runMockTranscriptionOrchestrator(input = {}) {
     transport_lifecycle: input.transport_lifecycle || null,
     selection_request: input.selection_request || null,
     selection_profiles: input.selection_profiles || [],
+    secret_resolution_request: input.secret_resolution_request || null,
     readiness: input.readiness || null,
     status: 'BLOCKED',
     blockers: [],
@@ -310,6 +334,7 @@ function runMockTranscriptionOrchestrator(input = {}) {
     const handlers = {
       validateRequest,
       selectProvider,
+      validateSecretResolution,
       validateConsent,
       validateProvider,
       validateAdapter,
@@ -335,6 +360,7 @@ module.exports = {
   runMockTranscriptionOrchestrator,
   sanitizeResult,
   selectProvider,
+  validateSecretResolution,
   validateAdapter,
   validateConsent,
   validateLifecycle,
