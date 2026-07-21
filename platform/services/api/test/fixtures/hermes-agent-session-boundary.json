@@ -1,0 +1,1631 @@
+{
+  "fixture_version": "hermes_agent_session_boundary_fixture_v1",
+  "simulation": true,
+  "production_blocked": true,
+  "runtime_enabled": false,
+  "execution_enabled": false,
+  "llm_enabled": false,
+  "tools_enabled": false,
+  "memory_enabled": false,
+  "network_enabled": false,
+  "rollout_percentage": 0,
+  "sessions": {
+    "interactive-session-reference": {
+      "session_id": "session_interactive",
+      "session_version": 1,
+      "session_fingerprint": "fp_session_interactive",
+      "agent_id": "agent_general_assistant_001",
+      "agent_version": 1,
+      "tenant_id": "tenant_demo_general",
+      "organization_id": "tenant_demo_general:org-main",
+      "actor_id": "actor_general_1",
+      "actor_type": "USER",
+      "actor_role": "OPERATOR",
+      "channel": "WEB",
+      "session_type": "INTERACTIVE_REFERENCE",
+      "session_status": "DRAFT",
+      "session_scope": {
+        "allowed_agent_ids": [
+          "agent_general_assistant_001"
+        ],
+        "allowed_actor_ids": [
+          "actor_general_1"
+        ],
+        "allowed_actor_roles": [
+          "OPERATOR"
+        ],
+        "allowed_channels": [
+          "WEB"
+        ],
+        "allowed_session_types": [
+          "INTERACTIVE_REFERENCE"
+        ],
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "cross_tenant_allowed": false,
+        "cross_organization_allowed": false,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "conversation_reference": {
+        "conversation_ref_id": "conversation_ref_interactive",
+        "conversation_ref_version": 1,
+        "conversation_present": false,
+        "history_present": false,
+        "history_loaded": false,
+        "history_mutated": false,
+        "message_count_reference": 0,
+        "last_message_sequence_reference": 0,
+        "conversation_fingerprint": "fp_conversation_interactive",
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "policy_reference": {
+        "policy_request_id": "policy_request_interactive",
+        "policy_decision_id": "policy_decision_interactive",
+        "policy_decision_fingerprint": "fp_policy_decision_interactive",
+        "policy_status": "ALLOW_SIMULATION",
+        "allowed_in_simulation": true,
+        "approval_required": false,
+        "policy_evaluated": true,
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "creation_sequence": 0,
+      "last_transition_sequence": 0,
+      "expiration_policy": {
+        "expiration_policy_id": "expiration_interactive",
+        "expiration_type": "INACTIVITY_SEQUENCE",
+        "created_sequence": 0,
+        "last_activity_sequence": 0,
+        "current_sequence": 0,
+        "maximum_inactive_sequences": 100,
+        "maximum_total_sequences": 1000,
+        "expiration_applicable": true,
+        "expired_logically": false,
+        "expiration_reason": "inactivity_sequence_within_limit",
+        "expiration_evaluated": true,
+        "timer_created": false,
+        "clock_accessed": false,
+        "session_mutated": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_session_expiration_validator_v1"
+      },
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "metadata": {
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "correlation_id": "correlation_interactive",
+        "causation_id": "causation_interactive",
+        "trace_id": "trace_interactive",
+        "client_reference": "client_ref_interactive",
+        "device_reference": "device_ref_interactive",
+        "purpose_code": "general_support_inquiry",
+        "data_classification": "INTERNAL",
+        "risk_classification": "LOW",
+        "metadata_version": 1,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "validator_version": "agent_session_contract_validator_v1"
+    },
+    "retail-agent-session": {
+      "session_id": "session_retail",
+      "session_version": 1,
+      "session_fingerprint": "fp_session_retail",
+      "agent_id": "agent_retail_operations_001",
+      "agent_version": 1,
+      "tenant_id": "tenant_demo_retail",
+      "organization_id": "tenant_demo_retail:org-main",
+      "actor_id": "actor_retail_1",
+      "actor_type": "USER",
+      "actor_role": "SUPERVISOR",
+      "channel": "WEB",
+      "session_type": "TASK_REFERENCE",
+      "session_status": "DRAFT",
+      "session_scope": {
+        "allowed_agent_ids": [
+          "agent_retail_operations_001"
+        ],
+        "allowed_actor_ids": [
+          "actor_retail_1"
+        ],
+        "allowed_actor_roles": [
+          "SUPERVISOR"
+        ],
+        "allowed_channels": [
+          "WEB"
+        ],
+        "allowed_session_types": [
+          "TASK_REFERENCE"
+        ],
+        "tenant_id": "tenant_demo_retail",
+        "organization_id": "tenant_demo_retail:org-main",
+        "cross_tenant_allowed": false,
+        "cross_organization_allowed": false,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "conversation_reference": {
+        "conversation_ref_id": "conversation_ref_retail",
+        "conversation_ref_version": 1,
+        "conversation_present": false,
+        "history_present": false,
+        "history_loaded": false,
+        "history_mutated": false,
+        "message_count_reference": 0,
+        "last_message_sequence_reference": 0,
+        "conversation_fingerprint": "fp_conversation_retail",
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "policy_reference": {
+        "policy_request_id": "policy_request_retail",
+        "policy_decision_id": "policy_decision_retail",
+        "policy_decision_fingerprint": "fp_policy_decision_retail",
+        "policy_status": "ALLOW_SIMULATION",
+        "allowed_in_simulation": true,
+        "approval_required": false,
+        "policy_evaluated": true,
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "creation_sequence": 0,
+      "last_transition_sequence": 0,
+      "expiration_policy": {
+        "expiration_policy_id": "expiration_retail",
+        "expiration_type": "INACTIVITY_SEQUENCE",
+        "created_sequence": 0,
+        "last_activity_sequence": 0,
+        "current_sequence": 0,
+        "maximum_inactive_sequences": 100,
+        "maximum_total_sequences": 1000,
+        "expiration_applicable": true,
+        "expired_logically": false,
+        "expiration_reason": "inactivity_sequence_within_limit",
+        "expiration_evaluated": true,
+        "timer_created": false,
+        "clock_accessed": false,
+        "session_mutated": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_session_expiration_validator_v1"
+      },
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "metadata": {
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "correlation_id": "correlation_retail",
+        "causation_id": "causation_retail",
+        "trace_id": "trace_retail",
+        "client_reference": "client_ref_retail",
+        "device_reference": "device_ref_retail",
+        "purpose_code": "store_operations_review",
+        "data_classification": "INTERNAL",
+        "risk_classification": "MODERATE",
+        "metadata_version": 1,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "validator_version": "agent_session_contract_validator_v1"
+    },
+    "finance-analytics-session": {
+      "session_id": "session_finance",
+      "session_version": 1,
+      "session_fingerprint": "fp_session_finance",
+      "agent_id": "agent_finance_analytics_001",
+      "agent_version": 1,
+      "tenant_id": "tenant_demo_finance",
+      "organization_id": "tenant_demo_finance:org-main",
+      "actor_id": "actor_finance_1",
+      "actor_type": "USER",
+      "actor_role": "MANAGER",
+      "channel": "WEB",
+      "session_type": "ANALYTICS_REFERENCE",
+      "session_status": "DRAFT",
+      "session_scope": {
+        "allowed_agent_ids": [
+          "agent_finance_analytics_001"
+        ],
+        "allowed_actor_ids": [
+          "actor_finance_1"
+        ],
+        "allowed_actor_roles": [
+          "MANAGER"
+        ],
+        "allowed_channels": [
+          "WEB"
+        ],
+        "allowed_session_types": [
+          "ANALYTICS_REFERENCE"
+        ],
+        "tenant_id": "tenant_demo_finance",
+        "organization_id": "tenant_demo_finance:org-main",
+        "cross_tenant_allowed": false,
+        "cross_organization_allowed": false,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "conversation_reference": {
+        "conversation_ref_id": "conversation_ref_finance",
+        "conversation_ref_version": 1,
+        "conversation_present": false,
+        "history_present": false,
+        "history_loaded": false,
+        "history_mutated": false,
+        "message_count_reference": 0,
+        "last_message_sequence_reference": 0,
+        "conversation_fingerprint": "fp_conversation_finance",
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "policy_reference": {
+        "policy_request_id": "policy_request_finance",
+        "policy_decision_id": "policy_decision_finance",
+        "policy_decision_fingerprint": "fp_policy_decision_finance",
+        "policy_status": "ALLOW_SIMULATION",
+        "allowed_in_simulation": true,
+        "approval_required": false,
+        "policy_evaluated": true,
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "creation_sequence": 0,
+      "last_transition_sequence": 0,
+      "expiration_policy": {
+        "expiration_policy_id": "expiration_finance",
+        "expiration_type": "INACTIVITY_SEQUENCE",
+        "created_sequence": 0,
+        "last_activity_sequence": 0,
+        "current_sequence": 0,
+        "maximum_inactive_sequences": 100,
+        "maximum_total_sequences": 1000,
+        "expiration_applicable": true,
+        "expired_logically": false,
+        "expiration_reason": "inactivity_sequence_within_limit",
+        "expiration_evaluated": true,
+        "timer_created": false,
+        "clock_accessed": false,
+        "session_mutated": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_session_expiration_validator_v1"
+      },
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "metadata": {
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "correlation_id": "correlation_finance",
+        "causation_id": "causation_finance",
+        "trace_id": "trace_finance",
+        "client_reference": "client_ref_finance",
+        "device_reference": "device_ref_finance",
+        "purpose_code": "financial_summary_review",
+        "data_classification": "CONFIDENTIAL",
+        "risk_classification": "HIGH",
+        "metadata_version": 1,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "validator_version": "agent_session_contract_validator_v1"
+    },
+    "pharmacy-specialist-session": {
+      "session_id": "session_pharmacy",
+      "session_version": 1,
+      "session_fingerprint": "fp_session_pharmacy",
+      "agent_id": "agent_pharmacy_specialist_001",
+      "agent_version": 1,
+      "tenant_id": "tenant_demo_pharmacy",
+      "organization_id": "tenant_demo_pharmacy:org-main",
+      "actor_id": "actor_pharmacy_1",
+      "actor_type": "USER",
+      "actor_role": "AUDITOR",
+      "channel": "WEB",
+      "session_type": "TASK_REFERENCE",
+      "session_status": "DRAFT",
+      "session_scope": {
+        "allowed_agent_ids": [
+          "agent_pharmacy_specialist_001"
+        ],
+        "allowed_actor_ids": [
+          "actor_pharmacy_1"
+        ],
+        "allowed_actor_roles": [
+          "AUDITOR"
+        ],
+        "allowed_channels": [
+          "WEB"
+        ],
+        "allowed_session_types": [
+          "TASK_REFERENCE"
+        ],
+        "tenant_id": "tenant_demo_pharmacy",
+        "organization_id": "tenant_demo_pharmacy:org-main",
+        "cross_tenant_allowed": false,
+        "cross_organization_allowed": false,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "conversation_reference": {
+        "conversation_ref_id": "conversation_ref_pharmacy",
+        "conversation_ref_version": 1,
+        "conversation_present": false,
+        "history_present": false,
+        "history_loaded": false,
+        "history_mutated": false,
+        "message_count_reference": 0,
+        "last_message_sequence_reference": 0,
+        "conversation_fingerprint": "fp_conversation_pharmacy",
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "policy_reference": {
+        "policy_request_id": "policy_request_pharmacy",
+        "policy_decision_id": "policy_decision_pharmacy",
+        "policy_decision_fingerprint": "fp_policy_decision_pharmacy",
+        "policy_status": "ALLOW_SIMULATION",
+        "allowed_in_simulation": true,
+        "approval_required": false,
+        "policy_evaluated": true,
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "creation_sequence": 0,
+      "last_transition_sequence": 0,
+      "expiration_policy": {
+        "expiration_policy_id": "expiration_pharmacy",
+        "expiration_type": "INACTIVITY_SEQUENCE",
+        "created_sequence": 0,
+        "last_activity_sequence": 0,
+        "current_sequence": 0,
+        "maximum_inactive_sequences": 100,
+        "maximum_total_sequences": 1000,
+        "expiration_applicable": true,
+        "expired_logically": false,
+        "expiration_reason": "inactivity_sequence_within_limit",
+        "expiration_evaluated": true,
+        "timer_created": false,
+        "clock_accessed": false,
+        "session_mutated": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_session_expiration_validator_v1"
+      },
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "metadata": {
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "correlation_id": "correlation_pharmacy",
+        "causation_id": "causation_pharmacy",
+        "trace_id": "trace_pharmacy",
+        "client_reference": "client_ref_pharmacy",
+        "device_reference": "device_ref_pharmacy",
+        "purpose_code": "pharmacy_category_review",
+        "data_classification": "CONFIDENTIAL",
+        "risk_classification": "MODERATE",
+        "metadata_version": 1,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "validator_version": "agent_session_contract_validator_v1"
+    },
+    "training-session": {
+      "session_id": "session_training",
+      "session_version": 1,
+      "session_fingerprint": "fp_session_training",
+      "agent_id": "agent_training_001",
+      "agent_version": 1,
+      "tenant_id": "tenant_demo_training",
+      "organization_id": "tenant_demo_training:org-main",
+      "actor_id": "actor_training_1",
+      "actor_type": "USER",
+      "actor_role": "COLLABORATOR",
+      "channel": "WEB",
+      "session_type": "TRAINING_REFERENCE",
+      "session_status": "DRAFT",
+      "session_scope": {
+        "allowed_agent_ids": [
+          "agent_training_001"
+        ],
+        "allowed_actor_ids": [
+          "actor_training_1"
+        ],
+        "allowed_actor_roles": [
+          "COLLABORATOR"
+        ],
+        "allowed_channels": [
+          "WEB"
+        ],
+        "allowed_session_types": [
+          "TRAINING_REFERENCE"
+        ],
+        "tenant_id": "tenant_demo_training",
+        "organization_id": "tenant_demo_training:org-main",
+        "cross_tenant_allowed": false,
+        "cross_organization_allowed": false,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "conversation_reference": {
+        "conversation_ref_id": "conversation_ref_training",
+        "conversation_ref_version": 1,
+        "conversation_present": false,
+        "history_present": false,
+        "history_loaded": false,
+        "history_mutated": false,
+        "message_count_reference": 0,
+        "last_message_sequence_reference": 0,
+        "conversation_fingerprint": "fp_conversation_training",
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "policy_reference": {
+        "policy_request_id": "policy_request_training",
+        "policy_decision_id": "policy_decision_training",
+        "policy_decision_fingerprint": "fp_policy_decision_training",
+        "policy_status": "ALLOW_SIMULATION",
+        "allowed_in_simulation": true,
+        "approval_required": false,
+        "policy_evaluated": true,
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "creation_sequence": 0,
+      "last_transition_sequence": 0,
+      "expiration_policy": {
+        "expiration_policy_id": "expiration_training",
+        "expiration_type": "INACTIVITY_SEQUENCE",
+        "created_sequence": 0,
+        "last_activity_sequence": 0,
+        "current_sequence": 0,
+        "maximum_inactive_sequences": 100,
+        "maximum_total_sequences": 1000,
+        "expiration_applicable": true,
+        "expired_logically": false,
+        "expiration_reason": "inactivity_sequence_within_limit",
+        "expiration_evaluated": true,
+        "timer_created": false,
+        "clock_accessed": false,
+        "session_mutated": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_session_expiration_validator_v1"
+      },
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "metadata": {
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "correlation_id": "correlation_training",
+        "causation_id": "causation_training",
+        "trace_id": "trace_training",
+        "client_reference": "client_ref_training",
+        "device_reference": "device_ref_training",
+        "purpose_code": "training_outline_review",
+        "data_classification": "INTERNAL",
+        "risk_classification": "LOW",
+        "metadata_version": 1,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "validator_version": "agent_session_contract_validator_v1"
+    },
+    "audit-session": {
+      "session_id": "session_audit",
+      "session_version": 1,
+      "session_fingerprint": "fp_session_audit",
+      "agent_id": "agent_audit_001",
+      "agent_version": 1,
+      "tenant_id": "tenant_demo_audit",
+      "organization_id": "tenant_demo_audit:org-main",
+      "actor_id": "actor_audit_1",
+      "actor_type": "USER",
+      "actor_role": "AUDITOR",
+      "channel": "WEB",
+      "session_type": "AUDIT_REFERENCE",
+      "session_status": "DRAFT",
+      "session_scope": {
+        "allowed_agent_ids": [
+          "agent_audit_001"
+        ],
+        "allowed_actor_ids": [
+          "actor_audit_1"
+        ],
+        "allowed_actor_roles": [
+          "AUDITOR"
+        ],
+        "allowed_channels": [
+          "WEB"
+        ],
+        "allowed_session_types": [
+          "AUDIT_REFERENCE"
+        ],
+        "tenant_id": "tenant_demo_audit",
+        "organization_id": "tenant_demo_audit:org-main",
+        "cross_tenant_allowed": false,
+        "cross_organization_allowed": false,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "conversation_reference": {
+        "conversation_ref_id": "conversation_ref_audit",
+        "conversation_ref_version": 1,
+        "conversation_present": false,
+        "history_present": false,
+        "history_loaded": false,
+        "history_mutated": false,
+        "message_count_reference": 0,
+        "last_message_sequence_reference": 0,
+        "conversation_fingerprint": "fp_conversation_audit",
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "policy_reference": {
+        "policy_request_id": "policy_request_audit",
+        "policy_decision_id": "policy_decision_audit",
+        "policy_decision_fingerprint": "fp_policy_decision_audit",
+        "policy_status": "ALLOW_SIMULATION",
+        "allowed_in_simulation": true,
+        "approval_required": false,
+        "policy_evaluated": true,
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "creation_sequence": 0,
+      "last_transition_sequence": 0,
+      "expiration_policy": {
+        "expiration_policy_id": "expiration_audit",
+        "expiration_type": "INACTIVITY_SEQUENCE",
+        "created_sequence": 0,
+        "last_activity_sequence": 0,
+        "current_sequence": 0,
+        "maximum_inactive_sequences": 100,
+        "maximum_total_sequences": 1000,
+        "expiration_applicable": true,
+        "expired_logically": false,
+        "expiration_reason": "inactivity_sequence_within_limit",
+        "expiration_evaluated": true,
+        "timer_created": false,
+        "clock_accessed": false,
+        "session_mutated": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_session_expiration_validator_v1"
+      },
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "metadata": {
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "correlation_id": "correlation_audit",
+        "causation_id": "causation_audit",
+        "trace_id": "trace_audit",
+        "client_reference": "client_ref_audit",
+        "device_reference": "device_ref_audit",
+        "purpose_code": "audit_checklist_review",
+        "data_classification": "CONFIDENTIAL",
+        "risk_classification": "MODERATE",
+        "metadata_version": 1,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "validator_version": "agent_session_contract_validator_v1"
+    },
+    "system-session": {
+      "session_id": "session_system",
+      "session_version": 1,
+      "session_fingerprint": "fp_session_system",
+      "agent_id": "agent_system_001",
+      "agent_version": 1,
+      "tenant_id": "SYSTEM",
+      "organization_id": "SYSTEM:org-system",
+      "actor_id": "actor_system_1",
+      "actor_type": "USER",
+      "actor_role": "SYSTEM_SERVICE",
+      "channel": "INTERNAL",
+      "session_type": "SYSTEM_REFERENCE",
+      "session_status": "DRAFT",
+      "session_scope": {
+        "allowed_agent_ids": [
+          "agent_system_001"
+        ],
+        "allowed_actor_ids": [
+          "actor_system_1"
+        ],
+        "allowed_actor_roles": [
+          "SYSTEM_SERVICE"
+        ],
+        "allowed_channels": [
+          "INTERNAL"
+        ],
+        "allowed_session_types": [
+          "SYSTEM_REFERENCE"
+        ],
+        "tenant_id": "SYSTEM",
+        "organization_id": "SYSTEM:org-system",
+        "cross_tenant_allowed": false,
+        "cross_organization_allowed": false,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "conversation_reference": {
+        "conversation_ref_id": "conversation_ref_system",
+        "conversation_ref_version": 1,
+        "conversation_present": false,
+        "history_present": false,
+        "history_loaded": false,
+        "history_mutated": false,
+        "message_count_reference": 0,
+        "last_message_sequence_reference": 0,
+        "conversation_fingerprint": "fp_conversation_system",
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "policy_reference": {
+        "policy_request_id": "policy_request_system",
+        "policy_decision_id": "policy_decision_system",
+        "policy_decision_fingerprint": "fp_policy_decision_system",
+        "policy_status": "ALLOW_SIMULATION",
+        "allowed_in_simulation": true,
+        "approval_required": false,
+        "policy_evaluated": true,
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "creation_sequence": 0,
+      "last_transition_sequence": 0,
+      "expiration_policy": {
+        "expiration_policy_id": "expiration_system",
+        "expiration_type": "INACTIVITY_SEQUENCE",
+        "created_sequence": 0,
+        "last_activity_sequence": 0,
+        "current_sequence": 0,
+        "maximum_inactive_sequences": 100,
+        "maximum_total_sequences": 1000,
+        "expiration_applicable": true,
+        "expired_logically": false,
+        "expiration_reason": "inactivity_sequence_within_limit",
+        "expiration_evaluated": true,
+        "timer_created": false,
+        "clock_accessed": false,
+        "session_mutated": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_session_expiration_validator_v1"
+      },
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "metadata": {
+        "locale": "pt-BR",
+        "timezone": "America/Sao_Paulo",
+        "correlation_id": "correlation_system",
+        "causation_id": "causation_system",
+        "trace_id": "trace_system",
+        "client_reference": "client_ref_system",
+        "device_reference": "device_ref_system",
+        "purpose_code": "system_contract_review",
+        "data_classification": "INTERNAL",
+        "risk_classification": "LOW",
+        "metadata_version": 1,
+        "validator_version": "agent_session_contract_validator_v1"
+      },
+      "validator_version": "agent_session_contract_validator_v1"
+    }
+  },
+  "cases": {
+    "tenant-mismatch-session": {
+      "request": {
+        "session_request_id": "session_request_tenant_mismatch",
+        "session_request_version": 1,
+        "request_type": "CREATE_SESSION_REFERENCE",
+        "session_reference": {
+          "session_id": "session_interactive",
+          "session_version": 0,
+          "session_fingerprint": "fp_session_pending",
+          "session_present": false,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_general_assistant_001",
+          "agent_id": "agent_general_assistant_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_other",
+          "organization_id": "tenant_other:org-main",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_interactive",
+          "policy_decision_id": "policy_decision_interactive",
+          "policy_decision_fingerprint": "fp_policy_decision_interactive",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "tenant_id": "tenant_other",
+        "organization_id": "tenant_other:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_general_1",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_other",
+          "organization_id": "tenant_other:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "channel": "WEB",
+        "requested_session_type": "INTERACTIVE_REFERENCE",
+        "requested_transition": "CREATE",
+        "logical_sequence": 1,
+        "expected_session_version": 0,
+        "expected_session_fingerprint": "no_expected_fingerprint",
+        "expiration_evaluation": {
+          "evaluate_expiration": false,
+          "current_sequence": 0,
+          "last_activity_sequence": 0,
+          "validator_version": "agent_session_request_validator_v1"
+        },
+        "correlation_id": "correlation_session_interactive",
+        "causation_id": "causation_session_interactive",
+        "trace_id": "trace_session_interactive",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_session_request_validator_v1"
+      },
+      "context": {
+        "session_scope": {
+          "allowed_agent_ids": [
+            "agent_general_assistant_001"
+          ],
+          "allowed_actor_ids": [
+            "actor_general_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_channels": [
+            "WEB"
+          ],
+          "allowed_session_types": [
+            "INTERACTIVE_REFERENCE"
+          ],
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "validator_version": "agent_session_contract_validator_v1"
+        }
+      },
+      "expected_status": "TENANT_BLOCKED"
+    },
+    "organization-mismatch-session": {
+      "request": {
+        "session_request_id": "session_request_org_mismatch",
+        "session_request_version": 1,
+        "request_type": "CREATE_SESSION_REFERENCE",
+        "session_reference": {
+          "session_id": "session_interactive",
+          "session_version": 0,
+          "session_fingerprint": "fp_session_pending",
+          "session_present": false,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_general_assistant_001",
+          "agent_id": "agent_general_assistant_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-secondary",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_interactive",
+          "policy_decision_id": "policy_decision_interactive",
+          "policy_decision_fingerprint": "fp_policy_decision_interactive",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-secondary",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_general_1",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-secondary",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "channel": "WEB",
+        "requested_session_type": "INTERACTIVE_REFERENCE",
+        "requested_transition": "CREATE",
+        "logical_sequence": 1,
+        "expected_session_version": 0,
+        "expected_session_fingerprint": "no_expected_fingerprint",
+        "expiration_evaluation": {
+          "evaluate_expiration": false,
+          "current_sequence": 0,
+          "last_activity_sequence": 0,
+          "validator_version": "agent_session_request_validator_v1"
+        },
+        "correlation_id": "correlation_session_interactive",
+        "causation_id": "causation_session_interactive",
+        "trace_id": "trace_session_interactive",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_session_request_validator_v1"
+      },
+      "context": {
+        "session_scope": {
+          "allowed_agent_ids": [
+            "agent_general_assistant_001"
+          ],
+          "allowed_actor_ids": [
+            "actor_general_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_channels": [
+            "WEB"
+          ],
+          "allowed_session_types": [
+            "INTERACTIVE_REFERENCE"
+          ],
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "validator_version": "agent_session_contract_validator_v1"
+        }
+      },
+      "expected_status": "ORGANIZATION_BLOCKED"
+    },
+    "invalid-transition-session": {
+      "request": {
+        "session_request_id": "session_request_invalid_transition",
+        "session_request_version": 1,
+        "request_type": "TRANSITION_SESSION_REFERENCE",
+        "session_reference": {
+          "session_id": "session_interactive",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_interactive",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_general_assistant_001",
+          "agent_id": "agent_general_assistant_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_interactive",
+          "policy_decision_id": "policy_decision_interactive",
+          "policy_decision_fingerprint": "fp_policy_decision_interactive",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_general_1",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "channel": "WEB",
+        "requested_session_type": "INTERACTIVE_REFERENCE",
+        "requested_transition": "VALIDATE",
+        "logical_sequence": 1,
+        "expected_session_version": 1,
+        "expected_session_fingerprint": "fp_session_interactive",
+        "expiration_evaluation": {
+          "evaluate_expiration": false,
+          "current_sequence": 0,
+          "last_activity_sequence": 0,
+          "validator_version": "agent_session_request_validator_v1"
+        },
+        "correlation_id": "correlation_session_interactive",
+        "causation_id": "causation_session_interactive",
+        "trace_id": "trace_session_interactive",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_session_request_validator_v1"
+      },
+      "context": {
+        "session_scope": {
+          "allowed_agent_ids": [
+            "agent_general_assistant_001"
+          ],
+          "allowed_actor_ids": [
+            "actor_general_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_channels": [
+            "WEB"
+          ],
+          "allowed_session_types": [
+            "INTERACTIVE_REFERENCE"
+          ],
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "validator_version": "agent_session_contract_validator_v1"
+        },
+        "current_session": {
+          "session_id": "session_interactive",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_interactive",
+          "current_status": "ARCHIVED",
+          "agent_id": "agent_general_assistant_001",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "creation_sequence": 0,
+          "last_transition_sequence": 0
+        }
+      },
+      "expected_status": "TRANSITION_BLOCKED"
+    },
+    "expired-logical-session": {
+      "request": {
+        "session_request_id": "session_request_expired",
+        "session_request_version": 1,
+        "request_type": "EVALUATE_EXPIRATION_REFERENCE",
+        "session_reference": {
+          "session_id": "session_interactive",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_interactive",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_general_assistant_001",
+          "agent_id": "agent_general_assistant_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_interactive",
+          "policy_decision_id": "policy_decision_interactive",
+          "policy_decision_fingerprint": "fp_policy_decision_interactive",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_general_1",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "channel": "WEB",
+        "requested_session_type": "INTERACTIVE_REFERENCE",
+        "requested_transition": "CREATE",
+        "logical_sequence": 1,
+        "expected_session_version": 1,
+        "expected_session_fingerprint": "fp_session_interactive",
+        "expiration_evaluation": {
+          "evaluate_expiration": true,
+          "current_sequence": 500,
+          "last_activity_sequence": 10,
+          "validator_version": "agent_session_request_validator_v1"
+        },
+        "correlation_id": "correlation_session_interactive",
+        "causation_id": "causation_session_interactive",
+        "trace_id": "trace_session_interactive",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_session_request_validator_v1"
+      },
+      "context": {
+        "session_scope": {
+          "allowed_agent_ids": [
+            "agent_general_assistant_001"
+          ],
+          "allowed_actor_ids": [
+            "actor_general_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_channels": [
+            "WEB"
+          ],
+          "allowed_session_types": [
+            "INTERACTIVE_REFERENCE"
+          ],
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "validator_version": "agent_session_contract_validator_v1"
+        },
+        "current_session": {
+          "session_id": "session_interactive",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_interactive",
+          "current_status": "OPEN_SIMULATION",
+          "agent_id": "agent_general_assistant_001",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "creation_sequence": 0,
+          "last_transition_sequence": 0
+        },
+        "expiration_policy": {
+          "expiration_policy_id": "expiration_interactive",
+          "expiration_type": "INACTIVITY_SEQUENCE",
+          "maximum_inactive_sequences": 100,
+          "maximum_total_sequences": 1000
+        }
+      },
+      "expected_status": "ALLOW_SIMULATION"
+    },
+    "approval-blocked-session": {
+      "request": {
+        "session_request_id": "session_request_approval_blocked",
+        "session_request_version": 1,
+        "request_type": "TRANSITION_SESSION_REFERENCE",
+        "session_reference": {
+          "session_id": "session_finance",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_finance",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_finance_analytics_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_finance_analytics_001",
+          "agent_id": "agent_finance_analytics_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_demo_finance",
+          "organization_id": "tenant_demo_finance:org-main",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_finance",
+          "policy_decision_id": "policy_decision_finance",
+          "policy_decision_fingerprint": "fp_policy_decision_finance",
+          "policy_status": "REQUIRE_APPROVAL_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": true,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "tenant_id": "tenant_demo_finance",
+        "organization_id": "tenant_demo_finance:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_finance_1",
+          "actor_role": "MANAGER",
+          "tenant_id": "tenant_demo_finance",
+          "organization_id": "tenant_demo_finance:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "channel": "WEB",
+        "requested_session_type": "ANALYTICS_REFERENCE",
+        "requested_transition": "OPEN_SIMULATION",
+        "logical_sequence": 1,
+        "expected_session_version": 1,
+        "expected_session_fingerprint": "fp_session_finance",
+        "expiration_evaluation": {
+          "evaluate_expiration": false,
+          "current_sequence": 0,
+          "last_activity_sequence": 0,
+          "validator_version": "agent_session_request_validator_v1"
+        },
+        "correlation_id": "correlation_session_finance",
+        "causation_id": "causation_session_finance",
+        "trace_id": "trace_session_finance",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_session_request_validator_v1"
+      },
+      "context": {
+        "session_scope": {
+          "allowed_agent_ids": [
+            "agent_finance_analytics_001"
+          ],
+          "allowed_actor_ids": [
+            "actor_finance_1"
+          ],
+          "allowed_actor_roles": [
+            "MANAGER"
+          ],
+          "allowed_channels": [
+            "WEB"
+          ],
+          "allowed_session_types": [
+            "ANALYTICS_REFERENCE"
+          ],
+          "tenant_id": "tenant_demo_finance",
+          "organization_id": "tenant_demo_finance:org-main",
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "validator_version": "agent_session_contract_validator_v1"
+        },
+        "current_session": {
+          "session_id": "session_finance",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_finance",
+          "current_status": "VALIDATED",
+          "agent_id": "agent_finance_analytics_001",
+          "tenant_id": "tenant_demo_finance",
+          "organization_id": "tenant_demo_finance:org-main",
+          "creation_sequence": 0,
+          "last_transition_sequence": 0
+        }
+      },
+      "expected_status": "APPROVAL_BLOCKED"
+    },
+    "policy-blocked-session": {
+      "request": {
+        "session_request_id": "session_request_policy_blocked",
+        "session_request_version": 1,
+        "request_type": "CREATE_SESSION_REFERENCE",
+        "session_reference": {
+          "session_id": "session_interactive",
+          "session_version": 0,
+          "session_fingerprint": "fp_session_pending",
+          "session_present": false,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_general_assistant_001",
+          "agent_id": "agent_general_assistant_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_denied",
+          "policy_decision_id": "policy_decision_denied",
+          "policy_decision_fingerprint": "fp_policy_decision_denied",
+          "policy_status": "DENY",
+          "allowed_in_simulation": false,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_general_1",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "channel": "WEB",
+        "requested_session_type": "INTERACTIVE_REFERENCE",
+        "requested_transition": "CREATE",
+        "logical_sequence": 1,
+        "expected_session_version": 0,
+        "expected_session_fingerprint": "no_expected_fingerprint",
+        "expiration_evaluation": {
+          "evaluate_expiration": false,
+          "current_sequence": 0,
+          "last_activity_sequence": 0,
+          "validator_version": "agent_session_request_validator_v1"
+        },
+        "correlation_id": "correlation_session_interactive",
+        "causation_id": "causation_session_interactive",
+        "trace_id": "trace_session_interactive",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_session_request_validator_v1"
+      },
+      "context": {
+        "session_scope": {
+          "allowed_agent_ids": [
+            "agent_general_assistant_001"
+          ],
+          "allowed_actor_ids": [
+            "actor_general_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_channels": [
+            "WEB"
+          ],
+          "allowed_session_types": [
+            "INTERACTIVE_REFERENCE"
+          ],
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "validator_version": "agent_session_contract_validator_v1"
+        }
+      },
+      "expected_status": "POLICY_BLOCKED"
+    },
+    "replay-session": {
+      "request": {
+        "session_request_id": "session_request_replay",
+        "session_request_version": 1,
+        "request_type": "CREATE_SESSION_REFERENCE",
+        "session_reference": {
+          "session_id": "session_interactive",
+          "session_version": 0,
+          "session_fingerprint": "fp_session_pending",
+          "session_present": false,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_general_assistant_001",
+          "agent_id": "agent_general_assistant_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_interactive",
+          "policy_decision_id": "policy_decision_interactive",
+          "policy_decision_fingerprint": "fp_policy_decision_interactive",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_general_1",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "channel": "WEB",
+        "requested_session_type": "INTERACTIVE_REFERENCE",
+        "requested_transition": "CREATE",
+        "logical_sequence": 1,
+        "expected_session_version": 0,
+        "expected_session_fingerprint": "no_expected_fingerprint",
+        "expiration_evaluation": {
+          "evaluate_expiration": false,
+          "current_sequence": 0,
+          "last_activity_sequence": 0,
+          "validator_version": "agent_session_request_validator_v1"
+        },
+        "correlation_id": "correlation_session_interactive",
+        "causation_id": "causation_session_interactive",
+        "trace_id": "trace_session_interactive",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_session_request_validator_v1"
+      },
+      "context": {
+        "session_scope": {
+          "allowed_agent_ids": [
+            "agent_general_assistant_001"
+          ],
+          "allowed_actor_ids": [
+            "actor_general_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_channels": [
+            "WEB"
+          ],
+          "allowed_session_types": [
+            "INTERACTIVE_REFERENCE"
+          ],
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "validator_version": "agent_session_contract_validator_v1"
+        }
+      },
+      "expected_status": "ALLOW_SIMULATION"
+    },
+    "version-conflict-session": {
+      "request": {
+        "session_request_id": "session_request_version_conflict",
+        "session_request_version": 1,
+        "request_type": "VALIDATE_SESSION_REFERENCE",
+        "session_reference": {
+          "session_id": "session_interactive",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_interactive",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_general_assistant_001",
+          "agent_id": "agent_general_assistant_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_interactive",
+          "policy_decision_id": "policy_decision_interactive",
+          "policy_decision_fingerprint": "fp_policy_decision_interactive",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_general_1",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "channel": "WEB",
+        "requested_session_type": "INTERACTIVE_REFERENCE",
+        "requested_transition": "VALIDATE",
+        "logical_sequence": 1,
+        "expected_session_version": 99,
+        "expected_session_fingerprint": "fp_session_interactive",
+        "expiration_evaluation": {
+          "evaluate_expiration": false,
+          "current_sequence": 0,
+          "last_activity_sequence": 0,
+          "validator_version": "agent_session_request_validator_v1"
+        },
+        "correlation_id": "correlation_session_interactive",
+        "causation_id": "causation_session_interactive",
+        "trace_id": "trace_session_interactive",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_session_request_validator_v1"
+      },
+      "context": {
+        "session_scope": {
+          "allowed_agent_ids": [
+            "agent_general_assistant_001"
+          ],
+          "allowed_actor_ids": [
+            "actor_general_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_channels": [
+            "WEB"
+          ],
+          "allowed_session_types": [
+            "INTERACTIVE_REFERENCE"
+          ],
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "validator_version": "agent_session_contract_validator_v1"
+        },
+        "current_session": {
+          "session_id": "session_interactive",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_interactive",
+          "current_status": "DRAFT",
+          "agent_id": "agent_general_assistant_001",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "creation_sequence": 0,
+          "last_transition_sequence": 0
+        }
+      },
+      "expected_status": "VERSION_BLOCKED"
+    }
+  }
+}
