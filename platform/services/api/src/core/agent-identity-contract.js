@@ -7,7 +7,7 @@ const AGENT_CORE_FORBIDDEN_KEY_TOKENS = Object.freeze([
   'jwt', 'oauth', 'cookie', 'filesystem',
   'endpoint', 'url', 'uri', 'hostname', 'host', 'ip', 'port', 'env',
   'function', 'callback', 'handler', 'execute', 'invoke',
-  'runtime', 'bootstrap', 'startup', 'plugin', 'prompt', 'model', 'provider', 'sdk',
+  'runtime', 'bootstrap', 'startup', 'plugin', 'prompt', 'sdk',
   'eval', 'vm', 'childprocess', 'workerthreads'
 ]);
 const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
