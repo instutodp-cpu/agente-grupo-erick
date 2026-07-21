@@ -1,0 +1,1234 @@
+{
+  "fixture_version": "hermes_agent_memory_contracts_fixture_v1",
+  "simulation": true,
+  "production_blocked": true,
+  "runtime_enabled": false,
+  "execution_enabled": false,
+  "llm_enabled": false,
+  "tools_enabled": false,
+  "memory_enabled": false,
+  "network_enabled": false,
+  "rollout_percentage": 0,
+  "memory_items": {
+    "working-memory-reference": {
+      "memory_item_id": "memory_item_working",
+      "memory_item_version": 1,
+      "memory_type": "WORKING_MEMORY_REFERENCE",
+      "agent_id": "agent_general_assistant_001",
+      "tenant_id": "tenant_demo_general",
+      "organization_id": "tenant_demo_general:org-main",
+      "session_reference_id": "session_general_1",
+      "subject_reference_id": "subject_ref_working",
+      "source_reference_id": "source_ref_working",
+      "content_reference_id": "content_ref_working",
+      "content_present": false,
+      "content_loaded": false,
+      "content_stored": false,
+      "content_indexed": false,
+      "classification": "INTERNAL",
+      "risk_classification": "LOW",
+      "retention_class": "EPHEMERAL_REFERENCE",
+      "importance_level": "NORMAL",
+      "confidence_reference": 50,
+      "created_sequence": 0,
+      "last_updated_sequence": 0,
+      "memory_fingerprint": "fp_memory_item_working",
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "validator_version": "agent_memory_item_contract_validator_v1"
+    },
+    "episodic-memory-reference": {
+      "memory_item_id": "memory_item_episodic",
+      "memory_item_version": 1,
+      "memory_type": "EPISODIC_MEMORY_REFERENCE",
+      "agent_id": "agent_retail_operations_001",
+      "tenant_id": "tenant_demo_retail",
+      "organization_id": "tenant_demo_retail:org-main",
+      "session_reference_id": "session_retail_1",
+      "subject_reference_id": "subject_ref_episodic",
+      "source_reference_id": "source_ref_episodic",
+      "content_reference_id": "content_ref_episodic",
+      "content_present": false,
+      "content_loaded": false,
+      "content_stored": false,
+      "content_indexed": false,
+      "classification": "INTERNAL",
+      "risk_classification": "LOW",
+      "retention_class": "SESSION_REFERENCE",
+      "importance_level": "NORMAL",
+      "confidence_reference": 50,
+      "created_sequence": 0,
+      "last_updated_sequence": 0,
+      "memory_fingerprint": "fp_memory_item_episodic",
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "validator_version": "agent_memory_item_contract_validator_v1"
+    },
+    "semantic-memory-reference": {
+      "memory_item_id": "memory_item_semantic",
+      "memory_item_version": 1,
+      "memory_type": "SEMANTIC_MEMORY_REFERENCE",
+      "agent_id": "agent_finance_analytics_001",
+      "tenant_id": "tenant_demo_finance",
+      "organization_id": "tenant_demo_finance:org-main",
+      "session_reference_id": "session_finance_1",
+      "subject_reference_id": "subject_ref_semantic",
+      "source_reference_id": "source_ref_semantic",
+      "content_reference_id": "content_ref_semantic",
+      "content_present": false,
+      "content_loaded": false,
+      "content_stored": false,
+      "content_indexed": false,
+      "classification": "CONFIDENTIAL",
+      "risk_classification": "LOW",
+      "retention_class": "LONG_TERM_REFERENCE",
+      "importance_level": "HIGH",
+      "confidence_reference": 50,
+      "created_sequence": 0,
+      "last_updated_sequence": 0,
+      "memory_fingerprint": "fp_memory_item_semantic",
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "validator_version": "agent_memory_item_contract_validator_v1"
+    },
+    "procedural-memory-reference": {
+      "memory_item_id": "memory_item_procedural",
+      "memory_item_version": 1,
+      "memory_type": "PROCEDURAL_MEMORY_REFERENCE",
+      "agent_id": "agent_pharmacy_specialist_001",
+      "tenant_id": "tenant_demo_pharmacy",
+      "organization_id": "tenant_demo_pharmacy:org-main",
+      "session_reference_id": "session_pharmacy_1",
+      "subject_reference_id": "subject_ref_procedural",
+      "source_reference_id": "source_ref_procedural",
+      "content_reference_id": "content_ref_procedural",
+      "content_present": false,
+      "content_loaded": false,
+      "content_stored": false,
+      "content_indexed": false,
+      "classification": "CONFIDENTIAL",
+      "risk_classification": "LOW",
+      "retention_class": "SHORT_TERM_REFERENCE",
+      "importance_level": "NORMAL",
+      "confidence_reference": 50,
+      "created_sequence": 0,
+      "last_updated_sequence": 0,
+      "memory_fingerprint": "fp_memory_item_procedural",
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "validator_version": "agent_memory_item_contract_validator_v1"
+    },
+    "profile-memory-reference": {
+      "memory_item_id": "memory_item_profile",
+      "memory_item_version": 1,
+      "memory_type": "PROFILE_MEMORY_REFERENCE",
+      "agent_id": "agent_training_001",
+      "tenant_id": "tenant_demo_training",
+      "organization_id": "tenant_demo_training:org-main",
+      "session_reference_id": "session_training_1",
+      "subject_reference_id": "subject_ref_profile",
+      "source_reference_id": "source_ref_profile",
+      "content_reference_id": "content_ref_profile",
+      "content_present": false,
+      "content_loaded": false,
+      "content_stored": false,
+      "content_indexed": false,
+      "classification": "INTERNAL",
+      "risk_classification": "LOW",
+      "retention_class": "LONG_TERM_REFERENCE",
+      "importance_level": "NORMAL",
+      "confidence_reference": 50,
+      "created_sequence": 0,
+      "last_updated_sequence": 0,
+      "memory_fingerprint": "fp_memory_item_profile",
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "validator_version": "agent_memory_item_contract_validator_v1"
+    },
+    "audit-memory-reference": {
+      "memory_item_id": "memory_item_audit",
+      "memory_item_version": 1,
+      "memory_type": "AUDIT_MEMORY_REFERENCE",
+      "agent_id": "agent_audit_001",
+      "tenant_id": "tenant_demo_audit",
+      "organization_id": "tenant_demo_audit:org-main",
+      "session_reference_id": "session_audit_1",
+      "subject_reference_id": "subject_ref_audit",
+      "source_reference_id": "source_ref_audit",
+      "content_reference_id": "content_ref_audit",
+      "content_present": false,
+      "content_loaded": false,
+      "content_stored": false,
+      "content_indexed": false,
+      "classification": "CONFIDENTIAL",
+      "risk_classification": "LOW",
+      "retention_class": "LONG_TERM_REFERENCE",
+      "importance_level": "HIGH",
+      "confidence_reference": 50,
+      "created_sequence": 0,
+      "last_updated_sequence": 0,
+      "memory_fingerprint": "fp_memory_item_audit",
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "validator_version": "agent_memory_item_contract_validator_v1"
+    }
+  },
+  "cases": {
+    "tenant-mismatch-memory": {
+      "request": {
+        "memory_request_id": "memory_request_tenant_mismatch",
+        "memory_request_version": 1,
+        "request_type": "REGISTER_MEMORY_REFERENCE",
+        "memory_contract_reference": {
+          "memory_contract_id": "memory_contract_memory_item_working",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp_memory_contract_memory_item_working",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "memory_item_reference": {
+          "memory_item_id": "memory_item_working",
+          "memory_item_version": 0,
+          "memory_item_fingerprint": "no_expected_fingerprint",
+          "memory_item_present": false,
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "retrieval_reference": {
+          "retrieval_reference_id": "retrieval_not_requested_memory_item_working",
+          "memory_contract_id": "memory_contract_memory_item_working",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "agent_id": "agent_general_assistant_001",
+          "session_reference_id": "session_general_1",
+          "requested_memory_types": [
+            "WORKING_MEMORY_REFERENCE"
+          ],
+          "query_reference_id": "query_ref_not_available",
+          "query_present": false,
+          "query_loaded": false,
+          "retrieval_requested": true,
+          "retrieval_executed": false,
+          "results_loaded": false,
+          "result_count_reference": 0,
+          "ranking_requested": false,
+          "ranking_executed": false,
+          "similarity_requested": false,
+          "similarity_executed": false,
+          "retrieval_fingerprint": "fp_retrieval_not_requested_memory_item_working",
+          "validator_version": "agent_memory_retrieval_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_general_assistant_001",
+          "agent_id": "agent_general_assistant_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_other",
+          "organization_id": "tenant_other:org-main",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "session_general_1",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_general_1",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_memory_item_working",
+          "policy_decision_id": "policy_decision_memory_item_working",
+          "policy_decision_fingerprint": "fp_policy_decision_memory_item_working",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "memory_read_allowed": false,
+          "memory_write_allowed": false,
+          "memory_delete_allowed": false,
+          "memory_share_allowed": false,
+          "validator_version": "agent_memory_policy_reference_validator_v1"
+        },
+        "tenant_id": "tenant_other",
+        "organization_id": "tenant_other:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_memory_item_working",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_other",
+          "organization_id": "tenant_other:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "expected_memory_version": 0,
+        "expected_memory_fingerprint": "no_expected_fingerprint",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_memory_request_validator_v1"
+      },
+      "context": {
+        "memory_scope": {
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "allowed_agent_ids": [
+            "agent_general_assistant_001"
+          ],
+          "allowed_session_reference_ids": [
+            "session_general_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_memory_types": [
+            "WORKING_MEMORY_REFERENCE"
+          ],
+          "allowed_classifications": [
+            "INTERNAL"
+          ],
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "shared_between_agents": false,
+          "shared_between_sessions": false,
+          "validator_version": "agent_memory_scope_validator_v1"
+        },
+        "memory_types": [
+          "WORKING_MEMORY_REFERENCE"
+        ],
+        "classification": "INTERNAL",
+        "retention_class": "EPHEMERAL_REFERENCE",
+        "importance_level": "NORMAL"
+      },
+      "expected_status": "TENANT_BLOCKED"
+    },
+    "organization-mismatch-memory": {
+      "request": {
+        "memory_request_id": "memory_request_org_mismatch",
+        "memory_request_version": 1,
+        "request_type": "REGISTER_MEMORY_REFERENCE",
+        "memory_contract_reference": {
+          "memory_contract_id": "memory_contract_memory_item_working",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp_memory_contract_memory_item_working",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "memory_item_reference": {
+          "memory_item_id": "memory_item_working",
+          "memory_item_version": 0,
+          "memory_item_fingerprint": "no_expected_fingerprint",
+          "memory_item_present": false,
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "retrieval_reference": {
+          "retrieval_reference_id": "retrieval_not_requested_memory_item_working",
+          "memory_contract_id": "memory_contract_memory_item_working",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "agent_id": "agent_general_assistant_001",
+          "session_reference_id": "session_general_1",
+          "requested_memory_types": [
+            "WORKING_MEMORY_REFERENCE"
+          ],
+          "query_reference_id": "query_ref_not_available",
+          "query_present": false,
+          "query_loaded": false,
+          "retrieval_requested": true,
+          "retrieval_executed": false,
+          "results_loaded": false,
+          "result_count_reference": 0,
+          "ranking_requested": false,
+          "ranking_executed": false,
+          "similarity_requested": false,
+          "similarity_executed": false,
+          "retrieval_fingerprint": "fp_retrieval_not_requested_memory_item_working",
+          "validator_version": "agent_memory_retrieval_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_general_assistant_001",
+          "agent_id": "agent_general_assistant_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-secondary",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "session_general_1",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_general_1",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_memory_item_working",
+          "policy_decision_id": "policy_decision_memory_item_working",
+          "policy_decision_fingerprint": "fp_policy_decision_memory_item_working",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "memory_read_allowed": false,
+          "memory_write_allowed": false,
+          "memory_delete_allowed": false,
+          "memory_share_allowed": false,
+          "validator_version": "agent_memory_policy_reference_validator_v1"
+        },
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-secondary",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_memory_item_working",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-secondary",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "expected_memory_version": 0,
+        "expected_memory_fingerprint": "no_expected_fingerprint",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_memory_request_validator_v1"
+      },
+      "context": {
+        "memory_scope": {
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "allowed_agent_ids": [
+            "agent_general_assistant_001"
+          ],
+          "allowed_session_reference_ids": [
+            "session_general_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_memory_types": [
+            "WORKING_MEMORY_REFERENCE"
+          ],
+          "allowed_classifications": [
+            "INTERNAL"
+          ],
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "shared_between_agents": false,
+          "shared_between_sessions": false,
+          "validator_version": "agent_memory_scope_validator_v1"
+        },
+        "memory_types": [
+          "WORKING_MEMORY_REFERENCE"
+        ],
+        "classification": "INTERNAL",
+        "retention_class": "EPHEMERAL_REFERENCE",
+        "importance_level": "NORMAL"
+      },
+      "expected_status": "ORGANIZATION_BLOCKED"
+    },
+    "restricted-memory": {
+      "request": {
+        "memory_request_id": "memory_request_restricted",
+        "memory_request_version": 1,
+        "request_type": "REGISTER_MEMORY_REFERENCE",
+        "memory_contract_reference": {
+          "memory_contract_id": "memory_contract_memory_item_working",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp_memory_contract_memory_item_working",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "memory_item_reference": {
+          "memory_item_id": "memory_item_working",
+          "memory_item_version": 0,
+          "memory_item_fingerprint": "no_expected_fingerprint",
+          "memory_item_present": false,
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "retrieval_reference": {
+          "retrieval_reference_id": "retrieval_not_requested_memory_item_working",
+          "memory_contract_id": "memory_contract_memory_item_working",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "agent_id": "agent_general_assistant_001",
+          "session_reference_id": "session_general_1",
+          "requested_memory_types": [
+            "WORKING_MEMORY_REFERENCE"
+          ],
+          "query_reference_id": "query_ref_not_available",
+          "query_present": false,
+          "query_loaded": false,
+          "retrieval_requested": true,
+          "retrieval_executed": false,
+          "results_loaded": false,
+          "result_count_reference": 0,
+          "ranking_requested": false,
+          "ranking_executed": false,
+          "similarity_requested": false,
+          "similarity_executed": false,
+          "retrieval_fingerprint": "fp_retrieval_not_requested_memory_item_working",
+          "validator_version": "agent_memory_retrieval_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_general_assistant_001",
+          "agent_id": "agent_general_assistant_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "session_general_1",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_general_1",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_memory_item_working",
+          "policy_decision_id": "policy_decision_memory_item_working",
+          "policy_decision_fingerprint": "fp_policy_decision_memory_item_working",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "memory_read_allowed": false,
+          "memory_write_allowed": false,
+          "memory_delete_allowed": false,
+          "memory_share_allowed": false,
+          "validator_version": "agent_memory_policy_reference_validator_v1"
+        },
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_memory_item_working",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "expected_memory_version": 0,
+        "expected_memory_fingerprint": "no_expected_fingerprint",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_memory_request_validator_v1"
+      },
+      "context": {
+        "memory_scope": {
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "allowed_agent_ids": [
+            "agent_general_assistant_001"
+          ],
+          "allowed_session_reference_ids": [
+            "session_general_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_memory_types": [
+            "WORKING_MEMORY_REFERENCE"
+          ],
+          "allowed_classifications": [
+            "INTERNAL"
+          ],
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "shared_between_agents": false,
+          "shared_between_sessions": false,
+          "validator_version": "agent_memory_scope_validator_v1"
+        },
+        "memory_types": [
+          "WORKING_MEMORY_REFERENCE"
+        ],
+        "classification": "RESTRICTED",
+        "retention_class": "EPHEMERAL_REFERENCE",
+        "importance_level": "NORMAL"
+      },
+      "expected_status": "CLASSIFICATION_BLOCKED"
+    },
+    "confidential-memory-without-policy": {
+      "request": {
+        "memory_request_id": "memory_request_confidential_no_policy",
+        "memory_request_version": 1,
+        "request_type": "REGISTER_MEMORY_REFERENCE",
+        "memory_contract_reference": {
+          "memory_contract_id": "memory_contract_memory_item_working",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp_memory_contract_memory_item_working",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "memory_item_reference": {
+          "memory_item_id": "memory_item_working",
+          "memory_item_version": 0,
+          "memory_item_fingerprint": "no_expected_fingerprint",
+          "memory_item_present": false,
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "retrieval_reference": {
+          "retrieval_reference_id": "retrieval_not_requested_memory_item_working",
+          "memory_contract_id": "memory_contract_memory_item_working",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "agent_id": "agent_general_assistant_001",
+          "session_reference_id": "session_general_1",
+          "requested_memory_types": [
+            "WORKING_MEMORY_REFERENCE"
+          ],
+          "query_reference_id": "query_ref_not_available",
+          "query_present": false,
+          "query_loaded": false,
+          "retrieval_requested": true,
+          "retrieval_executed": false,
+          "results_loaded": false,
+          "result_count_reference": 0,
+          "ranking_requested": false,
+          "ranking_executed": false,
+          "similarity_requested": false,
+          "similarity_executed": false,
+          "retrieval_fingerprint": "fp_retrieval_not_requested_memory_item_working",
+          "validator_version": "agent_memory_retrieval_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_general_assistant_001",
+          "agent_id": "agent_general_assistant_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "session_general_1",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_general_1",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_memory_item_working",
+          "policy_decision_id": "policy_decision_memory_item_working",
+          "policy_decision_fingerprint": "fp_policy_decision_memory_item_working",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "memory_read_allowed": false,
+          "memory_write_allowed": false,
+          "memory_delete_allowed": false,
+          "memory_share_allowed": false,
+          "validator_version": "agent_memory_policy_reference_validator_v1"
+        },
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_memory_item_working",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "expected_memory_version": 0,
+        "expected_memory_fingerprint": "no_expected_fingerprint",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_memory_request_validator_v1"
+      },
+      "context": {
+        "memory_scope": {
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "allowed_agent_ids": [
+            "agent_general_assistant_001"
+          ],
+          "allowed_session_reference_ids": [
+            "session_general_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_memory_types": [
+            "WORKING_MEMORY_REFERENCE"
+          ],
+          "allowed_classifications": [
+            "INTERNAL"
+          ],
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "shared_between_agents": false,
+          "shared_between_sessions": false,
+          "validator_version": "agent_memory_scope_validator_v1"
+        },
+        "memory_types": [
+          "WORKING_MEMORY_REFERENCE"
+        ],
+        "classification": "CONFIDENTIAL",
+        "retention_class": "EPHEMERAL_REFERENCE",
+        "importance_level": "NORMAL"
+      },
+      "expected_status": "SCOPE_BLOCKED"
+    },
+    "retrieval-reference": {
+      "request": {
+        "memory_request_id": "memory_request_retrieval",
+        "memory_request_version": 1,
+        "request_type": "RETRIEVE_MEMORY_REFERENCE",
+        "memory_contract_reference": {
+          "memory_contract_id": "memory_contract_memory_item_semantic",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp_memory_contract_memory_item_semantic",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "memory_item_reference": {
+          "memory_item_id": "memory_item_semantic",
+          "memory_item_version": 1,
+          "memory_item_fingerprint": "no_expected_fingerprint",
+          "memory_item_present": true,
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "retrieval_reference": {
+          "retrieval_reference_id": "retrieval_not_requested_memory_item_semantic",
+          "memory_contract_id": "memory_contract_memory_item_semantic",
+          "tenant_id": "tenant_demo_finance",
+          "organization_id": "tenant_demo_finance:org-main",
+          "agent_id": "agent_finance_analytics_001",
+          "session_reference_id": "session_finance_1",
+          "requested_memory_types": [
+            "SEMANTIC_MEMORY_REFERENCE"
+          ],
+          "query_reference_id": "query_ref_not_available",
+          "query_present": false,
+          "query_loaded": false,
+          "retrieval_requested": true,
+          "retrieval_executed": false,
+          "results_loaded": false,
+          "result_count_reference": 0,
+          "ranking_requested": false,
+          "ranking_executed": false,
+          "similarity_requested": false,
+          "similarity_executed": false,
+          "retrieval_fingerprint": "fp_retrieval_not_requested_memory_item_semantic",
+          "validator_version": "agent_memory_retrieval_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_finance_analytics_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_finance_analytics_001",
+          "agent_id": "agent_finance_analytics_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_demo_finance",
+          "organization_id": "tenant_demo_finance:org-main",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "session_finance_1",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_finance_1",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_memory_item_semantic",
+          "policy_decision_id": "policy_decision_memory_item_semantic",
+          "policy_decision_fingerprint": "fp_policy_decision_memory_item_semantic",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "memory_read_allowed": false,
+          "memory_write_allowed": false,
+          "memory_delete_allowed": false,
+          "memory_share_allowed": false,
+          "validator_version": "agent_memory_policy_reference_validator_v1"
+        },
+        "tenant_id": "tenant_demo_finance",
+        "organization_id": "tenant_demo_finance:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_memory_item_semantic",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_finance",
+          "organization_id": "tenant_demo_finance:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "expected_memory_version": 1,
+        "expected_memory_fingerprint": "no_expected_fingerprint",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_memory_request_validator_v1"
+      },
+      "context": {
+        "memory_scope": {
+          "tenant_id": "tenant_demo_finance",
+          "organization_id": "tenant_demo_finance:org-main",
+          "allowed_agent_ids": [
+            "agent_finance_analytics_001"
+          ],
+          "allowed_session_reference_ids": [
+            "session_finance_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_memory_types": [
+            "SEMANTIC_MEMORY_REFERENCE"
+          ],
+          "allowed_classifications": [
+            "CONFIDENTIAL"
+          ],
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "shared_between_agents": false,
+          "shared_between_sessions": false,
+          "validator_version": "agent_memory_scope_validator_v1"
+        },
+        "memory_types": [
+          "SEMANTIC_MEMORY_REFERENCE"
+        ],
+        "classification": "CONFIDENTIAL",
+        "retention_class": "LONG_TERM_REFERENCE",
+        "importance_level": "HIGH",
+        "current_memory": {
+          "memory_item_id": "memory_item_semantic",
+          "memory_item_version": 1,
+          "memory_fingerprint": "no_expected_fingerprint",
+          "agent_id": "agent_finance_analytics_001",
+          "tenant_id": "tenant_demo_finance",
+          "organization_id": "tenant_demo_finance:org-main"
+        }
+      },
+      "expected_status": "ALLOW_SIMULATION"
+    },
+    "replay-memory": {
+      "request": {
+        "memory_request_id": "memory_request_replay",
+        "memory_request_version": 1,
+        "request_type": "REGISTER_MEMORY_REFERENCE",
+        "memory_contract_reference": {
+          "memory_contract_id": "memory_contract_memory_item_working",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp_memory_contract_memory_item_working",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "memory_item_reference": {
+          "memory_item_id": "memory_item_working",
+          "memory_item_version": 0,
+          "memory_item_fingerprint": "no_expected_fingerprint",
+          "memory_item_present": false,
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "retrieval_reference": {
+          "retrieval_reference_id": "retrieval_not_requested_memory_item_working",
+          "memory_contract_id": "memory_contract_memory_item_working",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "agent_id": "agent_general_assistant_001",
+          "session_reference_id": "session_general_1",
+          "requested_memory_types": [
+            "WORKING_MEMORY_REFERENCE"
+          ],
+          "query_reference_id": "query_ref_not_available",
+          "query_present": false,
+          "query_loaded": false,
+          "retrieval_requested": true,
+          "retrieval_executed": false,
+          "results_loaded": false,
+          "result_count_reference": 0,
+          "ranking_requested": false,
+          "ranking_executed": false,
+          "similarity_requested": false,
+          "similarity_executed": false,
+          "retrieval_fingerprint": "fp_retrieval_not_requested_memory_item_working",
+          "validator_version": "agent_memory_retrieval_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_general_assistant_001",
+          "agent_id": "agent_general_assistant_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "session_general_1",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_general_1",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_memory_item_working",
+          "policy_decision_id": "policy_decision_memory_item_working",
+          "policy_decision_fingerprint": "fp_policy_decision_memory_item_working",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "memory_read_allowed": false,
+          "memory_write_allowed": false,
+          "memory_delete_allowed": false,
+          "memory_share_allowed": false,
+          "validator_version": "agent_memory_policy_reference_validator_v1"
+        },
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_memory_item_working",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "expected_memory_version": 0,
+        "expected_memory_fingerprint": "no_expected_fingerprint",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_memory_request_validator_v1"
+      },
+      "context": {
+        "memory_scope": {
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "allowed_agent_ids": [
+            "agent_general_assistant_001"
+          ],
+          "allowed_session_reference_ids": [
+            "session_general_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_memory_types": [
+            "WORKING_MEMORY_REFERENCE"
+          ],
+          "allowed_classifications": [
+            "INTERNAL"
+          ],
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "shared_between_agents": false,
+          "shared_between_sessions": false,
+          "validator_version": "agent_memory_scope_validator_v1"
+        },
+        "memory_types": [
+          "WORKING_MEMORY_REFERENCE"
+        ],
+        "classification": "INTERNAL",
+        "retention_class": "EPHEMERAL_REFERENCE",
+        "importance_level": "NORMAL"
+      },
+      "expected_status": "ALLOW_SIMULATION"
+    },
+    "version-conflict-memory": {
+      "request": {
+        "memory_request_id": "memory_request_version_conflict",
+        "memory_request_version": 1,
+        "request_type": "VALIDATE_MEMORY_REFERENCE",
+        "memory_contract_reference": {
+          "memory_contract_id": "memory_contract_memory_item_working",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp_memory_contract_memory_item_working",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "memory_item_reference": {
+          "memory_item_id": "memory_item_working",
+          "memory_item_version": 1,
+          "memory_item_fingerprint": "no_expected_fingerprint",
+          "memory_item_present": true,
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "retrieval_reference": {
+          "retrieval_reference_id": "retrieval_not_requested_memory_item_working",
+          "memory_contract_id": "memory_contract_memory_item_working",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "agent_id": "agent_general_assistant_001",
+          "session_reference_id": "session_general_1",
+          "requested_memory_types": [
+            "WORKING_MEMORY_REFERENCE"
+          ],
+          "query_reference_id": "query_ref_not_available",
+          "query_present": false,
+          "query_loaded": false,
+          "retrieval_requested": true,
+          "retrieval_executed": false,
+          "results_loaded": false,
+          "result_count_reference": 0,
+          "ranking_requested": false,
+          "ranking_executed": false,
+          "similarity_requested": false,
+          "similarity_executed": false,
+          "retrieval_fingerprint": "fp_retrieval_not_requested_memory_item_working",
+          "validator_version": "agent_memory_retrieval_reference_validator_v1"
+        },
+        "agent_contract_reference": {
+          "contract_id": "contract_agent_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_agent_general_assistant_001",
+          "agent_id": "agent_general_assistant_001",
+          "agent_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "session_general_1",
+          "session_version": 1,
+          "session_fingerprint": "fp_session_general_1",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_reference": {
+          "policy_request_id": "policy_request_memory_item_working",
+          "policy_decision_id": "policy_decision_memory_item_working",
+          "policy_decision_fingerprint": "fp_policy_decision_memory_item_working",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "memory_read_allowed": false,
+          "memory_write_allowed": false,
+          "memory_delete_allowed": false,
+          "memory_share_allowed": false,
+          "validator_version": "agent_memory_policy_reference_validator_v1"
+        },
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_memory_item_working",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "expected_memory_version": 99,
+        "expected_memory_fingerprint": "no_expected_fingerprint",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_memory_request_validator_v1"
+      },
+      "context": {
+        "memory_scope": {
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "allowed_agent_ids": [
+            "agent_general_assistant_001"
+          ],
+          "allowed_session_reference_ids": [
+            "session_general_1"
+          ],
+          "allowed_actor_roles": [
+            "OPERATOR"
+          ],
+          "allowed_memory_types": [
+            "WORKING_MEMORY_REFERENCE"
+          ],
+          "allowed_classifications": [
+            "INTERNAL"
+          ],
+          "cross_tenant_allowed": false,
+          "cross_organization_allowed": false,
+          "shared_between_agents": false,
+          "shared_between_sessions": false,
+          "validator_version": "agent_memory_scope_validator_v1"
+        },
+        "memory_types": [
+          "WORKING_MEMORY_REFERENCE"
+        ],
+        "classification": "INTERNAL",
+        "retention_class": "EPHEMERAL_REFERENCE",
+        "importance_level": "NORMAL",
+        "current_memory": {
+          "memory_item_id": "memory_item_working",
+          "memory_item_version": 1,
+          "memory_fingerprint": "no_expected_fingerprint",
+          "agent_id": "agent_general_assistant_001",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main"
+        }
+      },
+      "expected_status": "VERSION_BLOCKED"
+    }
+  }
+}
