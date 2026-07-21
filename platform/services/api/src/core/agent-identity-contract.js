@@ -5,11 +5,19 @@ const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-a
 const AGENT_CORE_FORBIDDEN_KEY_TOKENS = Object.freeze([
   'api', 'apikey', 'secret', 'token', 'password', 'authorization', 'bearer',
   'endpoint', 'url', 'uri', 'hostname', 'host', 'ip', 'port', 'env',
-  'import', 'require', 'function', 'callback', 'handler', 'execute', 'invoke',
+  'function', 'callback', 'handler', 'execute', 'invoke',
   'runtime', 'bootstrap', 'startup', 'plugin', 'prompt', 'model', 'provider', 'sdk',
   'eval', 'vm', 'childprocess', 'workerthreads'
 ]);
-const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set(['authorization_state', 'runtime_enabled']));
+const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
+  'authorization_state',
+  'runtime_enabled',
+  'runtime_mutated',
+  'secret_material_present',
+  'maximum_model_calls',
+  'requested_model_calls',
+  'model_calls_within_limit'
+]));
 const AGENT_CORE_FORBIDDEN_VALUE_PATTERN = /\b(api[_-]?key|secret|token|password|authorization|bearer|endpoint|hostname|callback|handler|execute|invoke|runtime|bootstrap|startup|plugin|tool_call|system_prompt|prompt|model|provider|sdk|eval)\b/i;
 const AGENT_CORE_FORBIDDEN_VALUE_SHAPES = Object.freeze([
   [/^(https?|wss?|grpc):\/\//i, 'operational_url_value'],

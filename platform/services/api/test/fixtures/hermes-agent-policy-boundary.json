@@ -1,0 +1,2908 @@
+{
+  "fixture_version": "hermes_agent_policy_boundary_fixture_v1",
+  "simulation": true,
+  "production_blocked": true,
+  "runtime_enabled": false,
+  "execution_enabled": false,
+  "llm_enabled": false,
+  "tools_enabled": false,
+  "memory_enabled": false,
+  "network_enabled": false,
+  "rollout_percentage": 0,
+  "policies": {
+    "tenant-default-deny-policy": {
+      "policy_id": "policy_tenant_default_deny_policy",
+      "policy_slug": "tenant-default-deny-policy",
+      "policy_version": 1,
+      "tenant_id": "tenant_default_deny_demo",
+      "organization_id": "tenant_default_deny_demo:org-main",
+      "policy_type": "TENANT_POLICY",
+      "policy_status": "VALIDATED_SIMULATION",
+      "priority": 500,
+      "effect": "DENY",
+      "subject_scope": {
+        "tenant_ids": [
+          "tenant_default_deny_demo"
+        ],
+        "organization_ids": [
+          "tenant_default_deny_demo:org-main"
+        ],
+        "agent_ids": [
+          "agent_default_deny_demo"
+        ],
+        "agent_types": [
+          "ANALYTICS_AGENT",
+          "AUDIT_AGENT",
+          "DOMAIN_ASSISTANT",
+          "GENERAL_ASSISTANT",
+          "OPERATIONS_AGENT",
+          "ROUTING_AGENT",
+          "SPECIALIST_AGENT",
+          "SUPERVISOR_AGENT",
+          "SYSTEM_AGENT",
+          "TRAINING_AGENT"
+        ],
+        "actor_types": [
+          "SERVICE",
+          "SYSTEM",
+          "USER"
+        ],
+        "actor_roles": [
+          "ADMIN",
+          "AUDITOR",
+          "COLLABORATOR",
+          "MANAGER",
+          "OPERATOR",
+          "SUPERVISOR",
+          "SYSTEM_SERVICE"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "resource_scope": {
+        "resource_types": [
+          "AGENT",
+          "BUDGET_REFERENCE",
+          "CAPABILITY",
+          "CONTEXT",
+          "CONVERSATION_REFERENCE",
+          "DATA_REFERENCE",
+          "DOCUMENT_REFERENCE",
+          "MEMORY_REFERENCE",
+          "MODEL_REFERENCE",
+          "SESSION_REFERENCE",
+          "TOOL_REFERENCE",
+          "WORKFLOW_REFERENCE"
+        ],
+        "resource_ids": [],
+        "resource_classifications": [
+          "CONFIDENTIAL",
+          "INTERNAL",
+          "PUBLIC",
+          "RESTRICTED"
+        ],
+        "resource_domains": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "action_scope": {
+        "actions": [
+          "ANALYZE_REFERENCE",
+          "CLASSIFY_REFERENCE",
+          "GENERATE_DOCUMENT_REFERENCE",
+          "LIST_REFERENCE",
+          "PLAN_REFERENCE",
+          "READ_REFERENCE",
+          "REQUEST_MEMORY_REFERENCE",
+          "REQUEST_MODEL_REFERENCE",
+          "REQUEST_TOOL_REFERENCE",
+          "REQUEST_WORKFLOW_REFERENCE",
+          "ROUTE_REFERENCE",
+          "SUMMARIZE_REFERENCE",
+          "VALIDATE"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "risk_scope": {
+        "allowed_risk_classifications": [
+          "LOW",
+          "MODERATE"
+        ],
+        "maximum_risk_classification": "MODERATE",
+        "requires_approval_above": "LOW",
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "data_scope": {
+        "allowed_data_classifications": [
+          "INTERNAL",
+          "PUBLIC"
+        ],
+        "maximum_data_classification": "INTERNAL",
+        "restricted_fields_present": false,
+        "personal_data_present": false,
+        "sensitive_data_present": false,
+        "secret_material_present": false,
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "channel_scope": {
+        "allowed_channels": [
+          "API",
+          "BATCH_REFERENCE",
+          "INTERNAL",
+          "MOBILE",
+          "WEB",
+          "WHATSAPP"
+        ],
+        "denied_channels": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "budget_policy": {
+        "budget_policy_id": "budget_tenant_default_deny_policy",
+        "currency": "BRL",
+        "period_type": "REQUEST",
+        "maximum_cost_minor_units": 1000,
+        "maximum_input_tokens": 2000,
+        "maximum_output_tokens": 1000,
+        "maximum_total_tokens": 3000,
+        "maximum_model_calls": 0,
+        "maximum_tool_calls": 0,
+        "maximum_memory_reads": 0,
+        "maximum_memory_writes": 0,
+        "maximum_network_calls": 0,
+        "maximum_escalations": 0,
+        "budget_enforced": true,
+        "budget_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_budget_validator_v1"
+      },
+      "limit_policy": {
+        "limit_policy_id": "limit_tenant_default_deny_policy",
+        "maximum_requests": 100,
+        "maximum_concurrency": 5,
+        "maximum_duration_ms": 30000,
+        "maximum_payload_bytes": 1000000,
+        "maximum_context_references": 20,
+        "maximum_dependency_references": 20,
+        "maximum_policy_evaluations": 50,
+        "limit_enforced": true,
+        "limit_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_limits_validator_v1"
+      },
+      "approval_policy": {
+        "approval_required": false,
+        "approval_type": "NONE",
+        "required_roles": [],
+        "minimum_approvals": 0,
+        "approval_granted": false,
+        "approval_applied": false,
+        "validator_version": "agent_policy_contract_validator_v1"
+      },
+      "rule_references": [],
+      "dependency_references": [],
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "created_at_logical": "logical_seq_tenant_default_deny_policy_000001",
+      "validator_version": "agent_policy_contract_validator_v1"
+    },
+    "tenant-low-risk-simulation-policy": {
+      "policy_id": "policy_tenant_low_risk_simulation_policy",
+      "policy_slug": "tenant-low-risk-simulation-policy",
+      "policy_version": 1,
+      "tenant_id": "tenant_demo_general",
+      "organization_id": "tenant_demo_general:org-main",
+      "policy_type": "TENANT_POLICY",
+      "policy_status": "VALIDATED_SIMULATION",
+      "priority": 100,
+      "effect": "ALLOW_SIMULATION",
+      "subject_scope": {
+        "tenant_ids": [
+          "tenant_demo_general"
+        ],
+        "organization_ids": [
+          "tenant_demo_general:org-main"
+        ],
+        "agent_ids": [
+          "agent_general_assistant_001"
+        ],
+        "agent_types": [
+          "GENERAL_ASSISTANT"
+        ],
+        "actor_types": [
+          "USER"
+        ],
+        "actor_roles": [
+          "OPERATOR"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "resource_scope": {
+        "resource_types": [
+          "AGENT",
+          "CAPABILITY"
+        ],
+        "resource_ids": [],
+        "resource_classifications": [
+          "INTERNAL"
+        ],
+        "resource_domains": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "action_scope": {
+        "actions": [
+          "READ_REFERENCE",
+          "VALIDATE"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "risk_scope": {
+        "allowed_risk_classifications": [
+          "LOW"
+        ],
+        "maximum_risk_classification": "LOW",
+        "requires_approval_above": "MODERATE",
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "data_scope": {
+        "allowed_data_classifications": [
+          "INTERNAL",
+          "PUBLIC"
+        ],
+        "maximum_data_classification": "INTERNAL",
+        "restricted_fields_present": false,
+        "personal_data_present": false,
+        "sensitive_data_present": false,
+        "secret_material_present": false,
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "channel_scope": {
+        "allowed_channels": [
+          "WEB"
+        ],
+        "denied_channels": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "budget_policy": {
+        "budget_policy_id": "budget_tenant_low_risk_simulation_policy",
+        "currency": "BRL",
+        "period_type": "REQUEST",
+        "maximum_cost_minor_units": 1000,
+        "maximum_input_tokens": 2000,
+        "maximum_output_tokens": 1000,
+        "maximum_total_tokens": 3000,
+        "maximum_model_calls": 0,
+        "maximum_tool_calls": 0,
+        "maximum_memory_reads": 0,
+        "maximum_memory_writes": 0,
+        "maximum_network_calls": 0,
+        "maximum_escalations": 0,
+        "budget_enforced": true,
+        "budget_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_budget_validator_v1"
+      },
+      "limit_policy": {
+        "limit_policy_id": "limit_tenant_low_risk_simulation_policy",
+        "maximum_requests": 100,
+        "maximum_concurrency": 5,
+        "maximum_duration_ms": 30000,
+        "maximum_payload_bytes": 1000000,
+        "maximum_context_references": 20,
+        "maximum_dependency_references": 20,
+        "maximum_policy_evaluations": 50,
+        "limit_enforced": true,
+        "limit_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_limits_validator_v1"
+      },
+      "approval_policy": {
+        "approval_required": false,
+        "approval_type": "NONE",
+        "required_roles": [],
+        "minimum_approvals": 0,
+        "approval_granted": false,
+        "approval_applied": false,
+        "validator_version": "agent_policy_contract_validator_v1"
+      },
+      "rule_references": [],
+      "dependency_references": [],
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "created_at_logical": "logical_seq_tenant_low_risk_simulation_policy_000001",
+      "validator_version": "agent_policy_contract_validator_v1"
+    },
+    "organization-retail-policy": {
+      "policy_id": "policy_organization_retail_policy",
+      "policy_slug": "organization-retail-policy",
+      "policy_version": 1,
+      "tenant_id": "tenant_demo_retail",
+      "organization_id": "tenant_demo_retail:org-main",
+      "policy_type": "ORGANIZATION_POLICY",
+      "policy_status": "VALIDATED_SIMULATION",
+      "priority": 100,
+      "effect": "ALLOW_SIMULATION",
+      "subject_scope": {
+        "tenant_ids": [
+          "tenant_demo_retail"
+        ],
+        "organization_ids": [
+          "tenant_demo_retail:org-main"
+        ],
+        "agent_ids": [
+          "agent_retail_operations_001"
+        ],
+        "agent_types": [
+          "OPERATIONS_AGENT"
+        ],
+        "actor_types": [
+          "USER"
+        ],
+        "actor_roles": [
+          "SUPERVISOR"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "resource_scope": {
+        "resource_types": [
+          "AGENT",
+          "CAPABILITY"
+        ],
+        "resource_ids": [],
+        "resource_classifications": [
+          "INTERNAL"
+        ],
+        "resource_domains": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "action_scope": {
+        "actions": [
+          "ROUTE_REFERENCE"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "risk_scope": {
+        "allowed_risk_classifications": [
+          "LOW",
+          "MODERATE"
+        ],
+        "maximum_risk_classification": "MODERATE",
+        "requires_approval_above": "HIGH",
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "data_scope": {
+        "allowed_data_classifications": [
+          "INTERNAL",
+          "PUBLIC"
+        ],
+        "maximum_data_classification": "INTERNAL",
+        "restricted_fields_present": false,
+        "personal_data_present": false,
+        "sensitive_data_present": false,
+        "secret_material_present": false,
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "channel_scope": {
+        "allowed_channels": [
+          "WEB"
+        ],
+        "denied_channels": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "budget_policy": {
+        "budget_policy_id": "budget_organization_retail_policy",
+        "currency": "BRL",
+        "period_type": "REQUEST",
+        "maximum_cost_minor_units": 1000,
+        "maximum_input_tokens": 2000,
+        "maximum_output_tokens": 1000,
+        "maximum_total_tokens": 3000,
+        "maximum_model_calls": 0,
+        "maximum_tool_calls": 0,
+        "maximum_memory_reads": 0,
+        "maximum_memory_writes": 0,
+        "maximum_network_calls": 0,
+        "maximum_escalations": 0,
+        "budget_enforced": true,
+        "budget_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_budget_validator_v1"
+      },
+      "limit_policy": {
+        "limit_policy_id": "limit_organization_retail_policy",
+        "maximum_requests": 100,
+        "maximum_concurrency": 5,
+        "maximum_duration_ms": 30000,
+        "maximum_payload_bytes": 1000000,
+        "maximum_context_references": 20,
+        "maximum_dependency_references": 20,
+        "maximum_policy_evaluations": 50,
+        "limit_enforced": true,
+        "limit_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_limits_validator_v1"
+      },
+      "approval_policy": {
+        "approval_required": false,
+        "approval_type": "NONE",
+        "required_roles": [],
+        "minimum_approvals": 0,
+        "approval_granted": false,
+        "approval_applied": false,
+        "validator_version": "agent_policy_contract_validator_v1"
+      },
+      "rule_references": [],
+      "dependency_references": [],
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "created_at_logical": "logical_seq_organization_retail_policy_000001",
+      "validator_version": "agent_policy_contract_validator_v1"
+    },
+    "finance-require-approval-policy": {
+      "policy_id": "policy_finance_require_approval_policy",
+      "policy_slug": "finance-require-approval-policy",
+      "policy_version": 1,
+      "tenant_id": "tenant_demo_finance",
+      "organization_id": "tenant_demo_finance:org-main",
+      "policy_type": "RISK_POLICY",
+      "policy_status": "VALIDATED_SIMULATION",
+      "priority": 100,
+      "effect": "REQUIRE_APPROVAL_SIMULATION",
+      "subject_scope": {
+        "tenant_ids": [
+          "tenant_demo_finance"
+        ],
+        "organization_ids": [
+          "tenant_demo_finance:org-main"
+        ],
+        "agent_ids": [
+          "agent_finance_analytics_001"
+        ],
+        "agent_types": [
+          "ANALYTICS_AGENT"
+        ],
+        "actor_types": [
+          "USER"
+        ],
+        "actor_roles": [
+          "MANAGER"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "resource_scope": {
+        "resource_types": [
+          "AGENT",
+          "DATA_REFERENCE"
+        ],
+        "resource_ids": [],
+        "resource_classifications": [
+          "CONFIDENTIAL"
+        ],
+        "resource_domains": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "action_scope": {
+        "actions": [
+          "ANALYZE_REFERENCE",
+          "SUMMARIZE_REFERENCE"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "risk_scope": {
+        "allowed_risk_classifications": [
+          "HIGH",
+          "LOW",
+          "MODERATE"
+        ],
+        "maximum_risk_classification": "HIGH",
+        "requires_approval_above": "MODERATE",
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "data_scope": {
+        "allowed_data_classifications": [
+          "CONFIDENTIAL",
+          "INTERNAL"
+        ],
+        "maximum_data_classification": "CONFIDENTIAL",
+        "restricted_fields_present": false,
+        "personal_data_present": false,
+        "sensitive_data_present": false,
+        "secret_material_present": false,
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "channel_scope": {
+        "allowed_channels": [
+          "WEB"
+        ],
+        "denied_channels": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "budget_policy": {
+        "budget_policy_id": "budget_finance_require_approval_policy",
+        "currency": "BRL",
+        "period_type": "REQUEST",
+        "maximum_cost_minor_units": 1000,
+        "maximum_input_tokens": 2000,
+        "maximum_output_tokens": 1000,
+        "maximum_total_tokens": 3000,
+        "maximum_model_calls": 0,
+        "maximum_tool_calls": 0,
+        "maximum_memory_reads": 0,
+        "maximum_memory_writes": 0,
+        "maximum_network_calls": 0,
+        "maximum_escalations": 0,
+        "budget_enforced": true,
+        "budget_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_budget_validator_v1"
+      },
+      "limit_policy": {
+        "limit_policy_id": "limit_finance_require_approval_policy",
+        "maximum_requests": 100,
+        "maximum_concurrency": 5,
+        "maximum_duration_ms": 30000,
+        "maximum_payload_bytes": 1000000,
+        "maximum_context_references": 20,
+        "maximum_dependency_references": 20,
+        "maximum_policy_evaluations": 50,
+        "limit_enforced": true,
+        "limit_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_limits_validator_v1"
+      },
+      "approval_policy": {
+        "approval_required": true,
+        "approval_type": "MANAGER",
+        "required_roles": [
+          "MANAGER"
+        ],
+        "minimum_approvals": 1,
+        "approval_granted": false,
+        "approval_applied": false,
+        "validator_version": "agent_policy_contract_validator_v1"
+      },
+      "rule_references": [],
+      "dependency_references": [],
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "created_at_logical": "logical_seq_finance_require_approval_policy_000001",
+      "validator_version": "agent_policy_contract_validator_v1"
+    },
+    "pharmacy-confidential-data-policy": {
+      "policy_id": "policy_pharmacy_confidential_data_policy",
+      "policy_slug": "pharmacy-confidential-data-policy",
+      "policy_version": 1,
+      "tenant_id": "tenant_demo_pharmacy",
+      "organization_id": "tenant_demo_pharmacy:org-main",
+      "policy_type": "DATA_POLICY",
+      "policy_status": "VALIDATED_SIMULATION",
+      "priority": 100,
+      "effect": "ALLOW_SIMULATION",
+      "subject_scope": {
+        "tenant_ids": [
+          "tenant_demo_pharmacy"
+        ],
+        "organization_ids": [
+          "tenant_demo_pharmacy:org-main"
+        ],
+        "agent_ids": [
+          "agent_pharmacy_specialist_001"
+        ],
+        "agent_types": [
+          "SPECIALIST_AGENT"
+        ],
+        "actor_types": [
+          "USER"
+        ],
+        "actor_roles": [
+          "AUDITOR"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "resource_scope": {
+        "resource_types": [
+          "AGENT",
+          "DATA_REFERENCE"
+        ],
+        "resource_ids": [],
+        "resource_classifications": [
+          "CONFIDENTIAL"
+        ],
+        "resource_domains": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "action_scope": {
+        "actions": [
+          "CLASSIFY_REFERENCE"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "risk_scope": {
+        "allowed_risk_classifications": [
+          "LOW"
+        ],
+        "maximum_risk_classification": "LOW",
+        "requires_approval_above": "MODERATE",
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "data_scope": {
+        "allowed_data_classifications": [
+          "CONFIDENTIAL",
+          "INTERNAL"
+        ],
+        "maximum_data_classification": "CONFIDENTIAL",
+        "restricted_fields_present": false,
+        "personal_data_present": false,
+        "sensitive_data_present": false,
+        "secret_material_present": false,
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "channel_scope": {
+        "allowed_channels": [
+          "WEB"
+        ],
+        "denied_channels": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "budget_policy": {
+        "budget_policy_id": "budget_pharmacy_confidential_data_policy",
+        "currency": "BRL",
+        "period_type": "REQUEST",
+        "maximum_cost_minor_units": 1000,
+        "maximum_input_tokens": 2000,
+        "maximum_output_tokens": 1000,
+        "maximum_total_tokens": 3000,
+        "maximum_model_calls": 0,
+        "maximum_tool_calls": 0,
+        "maximum_memory_reads": 0,
+        "maximum_memory_writes": 0,
+        "maximum_network_calls": 0,
+        "maximum_escalations": 0,
+        "budget_enforced": true,
+        "budget_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_budget_validator_v1"
+      },
+      "limit_policy": {
+        "limit_policy_id": "limit_pharmacy_confidential_data_policy",
+        "maximum_requests": 100,
+        "maximum_concurrency": 5,
+        "maximum_duration_ms": 30000,
+        "maximum_payload_bytes": 1000000,
+        "maximum_context_references": 20,
+        "maximum_dependency_references": 20,
+        "maximum_policy_evaluations": 50,
+        "limit_enforced": true,
+        "limit_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_limits_validator_v1"
+      },
+      "approval_policy": {
+        "approval_required": false,
+        "approval_type": "NONE",
+        "required_roles": [],
+        "minimum_approvals": 0,
+        "approval_granted": false,
+        "approval_applied": false,
+        "validator_version": "agent_policy_contract_validator_v1"
+      },
+      "rule_references": [],
+      "dependency_references": [],
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "created_at_logical": "logical_seq_pharmacy_confidential_data_policy_000001",
+      "validator_version": "agent_policy_contract_validator_v1"
+    },
+    "audit-agent-policy": {
+      "policy_id": "policy_audit_agent_policy",
+      "policy_slug": "audit-agent-policy",
+      "policy_version": 1,
+      "tenant_id": "tenant_demo_audit",
+      "organization_id": "tenant_demo_audit:org-main",
+      "policy_type": "ACTOR_POLICY",
+      "policy_status": "VALIDATED_SIMULATION",
+      "priority": 100,
+      "effect": "ALLOW_SIMULATION",
+      "subject_scope": {
+        "tenant_ids": [
+          "tenant_demo_audit"
+        ],
+        "organization_ids": [
+          "tenant_demo_audit:org-main"
+        ],
+        "agent_ids": [
+          "agent_audit_001"
+        ],
+        "agent_types": [
+          "AUDIT_AGENT"
+        ],
+        "actor_types": [
+          "USER"
+        ],
+        "actor_roles": [
+          "AUDITOR"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "resource_scope": {
+        "resource_types": [
+          "AGENT",
+          "DOCUMENT_REFERENCE"
+        ],
+        "resource_ids": [],
+        "resource_classifications": [
+          "CONFIDENTIAL"
+        ],
+        "resource_domains": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "action_scope": {
+        "actions": [
+          "ANALYZE_REFERENCE",
+          "SUMMARIZE_REFERENCE"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "risk_scope": {
+        "allowed_risk_classifications": [
+          "LOW",
+          "MODERATE"
+        ],
+        "maximum_risk_classification": "MODERATE",
+        "requires_approval_above": "HIGH",
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "data_scope": {
+        "allowed_data_classifications": [
+          "CONFIDENTIAL",
+          "INTERNAL"
+        ],
+        "maximum_data_classification": "CONFIDENTIAL",
+        "restricted_fields_present": false,
+        "personal_data_present": false,
+        "sensitive_data_present": false,
+        "secret_material_present": false,
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "channel_scope": {
+        "allowed_channels": [
+          "WEB"
+        ],
+        "denied_channels": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "budget_policy": {
+        "budget_policy_id": "budget_audit_agent_policy",
+        "currency": "BRL",
+        "period_type": "REQUEST",
+        "maximum_cost_minor_units": 1000,
+        "maximum_input_tokens": 2000,
+        "maximum_output_tokens": 1000,
+        "maximum_total_tokens": 3000,
+        "maximum_model_calls": 0,
+        "maximum_tool_calls": 0,
+        "maximum_memory_reads": 0,
+        "maximum_memory_writes": 0,
+        "maximum_network_calls": 0,
+        "maximum_escalations": 0,
+        "budget_enforced": true,
+        "budget_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_budget_validator_v1"
+      },
+      "limit_policy": {
+        "limit_policy_id": "limit_audit_agent_policy",
+        "maximum_requests": 100,
+        "maximum_concurrency": 5,
+        "maximum_duration_ms": 30000,
+        "maximum_payload_bytes": 1000000,
+        "maximum_context_references": 20,
+        "maximum_dependency_references": 20,
+        "maximum_policy_evaluations": 50,
+        "limit_enforced": true,
+        "limit_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_limits_validator_v1"
+      },
+      "approval_policy": {
+        "approval_required": false,
+        "approval_type": "NONE",
+        "required_roles": [],
+        "minimum_approvals": 0,
+        "approval_granted": false,
+        "approval_applied": false,
+        "validator_version": "agent_policy_contract_validator_v1"
+      },
+      "rule_references": [],
+      "dependency_references": [],
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "created_at_logical": "logical_seq_audit_agent_policy_000001",
+      "validator_version": "agent_policy_contract_validator_v1"
+    },
+    "channel-whatsapp-policy": {
+      "policy_id": "policy_channel_whatsapp_policy",
+      "policy_slug": "channel-whatsapp-policy",
+      "policy_version": 1,
+      "tenant_id": "tenant_demo_general",
+      "organization_id": "tenant_demo_general:org-main",
+      "policy_type": "CHANNEL_POLICY",
+      "policy_status": "VALIDATED_SIMULATION",
+      "priority": 100,
+      "effect": "ALLOW_SIMULATION",
+      "subject_scope": {
+        "tenant_ids": [
+          "tenant_demo_general"
+        ],
+        "organization_ids": [
+          "tenant_demo_general:org-main"
+        ],
+        "agent_ids": [
+          "agent_general_assistant_001"
+        ],
+        "agent_types": [
+          "GENERAL_ASSISTANT"
+        ],
+        "actor_types": [
+          "USER"
+        ],
+        "actor_roles": [
+          "OPERATOR"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "resource_scope": {
+        "resource_types": [
+          "AGENT",
+          "CAPABILITY"
+        ],
+        "resource_ids": [],
+        "resource_classifications": [
+          "INTERNAL"
+        ],
+        "resource_domains": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "action_scope": {
+        "actions": [
+          "READ_REFERENCE",
+          "VALIDATE"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "risk_scope": {
+        "allowed_risk_classifications": [
+          "LOW"
+        ],
+        "maximum_risk_classification": "LOW",
+        "requires_approval_above": "MODERATE",
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "data_scope": {
+        "allowed_data_classifications": [
+          "INTERNAL",
+          "PUBLIC"
+        ],
+        "maximum_data_classification": "INTERNAL",
+        "restricted_fields_present": false,
+        "personal_data_present": false,
+        "sensitive_data_present": false,
+        "secret_material_present": false,
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "channel_scope": {
+        "allowed_channels": [
+          "WHATSAPP"
+        ],
+        "denied_channels": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "budget_policy": {
+        "budget_policy_id": "budget_channel_whatsapp_policy",
+        "currency": "BRL",
+        "period_type": "REQUEST",
+        "maximum_cost_minor_units": 1000,
+        "maximum_input_tokens": 2000,
+        "maximum_output_tokens": 1000,
+        "maximum_total_tokens": 3000,
+        "maximum_model_calls": 0,
+        "maximum_tool_calls": 0,
+        "maximum_memory_reads": 0,
+        "maximum_memory_writes": 0,
+        "maximum_network_calls": 0,
+        "maximum_escalations": 0,
+        "budget_enforced": true,
+        "budget_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_budget_validator_v1"
+      },
+      "limit_policy": {
+        "limit_policy_id": "limit_channel_whatsapp_policy",
+        "maximum_requests": 100,
+        "maximum_concurrency": 5,
+        "maximum_duration_ms": 30000,
+        "maximum_payload_bytes": 1000000,
+        "maximum_context_references": 20,
+        "maximum_dependency_references": 20,
+        "maximum_policy_evaluations": 50,
+        "limit_enforced": true,
+        "limit_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_limits_validator_v1"
+      },
+      "approval_policy": {
+        "approval_required": false,
+        "approval_type": "NONE",
+        "required_roles": [],
+        "minimum_approvals": 0,
+        "approval_granted": false,
+        "approval_applied": false,
+        "validator_version": "agent_policy_contract_validator_v1"
+      },
+      "rule_references": [],
+      "dependency_references": [],
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "created_at_logical": "logical_seq_channel_whatsapp_policy_000001",
+      "validator_version": "agent_policy_contract_validator_v1"
+    },
+    "request-budget-policy": {
+      "policy_id": "policy_request_budget_policy",
+      "policy_slug": "request-budget-policy",
+      "policy_version": 1,
+      "tenant_id": "tenant_demo_general",
+      "organization_id": "tenant_demo_general:org-main",
+      "policy_type": "BUDGET_POLICY",
+      "policy_status": "VALIDATED_SIMULATION",
+      "priority": 100,
+      "effect": "ALLOW_SIMULATION",
+      "subject_scope": {
+        "tenant_ids": [
+          "tenant_demo_general"
+        ],
+        "organization_ids": [
+          "tenant_demo_general:org-main"
+        ],
+        "agent_ids": [
+          "agent_general_assistant_001"
+        ],
+        "agent_types": [
+          "GENERAL_ASSISTANT"
+        ],
+        "actor_types": [
+          "USER"
+        ],
+        "actor_roles": [
+          "OPERATOR"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "resource_scope": {
+        "resource_types": [
+          "AGENT",
+          "CAPABILITY"
+        ],
+        "resource_ids": [],
+        "resource_classifications": [
+          "INTERNAL"
+        ],
+        "resource_domains": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "action_scope": {
+        "actions": [
+          "READ_REFERENCE",
+          "VALIDATE"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "risk_scope": {
+        "allowed_risk_classifications": [
+          "LOW"
+        ],
+        "maximum_risk_classification": "LOW",
+        "requires_approval_above": "MODERATE",
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "data_scope": {
+        "allowed_data_classifications": [
+          "INTERNAL",
+          "PUBLIC"
+        ],
+        "maximum_data_classification": "INTERNAL",
+        "restricted_fields_present": false,
+        "personal_data_present": false,
+        "sensitive_data_present": false,
+        "secret_material_present": false,
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "channel_scope": {
+        "allowed_channels": [
+          "WEB"
+        ],
+        "denied_channels": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "budget_policy": {
+        "budget_policy_id": "budget_request_budget_policy",
+        "currency": "BRL",
+        "period_type": "REQUEST",
+        "maximum_cost_minor_units": 200,
+        "maximum_input_tokens": 300,
+        "maximum_output_tokens": 150,
+        "maximum_total_tokens": 450,
+        "maximum_model_calls": 0,
+        "maximum_tool_calls": 0,
+        "maximum_memory_reads": 0,
+        "maximum_memory_writes": 0,
+        "maximum_network_calls": 0,
+        "maximum_escalations": 0,
+        "budget_enforced": true,
+        "budget_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_budget_validator_v1"
+      },
+      "limit_policy": {
+        "limit_policy_id": "limit_request_budget_policy",
+        "maximum_requests": 100,
+        "maximum_concurrency": 5,
+        "maximum_duration_ms": 30000,
+        "maximum_payload_bytes": 1000000,
+        "maximum_context_references": 20,
+        "maximum_dependency_references": 20,
+        "maximum_policy_evaluations": 50,
+        "limit_enforced": true,
+        "limit_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_limits_validator_v1"
+      },
+      "approval_policy": {
+        "approval_required": false,
+        "approval_type": "NONE",
+        "required_roles": [],
+        "minimum_approvals": 0,
+        "approval_granted": false,
+        "approval_applied": false,
+        "validator_version": "agent_policy_contract_validator_v1"
+      },
+      "rule_references": [],
+      "dependency_references": [],
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "created_at_logical": "logical_seq_request_budget_policy_000001",
+      "validator_version": "agent_policy_contract_validator_v1"
+    },
+    "request-limit-policy": {
+      "policy_id": "policy_request_limit_policy",
+      "policy_slug": "request-limit-policy",
+      "policy_version": 1,
+      "tenant_id": "tenant_demo_general",
+      "organization_id": "tenant_demo_general:org-main",
+      "policy_type": "LIMIT_POLICY",
+      "policy_status": "VALIDATED_SIMULATION",
+      "priority": 100,
+      "effect": "ALLOW_SIMULATION",
+      "subject_scope": {
+        "tenant_ids": [
+          "tenant_demo_general"
+        ],
+        "organization_ids": [
+          "tenant_demo_general:org-main"
+        ],
+        "agent_ids": [
+          "agent_general_assistant_001"
+        ],
+        "agent_types": [
+          "GENERAL_ASSISTANT"
+        ],
+        "actor_types": [
+          "USER"
+        ],
+        "actor_roles": [
+          "OPERATOR"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "resource_scope": {
+        "resource_types": [
+          "AGENT",
+          "CAPABILITY"
+        ],
+        "resource_ids": [],
+        "resource_classifications": [
+          "INTERNAL"
+        ],
+        "resource_domains": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "action_scope": {
+        "actions": [
+          "READ_REFERENCE",
+          "VALIDATE"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "risk_scope": {
+        "allowed_risk_classifications": [
+          "LOW"
+        ],
+        "maximum_risk_classification": "LOW",
+        "requires_approval_above": "MODERATE",
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "data_scope": {
+        "allowed_data_classifications": [
+          "INTERNAL",
+          "PUBLIC"
+        ],
+        "maximum_data_classification": "INTERNAL",
+        "restricted_fields_present": false,
+        "personal_data_present": false,
+        "sensitive_data_present": false,
+        "secret_material_present": false,
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "channel_scope": {
+        "allowed_channels": [
+          "WEB"
+        ],
+        "denied_channels": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "budget_policy": {
+        "budget_policy_id": "budget_request_limit_policy",
+        "currency": "BRL",
+        "period_type": "REQUEST",
+        "maximum_cost_minor_units": 1000,
+        "maximum_input_tokens": 2000,
+        "maximum_output_tokens": 1000,
+        "maximum_total_tokens": 3000,
+        "maximum_model_calls": 0,
+        "maximum_tool_calls": 0,
+        "maximum_memory_reads": 0,
+        "maximum_memory_writes": 0,
+        "maximum_network_calls": 0,
+        "maximum_escalations": 0,
+        "budget_enforced": true,
+        "budget_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_budget_validator_v1"
+      },
+      "limit_policy": {
+        "limit_policy_id": "limit_request_limit_policy",
+        "maximum_requests": 10,
+        "maximum_concurrency": 2,
+        "maximum_duration_ms": 30000,
+        "maximum_payload_bytes": 1000000,
+        "maximum_context_references": 20,
+        "maximum_dependency_references": 20,
+        "maximum_policy_evaluations": 50,
+        "limit_enforced": true,
+        "limit_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_limits_validator_v1"
+      },
+      "approval_policy": {
+        "approval_required": false,
+        "approval_type": "NONE",
+        "required_roles": [],
+        "minimum_approvals": 0,
+        "approval_granted": false,
+        "approval_applied": false,
+        "validator_version": "agent_policy_contract_validator_v1"
+      },
+      "rule_references": [],
+      "dependency_references": [],
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "created_at_logical": "logical_seq_request_limit_policy_000001",
+      "validator_version": "agent_policy_contract_validator_v1"
+    },
+    "system-agent-policy": {
+      "policy_id": "policy_system_agent_policy",
+      "policy_slug": "system-agent-policy",
+      "policy_version": 1,
+      "tenant_id": "SYSTEM",
+      "organization_id": "SYSTEM:org-system",
+      "policy_type": "SYSTEM_POLICY",
+      "policy_status": "VALIDATED_SIMULATION",
+      "priority": 100,
+      "effect": "ALLOW_SIMULATION",
+      "subject_scope": {
+        "tenant_ids": [
+          "SYSTEM"
+        ],
+        "organization_ids": [
+          "SYSTEM:org-system"
+        ],
+        "agent_ids": [
+          "agent_system_001"
+        ],
+        "agent_types": [
+          "SYSTEM_AGENT"
+        ],
+        "actor_types": [
+          "SYSTEM"
+        ],
+        "actor_roles": [
+          "SYSTEM_SERVICE"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "resource_scope": {
+        "resource_types": [
+          "AGENT",
+          "CAPABILITY"
+        ],
+        "resource_ids": [],
+        "resource_classifications": [
+          "INTERNAL"
+        ],
+        "resource_domains": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "action_scope": {
+        "actions": [
+          "VALIDATE"
+        ],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "risk_scope": {
+        "allowed_risk_classifications": [
+          "LOW"
+        ],
+        "maximum_risk_classification": "LOW",
+        "requires_approval_above": "MODERATE",
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "data_scope": {
+        "allowed_data_classifications": [
+          "INTERNAL",
+          "PUBLIC"
+        ],
+        "maximum_data_classification": "INTERNAL",
+        "restricted_fields_present": false,
+        "personal_data_present": false,
+        "sensitive_data_present": false,
+        "secret_material_present": false,
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "channel_scope": {
+        "allowed_channels": [
+          "WEB"
+        ],
+        "denied_channels": [],
+        "validator_version": "agent_policy_scope_validator_v1"
+      },
+      "budget_policy": {
+        "budget_policy_id": "budget_system_agent_policy",
+        "currency": "BRL",
+        "period_type": "REQUEST",
+        "maximum_cost_minor_units": 1000,
+        "maximum_input_tokens": 2000,
+        "maximum_output_tokens": 1000,
+        "maximum_total_tokens": 3000,
+        "maximum_model_calls": 0,
+        "maximum_tool_calls": 0,
+        "maximum_memory_reads": 0,
+        "maximum_memory_writes": 0,
+        "maximum_network_calls": 0,
+        "maximum_escalations": 0,
+        "budget_enforced": true,
+        "budget_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_budget_validator_v1"
+      },
+      "limit_policy": {
+        "limit_policy_id": "limit_system_agent_policy",
+        "maximum_requests": 100,
+        "maximum_concurrency": 5,
+        "maximum_duration_ms": 30000,
+        "maximum_payload_bytes": 1000000,
+        "maximum_context_references": 20,
+        "maximum_dependency_references": 20,
+        "maximum_policy_evaluations": 50,
+        "limit_enforced": true,
+        "limit_consumed": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "agent_policy_limits_validator_v1"
+      },
+      "approval_policy": {
+        "approval_required": false,
+        "approval_type": "NONE",
+        "required_roles": [],
+        "minimum_approvals": 0,
+        "approval_granted": false,
+        "approval_applied": false,
+        "validator_version": "agent_policy_contract_validator_v1"
+      },
+      "rule_references": [],
+      "dependency_references": [],
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "created_at_logical": "logical_seq_system_agent_policy_000001",
+      "validator_version": "agent_policy_contract_validator_v1"
+    }
+  },
+  "requests": {
+    "general-assistant-request": {
+      "policy_request_id": "policy_request_general_1",
+      "policy_request_version": 1,
+      "agent_contract_reference": {
+        "contract_id": "contract_general_assistant_001",
+        "contract_version": 1,
+        "contract_fingerprint": "fp_contract_general_assistant",
+        "identity_fingerprint": "fp_identity_general_assistant",
+        "context_fingerprint": "fp_context_general_assistant",
+        "lifecycle_state": "REGISTERED_SIMULATION",
+        "contract_status": "VALIDATED_SIMULATION",
+        "validator_version": "agent_policy_request_validator_v1"
+      },
+      "agent_id": "agent_general_assistant_001",
+      "tenant_id": "tenant_demo_general",
+      "organization_id": "tenant_demo_general:org-main",
+      "actor_context": {
+        "actor_type": "USER",
+        "actor_id": "actor_general_1",
+        "actor_role": "OPERATOR",
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "authorization_state": "APPROVED_SIMULATION",
+        "validator_version": "agent_actor_context_validator_v1"
+      },
+      "capability_reference": {
+        "capability_id": "capability_info_retrieval_1",
+        "capability_version": 1,
+        "capability_slug": "information-retrieval",
+        "capability_type": "INFORMATION_RETRIEVAL",
+        "capability_fingerprint": "fp_capability_info_retrieval",
+        "declared": true,
+        "enabled": false,
+        "execution_allowed": false,
+        "validator_version": "agent_policy_request_validator_v1"
+      },
+      "requested_action": "READ_REFERENCE",
+      "resource_reference": {
+        "resource_type": "AGENT",
+        "resource_id": "agent_general_assistant_001",
+        "resource_classification": "INTERNAL",
+        "resource_domain": "general_support",
+        "resource_present": true,
+        "resource_loaded": false,
+        "resource_mutated": false,
+        "validator_version": "agent_policy_request_validator_v1"
+      },
+      "channel": "WEB",
+      "risk_classification": "LOW",
+      "data_classification": "INTERNAL",
+      "budget_request": {
+        "estimated_cost_minor_units": 10,
+        "estimated_input_tokens": 100,
+        "estimated_output_tokens": 50,
+        "estimated_total_tokens": 150,
+        "requested_model_calls": 0,
+        "requested_tool_calls": 0,
+        "requested_memory_reads": 0,
+        "requested_memory_writes": 0,
+        "requested_network_calls": 0,
+        "requested_escalations": 0,
+        "validator_version": "agent_policy_budget_validator_v1"
+      },
+      "limit_request": {
+        "requested_requests": 1,
+        "requested_concurrency": 1,
+        "requested_duration_ms": 100,
+        "requested_payload_bytes": 100,
+        "requested_context_references": 1,
+        "requested_dependency_references": 0,
+        "requested_policy_evaluations": 1,
+        "validator_version": "agent_policy_limits_validator_v1"
+      },
+      "approval_context": {
+        "approval_present": false,
+        "approval_reference_id": "approval_ref_not_available",
+        "approval_granted": false,
+        "approval_applied": false,
+        "validator_version": "agent_policy_request_validator_v1"
+      },
+      "correlation_id": "correlation_general_1",
+      "causation_id": "causation_general_1",
+      "trace_id": "trace_general_1",
+      "logical_sequence": 1,
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "validator_version": "agent_policy_request_validator_v1"
+    }
+  },
+  "cases": {
+    "policy-conflict-case": {
+      "request": {
+        "policy_request_id": "policy_request_general_1",
+        "policy_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "contract_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_general_assistant",
+          "identity_fingerprint": "fp_identity_general_assistant",
+          "context_fingerprint": "fp_context_general_assistant",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "agent_id": "agent_general_assistant_001",
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_general_1",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "capability_reference": {
+          "capability_id": "capability_info_retrieval_1",
+          "capability_version": 1,
+          "capability_slug": "information-retrieval",
+          "capability_type": "INFORMATION_RETRIEVAL",
+          "capability_fingerprint": "fp_capability_info_retrieval",
+          "declared": true,
+          "enabled": false,
+          "execution_allowed": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "requested_action": "READ_REFERENCE",
+        "resource_reference": {
+          "resource_type": "AGENT",
+          "resource_id": "agent_general_assistant_001",
+          "resource_classification": "INTERNAL",
+          "resource_domain": "general_support",
+          "resource_present": true,
+          "resource_loaded": false,
+          "resource_mutated": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "channel": "WEB",
+        "risk_classification": "LOW",
+        "data_classification": "INTERNAL",
+        "budget_request": {
+          "estimated_cost_minor_units": 10,
+          "estimated_input_tokens": 100,
+          "estimated_output_tokens": 50,
+          "estimated_total_tokens": 150,
+          "requested_model_calls": 0,
+          "requested_tool_calls": 0,
+          "requested_memory_reads": 0,
+          "requested_memory_writes": 0,
+          "requested_network_calls": 0,
+          "requested_escalations": 0,
+          "validator_version": "agent_policy_budget_validator_v1"
+        },
+        "limit_request": {
+          "requested_requests": 1,
+          "requested_concurrency": 1,
+          "requested_duration_ms": 100,
+          "requested_payload_bytes": 100,
+          "requested_context_references": 1,
+          "requested_dependency_references": 0,
+          "requested_policy_evaluations": 1,
+          "validator_version": "agent_policy_limits_validator_v1"
+        },
+        "approval_context": {
+          "approval_present": false,
+          "approval_reference_id": "approval_ref_not_available",
+          "approval_granted": false,
+          "approval_applied": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "correlation_id": "correlation_general_1",
+        "causation_id": "causation_general_1",
+        "trace_id": "trace_general_1",
+        "logical_sequence": 1,
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_policy_request_validator_v1"
+      },
+      "policies": [
+        {
+          "policy_id": "policy_tenant_low_risk_simulation_policy",
+          "policy_slug": "tenant-low-risk-simulation-policy",
+          "policy_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "policy_type": "TENANT_POLICY",
+          "policy_status": "VALIDATED_SIMULATION",
+          "priority": 100,
+          "effect": "ALLOW_SIMULATION",
+          "subject_scope": {
+            "tenant_ids": [
+              "tenant_demo_general"
+            ],
+            "organization_ids": [
+              "tenant_demo_general:org-main"
+            ],
+            "agent_ids": [
+              "agent_general_assistant_001"
+            ],
+            "agent_types": [
+              "GENERAL_ASSISTANT"
+            ],
+            "actor_types": [
+              "USER"
+            ],
+            "actor_roles": [
+              "OPERATOR"
+            ],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "resource_scope": {
+            "resource_types": [
+              "AGENT",
+              "CAPABILITY"
+            ],
+            "resource_ids": [],
+            "resource_classifications": [
+              "INTERNAL"
+            ],
+            "resource_domains": [],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "action_scope": {
+            "actions": [
+              "READ_REFERENCE",
+              "VALIDATE"
+            ],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "risk_scope": {
+            "allowed_risk_classifications": [
+              "LOW"
+            ],
+            "maximum_risk_classification": "LOW",
+            "requires_approval_above": "MODERATE",
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "data_scope": {
+            "allowed_data_classifications": [
+              "INTERNAL",
+              "PUBLIC"
+            ],
+            "maximum_data_classification": "INTERNAL",
+            "restricted_fields_present": false,
+            "personal_data_present": false,
+            "sensitive_data_present": false,
+            "secret_material_present": false,
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "channel_scope": {
+            "allowed_channels": [
+              "WEB"
+            ],
+            "denied_channels": [],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "budget_policy": {
+            "budget_policy_id": "budget_tenant_low_risk_simulation_policy",
+            "currency": "BRL",
+            "period_type": "REQUEST",
+            "maximum_cost_minor_units": 1000,
+            "maximum_input_tokens": 2000,
+            "maximum_output_tokens": 1000,
+            "maximum_total_tokens": 3000,
+            "maximum_model_calls": 0,
+            "maximum_tool_calls": 0,
+            "maximum_memory_reads": 0,
+            "maximum_memory_writes": 0,
+            "maximum_network_calls": 0,
+            "maximum_escalations": 0,
+            "budget_enforced": true,
+            "budget_consumed": false,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "agent_policy_budget_validator_v1"
+          },
+          "limit_policy": {
+            "limit_policy_id": "limit_tenant_low_risk_simulation_policy",
+            "maximum_requests": 100,
+            "maximum_concurrency": 5,
+            "maximum_duration_ms": 30000,
+            "maximum_payload_bytes": 1000000,
+            "maximum_context_references": 20,
+            "maximum_dependency_references": 20,
+            "maximum_policy_evaluations": 50,
+            "limit_enforced": true,
+            "limit_consumed": false,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "agent_policy_limits_validator_v1"
+          },
+          "approval_policy": {
+            "approval_required": false,
+            "approval_type": "NONE",
+            "required_roles": [],
+            "minimum_approvals": 0,
+            "approval_granted": false,
+            "approval_applied": false,
+            "validator_version": "agent_policy_contract_validator_v1"
+          },
+          "rule_references": [],
+          "dependency_references": [],
+          "simulation_context": {
+            "simulation": true,
+            "production_blocked": true,
+            "runtime_enabled": false,
+            "execution_enabled": false,
+            "network_enabled": false,
+            "tools_enabled": false,
+            "memory_enabled": false,
+            "llm_enabled": false,
+            "rollout_percentage": 0,
+            "validator_version": "agent_simulation_context_validator_v1"
+          },
+          "created_at_logical": "logical_seq_tenant_low_risk_simulation_policy_000001",
+          "validator_version": "agent_policy_contract_validator_v1"
+        },
+        {
+          "policy_id": "policy_tenant_low_risk_simulation_policy",
+          "policy_slug": "tenant-low-risk-simulation-policy",
+          "policy_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "policy_type": "TENANT_POLICY",
+          "policy_status": "VALIDATED_SIMULATION",
+          "priority": 200,
+          "effect": "ALLOW_SIMULATION",
+          "subject_scope": {
+            "tenant_ids": [
+              "tenant_demo_general"
+            ],
+            "organization_ids": [
+              "tenant_demo_general:org-main"
+            ],
+            "agent_ids": [
+              "agent_general_assistant_001"
+            ],
+            "agent_types": [
+              "GENERAL_ASSISTANT"
+            ],
+            "actor_types": [
+              "USER"
+            ],
+            "actor_roles": [
+              "OPERATOR"
+            ],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "resource_scope": {
+            "resource_types": [
+              "AGENT",
+              "CAPABILITY"
+            ],
+            "resource_ids": [],
+            "resource_classifications": [
+              "INTERNAL"
+            ],
+            "resource_domains": [],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "action_scope": {
+            "actions": [
+              "READ_REFERENCE",
+              "VALIDATE"
+            ],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "risk_scope": {
+            "allowed_risk_classifications": [
+              "LOW"
+            ],
+            "maximum_risk_classification": "LOW",
+            "requires_approval_above": "MODERATE",
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "data_scope": {
+            "allowed_data_classifications": [
+              "INTERNAL",
+              "PUBLIC"
+            ],
+            "maximum_data_classification": "INTERNAL",
+            "restricted_fields_present": false,
+            "personal_data_present": false,
+            "sensitive_data_present": false,
+            "secret_material_present": false,
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "channel_scope": {
+            "allowed_channels": [
+              "WEB"
+            ],
+            "denied_channels": [],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "budget_policy": {
+            "budget_policy_id": "budget_tenant_low_risk_simulation_policy",
+            "currency": "BRL",
+            "period_type": "REQUEST",
+            "maximum_cost_minor_units": 1000,
+            "maximum_input_tokens": 2000,
+            "maximum_output_tokens": 1000,
+            "maximum_total_tokens": 3000,
+            "maximum_model_calls": 0,
+            "maximum_tool_calls": 0,
+            "maximum_memory_reads": 0,
+            "maximum_memory_writes": 0,
+            "maximum_network_calls": 0,
+            "maximum_escalations": 0,
+            "budget_enforced": true,
+            "budget_consumed": false,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "agent_policy_budget_validator_v1"
+          },
+          "limit_policy": {
+            "limit_policy_id": "limit_tenant_low_risk_simulation_policy",
+            "maximum_requests": 100,
+            "maximum_concurrency": 5,
+            "maximum_duration_ms": 30000,
+            "maximum_payload_bytes": 1000000,
+            "maximum_context_references": 20,
+            "maximum_dependency_references": 20,
+            "maximum_policy_evaluations": 50,
+            "limit_enforced": true,
+            "limit_consumed": false,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "agent_policy_limits_validator_v1"
+          },
+          "approval_policy": {
+            "approval_required": false,
+            "approval_type": "NONE",
+            "required_roles": [],
+            "minimum_approvals": 0,
+            "approval_granted": false,
+            "approval_applied": false,
+            "validator_version": "agent_policy_contract_validator_v1"
+          },
+          "rule_references": [],
+          "dependency_references": [],
+          "simulation_context": {
+            "simulation": true,
+            "production_blocked": true,
+            "runtime_enabled": false,
+            "execution_enabled": false,
+            "network_enabled": false,
+            "tools_enabled": false,
+            "memory_enabled": false,
+            "llm_enabled": false,
+            "rollout_percentage": 0,
+            "validator_version": "agent_simulation_context_validator_v1"
+          },
+          "created_at_logical": "logical_seq_tenant_low_risk_simulation_policy_000001",
+          "validator_version": "agent_policy_contract_validator_v1"
+        }
+      ],
+      "rules": [],
+      "agent_type": "GENERAL_ASSISTANT",
+      "expected_status": "CONFLICT_BLOCKED",
+      "expected_effect": "DENY"
+    },
+    "tenant-mismatch-case": {
+      "request": {
+        "policy_request_id": "policy_request_general_1",
+        "policy_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "contract_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_general_assistant",
+          "identity_fingerprint": "fp_identity_general_assistant",
+          "context_fingerprint": "fp_context_general_assistant",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "agent_id": "agent_general_assistant_001",
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_general_1",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "capability_reference": {
+          "capability_id": "capability_info_retrieval_1",
+          "capability_version": 1,
+          "capability_slug": "information-retrieval",
+          "capability_type": "INFORMATION_RETRIEVAL",
+          "capability_fingerprint": "fp_capability_info_retrieval",
+          "declared": true,
+          "enabled": false,
+          "execution_allowed": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "requested_action": "READ_REFERENCE",
+        "resource_reference": {
+          "resource_type": "AGENT",
+          "resource_id": "agent_general_assistant_001",
+          "resource_classification": "INTERNAL",
+          "resource_domain": "general_support",
+          "resource_present": true,
+          "resource_loaded": false,
+          "resource_mutated": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "channel": "WEB",
+        "risk_classification": "LOW",
+        "data_classification": "INTERNAL",
+        "budget_request": {
+          "estimated_cost_minor_units": 10,
+          "estimated_input_tokens": 100,
+          "estimated_output_tokens": 50,
+          "estimated_total_tokens": 150,
+          "requested_model_calls": 0,
+          "requested_tool_calls": 0,
+          "requested_memory_reads": 0,
+          "requested_memory_writes": 0,
+          "requested_network_calls": 0,
+          "requested_escalations": 0,
+          "validator_version": "agent_policy_budget_validator_v1"
+        },
+        "limit_request": {
+          "requested_requests": 1,
+          "requested_concurrency": 1,
+          "requested_duration_ms": 100,
+          "requested_payload_bytes": 100,
+          "requested_context_references": 1,
+          "requested_dependency_references": 0,
+          "requested_policy_evaluations": 1,
+          "validator_version": "agent_policy_limits_validator_v1"
+        },
+        "approval_context": {
+          "approval_present": false,
+          "approval_reference_id": "approval_ref_not_available",
+          "approval_granted": false,
+          "approval_applied": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "correlation_id": "correlation_general_1",
+        "causation_id": "causation_general_1",
+        "trace_id": "trace_general_1",
+        "logical_sequence": 1,
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_policy_request_validator_v1"
+      },
+      "policies": [
+        {
+          "policy_id": "policy_organization_retail_policy",
+          "policy_slug": "organization-retail-policy",
+          "policy_version": 1,
+          "tenant_id": "tenant_demo_retail",
+          "organization_id": "tenant_demo_retail:org-main",
+          "policy_type": "ORGANIZATION_POLICY",
+          "policy_status": "VALIDATED_SIMULATION",
+          "priority": 100,
+          "effect": "ALLOW_SIMULATION",
+          "subject_scope": {
+            "tenant_ids": [
+              "tenant_demo_retail"
+            ],
+            "organization_ids": [
+              "tenant_demo_retail:org-main"
+            ],
+            "agent_ids": [
+              "agent_retail_operations_001"
+            ],
+            "agent_types": [
+              "OPERATIONS_AGENT"
+            ],
+            "actor_types": [
+              "USER"
+            ],
+            "actor_roles": [
+              "SUPERVISOR"
+            ],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "resource_scope": {
+            "resource_types": [
+              "AGENT",
+              "CAPABILITY"
+            ],
+            "resource_ids": [],
+            "resource_classifications": [
+              "INTERNAL"
+            ],
+            "resource_domains": [],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "action_scope": {
+            "actions": [
+              "ROUTE_REFERENCE"
+            ],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "risk_scope": {
+            "allowed_risk_classifications": [
+              "LOW",
+              "MODERATE"
+            ],
+            "maximum_risk_classification": "MODERATE",
+            "requires_approval_above": "HIGH",
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "data_scope": {
+            "allowed_data_classifications": [
+              "INTERNAL",
+              "PUBLIC"
+            ],
+            "maximum_data_classification": "INTERNAL",
+            "restricted_fields_present": false,
+            "personal_data_present": false,
+            "sensitive_data_present": false,
+            "secret_material_present": false,
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "channel_scope": {
+            "allowed_channels": [
+              "WEB"
+            ],
+            "denied_channels": [],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "budget_policy": {
+            "budget_policy_id": "budget_organization_retail_policy",
+            "currency": "BRL",
+            "period_type": "REQUEST",
+            "maximum_cost_minor_units": 1000,
+            "maximum_input_tokens": 2000,
+            "maximum_output_tokens": 1000,
+            "maximum_total_tokens": 3000,
+            "maximum_model_calls": 0,
+            "maximum_tool_calls": 0,
+            "maximum_memory_reads": 0,
+            "maximum_memory_writes": 0,
+            "maximum_network_calls": 0,
+            "maximum_escalations": 0,
+            "budget_enforced": true,
+            "budget_consumed": false,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "agent_policy_budget_validator_v1"
+          },
+          "limit_policy": {
+            "limit_policy_id": "limit_organization_retail_policy",
+            "maximum_requests": 100,
+            "maximum_concurrency": 5,
+            "maximum_duration_ms": 30000,
+            "maximum_payload_bytes": 1000000,
+            "maximum_context_references": 20,
+            "maximum_dependency_references": 20,
+            "maximum_policy_evaluations": 50,
+            "limit_enforced": true,
+            "limit_consumed": false,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "agent_policy_limits_validator_v1"
+          },
+          "approval_policy": {
+            "approval_required": false,
+            "approval_type": "NONE",
+            "required_roles": [],
+            "minimum_approvals": 0,
+            "approval_granted": false,
+            "approval_applied": false,
+            "validator_version": "agent_policy_contract_validator_v1"
+          },
+          "rule_references": [],
+          "dependency_references": [],
+          "simulation_context": {
+            "simulation": true,
+            "production_blocked": true,
+            "runtime_enabled": false,
+            "execution_enabled": false,
+            "network_enabled": false,
+            "tools_enabled": false,
+            "memory_enabled": false,
+            "llm_enabled": false,
+            "rollout_percentage": 0,
+            "validator_version": "agent_simulation_context_validator_v1"
+          },
+          "created_at_logical": "logical_seq_organization_retail_policy_000001",
+          "validator_version": "agent_policy_contract_validator_v1"
+        }
+      ],
+      "rules": [],
+      "agent_type": "GENERAL_ASSISTANT",
+      "expected_status": "POLICY_BLOCKED",
+      "expected_effect": "DENY"
+    },
+    "budget-exceeded-case": {
+      "request": {
+        "policy_request_id": "policy_request_budget_exceeded",
+        "policy_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "contract_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_general_assistant",
+          "identity_fingerprint": "fp_identity_general_assistant",
+          "context_fingerprint": "fp_context_general_assistant",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "agent_id": "agent_general_assistant_001",
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_general_1",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "capability_reference": {
+          "capability_id": "capability_info_retrieval_1",
+          "capability_version": 1,
+          "capability_slug": "information-retrieval",
+          "capability_type": "INFORMATION_RETRIEVAL",
+          "capability_fingerprint": "fp_capability_info_retrieval",
+          "declared": true,
+          "enabled": false,
+          "execution_allowed": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "requested_action": "READ_REFERENCE",
+        "resource_reference": {
+          "resource_type": "AGENT",
+          "resource_id": "agent_general_assistant_001",
+          "resource_classification": "INTERNAL",
+          "resource_domain": "general_support",
+          "resource_present": true,
+          "resource_loaded": false,
+          "resource_mutated": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "channel": "WEB",
+        "risk_classification": "LOW",
+        "data_classification": "INTERNAL",
+        "budget_request": {
+          "estimated_cost_minor_units": 999999,
+          "estimated_input_tokens": 10,
+          "estimated_output_tokens": 10,
+          "estimated_total_tokens": 20,
+          "requested_model_calls": 0,
+          "requested_tool_calls": 0,
+          "requested_memory_reads": 0,
+          "requested_memory_writes": 0,
+          "requested_network_calls": 0,
+          "requested_escalations": 0,
+          "validator_version": "agent_policy_budget_validator_v1"
+        },
+        "limit_request": {
+          "requested_requests": 1,
+          "requested_concurrency": 1,
+          "requested_duration_ms": 100,
+          "requested_payload_bytes": 100,
+          "requested_context_references": 1,
+          "requested_dependency_references": 0,
+          "requested_policy_evaluations": 1,
+          "validator_version": "agent_policy_limits_validator_v1"
+        },
+        "approval_context": {
+          "approval_present": false,
+          "approval_reference_id": "approval_ref_not_available",
+          "approval_granted": false,
+          "approval_applied": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "correlation_id": "correlation_general_1",
+        "causation_id": "causation_general_1",
+        "trace_id": "trace_general_1",
+        "logical_sequence": 1,
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_policy_request_validator_v1"
+      },
+      "policies": [
+        {
+          "policy_id": "policy_tenant_low_risk_simulation_policy",
+          "policy_slug": "tenant-low-risk-simulation-policy",
+          "policy_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "policy_type": "TENANT_POLICY",
+          "policy_status": "VALIDATED_SIMULATION",
+          "priority": 100,
+          "effect": "ALLOW_SIMULATION",
+          "subject_scope": {
+            "tenant_ids": [
+              "tenant_demo_general"
+            ],
+            "organization_ids": [
+              "tenant_demo_general:org-main"
+            ],
+            "agent_ids": [
+              "agent_general_assistant_001"
+            ],
+            "agent_types": [
+              "GENERAL_ASSISTANT"
+            ],
+            "actor_types": [
+              "USER"
+            ],
+            "actor_roles": [
+              "OPERATOR"
+            ],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "resource_scope": {
+            "resource_types": [
+              "AGENT",
+              "CAPABILITY"
+            ],
+            "resource_ids": [],
+            "resource_classifications": [
+              "INTERNAL"
+            ],
+            "resource_domains": [],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "action_scope": {
+            "actions": [
+              "READ_REFERENCE",
+              "VALIDATE"
+            ],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "risk_scope": {
+            "allowed_risk_classifications": [
+              "LOW"
+            ],
+            "maximum_risk_classification": "LOW",
+            "requires_approval_above": "MODERATE",
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "data_scope": {
+            "allowed_data_classifications": [
+              "INTERNAL",
+              "PUBLIC"
+            ],
+            "maximum_data_classification": "INTERNAL",
+            "restricted_fields_present": false,
+            "personal_data_present": false,
+            "sensitive_data_present": false,
+            "secret_material_present": false,
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "channel_scope": {
+            "allowed_channels": [
+              "WEB"
+            ],
+            "denied_channels": [],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "budget_policy": {
+            "budget_policy_id": "budget_tenant_low_risk_simulation_policy",
+            "currency": "BRL",
+            "period_type": "REQUEST",
+            "maximum_cost_minor_units": 1000,
+            "maximum_input_tokens": 2000,
+            "maximum_output_tokens": 1000,
+            "maximum_total_tokens": 3000,
+            "maximum_model_calls": 0,
+            "maximum_tool_calls": 0,
+            "maximum_memory_reads": 0,
+            "maximum_memory_writes": 0,
+            "maximum_network_calls": 0,
+            "maximum_escalations": 0,
+            "budget_enforced": true,
+            "budget_consumed": false,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "agent_policy_budget_validator_v1"
+          },
+          "limit_policy": {
+            "limit_policy_id": "limit_tenant_low_risk_simulation_policy",
+            "maximum_requests": 100,
+            "maximum_concurrency": 5,
+            "maximum_duration_ms": 30000,
+            "maximum_payload_bytes": 1000000,
+            "maximum_context_references": 20,
+            "maximum_dependency_references": 20,
+            "maximum_policy_evaluations": 50,
+            "limit_enforced": true,
+            "limit_consumed": false,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "agent_policy_limits_validator_v1"
+          },
+          "approval_policy": {
+            "approval_required": false,
+            "approval_type": "NONE",
+            "required_roles": [],
+            "minimum_approvals": 0,
+            "approval_granted": false,
+            "approval_applied": false,
+            "validator_version": "agent_policy_contract_validator_v1"
+          },
+          "rule_references": [],
+          "dependency_references": [],
+          "simulation_context": {
+            "simulation": true,
+            "production_blocked": true,
+            "runtime_enabled": false,
+            "execution_enabled": false,
+            "network_enabled": false,
+            "tools_enabled": false,
+            "memory_enabled": false,
+            "llm_enabled": false,
+            "rollout_percentage": 0,
+            "validator_version": "agent_simulation_context_validator_v1"
+          },
+          "created_at_logical": "logical_seq_tenant_low_risk_simulation_policy_000001",
+          "validator_version": "agent_policy_contract_validator_v1"
+        }
+      ],
+      "rules": [],
+      "agent_type": "GENERAL_ASSISTANT",
+      "expected_status": "BUDGET_BLOCKED",
+      "expected_effect": "DENY"
+    },
+    "restricted-data-case": {
+      "request": {
+        "policy_request_id": "policy_request_restricted_data",
+        "policy_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "contract_general_assistant_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_general_assistant",
+          "identity_fingerprint": "fp_identity_general_assistant",
+          "context_fingerprint": "fp_context_general_assistant",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "agent_id": "agent_general_assistant_001",
+        "tenant_id": "tenant_demo_general",
+        "organization_id": "tenant_demo_general:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_general_1",
+          "actor_role": "OPERATOR",
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "capability_reference": {
+          "capability_id": "capability_info_retrieval_1",
+          "capability_version": 1,
+          "capability_slug": "information-retrieval",
+          "capability_type": "INFORMATION_RETRIEVAL",
+          "capability_fingerprint": "fp_capability_info_retrieval",
+          "declared": true,
+          "enabled": false,
+          "execution_allowed": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "requested_action": "READ_REFERENCE",
+        "resource_reference": {
+          "resource_type": "AGENT",
+          "resource_id": "agent_general_assistant_001",
+          "resource_classification": "INTERNAL",
+          "resource_domain": "general_support",
+          "resource_present": true,
+          "resource_loaded": false,
+          "resource_mutated": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "channel": "WEB",
+        "risk_classification": "LOW",
+        "data_classification": "RESTRICTED",
+        "budget_request": {
+          "estimated_cost_minor_units": 10,
+          "estimated_input_tokens": 100,
+          "estimated_output_tokens": 50,
+          "estimated_total_tokens": 150,
+          "requested_model_calls": 0,
+          "requested_tool_calls": 0,
+          "requested_memory_reads": 0,
+          "requested_memory_writes": 0,
+          "requested_network_calls": 0,
+          "requested_escalations": 0,
+          "validator_version": "agent_policy_budget_validator_v1"
+        },
+        "limit_request": {
+          "requested_requests": 1,
+          "requested_concurrency": 1,
+          "requested_duration_ms": 100,
+          "requested_payload_bytes": 100,
+          "requested_context_references": 1,
+          "requested_dependency_references": 0,
+          "requested_policy_evaluations": 1,
+          "validator_version": "agent_policy_limits_validator_v1"
+        },
+        "approval_context": {
+          "approval_present": false,
+          "approval_reference_id": "approval_ref_not_available",
+          "approval_granted": false,
+          "approval_applied": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "correlation_id": "correlation_general_1",
+        "causation_id": "causation_general_1",
+        "trace_id": "trace_general_1",
+        "logical_sequence": 1,
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_policy_request_validator_v1"
+      },
+      "policies": [
+        {
+          "policy_id": "policy_tenant_low_risk_simulation_policy",
+          "policy_slug": "tenant-low-risk-simulation-policy",
+          "policy_version": 1,
+          "tenant_id": "tenant_demo_general",
+          "organization_id": "tenant_demo_general:org-main",
+          "policy_type": "TENANT_POLICY",
+          "policy_status": "VALIDATED_SIMULATION",
+          "priority": 100,
+          "effect": "ALLOW_SIMULATION",
+          "subject_scope": {
+            "tenant_ids": [
+              "tenant_demo_general"
+            ],
+            "organization_ids": [
+              "tenant_demo_general:org-main"
+            ],
+            "agent_ids": [
+              "agent_general_assistant_001"
+            ],
+            "agent_types": [
+              "GENERAL_ASSISTANT"
+            ],
+            "actor_types": [
+              "USER"
+            ],
+            "actor_roles": [
+              "OPERATOR"
+            ],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "resource_scope": {
+            "resource_types": [
+              "AGENT",
+              "CAPABILITY"
+            ],
+            "resource_ids": [],
+            "resource_classifications": [
+              "INTERNAL"
+            ],
+            "resource_domains": [],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "action_scope": {
+            "actions": [
+              "READ_REFERENCE",
+              "VALIDATE"
+            ],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "risk_scope": {
+            "allowed_risk_classifications": [
+              "LOW"
+            ],
+            "maximum_risk_classification": "LOW",
+            "requires_approval_above": "MODERATE",
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "data_scope": {
+            "allowed_data_classifications": [
+              "INTERNAL",
+              "PUBLIC"
+            ],
+            "maximum_data_classification": "INTERNAL",
+            "restricted_fields_present": false,
+            "personal_data_present": false,
+            "sensitive_data_present": false,
+            "secret_material_present": false,
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "channel_scope": {
+            "allowed_channels": [
+              "WEB"
+            ],
+            "denied_channels": [],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "budget_policy": {
+            "budget_policy_id": "budget_tenant_low_risk_simulation_policy",
+            "currency": "BRL",
+            "period_type": "REQUEST",
+            "maximum_cost_minor_units": 1000,
+            "maximum_input_tokens": 2000,
+            "maximum_output_tokens": 1000,
+            "maximum_total_tokens": 3000,
+            "maximum_model_calls": 0,
+            "maximum_tool_calls": 0,
+            "maximum_memory_reads": 0,
+            "maximum_memory_writes": 0,
+            "maximum_network_calls": 0,
+            "maximum_escalations": 0,
+            "budget_enforced": true,
+            "budget_consumed": false,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "agent_policy_budget_validator_v1"
+          },
+          "limit_policy": {
+            "limit_policy_id": "limit_tenant_low_risk_simulation_policy",
+            "maximum_requests": 100,
+            "maximum_concurrency": 5,
+            "maximum_duration_ms": 30000,
+            "maximum_payload_bytes": 1000000,
+            "maximum_context_references": 20,
+            "maximum_dependency_references": 20,
+            "maximum_policy_evaluations": 50,
+            "limit_enforced": true,
+            "limit_consumed": false,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "agent_policy_limits_validator_v1"
+          },
+          "approval_policy": {
+            "approval_required": false,
+            "approval_type": "NONE",
+            "required_roles": [],
+            "minimum_approvals": 0,
+            "approval_granted": false,
+            "approval_applied": false,
+            "validator_version": "agent_policy_contract_validator_v1"
+          },
+          "rule_references": [],
+          "dependency_references": [],
+          "simulation_context": {
+            "simulation": true,
+            "production_blocked": true,
+            "runtime_enabled": false,
+            "execution_enabled": false,
+            "network_enabled": false,
+            "tools_enabled": false,
+            "memory_enabled": false,
+            "llm_enabled": false,
+            "rollout_percentage": 0,
+            "validator_version": "agent_simulation_context_validator_v1"
+          },
+          "created_at_logical": "logical_seq_tenant_low_risk_simulation_policy_000001",
+          "validator_version": "agent_policy_contract_validator_v1"
+        }
+      ],
+      "rules": [],
+      "agent_type": "GENERAL_ASSISTANT",
+      "expected_status": "DATA_BLOCKED",
+      "expected_effect": "DENY"
+    },
+    "high-risk-approval-case": {
+      "request": {
+        "policy_request_id": "policy_request_high_risk",
+        "policy_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "contract_finance_analytics_001",
+          "contract_version": 1,
+          "contract_fingerprint": "fp_contract_general_assistant",
+          "identity_fingerprint": "fp_identity_general_assistant",
+          "context_fingerprint": "fp_context_general_assistant",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "agent_id": "agent_finance_analytics_001",
+        "tenant_id": "tenant_demo_finance",
+        "organization_id": "tenant_demo_finance:org-main",
+        "actor_context": {
+          "actor_type": "USER",
+          "actor_id": "actor_finance_1",
+          "actor_role": "MANAGER",
+          "tenant_id": "tenant_demo_finance",
+          "organization_id": "tenant_demo_finance:org-main",
+          "authorization_state": "APPROVED_SIMULATION",
+          "validator_version": "agent_actor_context_validator_v1"
+        },
+        "capability_reference": {
+          "capability_id": "capability_financial_analysis_1",
+          "capability_version": 1,
+          "capability_slug": "financial-analysis",
+          "capability_type": "ANALYSIS",
+          "capability_fingerprint": "fp_capability_financial_analysis",
+          "declared": true,
+          "enabled": false,
+          "execution_allowed": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "requested_action": "ANALYZE_REFERENCE",
+        "resource_reference": {
+          "resource_type": "DATA_REFERENCE",
+          "resource_id": "data_reference_financial_1",
+          "resource_classification": "CONFIDENTIAL",
+          "resource_domain": "financial_reporting",
+          "resource_present": true,
+          "resource_loaded": false,
+          "resource_mutated": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "channel": "WEB",
+        "risk_classification": "HIGH",
+        "data_classification": "CONFIDENTIAL",
+        "budget_request": {
+          "estimated_cost_minor_units": 10,
+          "estimated_input_tokens": 100,
+          "estimated_output_tokens": 50,
+          "estimated_total_tokens": 150,
+          "requested_model_calls": 0,
+          "requested_tool_calls": 0,
+          "requested_memory_reads": 0,
+          "requested_memory_writes": 0,
+          "requested_network_calls": 0,
+          "requested_escalations": 0,
+          "validator_version": "agent_policy_budget_validator_v1"
+        },
+        "limit_request": {
+          "requested_requests": 1,
+          "requested_concurrency": 1,
+          "requested_duration_ms": 100,
+          "requested_payload_bytes": 100,
+          "requested_context_references": 1,
+          "requested_dependency_references": 0,
+          "requested_policy_evaluations": 1,
+          "validator_version": "agent_policy_limits_validator_v1"
+        },
+        "approval_context": {
+          "approval_present": false,
+          "approval_reference_id": "approval_ref_not_available",
+          "approval_granted": false,
+          "approval_applied": false,
+          "validator_version": "agent_policy_request_validator_v1"
+        },
+        "correlation_id": "correlation_general_1",
+        "causation_id": "causation_general_1",
+        "trace_id": "trace_general_1",
+        "logical_sequence": 1,
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "agent_policy_request_validator_v1"
+      },
+      "policies": [
+        {
+          "policy_id": "policy_finance_require_approval_policy",
+          "policy_slug": "finance-require-approval-policy",
+          "policy_version": 1,
+          "tenant_id": "tenant_demo_finance",
+          "organization_id": "tenant_demo_finance:org-main",
+          "policy_type": "RISK_POLICY",
+          "policy_status": "VALIDATED_SIMULATION",
+          "priority": 100,
+          "effect": "REQUIRE_APPROVAL_SIMULATION",
+          "subject_scope": {
+            "tenant_ids": [
+              "tenant_demo_finance"
+            ],
+            "organization_ids": [
+              "tenant_demo_finance:org-main"
+            ],
+            "agent_ids": [
+              "agent_finance_analytics_001"
+            ],
+            "agent_types": [
+              "ANALYTICS_AGENT"
+            ],
+            "actor_types": [
+              "USER"
+            ],
+            "actor_roles": [
+              "MANAGER"
+            ],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "resource_scope": {
+            "resource_types": [
+              "AGENT",
+              "DATA_REFERENCE"
+            ],
+            "resource_ids": [],
+            "resource_classifications": [
+              "CONFIDENTIAL"
+            ],
+            "resource_domains": [],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "action_scope": {
+            "actions": [
+              "ANALYZE_REFERENCE",
+              "SUMMARIZE_REFERENCE"
+            ],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "risk_scope": {
+            "allowed_risk_classifications": [
+              "HIGH",
+              "LOW",
+              "MODERATE"
+            ],
+            "maximum_risk_classification": "HIGH",
+            "requires_approval_above": "MODERATE",
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "data_scope": {
+            "allowed_data_classifications": [
+              "CONFIDENTIAL",
+              "INTERNAL"
+            ],
+            "maximum_data_classification": "CONFIDENTIAL",
+            "restricted_fields_present": false,
+            "personal_data_present": false,
+            "sensitive_data_present": false,
+            "secret_material_present": false,
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "channel_scope": {
+            "allowed_channels": [
+              "WEB"
+            ],
+            "denied_channels": [],
+            "validator_version": "agent_policy_scope_validator_v1"
+          },
+          "budget_policy": {
+            "budget_policy_id": "budget_finance_require_approval_policy",
+            "currency": "BRL",
+            "period_type": "REQUEST",
+            "maximum_cost_minor_units": 1000,
+            "maximum_input_tokens": 2000,
+            "maximum_output_tokens": 1000,
+            "maximum_total_tokens": 3000,
+            "maximum_model_calls": 0,
+            "maximum_tool_calls": 0,
+            "maximum_memory_reads": 0,
+            "maximum_memory_writes": 0,
+            "maximum_network_calls": 0,
+            "maximum_escalations": 0,
+            "budget_enforced": true,
+            "budget_consumed": false,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "agent_policy_budget_validator_v1"
+          },
+          "limit_policy": {
+            "limit_policy_id": "limit_finance_require_approval_policy",
+            "maximum_requests": 100,
+            "maximum_concurrency": 5,
+            "maximum_duration_ms": 30000,
+            "maximum_payload_bytes": 1000000,
+            "maximum_context_references": 20,
+            "maximum_dependency_references": 20,
+            "maximum_policy_evaluations": 50,
+            "limit_enforced": true,
+            "limit_consumed": false,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "agent_policy_limits_validator_v1"
+          },
+          "approval_policy": {
+            "approval_required": true,
+            "approval_type": "MANAGER",
+            "required_roles": [
+              "MANAGER"
+            ],
+            "minimum_approvals": 1,
+            "approval_granted": false,
+            "approval_applied": false,
+            "validator_version": "agent_policy_contract_validator_v1"
+          },
+          "rule_references": [],
+          "dependency_references": [],
+          "simulation_context": {
+            "simulation": true,
+            "production_blocked": true,
+            "runtime_enabled": false,
+            "execution_enabled": false,
+            "network_enabled": false,
+            "tools_enabled": false,
+            "memory_enabled": false,
+            "llm_enabled": false,
+            "rollout_percentage": 0,
+            "validator_version": "agent_simulation_context_validator_v1"
+          },
+          "created_at_logical": "logical_seq_finance_require_approval_policy_000001",
+          "validator_version": "agent_policy_contract_validator_v1"
+        }
+      ],
+      "rules": [],
+      "agent_type": "ANALYTICS_AGENT",
+      "expected_status": "REQUIRE_APPROVAL_SIMULATION",
+      "expected_effect": "REQUIRE_APPROVAL_SIMULATION"
+    }
+  }
+}
