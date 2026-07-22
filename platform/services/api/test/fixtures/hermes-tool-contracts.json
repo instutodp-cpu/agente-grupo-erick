@@ -1,0 +1,898 @@
+{
+  "fixture_version": "hermes_tool_contracts_fixture_v1",
+  "simulation": true,
+  "production_blocked": true,
+  "scenarios": [
+    {
+      "scenario_id": "valid-tool-local",
+      "description": "A structurally valid LOCAL_REFERENCE tool with capabilities EXECUTE_REFERENCE, ZERO_COST_REFERENCE cost, and NONE side effects.",
+      "tool": {
+        "tool_id": "tool-local-1",
+        "tool_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "category": "LOCAL_REFERENCE",
+        "display_name": "Tool tool-local-1",
+        "description": "Declarative reference for tool-local-1.",
+        "tool_status": "VALIDATED_SIMULATION",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_contract_validator_v1"
+      },
+      "capability_set": {
+        "capability_set_id": "tool-local-1-capabilities",
+        "tool_id": "tool-local-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "capabilities": [
+          "EXECUTE_REFERENCE"
+        ],
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_capability_contract_validator_v1"
+      },
+      "permission_set": {
+        "permission_set_id": "tool-local-1-permissions",
+        "tool_id": "tool-local-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "requires_confirmation": false,
+        "requires_human_review": false,
+        "requires_network": false,
+        "requires_secret": false,
+        "requires_filesystem": false,
+        "requires_database": false,
+        "requires_external_provider": false,
+        "requires_runtime": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_permission_contract_validator_v1"
+      },
+      "cost_reference": {
+        "cost_reference_id": "tool-local-1-cost",
+        "tool_id": "tool-local-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "cost_tier": "ZERO_COST_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_cost_contract_validator_v1"
+      },
+      "side_effect_reference": {
+        "side_effect_reference_id": "tool-local-1-side-effect",
+        "tool_id": "tool-local-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "side_effect": "NONE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_side_effects_contract_validator_v1"
+      },
+      "expected_status": "TOOL_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_TOOL_REFERENCE"
+    },
+    {
+      "scenario_id": "valid-tool-http",
+      "description": "A structurally valid HTTP_REFERENCE tool with capabilities READ_REFERENCE, SEARCH_REFERENCE, LOW cost, and EXTERNAL_EFFECT_REFERENCE side effects.",
+      "tool": {
+        "tool_id": "tool-http-1",
+        "tool_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "category": "HTTP_REFERENCE",
+        "display_name": "Tool tool-http-1",
+        "description": "Declarative reference for tool-http-1.",
+        "tool_status": "VALIDATED_SIMULATION",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_contract_validator_v1"
+      },
+      "capability_set": {
+        "capability_set_id": "tool-http-1-capabilities",
+        "tool_id": "tool-http-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "capabilities": [
+          "READ_REFERENCE",
+          "SEARCH_REFERENCE"
+        ],
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_capability_contract_validator_v1"
+      },
+      "permission_set": {
+        "permission_set_id": "tool-http-1-permissions",
+        "tool_id": "tool-http-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "requires_confirmation": false,
+        "requires_human_review": false,
+        "requires_network": true,
+        "requires_secret": false,
+        "requires_filesystem": false,
+        "requires_database": false,
+        "requires_external_provider": false,
+        "requires_runtime": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_permission_contract_validator_v1"
+      },
+      "cost_reference": {
+        "cost_reference_id": "tool-http-1-cost",
+        "tool_id": "tool-http-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "cost_tier": "LOW",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_cost_contract_validator_v1"
+      },
+      "side_effect_reference": {
+        "side_effect_reference_id": "tool-http-1-side-effect",
+        "tool_id": "tool-http-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "side_effect": "EXTERNAL_EFFECT_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_side_effects_contract_validator_v1"
+      },
+      "expected_status": "TOOL_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_TOOL_REFERENCE"
+    },
+    {
+      "scenario_id": "valid-tool-database",
+      "description": "A structurally valid DATABASE_REFERENCE tool with capabilities READ_REFERENCE, WRITE_REFERENCE, MODERATE cost, and STATE_CHANGE_REFERENCE side effects.",
+      "tool": {
+        "tool_id": "tool-database-1",
+        "tool_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "category": "DATABASE_REFERENCE",
+        "display_name": "Tool tool-database-1",
+        "description": "Declarative reference for tool-database-1.",
+        "tool_status": "VALIDATED_SIMULATION",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_contract_validator_v1"
+      },
+      "capability_set": {
+        "capability_set_id": "tool-database-1-capabilities",
+        "tool_id": "tool-database-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "capabilities": [
+          "READ_REFERENCE",
+          "WRITE_REFERENCE"
+        ],
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_capability_contract_validator_v1"
+      },
+      "permission_set": {
+        "permission_set_id": "tool-database-1-permissions",
+        "tool_id": "tool-database-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "requires_confirmation": false,
+        "requires_human_review": false,
+        "requires_network": false,
+        "requires_secret": false,
+        "requires_filesystem": false,
+        "requires_database": true,
+        "requires_external_provider": false,
+        "requires_runtime": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_permission_contract_validator_v1"
+      },
+      "cost_reference": {
+        "cost_reference_id": "tool-database-1-cost",
+        "tool_id": "tool-database-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "cost_tier": "MODERATE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_cost_contract_validator_v1"
+      },
+      "side_effect_reference": {
+        "side_effect_reference_id": "tool-database-1-side-effect",
+        "tool_id": "tool-database-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "side_effect": "STATE_CHANGE_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_side_effects_contract_validator_v1"
+      },
+      "expected_status": "TOOL_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_TOOL_REFERENCE"
+    },
+    {
+      "scenario_id": "valid-tool-mcp",
+      "description": "A structurally valid MCP_REFERENCE tool with capabilities ROUTE_REFERENCE, VERY_LOW cost, and READ_ONLY_REFERENCE side effects.",
+      "tool": {
+        "tool_id": "tool-mcp-1",
+        "tool_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "category": "MCP_REFERENCE",
+        "display_name": "Tool tool-mcp-1",
+        "description": "Declarative reference for tool-mcp-1.",
+        "tool_status": "VALIDATED_SIMULATION",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_contract_validator_v1"
+      },
+      "capability_set": {
+        "capability_set_id": "tool-mcp-1-capabilities",
+        "tool_id": "tool-mcp-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "capabilities": [
+          "ROUTE_REFERENCE"
+        ],
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_capability_contract_validator_v1"
+      },
+      "permission_set": {
+        "permission_set_id": "tool-mcp-1-permissions",
+        "tool_id": "tool-mcp-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "requires_confirmation": false,
+        "requires_human_review": false,
+        "requires_network": false,
+        "requires_secret": false,
+        "requires_filesystem": false,
+        "requires_database": false,
+        "requires_external_provider": false,
+        "requires_runtime": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_permission_contract_validator_v1"
+      },
+      "cost_reference": {
+        "cost_reference_id": "tool-mcp-1-cost",
+        "tool_id": "tool-mcp-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "cost_tier": "VERY_LOW",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_cost_contract_validator_v1"
+      },
+      "side_effect_reference": {
+        "side_effect_reference_id": "tool-mcp-1-side-effect",
+        "tool_id": "tool-mcp-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "side_effect": "READ_ONLY_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_side_effects_contract_validator_v1"
+      },
+      "expected_status": "TOOL_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_TOOL_REFERENCE"
+    },
+    {
+      "scenario_id": "valid-tool-llm",
+      "description": "A structurally valid LLM_REFERENCE tool with capabilities GENERATE_REFERENCE, CLASSIFY_REFERENCE, SUMMARIZE_REFERENCE, HIGH cost, and READ_ONLY_REFERENCE side effects.",
+      "tool": {
+        "tool_id": "tool-llm-1",
+        "tool_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "category": "LLM_REFERENCE",
+        "display_name": "Tool tool-llm-1",
+        "description": "Declarative reference for tool-llm-1.",
+        "tool_status": "VALIDATED_SIMULATION",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_contract_validator_v1"
+      },
+      "capability_set": {
+        "capability_set_id": "tool-llm-1-capabilities",
+        "tool_id": "tool-llm-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "capabilities": [
+          "CLASSIFY_REFERENCE",
+          "GENERATE_REFERENCE",
+          "SUMMARIZE_REFERENCE"
+        ],
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_capability_contract_validator_v1"
+      },
+      "permission_set": {
+        "permission_set_id": "tool-llm-1-permissions",
+        "tool_id": "tool-llm-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "requires_confirmation": false,
+        "requires_human_review": false,
+        "requires_network": false,
+        "requires_secret": false,
+        "requires_filesystem": false,
+        "requires_database": false,
+        "requires_external_provider": false,
+        "requires_runtime": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_permission_contract_validator_v1"
+      },
+      "cost_reference": {
+        "cost_reference_id": "tool-llm-1-cost",
+        "tool_id": "tool-llm-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "cost_tier": "HIGH",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_cost_contract_validator_v1"
+      },
+      "side_effect_reference": {
+        "side_effect_reference_id": "tool-llm-1-side-effect",
+        "tool_id": "tool-llm-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "side_effect": "READ_ONLY_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_side_effects_contract_validator_v1"
+      },
+      "expected_status": "TOOL_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_TOOL_REFERENCE"
+    },
+    {
+      "scenario_id": "valid-tool-file-store",
+      "description": "A structurally valid FILESYSTEM_REFERENCE tool with capabilities READ_REFERENCE, WRITE_REFERENCE, ZERO_COST_REFERENCE cost, and STATE_CHANGE_REFERENCE side effects.",
+      "tool": {
+        "tool_id": "tool-file-store-1",
+        "tool_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "category": "FILESYSTEM_REFERENCE",
+        "display_name": "Tool tool-file-store-1",
+        "description": "Declarative reference for tool-file-store-1.",
+        "tool_status": "VALIDATED_SIMULATION",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_contract_validator_v1"
+      },
+      "capability_set": {
+        "capability_set_id": "tool-file-store-1-capabilities",
+        "tool_id": "tool-file-store-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "capabilities": [
+          "READ_REFERENCE",
+          "WRITE_REFERENCE"
+        ],
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_capability_contract_validator_v1"
+      },
+      "permission_set": {
+        "permission_set_id": "tool-file-store-1-permissions",
+        "tool_id": "tool-file-store-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "requires_confirmation": false,
+        "requires_human_review": false,
+        "requires_network": false,
+        "requires_secret": false,
+        "requires_filesystem": true,
+        "requires_database": false,
+        "requires_external_provider": false,
+        "requires_runtime": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_permission_contract_validator_v1"
+      },
+      "cost_reference": {
+        "cost_reference_id": "tool-file-store-1-cost",
+        "tool_id": "tool-file-store-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "cost_tier": "ZERO_COST_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_cost_contract_validator_v1"
+      },
+      "side_effect_reference": {
+        "side_effect_reference_id": "tool-file-store-1-side-effect",
+        "tool_id": "tool-file-store-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "side_effect": "STATE_CHANGE_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_side_effects_contract_validator_v1"
+      },
+      "expected_status": "TOOL_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_TOOL_REFERENCE"
+    },
+    {
+      "scenario_id": "valid-tool-message",
+      "description": "A structurally valid MESSAGE_REFERENCE tool with capabilities WRITE_REFERENCE, VERY_LOW cost, and EXTERNAL_EFFECT_REFERENCE side effects.",
+      "tool": {
+        "tool_id": "tool-message-1",
+        "tool_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "category": "MESSAGE_REFERENCE",
+        "display_name": "Tool tool-message-1",
+        "description": "Declarative reference for tool-message-1.",
+        "tool_status": "VALIDATED_SIMULATION",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_contract_validator_v1"
+      },
+      "capability_set": {
+        "capability_set_id": "tool-message-1-capabilities",
+        "tool_id": "tool-message-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "capabilities": [
+          "WRITE_REFERENCE"
+        ],
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_capability_contract_validator_v1"
+      },
+      "permission_set": {
+        "permission_set_id": "tool-message-1-permissions",
+        "tool_id": "tool-message-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "requires_confirmation": false,
+        "requires_human_review": false,
+        "requires_network": true,
+        "requires_secret": false,
+        "requires_filesystem": false,
+        "requires_database": false,
+        "requires_external_provider": false,
+        "requires_runtime": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_permission_contract_validator_v1"
+      },
+      "cost_reference": {
+        "cost_reference_id": "tool-message-1-cost",
+        "tool_id": "tool-message-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "cost_tier": "VERY_LOW",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_cost_contract_validator_v1"
+      },
+      "side_effect_reference": {
+        "side_effect_reference_id": "tool-message-1-side-effect",
+        "tool_id": "tool-message-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "side_effect": "EXTERNAL_EFFECT_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_side_effects_contract_validator_v1"
+      },
+      "expected_status": "TOOL_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_TOOL_REFERENCE"
+    },
+    {
+      "scenario_id": "valid-tool-email",
+      "description": "A structurally valid EMAIL_REFERENCE tool with capabilities WRITE_REFERENCE, LOW cost, and EXTERNAL_EFFECT_REFERENCE side effects.",
+      "tool": {
+        "tool_id": "tool-email-1",
+        "tool_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "category": "EMAIL_REFERENCE",
+        "display_name": "Tool tool-email-1",
+        "description": "Declarative reference for tool-email-1.",
+        "tool_status": "VALIDATED_SIMULATION",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_contract_validator_v1"
+      },
+      "capability_set": {
+        "capability_set_id": "tool-email-1-capabilities",
+        "tool_id": "tool-email-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "capabilities": [
+          "WRITE_REFERENCE"
+        ],
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_capability_contract_validator_v1"
+      },
+      "permission_set": {
+        "permission_set_id": "tool-email-1-permissions",
+        "tool_id": "tool-email-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "requires_confirmation": false,
+        "requires_human_review": false,
+        "requires_network": true,
+        "requires_secret": false,
+        "requires_filesystem": false,
+        "requires_database": false,
+        "requires_external_provider": false,
+        "requires_runtime": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_permission_contract_validator_v1"
+      },
+      "cost_reference": {
+        "cost_reference_id": "tool-email-1-cost",
+        "tool_id": "tool-email-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "cost_tier": "LOW",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_cost_contract_validator_v1"
+      },
+      "side_effect_reference": {
+        "side_effect_reference_id": "tool-email-1-side-effect",
+        "tool_id": "tool-email-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "side_effect": "EXTERNAL_EFFECT_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_side_effects_contract_validator_v1"
+      },
+      "expected_status": "TOOL_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_TOOL_REFERENCE"
+    },
+    {
+      "scenario_id": "valid-tool-calendar",
+      "description": "A structurally valid CALENDAR_REFERENCE tool with capabilities READ_REFERENCE, UPDATE_REFERENCE, LOW cost, and STATE_CHANGE_REFERENCE side effects.",
+      "tool": {
+        "tool_id": "tool-calendar-1",
+        "tool_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "category": "CALENDAR_REFERENCE",
+        "display_name": "Tool tool-calendar-1",
+        "description": "Declarative reference for tool-calendar-1.",
+        "tool_status": "VALIDATED_SIMULATION",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_contract_validator_v1"
+      },
+      "capability_set": {
+        "capability_set_id": "tool-calendar-1-capabilities",
+        "tool_id": "tool-calendar-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "capabilities": [
+          "READ_REFERENCE",
+          "UPDATE_REFERENCE"
+        ],
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_capability_contract_validator_v1"
+      },
+      "permission_set": {
+        "permission_set_id": "tool-calendar-1-permissions",
+        "tool_id": "tool-calendar-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "requires_confirmation": false,
+        "requires_human_review": false,
+        "requires_network": false,
+        "requires_secret": false,
+        "requires_filesystem": false,
+        "requires_database": false,
+        "requires_external_provider": false,
+        "requires_runtime": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_permission_contract_validator_v1"
+      },
+      "cost_reference": {
+        "cost_reference_id": "tool-calendar-1-cost",
+        "tool_id": "tool-calendar-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "cost_tier": "LOW",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_cost_contract_validator_v1"
+      },
+      "side_effect_reference": {
+        "side_effect_reference_id": "tool-calendar-1-side-effect",
+        "tool_id": "tool-calendar-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "side_effect": "STATE_CHANGE_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_side_effects_contract_validator_v1"
+      },
+      "expected_status": "TOOL_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_TOOL_REFERENCE"
+    },
+    {
+      "scenario_id": "valid-tool-search",
+      "description": "A structurally valid SEARCH_REFERENCE tool with capabilities SEARCH_REFERENCE, VERY_LOW cost, and READ_ONLY_REFERENCE side effects.",
+      "tool": {
+        "tool_id": "tool-search-1",
+        "tool_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "category": "SEARCH_REFERENCE",
+        "display_name": "Tool tool-search-1",
+        "description": "Declarative reference for tool-search-1.",
+        "tool_status": "VALIDATED_SIMULATION",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_contract_validator_v1"
+      },
+      "capability_set": {
+        "capability_set_id": "tool-search-1-capabilities",
+        "tool_id": "tool-search-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "capabilities": [
+          "SEARCH_REFERENCE"
+        ],
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_capability_contract_validator_v1"
+      },
+      "permission_set": {
+        "permission_set_id": "tool-search-1-permissions",
+        "tool_id": "tool-search-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "requires_confirmation": false,
+        "requires_human_review": false,
+        "requires_network": false,
+        "requires_secret": false,
+        "requires_filesystem": false,
+        "requires_database": false,
+        "requires_external_provider": false,
+        "requires_runtime": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_permission_contract_validator_v1"
+      },
+      "cost_reference": {
+        "cost_reference_id": "tool-search-1-cost",
+        "tool_id": "tool-search-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "cost_tier": "VERY_LOW",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_cost_contract_validator_v1"
+      },
+      "side_effect_reference": {
+        "side_effect_reference_id": "tool-search-1-side-effect",
+        "tool_id": "tool-search-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "side_effect": "READ_ONLY_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_side_effects_contract_validator_v1"
+      },
+      "expected_status": "TOOL_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_TOOL_REFERENCE"
+    },
+    {
+      "scenario_id": "valid-tool-custom",
+      "description": "A structurally valid CUSTOM_REFERENCE tool with capabilities DELETE_REFERENCE, VALIDATE_REFERENCE, UNKNOWN_BLOCKED cost, and IRREVERSIBLE_REFERENCE side effects.",
+      "tool": {
+        "tool_id": "tool-custom-1",
+        "tool_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "category": "CUSTOM_REFERENCE",
+        "display_name": "Tool tool-custom-1",
+        "description": "Declarative reference for tool-custom-1.",
+        "tool_status": "VALIDATED_SIMULATION",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_contract_validator_v1"
+      },
+      "capability_set": {
+        "capability_set_id": "tool-custom-1-capabilities",
+        "tool_id": "tool-custom-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "capabilities": [
+          "DELETE_REFERENCE",
+          "VALIDATE_REFERENCE"
+        ],
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_capability_contract_validator_v1"
+      },
+      "permission_set": {
+        "permission_set_id": "tool-custom-1-permissions",
+        "tool_id": "tool-custom-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "requires_confirmation": false,
+        "requires_human_review": false,
+        "requires_network": false,
+        "requires_secret": false,
+        "requires_filesystem": false,
+        "requires_database": false,
+        "requires_external_provider": false,
+        "requires_runtime": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_permission_contract_validator_v1"
+      },
+      "cost_reference": {
+        "cost_reference_id": "tool-custom-1-cost",
+        "tool_id": "tool-custom-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "cost_tier": "UNKNOWN_BLOCKED",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_cost_contract_validator_v1"
+      },
+      "side_effect_reference": {
+        "side_effect_reference_id": "tool-custom-1-side-effect",
+        "tool_id": "tool-custom-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "side_effect": "IRREVERSIBLE_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_side_effects_contract_validator_v1"
+      },
+      "expected_status": "TOOL_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_TOOL_REFERENCE"
+    },
+    {
+      "scenario_id": "tenant-mismatch-tool",
+      "description": "The permission set references a different tenant than the tool contract, blocking registration.",
+      "tool": {
+        "tool_id": "tool-tenant-mismatch-1",
+        "tool_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "category": "HTTP_REFERENCE",
+        "display_name": "Tool tool-tenant-mismatch-1",
+        "description": "Declarative reference for tool-tenant-mismatch-1.",
+        "tool_status": "VALIDATED_SIMULATION",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_contract_validator_v1"
+      },
+      "capability_set": {
+        "capability_set_id": "tool-tenant-mismatch-1-capabilities",
+        "tool_id": "tool-tenant-mismatch-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "capabilities": [
+          "READ_REFERENCE"
+        ],
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_capability_contract_validator_v1"
+      },
+      "permission_set": {
+        "permission_set_id": "tool-tenant-mismatch-1-permissions",
+        "tool_id": "tool-tenant-mismatch-1",
+        "tenant_id": "tenant-beta",
+        "organization_id": "tenant-beta:org-1",
+        "requires_confirmation": false,
+        "requires_human_review": false,
+        "requires_network": false,
+        "requires_secret": false,
+        "requires_filesystem": false,
+        "requires_database": false,
+        "requires_external_provider": false,
+        "requires_runtime": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_permission_contract_validator_v1"
+      },
+      "cost_reference": {
+        "cost_reference_id": "tool-tenant-mismatch-1-cost",
+        "tool_id": "tool-tenant-mismatch-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "cost_tier": "LOW",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_cost_contract_validator_v1"
+      },
+      "side_effect_reference": {
+        "side_effect_reference_id": "tool-tenant-mismatch-1-side-effect",
+        "tool_id": "tool-tenant-mismatch-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "side_effect": "READ_ONLY_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_side_effects_contract_validator_v1"
+      },
+      "expected_status": "TENANT_BLOCKED",
+      "expected_decision": "BLOCKED"
+    },
+    {
+      "scenario_id": "organization-mismatch-tool",
+      "description": "The cost reference references a different organization than the tool contract, blocking registration.",
+      "tool": {
+        "tool_id": "tool-org-mismatch-1",
+        "tool_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "category": "HTTP_REFERENCE",
+        "display_name": "Tool tool-org-mismatch-1",
+        "description": "Declarative reference for tool-org-mismatch-1.",
+        "tool_status": "VALIDATED_SIMULATION",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_contract_validator_v1"
+      },
+      "capability_set": {
+        "capability_set_id": "tool-org-mismatch-1-capabilities",
+        "tool_id": "tool-org-mismatch-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "capabilities": [
+          "READ_REFERENCE"
+        ],
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_capability_contract_validator_v1"
+      },
+      "permission_set": {
+        "permission_set_id": "tool-org-mismatch-1-permissions",
+        "tool_id": "tool-org-mismatch-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "requires_confirmation": false,
+        "requires_human_review": false,
+        "requires_network": false,
+        "requires_secret": false,
+        "requires_filesystem": false,
+        "requires_database": false,
+        "requires_external_provider": false,
+        "requires_runtime": false,
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_permission_contract_validator_v1"
+      },
+      "cost_reference": {
+        "cost_reference_id": "tool-org-mismatch-1-cost",
+        "tool_id": "tool-org-mismatch-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-DIFFERENT",
+        "cost_tier": "LOW",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_cost_contract_validator_v1"
+      },
+      "side_effect_reference": {
+        "side_effect_reference_id": "tool-org-mismatch-1-side-effect",
+        "tool_id": "tool-org-mismatch-1",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "side_effect": "READ_ONLY_REFERENCE",
+        "simulation": true,
+        "production_blocked": true,
+        "validator_version": "tool_side_effects_contract_validator_v1"
+      },
+      "expected_status": "ORGANIZATION_BLOCKED",
+      "expected_decision": "BLOCKED"
+    }
+  ]
+}
