@@ -113,6 +113,43 @@
         "reference_present": true,
         "validator_version": "orchestrator_request_validator_v1"
       },
+      "user_preference_references": [
+        {
+          "reference_id": "deterministic-no-llm-user-preference-a",
+          "reference_version": 1,
+          "reference_fingerprint": "fp-deterministic-no-llm-user-preference-a",
+          "validator_version": "orchestrator_request_validator_v1"
+        }
+      ],
+      "project_state_reference": {
+        "reference_id": "deterministic-no-llm-project-state",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-deterministic-no-llm-project-state",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "continuity_summary_reference": {
+        "reference_id": "deterministic-no-llm-continuity-summary",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-deterministic-no-llm-continuity-summary",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "required_memory_references": [
+        {
+          "reference_id": "deterministic-no-llm-required-memory-a",
+          "reference_version": 1,
+          "reference_fingerprint": "fp-deterministic-no-llm-required-memory-a",
+          "validator_version": "orchestrator_request_validator_v1"
+        }
+      ],
+      "memory_selection_policy_reference": {
+        "reference_id": "deterministic-no-llm-memory-selection-policy",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-deterministic-no-llm-memory-selection-policy",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
       "correlation_id": "deterministic-no-llm-correlation",
       "causation_id": "deterministic-no-llm-causation",
       "trace_id": "deterministic-no-llm-trace",
@@ -239,6 +276,43 @@
         "reference_id": "economical-selection-budget",
         "reference_version": 1,
         "reference_fingerprint": "fp-economical-selection-budget",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "user_preference_references": [
+        {
+          "reference_id": "economical-selection-user-preference-a",
+          "reference_version": 1,
+          "reference_fingerprint": "fp-economical-selection-user-preference-a",
+          "validator_version": "orchestrator_request_validator_v1"
+        }
+      ],
+      "project_state_reference": {
+        "reference_id": "economical-selection-project-state",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-economical-selection-project-state",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "continuity_summary_reference": {
+        "reference_id": "economical-selection-continuity-summary",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-economical-selection-continuity-summary",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "required_memory_references": [
+        {
+          "reference_id": "economical-selection-required-memory-a",
+          "reference_version": 1,
+          "reference_fingerprint": "fp-economical-selection-required-memory-a",
+          "validator_version": "orchestrator_request_validator_v1"
+        }
+      ],
+      "memory_selection_policy_reference": {
+        "reference_id": "economical-selection-memory-selection-policy",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-economical-selection-memory-selection-policy",
         "reference_present": true,
         "validator_version": "orchestrator_request_validator_v1"
       },

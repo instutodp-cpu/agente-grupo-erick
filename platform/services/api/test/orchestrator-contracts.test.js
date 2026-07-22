@@ -8,7 +8,10 @@ const test = require('node:test');
 const fixture = require('./fixtures/hermes-orchestrator-contracts.json');
 const { findAgentCoreOperationalMaterial, stablePayload } = require('../src/core/agent-identity-contract');
 const {
+  MAX_REQUIRED_MEMORY_REFERENCES,
   MAX_TOOL_REFERENCES,
+  MAX_USER_PREFERENCE_REFERENCES,
+  ORCHESTRATOR_REQUEST_FIELDS,
   ORCHESTRATOR_REQUEST_VALIDATOR_VERSION,
   validateOrchestratorRequest
 } = require('../src/core/orchestrator-request');
@@ -102,10 +105,62 @@ test('request valid, rejects unknown/extra/missing fields, and reuses existing P
 });
 
 test('request contains no content, message, or prompt field anywhere in its own field list', () => {
-  const { ORCHESTRATOR_REQUEST_FIELDS } = require('../src/core/orchestrator-request');
   for (const field of ORCHESTRATOR_REQUEST_FIELDS) {
     assert.equal(/content|message|prompt/i.test(field), false, `field ${field} must not resemble a content/message/prompt field`);
   }
+});
+
+test('continuity reference fields (user preferences, project state, continuity summary, required memory, memory selection policy) are required, reference-only, tenant/organization-consistent, fingerprint-validated, and reject duplicate list entries (PR #92 addendum, full memory selection policy deferred to PR #93)', () => {
+  const request = requestFixture('deterministic-no-llm-request');
+  assert.equal(validateOrchestratorRequest(request).valid, true);
+  assert.equal(ORCHESTRATOR_REQUEST_FIELDS.length, 25);
+
+  for (const field of ['user_preference_references', 'project_state_reference', 'continuity_summary_reference', 'required_memory_references', 'memory_selection_policy_reference']) {
+    const missing = clone(request);
+    delete missing[field];
+    assert.ok(validateOrchestratorRequest(missing).errors.some((e) => e.includes(`missing_${field}`)), `${field} must be required`);
+  }
+
+  // Singular references: reused validateSingleReference shape, fingerprint validated.
+  for (const field of ['project_state_reference', 'continuity_summary_reference', 'memory_selection_policy_reference']) {
+    assert.ok(
+      validateOrchestratorRequest({ ...request, [field]: { ...request[field], reference_fingerprint: '' } }).errors.some((e) => e.startsWith(`${field}_`)),
+      `${field} must validate its fingerprint`
+    );
+    assert.ok(
+      !validateOrchestratorRequest({ ...request, [field]: 'not-an-object' }).valid,
+      `${field} must remain a minimal reference object, never inline content`
+    );
+  }
+
+  // List references: reused validateReferenceList shape, duplicates and fingerprints rejected.
+  for (const field of ['user_preference_references', 'required_memory_references']) {
+    const item = request[field][0];
+    assert.ok(!validateOrchestratorRequest({ ...request, [field]: [item, item] }).valid, `${field} must reject duplicate reference_id entries`);
+    assert.ok(
+      !validateOrchestratorRequest({ ...request, [field]: [{ ...item, reference_fingerprint: '' }] }).valid,
+      `${field} entries must validate their fingerprint`
+    );
+  }
+  const tooManyPreferences = { ...request, user_preference_references: Array.from({ length: MAX_USER_PREFERENCE_REFERENCES + 1 }, (_, i) => ({ reference_id: `pref-${i}`, reference_version: 1, reference_fingerprint: `fp-${i}`, validator_version: ORCHESTRATOR_REQUEST_VALIDATOR_VERSION })) };
+  assert.ok(!validateOrchestratorRequest(tooManyPreferences).valid);
+  const tooManyRequiredMemories = { ...request, required_memory_references: Array.from({ length: MAX_REQUIRED_MEMORY_REFERENCES + 1 }, (_, i) => ({ reference_id: `mem-${i}`, reference_version: 1, reference_fingerprint: `fp-${i}`, validator_version: ORCHESTRATOR_REQUEST_VALIDATOR_VERSION })) };
+  assert.ok(!validateOrchestratorRequest(tooManyRequiredMemories).valid);
+
+  // Tenant/organization consistency: the fixture's agent_contract_reference and
+  // memory_retrieval_reference already share the same tenant_id/organization_id -- confirms
+  // adding the 5 new reference-only fields did not disturb that existing consistency, and that
+  // the request-level tenant_id/organization_id checks that DO exist (on agent_contract_reference
+  // itself) still reject a non-string value.
+  assert.equal(request.agent_contract_reference.tenant_id, request.memory_retrieval_reference.tenant_id);
+  assert.equal(request.agent_contract_reference.organization_id, request.memory_retrieval_reference.organization_id);
+  assert.ok(!validateOrchestratorRequest({ ...request, agent_contract_reference: { ...request.agent_contract_reference, tenant_id: 123 } }).valid);
+
+  // None of the 5 fields carry content, a memory read flag, or an execution flag -- they are
+  // exactly the same minimal reference shapes (SINGLE_REFERENCE_FIELDS / LIST_REFERENCE_ITEM_FIELDS)
+  // already reused elsewhere in this file, confirmed by exact-fields rejecting any extra field.
+  assert.ok(!validateOrchestratorRequest({ ...request, project_state_reference: { ...request.project_state_reference, content: 'not allowed' } }).valid);
+  assert.ok(!validateOrchestratorRequest({ ...request, required_memory_references: [{ ...request.required_memory_references[0], memory_read: true }] }).valid);
 });
 
 test('plan valid, forces plan_generated/plan_executed, rejects unsorted or duplicate ordered lists on hand-crafted input, and throws on construction-invalid input', () => {

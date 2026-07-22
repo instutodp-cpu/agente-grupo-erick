@@ -18,10 +18,13 @@ const ORCHESTRATOR_REQUEST_FIELDS = Object.freeze([
   'orchestrator_request_id', 'orchestrator_request_version', 'agent_contract_reference', 'policy_decision_reference',
   'session_reference', 'memory_contract_reference', 'memory_retrieval_reference', 'model_selection_decision_reference',
   'context_assembly_result_reference', 'workflow_reference', 'tool_references', 'task_reference', 'budget_reference',
-  'correlation_id', 'causation_id', 'trace_id', 'logical_sequence', 'expected_registry_version', 'simulation_context',
-  'validator_version'
+  'user_preference_references', 'project_state_reference', 'continuity_summary_reference', 'required_memory_references',
+  'memory_selection_policy_reference', 'correlation_id', 'causation_id', 'trace_id', 'logical_sequence',
+  'expected_registry_version', 'simulation_context', 'validator_version'
 ]);
 const MAX_TOOL_REFERENCES = 100;
+const MAX_USER_PREFERENCE_REFERENCES = 100;
+const MAX_REQUIRED_MEMORY_REFERENCES = 100;
 
 function validateOrchestratorRequest(request) {
   const errors = [];
@@ -46,6 +49,11 @@ function validateOrchestratorRequest(request) {
   errors.push(...validateSingleReference(request.task_reference).errors.map((error) => `task_reference_${error}`));
   errors.push(...validateSingleReference(request.budget_reference).errors.map((error) => `budget_reference_${error}`));
   errors.push(...validateReferenceList(request.tool_references, { maxItems: MAX_TOOL_REFERENCES }).errors.map((error) => `tool_references_${error}`));
+  errors.push(...validateReferenceList(request.user_preference_references, { maxItems: MAX_USER_PREFERENCE_REFERENCES }).errors.map((error) => `user_preference_references_${error}`));
+  errors.push(...validateSingleReference(request.project_state_reference).errors.map((error) => `project_state_reference_${error}`));
+  errors.push(...validateSingleReference(request.continuity_summary_reference).errors.map((error) => `continuity_summary_reference_${error}`));
+  errors.push(...validateReferenceList(request.required_memory_references, { maxItems: MAX_REQUIRED_MEMORY_REFERENCES }).errors.map((error) => `required_memory_references_${error}`));
+  errors.push(...validateSingleReference(request.memory_selection_policy_reference).errors.map((error) => `memory_selection_policy_reference_${error}`));
   errors.push(...validateAgentSimulationContext(request.simulation_context).errors.map((error) => `simulation_context_${error}`));
 
   if (request.validator_version !== ORCHESTRATOR_REQUEST_VALIDATOR_VERSION) errors.push('validator_version_invalid');
@@ -59,7 +67,9 @@ function validateOrchestratorRequest(request) {
 }
 
 module.exports = {
+  MAX_REQUIRED_MEMORY_REFERENCES,
   MAX_TOOL_REFERENCES,
+  MAX_USER_PREFERENCE_REFERENCES,
   ORCHESTRATOR_REQUEST_FIELDS,
   ORCHESTRATOR_REQUEST_VALIDATOR_VERSION,
   validateOrchestratorRequest
