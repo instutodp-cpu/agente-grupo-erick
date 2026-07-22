@@ -1,0 +1,543 @@
+{
+  "fixture_version": "hermes_orchestrator_contracts_fixture_v1",
+  "simulation": true,
+  "production_blocked": true,
+  "requests": {
+    "deterministic-no-llm-request": {
+      "orchestrator_request_id": "deterministic-no-llm",
+      "orchestrator_request_version": 1,
+      "agent_contract_reference": {
+        "contract_id": "deterministic-no-llm-contract",
+        "contract_version": 1,
+        "contract_fingerprint": "fp-deterministic-no-llm-contract",
+        "agent_id": "agent-alpha-1",
+        "agent_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "contract_status": "VALIDATED_SIMULATION",
+        "lifecycle_state": "REGISTERED_SIMULATION",
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "policy_decision_reference": {
+        "policy_request_id": "deterministic-no-llm-policy-request",
+        "policy_decision_id": "deterministic-no-llm-policy-decision",
+        "policy_decision_fingerprint": "fp-deterministic-no-llm-policy-decision",
+        "policy_status": "ALLOW_SIMULATION",
+        "allowed_in_simulation": true,
+        "approval_required": false,
+        "policy_evaluated": true,
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "session_reference": {
+        "session_id": "deterministic-no-llm-session",
+        "session_version": 1,
+        "session_fingerprint": "fp-deterministic-no-llm-session",
+        "session_present": true,
+        "session_loaded": false,
+        "session_mutated": false,
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "memory_contract_reference": {
+        "memory_contract_id": "deterministic-no-llm-memory-contract",
+        "memory_contract_version": 1,
+        "memory_contract_fingerprint": "fp-deterministic-no-llm-memory-contract",
+        "contract_status": "VALIDATED_SIMULATION",
+        "validator_version": "agent_memory_request_validator_v1"
+      },
+      "memory_retrieval_reference": {
+        "retrieval_reference_id": "deterministic-no-llm-retrieval",
+        "memory_contract_id": "deterministic-no-llm-memory-contract",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "agent_id": "agent-alpha-1",
+        "session_reference_id": "deterministic-no-llm-session",
+        "requested_memory_types": [
+          "WORKING_MEMORY_REFERENCE"
+        ],
+        "query_reference_id": "deterministic-no-llm-query-ref",
+        "query_present": false,
+        "query_loaded": false,
+        "retrieval_requested": true,
+        "retrieval_executed": false,
+        "results_loaded": false,
+        "result_count_reference": 0,
+        "ranking_requested": false,
+        "ranking_executed": false,
+        "similarity_requested": false,
+        "similarity_executed": false,
+        "retrieval_fingerprint": "fp-deterministic-no-llm-retrieval",
+        "validator_version": "agent_memory_retrieval_reference_validator_v1"
+      },
+      "model_selection_decision_reference": {
+        "decision_reference_id": "deterministic-no-llm-decision-ref",
+        "decision_status": "NO_LLM_SELECTED_SIMULATION",
+        "decision_value": "SELECT_NO_LLM_REFERENCE",
+        "selected_provider_id": null,
+        "selected_model_id": null,
+        "decision_fingerprint": "fp-deterministic-no-llm-decision",
+        "validator_version": "context_assembly_request_validator_v1"
+      },
+      "context_assembly_result_reference": {
+        "reference_id": "deterministic-no-llm-context-result",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-deterministic-no-llm-context-result",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "workflow_reference": {
+        "reference_id": "deterministic-no-llm-workflow",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-deterministic-no-llm-workflow",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "tool_references": [
+        {
+          "reference_id": "deterministic-no-llm-tool-a",
+          "reference_version": 1,
+          "reference_fingerprint": "fp-deterministic-no-llm-tool-a",
+          "validator_version": "orchestrator_request_validator_v1"
+        }
+      ],
+      "task_reference": {
+        "reference_id": "deterministic-no-llm-task",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-deterministic-no-llm-task",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "budget_reference": {
+        "reference_id": "deterministic-no-llm-budget",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-deterministic-no-llm-budget",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "user_preference_references": [
+        {
+          "reference_id": "deterministic-no-llm-user-preference-a",
+          "reference_version": 1,
+          "reference_fingerprint": "fp-deterministic-no-llm-user-preference-a",
+          "validator_version": "orchestrator_request_validator_v1"
+        }
+      ],
+      "project_state_reference": {
+        "reference_id": "deterministic-no-llm-project-state",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-deterministic-no-llm-project-state",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "continuity_summary_reference": {
+        "reference_id": "deterministic-no-llm-continuity-summary",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-deterministic-no-llm-continuity-summary",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "required_memory_references": [
+        {
+          "reference_id": "deterministic-no-llm-required-memory-a",
+          "reference_version": 1,
+          "reference_fingerprint": "fp-deterministic-no-llm-required-memory-a",
+          "validator_version": "orchestrator_request_validator_v1"
+        }
+      ],
+      "memory_selection_policy_reference": {
+        "reference_id": "deterministic-no-llm-memory-selection-policy",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-deterministic-no-llm-memory-selection-policy",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "correlation_id": "deterministic-no-llm-correlation",
+      "causation_id": "deterministic-no-llm-causation",
+      "trace_id": "deterministic-no-llm-trace",
+      "logical_sequence": 1,
+      "expected_registry_version": "registry-v1",
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "validator_version": "orchestrator_request_validator_v1"
+    },
+    "economical-selection-request": {
+      "orchestrator_request_id": "economical-selection",
+      "orchestrator_request_version": 1,
+      "agent_contract_reference": {
+        "contract_id": "economical-selection-contract",
+        "contract_version": 1,
+        "contract_fingerprint": "fp-economical-selection-contract",
+        "agent_id": "agent-alpha-1",
+        "agent_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "contract_status": "VALIDATED_SIMULATION",
+        "lifecycle_state": "REGISTERED_SIMULATION",
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "policy_decision_reference": {
+        "policy_request_id": "economical-selection-policy-request",
+        "policy_decision_id": "economical-selection-policy-decision",
+        "policy_decision_fingerprint": "fp-economical-selection-policy-decision",
+        "policy_status": "ALLOW_SIMULATION",
+        "allowed_in_simulation": true,
+        "approval_required": false,
+        "policy_evaluated": true,
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "session_reference": {
+        "session_id": "economical-selection-session",
+        "session_version": 1,
+        "session_fingerprint": "fp-economical-selection-session",
+        "session_present": true,
+        "session_loaded": false,
+        "session_mutated": false,
+        "validator_version": "agent_session_reference_validator_v1"
+      },
+      "memory_contract_reference": {
+        "memory_contract_id": "economical-selection-memory-contract",
+        "memory_contract_version": 1,
+        "memory_contract_fingerprint": "fp-economical-selection-memory-contract",
+        "contract_status": "VALIDATED_SIMULATION",
+        "validator_version": "agent_memory_request_validator_v1"
+      },
+      "memory_retrieval_reference": {
+        "retrieval_reference_id": "economical-selection-retrieval",
+        "memory_contract_id": "economical-selection-memory-contract",
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "agent_id": "agent-alpha-1",
+        "session_reference_id": "economical-selection-session",
+        "requested_memory_types": [
+          "WORKING_MEMORY_REFERENCE"
+        ],
+        "query_reference_id": "economical-selection-query-ref",
+        "query_present": false,
+        "query_loaded": false,
+        "retrieval_requested": true,
+        "retrieval_executed": false,
+        "results_loaded": false,
+        "result_count_reference": 0,
+        "ranking_requested": false,
+        "ranking_executed": false,
+        "similarity_requested": false,
+        "similarity_executed": false,
+        "retrieval_fingerprint": "fp-economical-selection-retrieval",
+        "validator_version": "agent_memory_retrieval_reference_validator_v1"
+      },
+      "model_selection_decision_reference": {
+        "decision_reference_id": "economical-selection-decision-ref",
+        "decision_status": "MODEL_SELECTED_SIMULATION",
+        "decision_value": "SELECT_MODEL_REFERENCE",
+        "selected_provider_id": "hermes-mock-svc-economical",
+        "selected_model_id": "hermes-mock-entry-economical",
+        "decision_fingerprint": "fp-economical-selection-decision",
+        "validator_version": "context_assembly_request_validator_v1"
+      },
+      "context_assembly_result_reference": {
+        "reference_id": "economical-selection-context-result",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-economical-selection-context-result",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "workflow_reference": {
+        "reference_id": "economical-selection-workflow",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-economical-selection-workflow",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "tool_references": [
+        {
+          "reference_id": "economical-selection-tool-a",
+          "reference_version": 1,
+          "reference_fingerprint": "fp-economical-selection-tool-a",
+          "validator_version": "orchestrator_request_validator_v1"
+        }
+      ],
+      "task_reference": {
+        "reference_id": "economical-selection-task",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-economical-selection-task",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "budget_reference": {
+        "reference_id": "economical-selection-budget",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-economical-selection-budget",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "user_preference_references": [
+        {
+          "reference_id": "economical-selection-user-preference-a",
+          "reference_version": 1,
+          "reference_fingerprint": "fp-economical-selection-user-preference-a",
+          "validator_version": "orchestrator_request_validator_v1"
+        }
+      ],
+      "project_state_reference": {
+        "reference_id": "economical-selection-project-state",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-economical-selection-project-state",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "continuity_summary_reference": {
+        "reference_id": "economical-selection-continuity-summary",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-economical-selection-continuity-summary",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "required_memory_references": [
+        {
+          "reference_id": "economical-selection-required-memory-a",
+          "reference_version": 1,
+          "reference_fingerprint": "fp-economical-selection-required-memory-a",
+          "validator_version": "orchestrator_request_validator_v1"
+        }
+      ],
+      "memory_selection_policy_reference": {
+        "reference_id": "economical-selection-memory-selection-policy",
+        "reference_version": 1,
+        "reference_fingerprint": "fp-economical-selection-memory-selection-policy",
+        "reference_present": true,
+        "validator_version": "orchestrator_request_validator_v1"
+      },
+      "correlation_id": "economical-selection-correlation",
+      "causation_id": "economical-selection-causation",
+      "trace_id": "economical-selection-trace",
+      "logical_sequence": 1,
+      "expected_registry_version": "registry-v1",
+      "simulation_context": {
+        "simulation": true,
+        "production_blocked": true,
+        "runtime_enabled": false,
+        "execution_enabled": false,
+        "network_enabled": false,
+        "tools_enabled": false,
+        "memory_enabled": false,
+        "llm_enabled": false,
+        "rollout_percentage": 0,
+        "validator_version": "agent_simulation_context_validator_v1"
+      },
+      "validator_version": "orchestrator_request_validator_v1"
+    }
+  },
+  "plans": {
+    "deterministic-no-llm-plan": {
+      "agent_id": "agent-alpha-1",
+      "context_reference_id": "deterministic-no-llm-context-result",
+      "execution_plan_reference_id": "execution-plan-deterministic-no-llm-1",
+      "model_reference_id": null,
+      "orchestrator_request_id": "deterministic-no-llm",
+      "ordered_approval_codes": [],
+      "ordered_blocker_codes": [],
+      "ordered_decision_codes": [
+        "model_selection_no_llm_accepted",
+        "policy_allow_simulation"
+      ],
+      "ordered_reference_ids": [
+        "deterministic-no-llm-context-result",
+        "deterministic-no-llm-tool-a",
+        "deterministic-no-llm-workflow"
+      ],
+      "ordered_validation_codes": [
+        "agent_contract_validated",
+        "memory_validated",
+        "policy_validated",
+        "session_validated"
+      ],
+      "organization_id": "tenant-alpha:org-1",
+      "plan_executed": false,
+      "plan_fingerprint": "{\"context_reference_id\":\"deterministic-no-llm-context-result\",\"model_reference_id\":null,\"orchestrator_request_id\":\"deterministic-no-llm\",\"ordered_decision_codes\":[\"model_selection_no_llm_accepted\",\"policy_allow_simulation\"],\"ordered_reference_ids\":[\"deterministic-no-llm-context-result\",\"deterministic-no-llm-tool-a\",\"deterministic-no-llm-workflow\"],\"tool_reference_ids\":[\"deterministic-no-llm-tool-a\"],\"workflow_reference_id\":\"deterministic-no-llm-workflow\"}",
+      "plan_generated": true,
+      "plan_id": "plan-deterministic-no-llm-1",
+      "tenant_id": "tenant-alpha",
+      "tool_reference_ids": [
+        "deterministic-no-llm-tool-a"
+      ],
+      "validator_version": "orchestrator_plan_validator_v1",
+      "workflow_reference_id": "deterministic-no-llm-workflow"
+    },
+    "economical-selection-plan": {
+      "agent_id": "agent-alpha-1",
+      "context_reference_id": "economical-selection-context-result",
+      "execution_plan_reference_id": "execution-plan-economical-selection-1",
+      "model_reference_id": "hermes-mock-entry-economical",
+      "orchestrator_request_id": "economical-selection",
+      "ordered_approval_codes": [],
+      "ordered_blocker_codes": [],
+      "ordered_decision_codes": [
+        "model_selection_model_selected_accepted",
+        "policy_allow_simulation"
+      ],
+      "ordered_reference_ids": [
+        "economical-selection-context-result",
+        "economical-selection-tool-a",
+        "economical-selection-workflow"
+      ],
+      "ordered_validation_codes": [
+        "agent_contract_validated",
+        "memory_validated",
+        "policy_validated",
+        "session_validated"
+      ],
+      "organization_id": "tenant-alpha:org-1",
+      "plan_executed": false,
+      "plan_fingerprint": "{\"context_reference_id\":\"economical-selection-context-result\",\"model_reference_id\":\"hermes-mock-entry-economical\",\"orchestrator_request_id\":\"economical-selection\",\"ordered_decision_codes\":[\"model_selection_model_selected_accepted\",\"policy_allow_simulation\"],\"ordered_reference_ids\":[\"economical-selection-context-result\",\"economical-selection-tool-a\",\"economical-selection-workflow\"],\"tool_reference_ids\":[\"economical-selection-tool-a\"],\"workflow_reference_id\":\"economical-selection-workflow\"}",
+      "plan_generated": true,
+      "plan_id": "plan-economical-selection-1",
+      "tenant_id": "tenant-alpha",
+      "tool_reference_ids": [
+        "economical-selection-tool-a"
+      ],
+      "validator_version": "orchestrator_plan_validator_v1",
+      "workflow_reference_id": "economical-selection-workflow"
+    }
+  },
+  "decisions": {
+    "plan-ready-decision": {
+      "agent_id": "agent-alpha-1",
+      "blockers": [],
+      "context_reference_id": "deterministic-no-llm-context-result",
+      "cost_consumed": false,
+      "decision_id": "decision-plan-ready-1",
+      "executed": false,
+      "model_called": false,
+      "model_selection_reference_id": null,
+      "network_used": false,
+      "orchestrator_request_id": "deterministic-no-llm",
+      "organization_id": "tenant-alpha:org-1",
+      "plan_fingerprint": "fp-plan-deterministic-no-llm-1",
+      "plan_reference_id": "plan-deterministic-no-llm-1",
+      "production_blocked": true,
+      "provider_called": false,
+      "reason_codes": [
+        "orchestrator_plan_ready_simulation_only"
+      ],
+      "request_fingerprint": "fp-deterministic-no-llm-request",
+      "runtime_enabled": false,
+      "simulation": true,
+      "status": "PLAN_READY",
+      "tenant_id": "tenant-alpha",
+      "tokens_consumed": false,
+      "tool_called": false,
+      "tool_reference_ids": [
+        "deterministic-no-llm-tool-a"
+      ],
+      "validator_version": "orchestrator_decision_validator_v1",
+      "workflow_executed": false,
+      "workflow_reference_id": "deterministic-no-llm-workflow"
+    },
+    "blocked-decision": {
+      "agent_id": "agent-alpha-1",
+      "blockers": [
+        "policy_denies_orchestration"
+      ],
+      "context_reference_id": "deterministic-no-llm-context-result",
+      "cost_consumed": false,
+      "decision_id": "decision-blocked-1",
+      "executed": false,
+      "model_called": false,
+      "model_selection_reference_id": null,
+      "network_used": false,
+      "orchestrator_request_id": "deterministic-no-llm",
+      "organization_id": "tenant-alpha:org-1",
+      "plan_fingerprint": "fingerprint_not_available",
+      "plan_reference_id": "reference_not_available",
+      "production_blocked": true,
+      "provider_called": false,
+      "reason_codes": [
+        "policy_denies_orchestration"
+      ],
+      "request_fingerprint": "fp-deterministic-no-llm-request",
+      "runtime_enabled": false,
+      "simulation": true,
+      "status": "BLOCKED",
+      "tenant_id": "tenant-alpha",
+      "tokens_consumed": false,
+      "tool_called": false,
+      "tool_reference_ids": [
+        "deterministic-no-llm-tool-a"
+      ],
+      "validator_version": "orchestrator_decision_validator_v1",
+      "workflow_executed": false,
+      "workflow_reference_id": "deterministic-no-llm-workflow"
+    },
+    "validation-failed-decision": {
+      "agent_id": "agent_not_available",
+      "blockers": [],
+      "context_reference_id": "reference_not_available",
+      "cost_consumed": false,
+      "decision_id": "orchestrator_decision_not_available",
+      "executed": false,
+      "model_called": false,
+      "model_selection_reference_id": null,
+      "network_used": false,
+      "orchestrator_request_id": "orchestrator_request_not_available",
+      "organization_id": "organization_not_available",
+      "plan_fingerprint": "fingerprint_not_available",
+      "plan_reference_id": "reference_not_available",
+      "production_blocked": true,
+      "provider_called": false,
+      "reason_codes": [],
+      "request_fingerprint": "fingerprint_not_available",
+      "runtime_enabled": false,
+      "simulation": true,
+      "status": "VALIDATION_FAILED",
+      "tenant_id": "tenant_not_available",
+      "tokens_consumed": false,
+      "tool_called": false,
+      "tool_reference_ids": [],
+      "validator_version": "orchestrator_decision_validator_v1",
+      "workflow_executed": false,
+      "workflow_reference_id": "reference_not_available"
+    },
+    "simulation-only-decision": {
+      "agent_id": "agent-alpha-1",
+      "blockers": [],
+      "context_reference_id": "deterministic-no-llm-context-result",
+      "cost_consumed": false,
+      "decision_id": "decision-simulation-only-1",
+      "executed": false,
+      "model_called": false,
+      "model_selection_reference_id": null,
+      "network_used": false,
+      "orchestrator_request_id": "deterministic-no-llm",
+      "organization_id": "tenant-alpha:org-1",
+      "plan_fingerprint": "fingerprint_not_available",
+      "plan_reference_id": "reference_not_available",
+      "production_blocked": true,
+      "provider_called": false,
+      "reason_codes": [
+        "orchestrator_simulation_only_mode"
+      ],
+      "request_fingerprint": "fp-deterministic-no-llm-request",
+      "runtime_enabled": false,
+      "simulation": true,
+      "status": "SIMULATION_ONLY",
+      "tenant_id": "tenant-alpha",
+      "tokens_consumed": false,
+      "tool_called": false,
+      "tool_reference_ids": [
+        "deterministic-no-llm-tool-a"
+      ],
+      "validator_version": "orchestrator_decision_validator_v1",
+      "workflow_executed": false,
+      "workflow_reference_id": "deterministic-no-llm-workflow"
+    }
+  }
+}
