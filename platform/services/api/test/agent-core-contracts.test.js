@@ -351,6 +351,41 @@ test('registry replay payload mismatch version conflict tenant isolation and def
   assert.equal(crossTenantList.some((record) => record.identity.agent_id === built.contract.identity.agent_id), false);
 });
 
+test('registry blocks organization reassignment while preserving tenant immutability replay and optimistic concurrency', () => {
+  const registry = createAgentRegistry();
+  const built = buildValidContract('general-assistant-agent');
+  assert.equal(registry.registerAgentContract(built.contract, { expected_version: 0 }).status, 'REGISTERED_SIMULATION');
+
+  const bumpedIdentity = clone(built.contract.identity);
+  bumpedIdentity.display_name = 'Updated Assistant Display Name';
+  const bumped = buildValidContract('general-assistant-agent', { contract_version: 2, identity: bumpedIdentity });
+  assert.equal(registry.registerAgentContract(bumped.contract).status, 'REGISTERED_SIMULATION');
+
+  const orgIdentity = clone(bumped.contract.identity);
+  orgIdentity.organization_id = `${orgIdentity.tenant_id}:org-reassigned`;
+  const orgChanged = buildValidContract('general-assistant-agent', { contract_version: 3, identity: orgIdentity });
+  const orgResult = registry.registerAgentContract(orgChanged.contract);
+  assert.equal(orgResult.ok, false);
+  assert.equal(orgResult.status, 'ORGANIZATION_BLOCKED');
+
+  const tenantIdentity = clone(bumped.contract.identity);
+  tenantIdentity.tenant_id = 'tenant_reassigned';
+  tenantIdentity.organization_id = 'tenant_reassigned:org-1';
+  const tenantChanged = buildValidContract('general-assistant-agent', { contract_version: 3, identity: tenantIdentity });
+  const tenantResult = registry.registerAgentContract(tenantChanged.contract);
+  assert.equal(tenantResult.ok, false);
+  assert.equal(tenantResult.status, 'TENANT_BLOCKED');
+
+  assert.equal(registry.getByAgentId(built.contract.identity.agent_id).contract_version, 2);
+  assert.equal(registry.registerAgentContract(bumped.contract).status, 'REPLAY_ACCEPTED');
+
+  const laterIdentity = clone(bumped.contract.identity);
+  laterIdentity.display_name = 'Second Update';
+  const laterVersion = buildValidContract('general-assistant-agent', { contract_version: 3, identity: laterIdentity });
+  const staleConflict = registry.registerAgentContract(laterVersion.contract, { expected_version: 99 });
+  assert.equal(staleConflict.status, 'VERSION_CONFLICT');
+});
+
 test('registry rejects contracts that are not VALIDATED_SIMULATION', () => {
   const registry = createAgentRegistry();
   const pieces = agentPieces('general-assistant-agent');

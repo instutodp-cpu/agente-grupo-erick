@@ -28,6 +28,21 @@ const MAX_COST_MINOR_UNITS = 1000000000;
 const VISION_AUDIO_MODALITIES = Object.freeze([
   'IMAGE_INPUT_REFERENCE', 'IMAGE_OUTPUT_REFERENCE', 'AUDIO_INPUT_REFERENCE', 'AUDIO_OUTPUT_REFERENCE', 'VIDEO_INPUT_REFERENCE'
 ]);
+const COST_TIER_RANGES = Object.freeze({
+  ZERO_COST_REFERENCE: Object.freeze({ min: 0, max: 0 }),
+  VERY_LOW: Object.freeze({ min: 1, max: 99 }),
+  LOW: Object.freeze({ min: 100, max: 499 }),
+  MODERATE: Object.freeze({ min: 500, max: 1999 }),
+  HIGH: Object.freeze({ min: 2000, max: 99999 }),
+  PREMIUM: Object.freeze({ min: 100000, max: MAX_COST_MINOR_UNITS })
+});
+
+function isCostConsistentWithTier(costTier, estimatedCostMinorUnits) {
+  if (costTier === 'UNKNOWN_BLOCKED') return true;
+  const range = COST_TIER_RANGES[costTier];
+  if (!range) return false;
+  return Number.isInteger(estimatedCostMinorUnits) && estimatedCostMinorUnits >= range.min && estimatedCostMinorUnits <= range.max;
+}
 
 function isOrderedUniqueEnumList(list, allowedValues, { minItems = 0, maxItems = allowedValues.length } = {}) {
   if (!Array.isArray(list) || list.length < minItems || list.length > maxItems) return false;
@@ -74,6 +89,8 @@ function validateModelSelectionCandidate(candidate) {
   }
   if (!Number.isInteger(candidate.estimated_cost_minor_units) || candidate.estimated_cost_minor_units < 0 || candidate.estimated_cost_minor_units > MAX_COST_MINOR_UNITS) {
     errors.push('estimated_cost_minor_units_invalid');
+  } else if (COST_TIERS.includes(candidate.cost_tier) && !isCostConsistentWithTier(candidate.cost_tier, candidate.estimated_cost_minor_units)) {
+    errors.push(`cost_tier_inconsistent_with_estimated_cost::${candidate.cost_tier}`);
   }
   if (!AVAILABILITY_STATUSES.includes(candidate.availability_status)) errors.push(`availability_status_not_allowed::${candidate.availability_status}`);
   if (!HEALTH_STATUSES.includes(candidate.health_status)) errors.push(`health_status_not_allowed::${candidate.health_status}`);
@@ -154,12 +171,14 @@ function buildNoLlmCandidate(tenantId, organizationId) {
 
 module.exports = {
   CANDIDATE_STATUSES,
+  COST_TIER_RANGES,
   MODEL_SELECTION_CANDIDATE_VALIDATOR_VERSION,
   NO_LLM_CANDIDATE_ID,
   NO_LLM_SENTINEL_FINGERPRINT,
   SELECTION_CANDIDATE_FIELDS,
   VISION_AUDIO_MODALITIES,
   buildNoLlmCandidate,
+  isCostConsistentWithTier,
   isNoLlmEligible,
   validateModelSelectionCandidate
 };

@@ -10,6 +10,21 @@ const AGENT_CORE_FORBIDDEN_KEY_TOKENS = Object.freeze([
   'runtime', 'bootstrap', 'startup', 'plugin', 'prompt', 'sdk',
   'eval', 'vm', 'childprocess', 'workerthreads'
 ]);
+// Longer, distinctive tokens are also matched as substrings inside a single unseparated
+// segment (e.g. "myapikey", "apikey12345") since word-boundary/segment splitting alone
+// cannot detect a forbidden term glued to other characters with no case or separator
+// signal. Short/common tokens (api, key, ip, env, url, uri, vm, jwt, host, port, ...) are
+// deliberately excluded here: matching them as bare substrings would reintroduce the exact
+// false-positive class already fixed once (e.g. "port" inside "transport"). "execute" and
+// "invoke" are also excluded: their past-tense/gerund forms ("executed", "invoked",
+// "invoking") are legitimate, extremely common safe-flag field names throughout this
+// codebase (e.g. executed, fallback_executed, escalation_executed, selection_executed) and
+// would collide as substrings.
+const AGENT_CORE_SUBSTRING_KEY_TOKENS = Object.freeze([
+  'apikey', 'secret', 'password', 'authorization', 'bearer', 'oauth', 'filesystem',
+  'endpoint', 'hostname', 'callback', 'runtime', 'bootstrap',
+  'startup', 'childprocess', 'workerthreads'
+]);
 const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'authorization_state',
   'runtime_enabled',
@@ -35,17 +50,76 @@ const AGENT_CORE_FORBIDDEN_VALUE_SHAPES = Object.freeze([
   [/\.(js|ts|mjs|cjs|py|sh|exe|dll|so|bat|cmd|ps1)(\?|$)/i, 'executable_path_value'],
   [/^\.{0,2}[\\/]/, 'filesystem_path_value']
 ]);
+// Best-effort Unicode hardening: strip zero-width characters and fold the small set of
+// Cyrillic/Greek letters that are visually indistinguishable from Latin letters (the
+// exact classes used in real-world homoglyph obfuscation) back to their Latin lookalike
+// before matching. This is not a full Unicode confusables table (that is a much larger,
+// separately-maintained dataset) — it covers the common single-letter substitutions.
+const ZERO_WIDTH_PATTERN = /[\u200B-\u200D\uFEFF\u2060]/g;
+// Cyrillic/Greek letters that are visually indistinguishable from Latin letters, mapped to
+// their Latin lookalike. Written as explicit \u escapes (rather than raw characters) so the
+// mapping stays reviewable and immune to editor/encoding mangling.
+const CONFUSABLE_CHAR_MAP = Object.freeze({
+  '\u0430': 'a', // CYRILLIC SMALL LETTER A (U+0430)
+  '\u0410': 'A', // CYRILLIC CAPITAL LETTER A (U+0410)
+  '\u0435': 'e', // CYRILLIC SMALL LETTER IE (U+0435)
+  '\u0415': 'E', // CYRILLIC CAPITAL LETTER IE (U+0415)
+  '\u043e': 'o', // CYRILLIC SMALL LETTER O (U+043E)
+  '\u041e': 'O', // CYRILLIC CAPITAL LETTER O (U+041E)
+  '\u0440': 'p', // CYRILLIC SMALL LETTER ER (U+0440)
+  '\u0420': 'P', // CYRILLIC CAPITAL LETTER ER (U+0420)
+  '\u0441': 'c', // CYRILLIC SMALL LETTER ES (U+0441)
+  '\u0421': 'C', // CYRILLIC CAPITAL LETTER ES (U+0421)
+  '\u0445': 'x', // CYRILLIC SMALL LETTER HA (U+0445)
+  '\u0425': 'X', // CYRILLIC CAPITAL LETTER HA (U+0425)
+  '\u0443': 'y', // CYRILLIC SMALL LETTER U (U+0443)
+  '\u0423': 'Y', // CYRILLIC CAPITAL LETTER U (U+0423)
+  '\u0456': 'i', // CYRILLIC SMALL LETTER BYELORUSSIAN-UKRAINIAN I (U+0456)
+  '\u0406': 'I', // CYRILLIC CAPITAL LETTER BYELORUSSIAN-UKRAINIAN I (U+0406)
+  '\u0455': 's', // CYRILLIC SMALL LETTER DZE (U+0455)
+  '\u0405': 'S', // CYRILLIC CAPITAL LETTER DZE (U+0405)
+  '\u0458': 'j', // CYRILLIC SMALL LETTER JE (U+0458)
+  '\u0408': 'J', // CYRILLIC CAPITAL LETTER JE (U+0408)
+  '\u03b1': 'a', // GREEK SMALL LETTER ALPHA (U+03B1)
+  '\u0391': 'A', // GREEK CAPITAL LETTER ALPHA (U+0391)
+  '\u03bf': 'o', // GREEK SMALL LETTER OMICRON (U+03BF)
+  '\u039f': 'O', // GREEK CAPITAL LETTER OMICRON (U+039F)
+  '\u03c1': 'p', // GREEK SMALL LETTER RHO (U+03C1)
+  '\u03a1': 'P', // GREEK CAPITAL LETTER RHO (U+03A1)
+  '\u03c5': 'y', // GREEK SMALL LETTER UPSILON (U+03C5)
+  '\u03a5': 'Y', // GREEK CAPITAL LETTER UPSILON (U+03A5)
+});
+
+function normalizeForDetection(text) {
+  const withoutZeroWidth = String(text).normalize('NFKC').replace(ZERO_WIDTH_PATTERN, '');
+  let result = '';
+  for (const char of withoutZeroWidth) {
+    result += CONFUSABLE_CHAR_MAP[char] || char;
+  }
+  return result;
+}
+
+function splitCamelCaseBoundaries(text) {
+  return text
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2');
+}
 
 function keySegments(key) {
-  return String(key).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const normalized = normalizeForDetection(key);
+  const camelSplit = splitCamelCaseBoundaries(normalized);
+  return camelSplit.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 }
 
 function isForbiddenAgentCoreKey(key) {
   if (AGENT_CORE_ALLOWLISTED_KEY_NAMES.has(key)) return false;
-  return keySegments(key).some((segment) => AGENT_CORE_FORBIDDEN_KEY_TOKENS.includes(segment));
+  const segments = keySegments(key);
+  if (segments.some((segment) => AGENT_CORE_FORBIDDEN_KEY_TOKENS.includes(segment))) return true;
+  return segments.some((segment) => AGENT_CORE_SUBSTRING_KEY_TOKENS.some((token) => segment.includes(token)));
 }
 
-function looksLikeOperationalValue(value) {
+function looksLikeOperationalValue(rawValue) {
+  const value = normalizeForDetection(rawValue);
   if (AGENT_CORE_FORBIDDEN_VALUE_PATTERN.test(value)) return 'forbidden_word_value';
   for (const [pattern, reason] of AGENT_CORE_FORBIDDEN_VALUE_SHAPES) {
     if (pattern.test(value)) return reason;

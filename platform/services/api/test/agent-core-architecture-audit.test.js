@@ -187,12 +187,24 @@ test('architecture: registries do not share module-level state across instances'
   assert.equal(registryB.getTaskProfileById('isolation-check'), null, 'a fresh registry instance must not see records registered on another instance');
 });
 
-test('characterization: operational material detector currently misses camelCase and glued identifiers (AUDIT-001)', () => {
+test('regression: operational material detector now catches camelCase, PascalCase, and glued key bypasses (AUDIT-001, fixed)', () => {
   const { findAgentCoreOperationalMaterial } = require('../src/core/agent-identity-contract');
-  assert.deepEqual(findAgentCoreOperationalMaterial({ apiKeyValue: 'x' }), []);
-  assert.deepEqual(findAgentCoreOperationalMaterial({ myapikey: 'x' }), []);
-  assert.deepEqual(findAgentCoreOperationalMaterial({ note: 'myApiKeyIsX' }), []);
+  assert.ok(findAgentCoreOperationalMaterial({ apiKeyValue: 'x' }).some((entry) => entry.startsWith('forbidden_key')));
+  assert.ok(findAgentCoreOperationalMaterial({ ApiKeyValue: 'x' }).some((entry) => entry.startsWith('forbidden_key')));
+  assert.ok(findAgentCoreOperationalMaterial({ myapikey: 'x' }).some((entry) => entry.startsWith('forbidden_key')));
+  assert.ok(findAgentCoreOperationalMaterial({ api_key_value: 'x' }).some((entry) => entry.startsWith('forbidden_key')));
+  assert.ok(findAgentCoreOperationalMaterial({ 'api-key-value': 'x' }).some((entry) => entry.startsWith('forbidden_key')));
   assert.ok(findAgentCoreOperationalMaterial({ api_key: 'x' }).some((entry) => entry.startsWith('forbidden_key')));
+  // Cyrillic homoglyph and zero-width obfuscation in free-text values are now normalized before matching.
+  assert.ok(findAgentCoreOperationalMaterial({ note: 'the sеcret value' }).some((entry) => entry.startsWith('forbidden_word_value')));
+  // Known collision-prone field names must remain unaffected (no new false positives).
+  assert.deepEqual(findAgentCoreOperationalMaterial({ transport_binding_valid: true }), []);
+  assert.deepEqual(findAgentCoreOperationalMaterial({ executed: false }), []);
+  assert.deepEqual(findAgentCoreOperationalMaterial({ fallback_executed: false }), []);
+  assert.deepEqual(findAgentCoreOperationalMaterial({ escalation_executed: false }), []);
+  assert.deepEqual(findAgentCoreOperationalMaterial({ selection_executed: false }), []);
+  assert.deepEqual(findAgentCoreOperationalMaterial({ model_id: 'hermes-neo-x-ref' }), []);
+  assert.deepEqual(findAgentCoreOperationalMaterial({ provider_id: 'hermes-svc-ref' }), []);
 });
 
 test('characterization: operational material detector does not scan Map/Set/RegExp/Error contents (AUDIT-008)', () => {
@@ -201,19 +213,20 @@ test('characterization: operational material detector does not scan Map/Set/RegE
   assert.equal(stablePayload({ a: new Map([['x', 1]]) }), stablePayload({ a: {} }), 'Map and empty object currently fingerprint identically');
 });
 
-test('characterization: model-selection-ranking does not currently reject duplicate candidate_id values (AUDIT-003)', () => {
+test('regression: model-selection-ranking now rejects duplicate candidate_id values (AUDIT-003, fixed)', () => {
   const { buildModelSelectionRanking } = require('../src/core/model-selection-ranking');
   const base = {
     candidate_id: 'dup-1', model_id: 'entry-dup', cost_tier: 'LOW', estimated_cost_minor_units: 100, quality_tier: 'STANDARD',
     privacy_tier: 'NO_TRAINING_REFERENCE', latency_tier: 'LOW', availability_status: 'AVAILABLE_REFERENCE', health_status: 'HEALTHY_REFERENCE',
     local_reference: false, supported_capabilities: [], candidate_status: 'ELIGIBLE_SIMULATION'
   };
-  const ranking = buildModelSelectionRanking('ranking-dup', 'selection-request-dup', [base, { ...base }], { maximum_fallbacks: 1, maximum_escalations: 0 });
-  assert.deepEqual(ranking.eligible_candidate_ids, ['dup-1', 'dup-1'], 'documents current behavior: duplicates are not deduplicated or rejected');
-  assert.equal(ranking.fallback_candidate_ids[0], ranking.primary_candidate_id, 'documents current behavior: fallback can equal primary when candidate_id is duplicated');
+  assert.throws(
+    () => buildModelSelectionRanking('ranking-dup', 'selection-request-dup', [base, { ...base }], { maximum_fallbacks: 1, maximum_escalations: 0 }),
+    /model_selection_ranking_duplicate_candidate_id::dup-1/
+  );
 });
 
-test('characterization: model-selection-candidate does not currently cross-check cost_tier against estimated_cost_minor_units (AUDIT-004)', () => {
+test('regression: model-selection-candidate now cross-checks cost_tier against estimated_cost_minor_units (AUDIT-004, fixed)', () => {
   const { MODEL_SELECTION_CANDIDATE_VALIDATOR_VERSION, validateModelSelectionCandidate } = require('../src/core/model-selection-candidate');
   const inconsistentCandidate = {
     candidate_id: 'entry-inconsistent', candidate_version: 1, provider_id: 'hermes-svc-ref', model_id: 'entry-inconsistent',
@@ -226,7 +239,8 @@ test('characterization: model-selection-candidate does not currently cross-check
     candidate_status: 'PENDING_EVALUATION', validator_version: MODEL_SELECTION_CANDIDATE_VALIDATOR_VERSION
   };
   const validation = validateModelSelectionCandidate(inconsistentCandidate);
-  assert.equal(validation.valid, true, 'documents current behavior: a ZERO_COST_REFERENCE candidate with a non-zero declared cost is currently accepted');
+  assert.equal(validation.valid, false);
+  assert.ok(validation.errors.includes('cost_tier_inconsistent_with_estimated_cost::ZERO_COST_REFERENCE'));
 });
 
 test('architecture: registries independently re-validate and reject hand-crafted unsafe records bypassing the decision builder', () => {

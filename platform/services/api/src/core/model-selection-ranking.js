@@ -79,10 +79,16 @@ function compareEligibleCandidates(a, b) {
   return 0;
 }
 
-function isOrderedUniqueStringList(list, maxItems = MAX_CANDIDATE_IDS) {
+function isUniqueStringList(list, maxItems = MAX_CANDIDATE_IDS) {
   if (!Array.isArray(list) || list.length > maxItems) return false;
   if (!list.every(isNonEmptyString)) return false;
-  return true;
+  return new Set(list).size === list.length;
+}
+
+function isOrderedUniqueStringList(list, maxItems = MAX_CANDIDATE_IDS) {
+  if (!isUniqueStringList(list, maxItems)) return false;
+  const sorted = [...list].sort();
+  return list.every((item, index) => item === sorted[index]);
 }
 
 function validateModelSelectionRanking(ranking) {
@@ -92,12 +98,30 @@ function validateModelSelectionRanking(ranking) {
   for (const field of ['ranking_id', 'selection_request_id', 'primary_candidate_id', 'tie_breaker_reason', 'ranking_fingerprint', 'validator_version']) {
     if (!isNonEmptyString(ranking[field])) errors.push(`${field}_invalid`);
   }
-  for (const field of ['eligible_candidate_ids', 'ineligible_candidate_ids', 'ordered_candidate_ids', 'fallback_candidate_ids', 'escalation_candidate_ids']) {
-    if (!isOrderedUniqueStringList(ranking[field])) errors.push(`${field}_invalid`);
+  if (!isOrderedUniqueStringList(ranking.ineligible_candidate_ids)) errors.push('ineligible_candidate_ids_invalid');
+  for (const field of ['eligible_candidate_ids', 'ordered_candidate_ids', 'fallback_candidate_ids', 'escalation_candidate_ids']) {
+    if (!isUniqueStringList(ranking[field])) errors.push(`${field}_invalid`);
   }
   if (typeof ranking.tie_breaker_applied !== 'boolean') errors.push('tie_breaker_applied_must_be_boolean');
   if (ranking.ranking_generated !== true) errors.push('ranking_generated_must_be_true');
   if (ranking.selection_executed !== false) errors.push('selection_executed_must_be_false');
+
+  if (Array.isArray(ranking.ordered_candidate_ids) && Array.isArray(ranking.eligible_candidate_ids) && Array.isArray(ranking.ineligible_candidate_ids)) {
+    if (ranking.ordered_candidate_ids.length !== ranking.eligible_candidate_ids.length + ranking.ineligible_candidate_ids.length) {
+      errors.push('ordered_candidate_ids_count_mismatch');
+    }
+  }
+  if (isNonEmptyString(ranking.primary_candidate_id) && Array.isArray(ranking.fallback_candidate_ids) && ranking.fallback_candidate_ids.includes(ranking.primary_candidate_id)) {
+    errors.push('fallback_candidate_ids_must_not_include_primary_candidate_id');
+  }
+  if (isNonEmptyString(ranking.primary_candidate_id) && Array.isArray(ranking.escalation_candidate_ids) && ranking.escalation_candidate_ids.includes(ranking.primary_candidate_id)) {
+    errors.push('escalation_candidate_ids_must_not_include_primary_candidate_id');
+  }
+  if (Array.isArray(ranking.fallback_candidate_ids) && Array.isArray(ranking.escalation_candidate_ids)) {
+    const overlap = ranking.escalation_candidate_ids.filter((id) => ranking.fallback_candidate_ids.includes(id));
+    if (overlap.length > 0) errors.push('escalation_candidate_ids_must_not_overlap_fallback_candidate_ids');
+  }
+
   if (ranking.validator_version !== MODEL_SELECTION_RANKING_VALIDATOR_VERSION) errors.push('validator_version_invalid');
   try {
     stablePayload(ranking);
@@ -111,6 +135,17 @@ function validateModelSelectionRanking(ranking) {
 function buildModelSelectionRanking(rankingId, selectionRequestId, candidates, constraints) {
   if (!isNonEmptyString(rankingId) || !isNonEmptyString(selectionRequestId) || !Array.isArray(candidates) || !isPlainObject(constraints)) {
     throw new Error('build_model_selection_ranking_requires_ranking_id_selection_request_id_candidates_and_constraints');
+  }
+  const seenCandidateIds = new Set();
+  for (const candidate of candidates) {
+    const candidateId = isPlainObject(candidate) ? candidate.candidate_id : undefined;
+    if (!isNonEmptyString(candidateId)) {
+      throw new Error('model_selection_ranking_candidate_id_missing');
+    }
+    if (seenCandidateIds.has(candidateId)) {
+      throw new Error(`model_selection_ranking_duplicate_candidate_id::${candidateId}`);
+    }
+    seenCandidateIds.add(candidateId);
   }
   const eligible = candidates.filter((candidate) => candidate.candidate_status === 'ELIGIBLE_SIMULATION');
   const ineligible = candidates.filter((candidate) => candidate.candidate_status !== 'ELIGIBLE_SIMULATION');

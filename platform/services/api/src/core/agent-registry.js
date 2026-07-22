@@ -11,7 +11,8 @@ const AGENT_REGISTRY_STATUSES = Object.freeze([
   'PAYLOAD_MISMATCH',
   'VERSION_CONFLICT',
   'VALIDATION_FAILED',
-  'TENANT_BLOCKED'
+  'TENANT_BLOCKED',
+  'ORGANIZATION_BLOCKED'
 ]);
 const FORBIDDEN_AGENT_REGISTRY_STATUSES = Object.freeze(['REGISTERED_REAL']);
 const AGENT_REGISTRY_SAFE_FLAGS = Object.freeze({
@@ -51,6 +52,7 @@ function createAgentRegistry() {
     }
     const agentId = contract.identity.agent_id;
     const tenantId = contract.identity.tenant_id;
+    const organizationId = contract.identity.organization_id;
     const agentSlug = contract.identity.agent_slug;
     const contractVersion = contract.contract_version;
     const existing = recordsById.get(agentId);
@@ -71,8 +73,11 @@ function createAgentRegistry() {
       if (existing.tenant_id !== tenantId) {
         return safe({ ok: false, status: 'TENANT_BLOCKED', errors: ['agent_tenant_reassignment_blocked'] });
       }
+      if (existing.organization_id !== organizationId) {
+        return safe({ ok: false, status: 'ORGANIZATION_BLOCKED', errors: ['agent_organization_reassignment_blocked'] });
+      }
       const storedRecord = cloneFrozen(contract);
-      recordsById.set(agentId, { record: storedRecord, fingerprint: payload, tenant_id: tenantId, agent_slug: agentSlug, contract_version: contractVersion });
+      recordsById.set(agentId, { record: storedRecord, fingerprint: payload, tenant_id: tenantId, organization_id: organizationId, agent_slug: agentSlug, contract_version: contractVersion });
       if (existing.agent_slug !== agentSlug) idBySlug.delete(slugKey(existing.tenant_id, existing.agent_slug));
       idBySlug.set(slugKey(tenantId, agentSlug), agentId);
       return safe({ ok: true, status: 'REGISTERED_SIMULATION', agent_id: agentId, tenant_id: tenantId, contract_version: contractVersion, fingerprint: payload });
@@ -86,7 +91,7 @@ function createAgentRegistry() {
       return safe({ ok: false, status: 'PAYLOAD_MISMATCH', errors: ['agent_slug_already_registered_for_tenant'] });
     }
     const storedRecord = cloneFrozen(contract);
-    recordsById.set(agentId, { record: storedRecord, fingerprint: payload, tenant_id: tenantId, agent_slug: agentSlug, contract_version: contractVersion });
+    recordsById.set(agentId, { record: storedRecord, fingerprint: payload, tenant_id: tenantId, organization_id: organizationId, agent_slug: agentSlug, contract_version: contractVersion });
     idBySlug.set(slugKey(tenantId, agentSlug), agentId);
     return safe({ ok: true, status: 'REGISTERED_SIMULATION', agent_id: agentId, tenant_id: tenantId, contract_version: contractVersion, fingerprint: payload });
   }

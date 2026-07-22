@@ -19,9 +19,11 @@ const {
 } = require('../src/core/model-selection-constraints');
 const {
   CANDIDATE_STATUSES,
+  COST_TIER_RANGES,
   MODEL_SELECTION_CANDIDATE_VALIDATOR_VERSION,
   NO_LLM_CANDIDATE_ID,
   buildNoLlmCandidate,
+  isCostConsistentWithTier,
   isNoLlmEligible,
   validateModelSelectionCandidate
 } = require('../src/core/model-selection-candidate');
@@ -141,6 +143,31 @@ test('candidate valid, NO_LLM synthetic candidate is well formed, and eligibilit
   assert.equal(isNoLlmEligible({ ...tier0Profile, deterministic_resolution_available: false }, { allow_no_llm: true }), false);
 });
 
+test('candidate cost validation is deterministic: VERY_LOW cannot carry a PREMIUM-range cost and UNKNOWN_BLOCKED still blocks', () => {
+  const candidate = scenario('advanced-reasoning-selection').candidates[0];
+
+  const veryLowWithPremiumCost = { ...candidate, cost_tier: 'VERY_LOW', estimated_cost_minor_units: COST_TIER_RANGES.PREMIUM.min };
+  const veryLowValidation = validateModelSelectionCandidate(veryLowWithPremiumCost);
+  assert.equal(veryLowValidation.valid, false);
+  assert.ok(veryLowValidation.errors.includes('cost_tier_inconsistent_with_estimated_cost::VERY_LOW'));
+
+  const veryLowConsistent = { ...candidate, cost_tier: 'VERY_LOW', estimated_cost_minor_units: COST_TIER_RANGES.VERY_LOW.min };
+  assert.equal(validateModelSelectionCandidate(veryLowConsistent).valid, true);
+
+  const zeroCostWithNonZeroAmount = { ...candidate, cost_tier: 'ZERO_COST_REFERENCE', estimated_cost_minor_units: 1 };
+  assert.ok(validateModelSelectionCandidate(zeroCostWithNonZeroAmount).errors.includes('cost_tier_inconsistent_with_estimated_cost::ZERO_COST_REFERENCE'));
+
+  const unknownPricing = { ...candidate, cost_tier: 'UNKNOWN_BLOCKED', estimated_cost_minor_units: 500 };
+  assert.equal(validateModelSelectionCandidate(unknownPricing).valid, true, 'UNKNOWN_BLOCKED is exempt from tier/cost range checks; it is blocked elsewhere by candidate_status resolution');
+
+  for (const [tier, range] of Object.entries(COST_TIER_RANGES)) {
+    assert.equal(isCostConsistentWithTier(tier, range.min), true, `${tier} minimum boundary must be accepted`);
+    assert.equal(isCostConsistentWithTier(tier, range.max), true, `${tier} maximum boundary must be accepted`);
+  }
+  assert.equal(isCostConsistentWithTier('HIGH', COST_TIER_RANGES.HIGH.max + 1), false);
+  assert.equal(isCostConsistentWithTier('PREMIUM', COST_TIER_RANGES.MODERATE.min), false);
+});
+
 test('selection request valid and rejects missing extra and cross-reference mismatches', () => {
   const request = scenario('advanced-reasoning-selection').request;
   assert.equal(validateModelSelectionRequest(request).valid, true);
@@ -203,6 +230,46 @@ test('ranking orders by eligibility, NO_LLM priority, cost tier, cost amount, qu
   assert.deepEqual(noneRanking.eligible_candidate_ids, []);
 
   assert.ok(!validateModelSelectionRanking({ ...ranking, extra: 1 }).valid);
+});
+
+test('ranking rejects duplicate candidate_id and guarantees fallback/escalation never equal primary and never overlap each other', () => {
+  const mk = (id, cost) => ({
+    candidate_id: id, model_id: id, cost_tier: 'LOW', estimated_cost_minor_units: cost, quality_tier: 'STANDARD',
+    privacy_tier: 'NO_TRAINING_REFERENCE', latency_tier: 'LOW', availability_status: 'AVAILABLE_REFERENCE', health_status: 'HEALTHY_REFERENCE',
+    local_reference: false, supported_capabilities: [], candidate_status: 'ELIGIBLE_SIMULATION'
+  });
+
+  assert.throws(
+    () => buildModelSelectionRanking('ranking-dup', 'selection-request-1', [mk('dup-1', 100), mk('dup-1', 200)], { maximum_fallbacks: 1, maximum_escalations: 1 }),
+    /model_selection_ranking_duplicate_candidate_id::dup-1/
+  );
+  assert.throws(
+    () => buildModelSelectionRanking('ranking-missing', 'selection-request-1', [{ ...mk('x', 1), candidate_id: undefined }], { maximum_fallbacks: 0, maximum_escalations: 0 }),
+    /model_selection_ranking_candidate_id_missing/
+  );
+
+  const ranking = buildModelSelectionRanking(
+    'ranking-distinct', 'selection-request-1',
+    [mk('a', 100), mk('b', 200), mk('c', 300)],
+    { maximum_fallbacks: 1, maximum_escalations: 1 }
+  );
+  assert.equal(ranking.primary_candidate_id, 'a');
+  assert.deepEqual(ranking.fallback_candidate_ids, ['b']);
+  assert.deepEqual(ranking.escalation_candidate_ids, ['c']);
+  assert.equal(ranking.fallback_candidate_ids.includes(ranking.primary_candidate_id), false);
+  assert.equal(ranking.escalation_candidate_ids.includes(ranking.primary_candidate_id), false);
+  assert.equal(ranking.escalation_candidate_ids.some((id) => ranking.fallback_candidate_ids.includes(id)), false);
+  assert.equal(new Set(ranking.ordered_candidate_ids).size, ranking.ordered_candidate_ids.length);
+  assert.equal(validateModelSelectionRanking(ranking).valid, true);
+
+  const invalidFallbackEqualsPrimary = { ...ranking, fallback_candidate_ids: [ranking.primary_candidate_id] };
+  assert.ok(validateModelSelectionRanking(invalidFallbackEqualsPrimary).errors.includes('fallback_candidate_ids_must_not_include_primary_candidate_id'));
+  const invalidEscalationEqualsPrimary = { ...ranking, escalation_candidate_ids: [ranking.primary_candidate_id] };
+  assert.ok(validateModelSelectionRanking(invalidEscalationEqualsPrimary).errors.includes('escalation_candidate_ids_must_not_include_primary_candidate_id'));
+  const invalidOverlap = { ...ranking, escalation_candidate_ids: ranking.fallback_candidate_ids };
+  assert.ok(validateModelSelectionRanking(invalidOverlap).errors.includes('escalation_candidate_ids_must_not_overlap_fallback_candidate_ids'));
+  const invalidDuplicateOrdered = { ...ranking, ordered_candidate_ids: [...ranking.ordered_candidate_ids, ranking.ordered_candidate_ids[0]] };
+  assert.equal(validateModelSelectionRanking(invalidDuplicateOrdered).valid, false);
 });
 
 test('escalation plan is purely declarative, forces executed flags false, and only accepts known trigger references', () => {

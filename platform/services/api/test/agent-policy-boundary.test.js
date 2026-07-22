@@ -419,6 +419,38 @@ test('registry replay payload mismatch version conflict tenant block and danglin
   assert.equal(registry.listRulesByPolicyId(policy.policy_id).length, 1);
 });
 
+test('registry blocks organization reassignment while preserving tenant immutability replay and optimistic concurrency', () => {
+  const registry = createAgentPolicyRegistry();
+  const policy = policyFixture('tenant-low-risk-simulation-policy');
+  assert.equal(registry.registerPolicy(policy, { expected_version: 0 }).status, 'REGISTERED_SIMULATION');
+
+  const bumped = policyFixture('tenant-low-risk-simulation-policy', { policy_version: 2, priority: policy.priority + 1 });
+  assert.equal(registry.registerPolicy(bumped).status, 'REGISTERED_SIMULATION');
+
+  const orgChanged = policyFixture('tenant-low-risk-simulation-policy', {
+    policy_version: 3, priority: policy.priority + 1, organization_id: `${policy.tenant_id}:org-reassigned`
+  });
+  const orgResult = registry.registerPolicy(orgChanged);
+  assert.equal(orgResult.ok, false);
+  assert.equal(orgResult.status, 'ORGANIZATION_BLOCKED');
+
+  const tenantChanged = policyFixture('tenant-low-risk-simulation-policy', {
+    policy_version: 3, priority: policy.priority + 1, tenant_id: 'tenant_reassigned', organization_id: 'tenant_reassigned:org-1'
+  });
+  const tenantResult = registry.registerPolicy(tenantChanged);
+  assert.equal(tenantResult.ok, false);
+  assert.equal(tenantResult.status, 'TENANT_BLOCKED');
+
+  assert.equal(registry.getPolicyById(policy.policy_id).policy_version, 2);
+  assert.equal(registry.registerPolicy(bumped).status, 'REPLAY_ACCEPTED');
+
+  const staleConflict = registry.registerPolicy(
+    policyFixture('tenant-low-risk-simulation-policy', { policy_version: 3, priority: policy.priority + 2 }),
+    { expected_version: 99 }
+  );
+  assert.equal(staleConflict.status, 'VERSION_CONFLICT');
+});
+
 test('policy audit is immutable structurally minimal and always simulated', () => {
   const decision = evaluateAgentPolicyRequest(requestFixture(), { policies: [policyFixture('tenant-low-risk-simulation-policy')], rules: [], agent_type: 'GENERAL_ASSISTANT' });
   const audit = buildAgentPolicyAudit({ request: requestFixture(), decision, logical_sequence: 1 });
