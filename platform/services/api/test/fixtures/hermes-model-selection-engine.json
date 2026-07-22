@@ -1,0 +1,3851 @@
+{
+  "fixture_id": "hermes-entry-selection-fixture-v1",
+  "generated_by": "validate_by_construction",
+  "scenarios": {
+    "deterministic-no-llm-selection": {
+      "description": "TIER_0 deterministic task resolves via the synthetic NO_LLM candidate.",
+      "expected_status": "NO_LLM_SELECTED_SIMULATION",
+      "request": {
+        "selection_request_id": "deterministic-no-llm-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "deterministic-no-llm-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "deterministic-no-llm-selection-policy-request",
+          "policy_decision_id": "deterministic-no-llm-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "deterministic-no-llm-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "deterministic-no-llm-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "deterministic-no-llm-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "DETERMINISTIC_QUERY_REFERENCE",
+          "complexity_tier": "TIER_0_DETERMINISTIC",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [],
+          "required_modalities": [],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 0,
+          "estimated_output_tokens": 0,
+          "estimated_total_tokens": 0,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": true,
+          "deterministic_resolution_reference": "det-rule-1",
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "deterministic-no-llm-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "deterministic-no-llm-selection-correlation",
+        "causation_id": "deterministic-no-llm-selection-causation",
+        "trace_id": "deterministic-no-llm-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": []
+    },
+    "zero-cost-local-selection": {
+      "description": "A zero-cost local reference entry wins over a paid alternative when both satisfy requirements.",
+      "expected_status": "MODEL_SELECTED_SIMULATION",
+      "request": {
+        "selection_request_id": "zero-cost-local-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "zero-cost-local-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "zero-cost-local-selection-policy-request",
+          "policy_decision_id": "zero-cost-local-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "zero-cost-local-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "zero-cost-local-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "zero-cost-local-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "zero-cost-local-selection-zero",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          },
+          {
+            "reference_id": "zero-cost-local-selection-paid",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "zero-cost-local-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "zero-cost-local-selection-correlation",
+        "causation_id": "zero-cost-local-selection-causation",
+        "trace_id": "zero-cost-local-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "zero-cost-local-selection-zero",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "zero-cost-local-selection-zero",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "ZERO_COST_REFERENCE",
+          "latency_tier": "LOW",
+          "privacy_tier": "LOCAL_PROCESSING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 0,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": true,
+          "zero_cost_reference": true,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        },
+        {
+          "candidate_id": "zero-cost-local-selection-paid",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "zero-cost-local-selection-paid",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "MODERATE",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 800,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "low-cost-text-selection": {
+      "description": "A low-cost text-generation reference entry is preferred once it satisfies every requirement.",
+      "expected_status": "MODEL_SELECTED_SIMULATION",
+      "request": {
+        "selection_request_id": "low-cost-text-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "low-cost-text-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "low-cost-text-selection-policy-request",
+          "policy_decision_id": "low-cost-text-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "low-cost-text-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "low-cost-text-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "low-cost-text-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "SUMMARIZATION_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "SUMMARIZATION_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "low-cost-text-selection-cheap",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          },
+          {
+            "reference_id": "low-cost-text-selection-expensive",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "low-cost-text-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "low-cost-text-selection-correlation",
+        "causation_id": "low-cost-text-selection-causation",
+        "trace_id": "low-cost-text-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "low-cost-text-selection-cheap",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "low-cost-text-selection-cheap",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "VERY_LOW",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "SUMMARIZATION_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 50,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        },
+        {
+          "candidate_id": "low-cost-text-selection-expensive",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "low-cost-text-selection-expensive",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "PREMIUM",
+          "cost_tier": "HIGH",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "SUMMARIZATION_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 4000,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "structured-output-selection": {
+      "description": "A structured-output-capable reference entry is selected when the task requires schema-shaped output.",
+      "expected_status": "MODEL_SELECTED_SIMULATION",
+      "request": {
+        "selection_request_id": "structured-output-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "structured-output-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "structured-output-selection-policy-request",
+          "policy_decision_id": "structured-output-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "structured-output-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "structured-output-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "structured-output-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "EXTRACTION_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "STRUCTURED_OUTPUT_REFERENCE"
+          ],
+          "required_modalities": [
+            "STRUCTURED_OUTPUT_REFERENCE",
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": true,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "structured-output-selection-entry",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "structured-output-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "structured-output-selection-correlation",
+        "causation_id": "structured-output-selection-causation",
+        "trace_id": "structured-output-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "structured-output-selection-entry",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "structured-output-selection-entry",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "MODERATE",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "STRUCTURED_OUTPUT_REFERENCE"
+          ],
+          "supported_modalities": [
+            "STRUCTURED_OUTPUT_REFERENCE",
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 500,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "long-context-selection": {
+      "description": "A long-context reference entry is selected once its declared window covers the estimated unit volume.",
+      "expected_status": "MODEL_SELECTED_SIMULATION",
+      "request": {
+        "selection_request_id": "long-context-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "long-context-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "long-context-selection-policy-request",
+          "policy_decision_id": "long-context-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "long-context-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "long-context-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "long-context-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "ANALYSIS_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "LONG_CONTEXT_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 100000,
+          "estimated_output_tokens": 8000,
+          "estimated_total_tokens": 108000,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": true,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "long-context-selection-entry",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 200000,
+          "maximum_output_tokens": 20000,
+          "maximum_total_tokens": 220000,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "long-context-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "long-context-selection-correlation",
+        "causation_id": "long-context-selection-causation",
+        "trace_id": "long-context-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "long-context-selection-entry",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "long-context-selection-entry",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "MODERATE",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "LONG_CONTEXT_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 200000,
+          "maximum_input_tokens": 190000,
+          "maximum_output_tokens": 16000,
+          "estimated_cost_minor_units": 500,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "advanced-reasoning-selection": {
+      "description": "An advanced-tier reference entry is selected when the task requires above-standard reasoning quality.",
+      "expected_status": "MODEL_SELECTED_SIMULATION",
+      "request": {
+        "selection_request_id": "advanced-reasoning-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "advanced-reasoning-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "advanced-reasoning-selection-policy-request",
+          "policy_decision_id": "advanced-reasoning-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "advanced-reasoning-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "advanced-reasoning-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "advanced-reasoning-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "ADVANCED",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "advanced-reasoning-selection-advanced",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "ADVANCED",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "advanced-reasoning-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "advanced-reasoning-selection-correlation",
+        "causation_id": "advanced-reasoning-selection-causation",
+        "trace_id": "advanced-reasoning-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "advanced-reasoning-selection-advanced",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "advanced-reasoning-selection-advanced",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "ADVANCED",
+          "cost_tier": "HIGH",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 2000,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "high-risk-advanced-selection": {
+      "description": "A HIGH-risk task only accepts an ADVANCED-or-above reference entry, enforced by the task profile contract.",
+      "expected_status": "MODEL_SELECTED_SIMULATION",
+      "request": {
+        "selection_request_id": "high-risk-advanced-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "high-risk-advanced-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "high-risk-advanced-selection-policy-request",
+          "policy_decision_id": "high-risk-advanced-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "high-risk-advanced-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "high-risk-advanced-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "high-risk-advanced-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "HIGH",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "ADVANCED",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "high-risk-advanced-selection-advanced",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "ADVANCED",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "high-risk-advanced-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "high-risk-advanced-selection-correlation",
+        "causation_id": "high-risk-advanced-selection-causation",
+        "trace_id": "high-risk-advanced-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "high-risk-advanced-selection-advanced",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "high-risk-advanced-selection-advanced",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "ADVANCED",
+          "cost_tier": "HIGH",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 2000,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "premium-only-eligible-selection": {
+      "description": "The premium reference entry wins because the cheaper standard entry does not meet the minimum quality bar.",
+      "expected_status": "MODEL_SELECTED_SIMULATION",
+      "request": {
+        "selection_request_id": "premium-only-eligible-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "premium-only-eligible-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "premium-only-eligible-selection-policy-request",
+          "policy_decision_id": "premium-only-eligible-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "premium-only-eligible-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "premium-only-eligible-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "premium-only-eligible-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "PREMIUM",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "premium-only-eligible-selection-standard",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          },
+          {
+            "reference_id": "premium-only-eligible-selection-premium",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 6000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "PREMIUM",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "premium-only-eligible-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "premium-only-eligible-selection-correlation",
+        "causation_id": "premium-only-eligible-selection-causation",
+        "trace_id": "premium-only-eligible-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "premium-only-eligible-selection-standard",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "premium-only-eligible-selection-standard",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "LOW",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 100,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        },
+        {
+          "candidate_id": "premium-only-eligible-selection-premium",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "premium-only-eligible-selection-premium",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "PREMIUM",
+          "cost_tier": "HIGH",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 5000,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "budget-blocked-selection": {
+      "description": "The only candidate exceeds the maximum declared cost ceiling and is filtered out (BUDGET_BLOCKED).",
+      "expected_status": "NO_ELIGIBLE_CANDIDATE",
+      "request": {
+        "selection_request_id": "budget-blocked-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "budget-blocked-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "budget-blocked-selection-policy-request",
+          "policy_decision_id": "budget-blocked-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "budget-blocked-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "budget-blocked-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "budget-blocked-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "budget-blocked-selection-entry",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "budget-blocked-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "budget-blocked-selection-correlation",
+        "causation_id": "budget-blocked-selection-causation",
+        "trace_id": "budget-blocked-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "budget-blocked-selection-entry",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "budget-blocked-selection-entry",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "HIGH",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 999999,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "privacy-blocked-selection": {
+      "description": "The only candidate declares a weaker privacy tier than required and is filtered out (PRIVACY_BLOCKED).",
+      "expected_status": "NO_ELIGIBLE_CANDIDATE",
+      "request": {
+        "selection_request_id": "privacy-blocked-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "privacy-blocked-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "privacy-blocked-selection-policy-request",
+          "policy_decision_id": "privacy-blocked-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "privacy-blocked-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "privacy-blocked-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "privacy-blocked-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "privacy-blocked-selection-entry",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "LOCAL_PROCESSING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "privacy-blocked-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "privacy-blocked-selection-correlation",
+        "causation_id": "privacy-blocked-selection-causation",
+        "trace_id": "privacy-blocked-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "privacy-blocked-selection-entry",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "privacy-blocked-selection-entry",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "MODERATE",
+          "latency_tier": "LOW",
+          "privacy_tier": "PUBLIC_PROCESSING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 500,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "unavailable-model-selection": {
+      "description": "The only candidate declares itself unavailable and is filtered out (AVAILABILITY_BLOCKED).",
+      "expected_status": "NO_ELIGIBLE_CANDIDATE",
+      "request": {
+        "selection_request_id": "unavailable-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "unavailable-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "unavailable-selection-policy-request",
+          "policy_decision_id": "unavailable-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "unavailable-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "unavailable-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "unavailable-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "unavailable-selection-entry",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "unavailable-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "unavailable-selection-correlation",
+        "causation_id": "unavailable-selection-causation",
+        "trace_id": "unavailable-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "unavailable-selection-entry",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "unavailable-selection-entry",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "MODERATE",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 500,
+          "availability_status": "UNAVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "unknown-pricing-selection": {
+      "description": "The only candidate declares an unknown cost tier and is filtered out (BUDGET_BLOCKED).",
+      "expected_status": "NO_ELIGIBLE_CANDIDATE",
+      "request": {
+        "selection_request_id": "unknown-pricing-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "unknown-pricing-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "unknown-pricing-selection-policy-request",
+          "policy_decision_id": "unknown-pricing-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "unknown-pricing-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "unknown-pricing-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "unknown-pricing-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "unknown-pricing-selection-entry",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "unknown-pricing-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "unknown-pricing-selection-correlation",
+        "causation_id": "unknown-pricing-selection-causation",
+        "trace_id": "unknown-pricing-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "unknown-pricing-selection-entry",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "unknown-pricing-selection-entry",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "UNKNOWN_BLOCKED",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 500,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "capability-mismatch-selection": {
+      "description": "The only candidate lacks the required capability and is filtered out (CAPABILITY_BLOCKED).",
+      "expected_status": "NO_ELIGIBLE_CANDIDATE",
+      "request": {
+        "selection_request_id": "capability-mismatch-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "capability-mismatch-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "capability-mismatch-selection-policy-request",
+          "policy_decision_id": "capability-mismatch-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "capability-mismatch-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "capability-mismatch-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "capability-mismatch-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "VISION_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "capability-mismatch-selection-entry",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "capability-mismatch-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "capability-mismatch-selection-correlation",
+        "causation_id": "capability-mismatch-selection-causation",
+        "trace_id": "capability-mismatch-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "capability-mismatch-selection-entry",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "capability-mismatch-selection-entry",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "MODERATE",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 500,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "context-limit-selection": {
+      "description": "The only candidate has too small a context window for the estimated unit volume (CONTEXT_BLOCKED).",
+      "expected_status": "NO_ELIGIBLE_CANDIDATE",
+      "request": {
+        "selection_request_id": "context-limit-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "context-limit-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "context-limit-selection-policy-request",
+          "policy_decision_id": "context-limit-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "context-limit-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "context-limit-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "context-limit-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 8000,
+          "estimated_output_tokens": 4000,
+          "estimated_total_tokens": 12000,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "context-limit-selection-entry",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 16000,
+          "maximum_output_tokens": 8000,
+          "maximum_total_tokens": 24000,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "context-limit-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "context-limit-selection-correlation",
+        "causation_id": "context-limit-selection-causation",
+        "trace_id": "context-limit-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "context-limit-selection-entry",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "context-limit-selection-entry",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "MODERATE",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 4096,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 2048,
+          "estimated_cost_minor_units": 500,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "tenant-mismatch-selection": {
+      "description": "The only candidate is bound to a different tenant and is filtered out (TENANT_BLOCKED).",
+      "expected_status": "NO_ELIGIBLE_CANDIDATE",
+      "request": {
+        "selection_request_id": "tenant-mismatch-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "tenant-mismatch-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "tenant-mismatch-selection-policy-request",
+          "policy_decision_id": "tenant-mismatch-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "tenant-mismatch-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "tenant-mismatch-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "tenant-mismatch-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "tenant-mismatch-selection-entry",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "tenant-mismatch-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "tenant-mismatch-selection-correlation",
+        "causation_id": "tenant-mismatch-selection-causation",
+        "trace_id": "tenant-mismatch-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "tenant-mismatch-selection-entry",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "tenant-mismatch-selection-entry",
+          "tenant_id": "tenant-b",
+          "organization_id": "tenant-b:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "MODERATE",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 500,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "organization-mismatch-selection": {
+      "description": "The only candidate is bound to a different organization and is filtered out (ORGANIZATION_BLOCKED).",
+      "expected_status": "NO_ELIGIBLE_CANDIDATE",
+      "request": {
+        "selection_request_id": "organization-mismatch-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "organization-mismatch-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "organization-mismatch-selection-policy-request",
+          "policy_decision_id": "organization-mismatch-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "organization-mismatch-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "organization-mismatch-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "organization-mismatch-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "organization-mismatch-selection-entry",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "organization-mismatch-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "organization-mismatch-selection-correlation",
+        "causation_id": "organization-mismatch-selection-causation",
+        "trace_id": "organization-mismatch-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "organization-mismatch-selection-entry",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "organization-mismatch-selection-entry",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-other",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "MODERATE",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 500,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "tie-breaker-selection": {
+      "description": "Two candidates tie on every criterion; the canonical model_id ordering breaks the tie deterministically.",
+      "expected_status": "MODEL_SELECTED_SIMULATION",
+      "request": {
+        "selection_request_id": "tie-breaker-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "tie-breaker-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "tie-breaker-selection-policy-request",
+          "policy_decision_id": "tie-breaker-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "tie-breaker-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "tie-breaker-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "tie-breaker-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "tie-breaker-selection-zzz",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          },
+          {
+            "reference_id": "tie-breaker-selection-aaa",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "tie-breaker-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "tie-breaker-selection-correlation",
+        "causation_id": "tie-breaker-selection-causation",
+        "trace_id": "tie-breaker-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "tie-breaker-selection-zzz",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "tie-breaker-selection-zzz",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "MODERATE",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 500,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        },
+        {
+          "candidate_id": "tie-breaker-selection-aaa",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "tie-breaker-selection-aaa",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "MODERATE",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 500,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "fallback-plan-selection": {
+      "description": "A second eligible candidate is captured declaratively as a fallback plan entry, never executed.",
+      "expected_status": "MODEL_SELECTED_SIMULATION",
+      "request": {
+        "selection_request_id": "fallback-plan-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "fallback-plan-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "fallback-plan-selection-policy-request",
+          "policy_decision_id": "fallback-plan-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "fallback-plan-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "fallback-plan-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "fallback-plan-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "fallback-plan-selection-primary",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          },
+          {
+            "reference_id": "fallback-plan-selection-secondary",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "fallback-plan-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "fallback-plan-selection-correlation",
+        "causation_id": "fallback-plan-selection-causation",
+        "trace_id": "fallback-plan-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "fallback-plan-selection-primary",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "fallback-plan-selection-primary",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "VERY_LOW",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 50,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        },
+        {
+          "candidate_id": "fallback-plan-selection-secondary",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "fallback-plan-selection-secondary",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "LOW",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 200,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "escalation-plan-selection": {
+      "description": "A third eligible candidate is captured declaratively as an escalation plan entry, never executed.",
+      "expected_status": "MODEL_SELECTED_SIMULATION",
+      "request": {
+        "selection_request_id": "escalation-plan-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "escalation-plan-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "escalation-plan-selection-policy-request",
+          "policy_decision_id": "escalation-plan-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "escalation-plan-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "escalation-plan-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "escalation-plan-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "STANDARD",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "escalation-plan-selection-primary",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          },
+          {
+            "reference_id": "escalation-plan-selection-fallback",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          },
+          {
+            "reference_id": "escalation-plan-selection-escalation",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": true,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "STANDARD",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 1,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "escalation-plan-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "escalation-plan-selection-correlation",
+        "causation_id": "escalation-plan-selection-causation",
+        "trace_id": "escalation-plan-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "escalation-plan-selection-primary",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "escalation-plan-selection-primary",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "VERY_LOW",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 50,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        },
+        {
+          "candidate_id": "escalation-plan-selection-fallback",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "escalation-plan-selection-fallback",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "LOW",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 200,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        },
+        {
+          "candidate_id": "escalation-plan-selection-escalation",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "escalation-plan-selection-escalation",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "PREMIUM",
+          "cost_tier": "HIGH",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 3000,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    },
+    "no-eligible-candidate-selection": {
+      "description": "No candidate meets the minimum quality bar and NO_LLM is disallowed, so no eligible candidate remains.",
+      "expected_status": "NO_ELIGIBLE_CANDIDATE",
+      "request": {
+        "selection_request_id": "no-eligible-candidate-selection-selection-request",
+        "selection_request_version": 1,
+        "agent_contract_reference": {
+          "contract_id": "no-eligible-candidate-selection-contract",
+          "contract_version": 1,
+          "contract_fingerprint": "fp-contract",
+          "agent_id": "agent-1",
+          "agent_version": 1,
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "contract_status": "VALIDATED_SIMULATION",
+          "lifecycle_state": "REGISTERED_SIMULATION",
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "policy_decision_reference": {
+          "policy_request_id": "no-eligible-candidate-selection-policy-request",
+          "policy_decision_id": "no-eligible-candidate-selection-policy-decision",
+          "policy_decision_fingerprint": "fp-policy-decision",
+          "policy_status": "ALLOW_SIMULATION",
+          "allowed_in_simulation": true,
+          "approval_required": false,
+          "policy_evaluated": true,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "session_reference": {
+          "session_id": "no-eligible-candidate-selection-session",
+          "session_version": 1,
+          "session_fingerprint": "fp-session",
+          "session_present": true,
+          "session_loaded": false,
+          "session_mutated": false,
+          "validator_version": "agent_session_reference_validator_v1"
+        },
+        "memory_reference": {
+          "memory_contract_id": "no-eligible-candidate-selection-memory-contract",
+          "memory_contract_version": 1,
+          "memory_contract_fingerprint": "fp-memory-contract",
+          "contract_status": "VALIDATED_SIMULATION",
+          "validator_version": "agent_memory_request_validator_v1"
+        },
+        "task_profile": {
+          "task_profile_id": "no-eligible-candidate-selection-task",
+          "task_profile_version": 1,
+          "agent_id": "agent-1",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "task_type": "REASONING_REFERENCE",
+          "complexity_tier": "TIER_3_MODERATE",
+          "risk_classification": "LOW",
+          "data_classification": "INTERNAL",
+          "required_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "required_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "minimum_quality_tier": "SPECIALIST",
+          "maximum_latency_tier": "MODERATE",
+          "estimated_input_tokens": 1000,
+          "estimated_output_tokens": 500,
+          "estimated_total_tokens": 1500,
+          "requires_structured_output": false,
+          "requires_tool_calling": false,
+          "requires_long_context": false,
+          "requires_multilingual": false,
+          "deterministic_resolution_available": false,
+          "deterministic_resolution_reference": null,
+          "human_review_required": false,
+          "logical_sequence": 1,
+          "validator_version": "model_selection_task_profile_validator_v1"
+        },
+        "candidate_model_references": [
+          {
+            "reference_id": "no-eligible-candidate-selection-entry",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-entry",
+            "validator_version": "model_selection_request_validator_v1"
+          }
+        ],
+        "constraints": {
+          "allow_no_llm": false,
+          "allow_zero_cost": true,
+          "allow_local": true,
+          "allow_remote": true,
+          "allow_commercial": true,
+          "allow_open_source": true,
+          "allow_fallback": true,
+          "allow_escalation": true,
+          "maximum_cost_minor_units": 5000,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "maximum_total_tokens": 8192,
+          "maximum_latency_tier": "MODERATE",
+          "minimum_quality_tier": "SPECIALIST",
+          "required_privacy_tier": "NO_TRAINING_REFERENCE",
+          "required_health_status": "HEALTHY_REFERENCE",
+          "required_availability_status": "AVAILABLE_REFERENCE",
+          "maximum_candidates": 10,
+          "maximum_fallbacks": 2,
+          "maximum_escalations": 1,
+          "prefer_cached_reference": false,
+          "prefer_same_provider_reference": false,
+          "prefer_local_reference": true,
+          "prefer_zero_cost_reference": true,
+          "validator_version": "model_selection_constraints_validator_v1"
+        },
+        "budget_reference": {
+          "budget_reference_id": "no-eligible-candidate-selection-budget-ref",
+          "within_budget_reference": true,
+          "remaining_budget_minor_units_reference": 100000,
+          "budget_evaluated_reference": true,
+          "validator_version": "model_selection_request_validator_v1"
+        },
+        "correlation_id": "no-eligible-candidate-selection-correlation",
+        "causation_id": "no-eligible-candidate-selection-causation",
+        "trace_id": "no-eligible-candidate-selection-trace",
+        "logical_sequence": 1,
+        "expected_registry_version": "registry-v1",
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "validator_version": "model_selection_request_validator_v1"
+      },
+      "candidates": [
+        {
+          "candidate_id": "no-eligible-candidate-selection-entry",
+          "candidate_version": 1,
+          "provider_id": "hermes-svc-ref",
+          "model_id": "no-eligible-candidate-selection-entry",
+          "tenant_id": "tenant-a",
+          "organization_id": "tenant-a:org-1",
+          "provider_fingerprint": "fp-svc",
+          "model_fingerprint": "fp-entry",
+          "capability_fingerprints": [
+            "fp-cap"
+          ],
+          "pricing_fingerprint": "fp-price",
+          "limits_fingerprint": "fp-limits",
+          "availability_fingerprint": "fp-avail",
+          "privacy_fingerprint": "fp-privacy",
+          "health_fingerprint": "fp-health",
+          "quality_tier": "STANDARD",
+          "cost_tier": "MODERATE",
+          "latency_tier": "LOW",
+          "privacy_tier": "NO_TRAINING_REFERENCE",
+          "supported_capabilities": [
+            "REASONING_REFERENCE"
+          ],
+          "supported_modalities": [
+            "TEXT_INPUT",
+            "TEXT_OUTPUT"
+          ],
+          "context_window_tokens": 8192,
+          "maximum_input_tokens": 4096,
+          "maximum_output_tokens": 4096,
+          "estimated_cost_minor_units": 500,
+          "availability_status": "AVAILABLE_REFERENCE",
+          "health_status": "HEALTHY_REFERENCE",
+          "local_reference": false,
+          "zero_cost_reference": false,
+          "candidate_status": "PENDING_EVALUATION",
+          "validator_version": "model_selection_candidate_validator_v1"
+        }
+      ]
+    }
+  }
+}
