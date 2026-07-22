@@ -50,7 +50,7 @@ const {
   buildAgentResponse,
   validateAgentResponse
 } = require('../src/core/agent-response-contract');
-const { createAgentRegistry } = require('../src/core/agent-registry');
+const { AGENT_REGISTRY_STATUSES, createAgentRegistry } = require('../src/core/agent-registry');
 const { buildAgentCoreAudit, validateAgentCoreAudit } = require('../src/core/agent-core-audit');
 
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -384,6 +384,56 @@ test('registry blocks organization reassignment while preserving tenant immutabi
   const laterVersion = buildValidContract('general-assistant-agent', { contract_version: 3, identity: laterIdentity });
   const staleConflict = registry.registerAgentContract(laterVersion.contract, { expected_version: 99 });
   assert.equal(staleConflict.status, 'VERSION_CONFLICT');
+});
+
+test('registry FINGERPRINT_CONFLICT: correct expected_fingerprint accepted, incorrect rejected without mutating the stored record, alongside replay/payload-mismatch/version-conflict/tenant/organization checks (PR91, fixes CAND-REG-01)', () => {
+  assert.equal(AGENT_REGISTRY_STATUSES.includes('FINGERPRINT_CONFLICT'), true);
+  const registry = createAgentRegistry();
+  const built = buildValidContract('general-assistant-agent');
+  const first = registry.registerAgentContract(built.contract, { expected_version: 0 });
+  assert.equal(first.status, 'REGISTERED_SIMULATION');
+
+  const bumpedIdentity = clone(built.contract.identity);
+  bumpedIdentity.display_name = 'Fingerprint Conflict Update 1';
+  const bumped = buildValidContract('general-assistant-agent', { contract_version: 2, identity: bumpedIdentity });
+  const correctFingerprint = registry.registerAgentContract(bumped.contract, { expected_fingerprint: first.fingerprint });
+  assert.equal(correctFingerprint.status, 'REGISTERED_SIMULATION');
+
+  const bumpedIdentity2 = clone(bumped.contract.identity);
+  bumpedIdentity2.display_name = 'Fingerprint Conflict Update 2';
+  const nextAttempt = buildValidContract('general-assistant-agent', { contract_version: 3, identity: bumpedIdentity2 });
+  const wrongFingerprint = registry.registerAgentContract(nextAttempt.contract, { expected_fingerprint: 'stale-fingerprint-value' });
+  assert.equal(wrongFingerprint.ok, false);
+  assert.equal(wrongFingerprint.status, 'FINGERPRINT_CONFLICT');
+  assert.equal(wrongFingerprint.simulation, true);
+  assert.equal(wrongFingerprint.production_blocked, true);
+  assert.equal(wrongFingerprint.executed, false);
+  assert.equal(Object.isFrozen(wrongFingerprint), true);
+
+  const unchanged = registry.getByAgentId(built.contract.identity.agent_id);
+  assert.equal(unchanged.contract_version, 2, 'a rejected fingerprint conflict must not mutate the stored record');
+  assert.equal(unchanged.identity.display_name, 'Fingerprint Conflict Update 1');
+
+  assert.equal(registry.registerAgentContract(bumped.contract).status, 'REPLAY_ACCEPTED');
+
+  const tampered = { ...bumped.contract, metadata: { ...bumped.contract.metadata, business_domain: 'fingerprint_conflict_tamper' } };
+  assert.equal(registry.registerAgentContract(tampered).status, 'PAYLOAD_MISMATCH');
+
+  const staleVersion = buildValidContract('general-assistant-agent', { contract_version: 3, identity: bumpedIdentity2 });
+  assert.equal(registry.registerAgentContract(staleVersion.contract, { expected_version: 99 }).status, 'VERSION_CONFLICT');
+
+  const orgIdentity = clone(bumped.contract.identity);
+  orgIdentity.organization_id = `${orgIdentity.tenant_id}:org-fingerprint-test`;
+  const orgChanged = buildValidContract('general-assistant-agent', { contract_version: 3, identity: orgIdentity });
+  assert.equal(registry.registerAgentContract(orgChanged.contract, { expected_fingerprint: correctFingerprint.fingerprint }).status, 'ORGANIZATION_BLOCKED', 'tenant/organization checks must take precedence over fingerprint conflict, matching the consolidated registry pattern');
+
+  const tenantIdentity = clone(bumped.contract.identity);
+  tenantIdentity.tenant_id = 'tenant_fingerprint_reassigned';
+  tenantIdentity.organization_id = 'tenant_fingerprint_reassigned:org-1';
+  const tenantChanged = buildValidContract('general-assistant-agent', { contract_version: 3, identity: tenantIdentity });
+  assert.equal(registry.registerAgentContract(tenantChanged.contract, { expected_fingerprint: correctFingerprint.fingerprint }).status, 'TENANT_BLOCKED');
+
+  assert.equal(registry.getByAgentId(built.contract.identity.agent_id).contract_version, 2, 'tenant/organization block attempts must not mutate the stored record either');
 });
 
 test('registry rejects contracts that are not VALIDATED_SIMULATION', () => {

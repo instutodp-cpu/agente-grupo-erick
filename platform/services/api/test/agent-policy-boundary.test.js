@@ -53,7 +53,7 @@ const {
   validateAgentPolicyDecision
 } = require('../src/core/agent-policy-decision');
 const { evaluateAgentPolicyRequest } = require('../src/core/agent-policy-boundary');
-const { createAgentPolicyRegistry } = require('../src/core/agent-policy-registry');
+const { AGENT_POLICY_REGISTRY_STATUSES, createAgentPolicyRegistry } = require('../src/core/agent-policy-registry');
 const { buildAgentPolicyAudit, validateAgentPolicyAudit } = require('../src/core/agent-policy-audit');
 
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -449,6 +449,75 @@ test('registry blocks organization reassignment while preserving tenant immutabi
     { expected_version: 99 }
   );
   assert.equal(staleConflict.status, 'VERSION_CONFLICT');
+});
+
+test('registry FINGERPRINT_CONFLICT: correct expected_fingerprint accepted, incorrect rejected without mutating policy or rule records, alongside replay/payload-mismatch/version-conflict/tenant/organization checks (PR91, fixes CAND-REG-01)', () => {
+  assert.equal(AGENT_POLICY_REGISTRY_STATUSES.includes('FINGERPRINT_CONFLICT'), true);
+  const registry = createAgentPolicyRegistry();
+  const policy = policyFixture('tenant-low-risk-simulation-policy');
+  const first = registry.registerPolicy(policy, { expected_version: 0 });
+  assert.equal(first.status, 'REGISTERED_SIMULATION');
+
+  const bumped = policyFixture('tenant-low-risk-simulation-policy', { policy_version: 2, priority: policy.priority + 1 });
+  const correctFingerprint = registry.registerPolicy(bumped, { expected_fingerprint: first.fingerprint });
+  assert.equal(correctFingerprint.status, 'REGISTERED_SIMULATION');
+
+  const nextAttempt = policyFixture('tenant-low-risk-simulation-policy', { policy_version: 3, priority: policy.priority + 2 });
+  const wrongFingerprint = registry.registerPolicy(nextAttempt, { expected_fingerprint: 'stale-fingerprint-value' });
+  assert.equal(wrongFingerprint.ok, false);
+  assert.equal(wrongFingerprint.status, 'FINGERPRINT_CONFLICT');
+  assert.equal(wrongFingerprint.simulation, true);
+  assert.equal(wrongFingerprint.production_blocked, true);
+  assert.equal(wrongFingerprint.executed, false);
+  assert.equal(Object.isFrozen(wrongFingerprint), true);
+
+  const unchangedPolicy = registry.getPolicyById(policy.policy_id);
+  assert.equal(unchangedPolicy.policy_version, 2, 'a rejected fingerprint conflict must not mutate the stored policy record');
+  assert.equal(unchangedPolicy.priority, policy.priority + 1);
+
+  assert.equal(registry.registerPolicy(bumped).status, 'REPLAY_ACCEPTED');
+  assert.equal(registry.registerPolicy({ ...bumped, priority: bumped.priority + 500 }).status, 'PAYLOAD_MISMATCH');
+  assert.equal(
+    registry.registerPolicy(policyFixture('tenant-low-risk-simulation-policy', { policy_version: 3, priority: policy.priority + 3 }), { expected_version: 99 }).status,
+    'VERSION_CONFLICT'
+  );
+
+  const orgChanged = policyFixture('tenant-low-risk-simulation-policy', {
+    policy_version: 3, priority: policy.priority + 1, organization_id: `${policy.tenant_id}:org-fingerprint-test`
+  });
+  assert.equal(
+    registry.registerPolicy(orgChanged, { expected_fingerprint: correctFingerprint.fingerprint }).status,
+    'ORGANIZATION_BLOCKED',
+    'tenant/organization checks must take precedence over fingerprint conflict, matching the consolidated registry pattern'
+  );
+
+  const tenantChanged = policyFixture('tenant-low-risk-simulation-policy', {
+    policy_version: 3, priority: policy.priority + 1, tenant_id: 'tenant_fingerprint_reassigned', organization_id: 'tenant_fingerprint_reassigned:org-1'
+  });
+  assert.equal(registry.registerPolicy(tenantChanged, { expected_fingerprint: correctFingerprint.fingerprint }).status, 'TENANT_BLOCKED');
+
+  assert.equal(registry.getPolicyById(policy.policy_id).policy_version, 2, 'tenant/organization block attempts must not mutate the stored policy record either');
+
+  const rule = {
+    rule_id: 'rule_fingerprint_conflict_test', rule_version: 1, policy_id: policy.policy_id, rule_type: 'TENANT_MATCH', rule_operator: 'IN',
+    left_operand_reference: 'REQUEST.TENANT_ID', right_operand_reference: 'SUBJECT_SCOPE.TENANT_IDS', expected_result: true,
+    failure_effect: 'TENANT_BLOCKED', reason_code: 'tenant_not_in_subject_scope', rule_status: 'VALIDATED_SIMULATION',
+    validator_version: AGENT_POLICY_RULE_VALIDATOR_VERSION
+  };
+  const firstRule = registry.registerRule(rule, { expected_version: 0 });
+  assert.equal(firstRule.status, 'REGISTERED_SIMULATION');
+
+  const bumpedRule = { ...rule, rule_version: 2, expected_result: false };
+  const correctRuleFingerprint = registry.registerRule(bumpedRule, { expected_fingerprint: firstRule.fingerprint });
+  assert.equal(correctRuleFingerprint.status, 'REGISTERED_SIMULATION');
+
+  const wrongRuleFingerprint = registry.registerRule({ ...rule, rule_version: 3, expected_result: true }, { expected_fingerprint: 'stale-rule-fingerprint' });
+  assert.equal(wrongRuleFingerprint.status, 'FINGERPRINT_CONFLICT');
+  assert.equal(Object.isFrozen(wrongRuleFingerprint), true);
+
+  const unchangedRule = registry.getRuleById(rule.rule_id);
+  assert.equal(unchangedRule.rule_version, 2, 'a rejected fingerprint conflict must not mutate the stored rule record');
+  assert.equal(unchangedRule.expected_result, false);
 });
 
 test('policy audit is immutable structurally minimal and always simulated', () => {

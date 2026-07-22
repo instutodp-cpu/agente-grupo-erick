@@ -10,6 +10,7 @@ const AGENT_REGISTRY_STATUSES = Object.freeze([
   'REPLAY_ACCEPTED',
   'PAYLOAD_MISMATCH',
   'VERSION_CONFLICT',
+  'FINGERPRINT_CONFLICT',
   'VALIDATION_FAILED',
   'TENANT_BLOCKED',
   'ORGANIZATION_BLOCKED'
@@ -58,6 +59,12 @@ function createAgentRegistry() {
     const existing = recordsById.get(agentId);
 
     if (existing) {
+      if (existing.tenant_id !== tenantId) {
+        return safe({ ok: false, status: 'TENANT_BLOCKED', errors: ['agent_tenant_reassignment_blocked'] });
+      }
+      if (existing.organization_id !== organizationId) {
+        return safe({ ok: false, status: 'ORGANIZATION_BLOCKED', errors: ['agent_organization_reassignment_blocked'] });
+      }
       if (existing.fingerprint === payload) {
         return safe({ ok: true, status: 'REPLAY_ACCEPTED', agent_id: agentId, tenant_id: tenantId, contract_version: existing.contract_version, fingerprint: payload });
       }
@@ -67,14 +74,11 @@ function createAgentRegistry() {
       if (options.expected_version !== undefined && options.expected_version !== existing.contract_version) {
         return safe({ ok: false, status: 'VERSION_CONFLICT', errors: ['agent_contract_optimistic_conflict'] });
       }
+      if (options.expected_fingerprint !== undefined && options.expected_fingerprint !== existing.fingerprint) {
+        return safe({ ok: false, status: 'FINGERPRINT_CONFLICT', errors: ['agent_contract_fingerprint_conflict'] });
+      }
       if (contractVersion < existing.contract_version) {
         return safe({ ok: false, status: 'VERSION_CONFLICT', errors: ['agent_contract_version_downgrade'] });
-      }
-      if (existing.tenant_id !== tenantId) {
-        return safe({ ok: false, status: 'TENANT_BLOCKED', errors: ['agent_tenant_reassignment_blocked'] });
-      }
-      if (existing.organization_id !== organizationId) {
-        return safe({ ok: false, status: 'ORGANIZATION_BLOCKED', errors: ['agent_organization_reassignment_blocked'] });
       }
       const storedRecord = cloneFrozen(contract);
       recordsById.set(agentId, { record: storedRecord, fingerprint: payload, tenant_id: tenantId, organization_id: organizationId, agent_slug: agentSlug, contract_version: contractVersion });
