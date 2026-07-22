@@ -1,0 +1,2673 @@
+{
+  "fixture_version": "hermes_workflow_contracts_fixture_v1",
+  "simulation": true,
+  "production_blocked": true,
+  "scenarios": [
+    {
+      "scenario_id": "deterministic-linear-workflow",
+      "description": "Two sequential steps connected by an AFTER_SUCCESS_REFERENCE dependency.",
+      "workflow": {
+        "workflow_id": "workflow-linear-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-linear-1",
+        "description": "Declarative workflow reference for workflow-linear-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "linear-step-1",
+          "linear-step-2"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-linear-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-linear-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-linear-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-linear-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-linear-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-linear-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "linear-step-1",
+          "step_version": 1,
+          "step_type": "SYSTEM_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "linear-step-2",
+          "step_version": 1,
+          "step_type": "TOOL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": {
+            "reference_id": "linear-tool-1",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-linear-tool-1",
+            "reference_present": true,
+            "validator_version": "workflow_step_contract_validator_v1"
+          },
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [
+            {
+              "dependency_id": "linear-dep-1",
+              "dependency_type": "AFTER_SUCCESS_REFERENCE",
+              "depends_on_step_id": "linear-step-1",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            }
+          ],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "parallel-fanout-workflow",
+      "description": "A root step fans out to two parallel steps via PARALLEL_REFERENCE dependencies.",
+      "workflow": {
+        "workflow_id": "workflow-fanout-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-fanout-1",
+        "description": "Declarative workflow reference for workflow-fanout-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "fanout-root",
+          "fanout-a",
+          "fanout-b"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-fanout-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-fanout-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-fanout-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-fanout-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-fanout-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-fanout-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "fanout-root",
+          "step_version": 1,
+          "step_type": "SYSTEM_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "fanout-a",
+          "step_version": 1,
+          "step_type": "TOOL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": {
+            "reference_id": "fanout-tool-a",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-fanout-tool-a",
+            "reference_present": true,
+            "validator_version": "workflow_step_contract_validator_v1"
+          },
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [
+            {
+              "dependency_id": "fanout-dep-a",
+              "dependency_type": "PARALLEL_REFERENCE",
+              "depends_on_step_id": "fanout-root",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            }
+          ],
+          "priority": 500,
+          "parallelizable": true,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "fanout-b",
+          "step_version": 1,
+          "step_type": "TOOL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": {
+            "reference_id": "fanout-tool-b",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-fanout-tool-b",
+            "reference_present": true,
+            "validator_version": "workflow_step_contract_validator_v1"
+          },
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [
+            {
+              "dependency_id": "fanout-dep-b",
+              "dependency_type": "PARALLEL_REFERENCE",
+              "depends_on_step_id": "fanout-root",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            }
+          ],
+          "priority": 500,
+          "parallelizable": true,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "join-workflow",
+      "description": "A step joins on two predecessors via JOIN_REFERENCE dependencies.",
+      "workflow": {
+        "workflow_id": "workflow-join-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-join-1",
+        "description": "Declarative workflow reference for workflow-join-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "join-a",
+          "join-b",
+          "join-c"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-join-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-join-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-join-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-join-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-join-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-join-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "join-a",
+          "step_version": 1,
+          "step_type": "SYSTEM_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "join-b",
+          "step_version": 1,
+          "step_type": "SYSTEM_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "join-c",
+          "step_version": 1,
+          "step_type": "VALIDATION_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [
+            {
+              "dependency_id": "join-dep-a",
+              "dependency_type": "JOIN_REFERENCE",
+              "depends_on_step_id": "join-a",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            },
+            {
+              "dependency_id": "join-dep-b",
+              "dependency_type": "JOIN_REFERENCE",
+              "depends_on_step_id": "join-b",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            }
+          ],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "after-failure-workflow",
+      "description": "An audit step triggers only after a failure via AFTER_FAILURE_REFERENCE.",
+      "workflow": {
+        "workflow_id": "workflow-failure-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-failure-1",
+        "description": "Declarative workflow reference for workflow-failure-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "failure-step-1",
+          "failure-step-2"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-failure-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-failure-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-failure-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-failure-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-failure-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-failure-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "failure-step-1",
+          "step_version": 1,
+          "step_type": "TOOL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": {
+            "reference_id": "failure-tool-1",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-failure-tool-1",
+            "reference_present": true,
+            "validator_version": "workflow_step_contract_validator_v1"
+          },
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "failure-step-2",
+          "step_version": 1,
+          "step_type": "AUDIT_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [
+            {
+              "dependency_id": "failure-dep-1",
+              "dependency_type": "AFTER_FAILURE_REFERENCE",
+              "depends_on_step_id": "failure-step-1",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            }
+          ],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "full-lifecycle-workflow",
+      "description": "A workflow with one step per declared step type, dual approval, exponential retry, long timeout and rollback compensation.",
+      "workflow": {
+        "workflow_id": "workflow-lifecycle-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-lifecycle-1",
+        "description": "Declarative workflow reference for workflow-lifecycle-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "lifecycle-step-1",
+          "lifecycle-step-2",
+          "lifecycle-step-3",
+          "lifecycle-step-4",
+          "lifecycle-step-5",
+          "lifecycle-step-6",
+          "lifecycle-step-7",
+          "lifecycle-step-8",
+          "lifecycle-step-9"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "lifecycle-entry-if",
+            "condition_type": "IF_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "lifecycle-exit-always",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "lifecycle-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "DUAL_APPROVAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "lifecycle-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "LONG_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "lifecycle-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "EXPONENTIAL_REFERENCE",
+          "maximum_attempts": 5,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "lifecycle-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "ROLLBACK_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "lifecycle-step-1",
+          "step_version": 1,
+          "step_type": "SYSTEM_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "lifecycle-step-2",
+          "step_version": 1,
+          "step_type": "MODEL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": {
+            "reference_id": "lifecycle-entry-ref-2",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-lifecycle-entry-ref-2",
+            "reference_present": true,
+            "validator_version": "workflow_step_contract_validator_v1"
+          },
+          "context_reference": null,
+          "depends_on": [
+            {
+              "dependency_id": "lifecycle-dep-1",
+              "dependency_type": "AFTER_SUCCESS_REFERENCE",
+              "depends_on_step_id": "lifecycle-step-1",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            }
+          ],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "lifecycle-step-3",
+          "step_version": 1,
+          "step_type": "TOOL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": {
+            "reference_id": "lifecycle-entry-ref-3",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-lifecycle-entry-ref-3",
+            "reference_present": true,
+            "validator_version": "workflow_step_contract_validator_v1"
+          },
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [
+            {
+              "dependency_id": "lifecycle-dep-2",
+              "dependency_type": "AFTER_SUCCESS_REFERENCE",
+              "depends_on_step_id": "lifecycle-step-2",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            }
+          ],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "lifecycle-step-4",
+          "step_version": 1,
+          "step_type": "HUMAN_APPROVAL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [
+            {
+              "dependency_id": "lifecycle-dep-3",
+              "dependency_type": "AFTER_SUCCESS_REFERENCE",
+              "depends_on_step_id": "lifecycle-step-3",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            }
+          ],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": true,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "lifecycle-step-5",
+          "step_version": 1,
+          "step_type": "WORKFLOW_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": {
+            "reference_id": "lifecycle-entry-ref-5",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-lifecycle-entry-ref-5",
+            "reference_present": true,
+            "validator_version": "workflow_step_contract_validator_v1"
+          },
+          "depends_on": [
+            {
+              "dependency_id": "lifecycle-dep-4",
+              "dependency_type": "AFTER_SUCCESS_REFERENCE",
+              "depends_on_step_id": "lifecycle-step-4",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            }
+          ],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "lifecycle-step-6",
+          "step_version": 1,
+          "step_type": "DECISION_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [
+            {
+              "dependency_id": "lifecycle-dep-5",
+              "dependency_type": "AFTER_SUCCESS_REFERENCE",
+              "depends_on_step_id": "lifecycle-step-5",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            }
+          ],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "lifecycle-step-7",
+          "step_version": 1,
+          "step_type": "AUDIT_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [
+            {
+              "dependency_id": "lifecycle-dep-6",
+              "dependency_type": "AFTER_SUCCESS_REFERENCE",
+              "depends_on_step_id": "lifecycle-step-6",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            }
+          ],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "lifecycle-step-8",
+          "step_version": 1,
+          "step_type": "NOTIFICATION_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [
+            {
+              "dependency_id": "lifecycle-dep-7",
+              "dependency_type": "AFTER_SUCCESS_REFERENCE",
+              "depends_on_step_id": "lifecycle-step-7",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            }
+          ],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        },
+        {
+          "step_id": "lifecycle-step-9",
+          "step_version": 1,
+          "step_type": "VALIDATION_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [
+            {
+              "dependency_id": "lifecycle-dep-8",
+              "dependency_type": "AFTER_SUCCESS_REFERENCE",
+              "depends_on_step_id": "lifecycle-step-8",
+              "simulation": true,
+              "production_blocked": true,
+              "validator_version": "workflow_dependency_contract_validator_v1"
+            }
+          ],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "retry-fixed-workflow",
+      "description": "A step overrides the workflow default retry with FIXED_REFERENCE.",
+      "workflow": {
+        "workflow_id": "workflow-retry-fixed-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-retry-fixed-1",
+        "description": "Declarative workflow reference for workflow-retry-fixed-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "retry-fixed-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-retry-fixed-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-retry-fixed-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-retry-fixed-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-retry-fixed-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-retry-fixed-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-retry-fixed-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "retry-fixed-step-1",
+          "step_version": 1,
+          "step_type": "TOOL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": {
+            "reference_id": "retry-fixed-tool-1",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-retry-fixed-tool-1",
+            "reference_present": true,
+            "validator_version": "workflow_step_contract_validator_v1"
+          },
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": {
+            "retry_reference_id": "retry-fixed-step-retry",
+            "tenant_id": "tenant-alpha",
+            "organization_id": "tenant-alpha:org-1",
+            "retry_type": "FIXED_REFERENCE",
+            "maximum_attempts": 3,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_retry_contract_validator_v1"
+          },
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "retry-manual-workflow",
+      "description": "A human approval step overrides the workflow default retry with MANUAL_REFERENCE.",
+      "workflow": {
+        "workflow_id": "workflow-retry-manual-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-retry-manual-1",
+        "description": "Declarative workflow reference for workflow-retry-manual-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "retry-manual-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-retry-manual-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-retry-manual-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-retry-manual-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-retry-manual-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-retry-manual-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-retry-manual-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "retry-manual-step-1",
+          "step_version": 1,
+          "step_type": "HUMAN_APPROVAL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": true,
+          "timeout_reference": null,
+          "retry_reference": {
+            "retry_reference_id": "retry-manual-step-retry",
+            "tenant_id": "tenant-alpha",
+            "organization_id": "tenant-alpha:org-1",
+            "retry_type": "MANUAL_REFERENCE",
+            "maximum_attempts": 1,
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_retry_contract_validator_v1"
+          },
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "timeout-short-workflow",
+      "description": "A step overrides the workflow default timeout with SHORT_REFERENCE.",
+      "workflow": {
+        "workflow_id": "workflow-timeout-short-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-timeout-short-1",
+        "description": "Declarative workflow reference for workflow-timeout-short-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "timeout-short-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-timeout-short-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-timeout-short-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-timeout-short-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-timeout-short-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-timeout-short-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-timeout-short-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "timeout-short-step-1",
+          "step_version": 1,
+          "step_type": "TOOL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": {
+            "reference_id": "timeout-short-tool-1",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-timeout-short-tool-1",
+            "reference_present": true,
+            "validator_version": "workflow_step_contract_validator_v1"
+          },
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": {
+            "timeout_reference_id": "timeout-short-step-timeout",
+            "tenant_id": "tenant-alpha",
+            "organization_id": "tenant-alpha:org-1",
+            "timeout_type": "SHORT_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_timeout_contract_validator_v1"
+          },
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "timeout-manual-workflow",
+      "description": "A human approval step overrides the workflow default timeout with MANUAL_REFERENCE.",
+      "workflow": {
+        "workflow_id": "workflow-timeout-manual-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-timeout-manual-1",
+        "description": "Declarative workflow reference for workflow-timeout-manual-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "timeout-manual-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-timeout-manual-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-timeout-manual-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-timeout-manual-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-timeout-manual-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-timeout-manual-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-timeout-manual-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "timeout-manual-step-1",
+          "step_version": 1,
+          "step_type": "HUMAN_APPROVAL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": true,
+          "timeout_reference": {
+            "timeout_reference_id": "timeout-manual-step-timeout",
+            "tenant_id": "tenant-alpha",
+            "organization_id": "tenant-alpha:org-1",
+            "timeout_type": "MANUAL_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_timeout_contract_validator_v1"
+          },
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "compensation-manual-workflow",
+      "description": "A step overrides the workflow default compensation with MANUAL_COMPENSATION_REFERENCE.",
+      "workflow": {
+        "workflow_id": "workflow-compensation-manual-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-compensation-manual-1",
+        "description": "Declarative workflow reference for workflow-compensation-manual-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "compensation-manual-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-compensation-manual-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-compensation-manual-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-compensation-manual-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-compensation-manual-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-compensation-manual-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-compensation-manual-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "compensation-manual-step-1",
+          "step_version": 1,
+          "step_type": "TOOL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": {
+            "reference_id": "compensation-manual-tool-1",
+            "reference_version": 1,
+            "reference_fingerprint": "fp-compensation-manual-tool-1",
+            "reference_present": true,
+            "validator_version": "workflow_step_contract_validator_v1"
+          },
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": {
+            "compensation_reference_id": "compensation-manual-step-comp",
+            "tenant_id": "tenant-alpha",
+            "organization_id": "tenant-alpha:org-1",
+            "compensation_type": "MANUAL_COMPENSATION_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_compensation_contract_validator_v1"
+          },
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "compensation-human-workflow",
+      "description": "A human approval step overrides the workflow default compensation with HUMAN_COMPENSATION_REFERENCE.",
+      "workflow": {
+        "workflow_id": "workflow-compensation-human-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-compensation-human-1",
+        "description": "Declarative workflow reference for workflow-compensation-human-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "compensation-human-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-compensation-human-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-compensation-human-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-compensation-human-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-compensation-human-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-compensation-human-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-compensation-human-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "compensation-human-step-1",
+          "step_version": 1,
+          "step_type": "HUMAN_APPROVAL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": true,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": {
+            "compensation_reference_id": "compensation-human-step-comp",
+            "tenant_id": "tenant-alpha",
+            "organization_id": "tenant-alpha:org-1",
+            "compensation_type": "HUMAN_COMPENSATION_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_compensation_contract_validator_v1"
+          },
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "approval-user-workflow",
+      "description": "A workflow whose approval policy is USER_REFERENCE.",
+      "workflow": {
+        "workflow_id": "workflow-approval-user-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-approval-user-1",
+        "description": "Declarative workflow reference for workflow-approval-user-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "approval-user-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-approval-user-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-approval-user-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "approval-user-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "USER_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-approval-user-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-approval-user-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-approval-user-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "approval-user-step-1",
+          "step_version": 1,
+          "step_type": "HUMAN_APPROVAL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": true,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "approval-supervisor-workflow",
+      "description": "A workflow whose approval policy is SUPERVISOR_REFERENCE.",
+      "workflow": {
+        "workflow_id": "workflow-approval-supervisor-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-approval-supervisor-1",
+        "description": "Declarative workflow reference for workflow-approval-supervisor-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "approval-supervisor-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-approval-supervisor-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-approval-supervisor-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "approval-supervisor-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "SUPERVISOR_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-approval-supervisor-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-approval-supervisor-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-approval-supervisor-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "approval-supervisor-step-1",
+          "step_version": 1,
+          "step_type": "HUMAN_APPROVAL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": true,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "approval-admin-workflow",
+      "description": "A workflow whose approval policy is ADMIN_REFERENCE.",
+      "workflow": {
+        "workflow_id": "workflow-approval-admin-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-approval-admin-1",
+        "description": "Declarative workflow reference for workflow-approval-admin-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "approval-admin-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-approval-admin-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-approval-admin-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "approval-admin-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "ADMIN_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-approval-admin-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-approval-admin-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-approval-admin-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "approval-admin-step-1",
+          "step_version": 1,
+          "step_type": "HUMAN_APPROVAL_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": true,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "condition-switch-workflow",
+      "description": "A workflow whose entry condition is SWITCH_REFERENCE and exit condition is ELSE_REFERENCE.",
+      "workflow": {
+        "workflow_id": "workflow-condition-switch-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-condition-switch-1",
+        "description": "Declarative workflow reference for workflow-condition-switch-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "condition-switch-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "condition-switch-entry",
+            "condition_type": "SWITCH_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "condition-switch-exit",
+            "condition_type": "ELSE_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-condition-switch-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-condition-switch-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-condition-switch-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-condition-switch-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "condition-switch-step-1",
+          "step_version": 1,
+          "step_type": "DECISION_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "condition-never-workflow",
+      "description": "A workflow whose exit condition is NEVER_REFERENCE.",
+      "workflow": {
+        "workflow_id": "workflow-condition-never-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-condition-never-1",
+        "description": "Declarative workflow reference for workflow-condition-never-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "condition-never-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-condition-never-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "condition-never-exit",
+            "condition_type": "NEVER_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-condition-never-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-condition-never-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-condition-never-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-condition-never-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "condition-never-step-1",
+          "step_version": 1,
+          "step_type": "DECISION_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "optional-step-workflow",
+      "description": "A workflow containing an optional notification step with no workflow-level timeout.",
+      "workflow": {
+        "workflow_id": "workflow-optional-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-optional-1",
+        "description": "Declarative workflow reference for workflow-optional-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "optional-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-optional-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-optional-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-optional-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "optional-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-optional-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-optional-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "optional-step-1",
+          "step_version": 1,
+          "step_type": "NOTIFICATION_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": true,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "WORKFLOW_REGISTERED_SIMULATION",
+      "expected_decision": "REGISTER_WORKFLOW_REFERENCE"
+    },
+    {
+      "scenario_id": "tenant-mismatch-workflow",
+      "description": "The approval policy reference is bound to a different tenant than the workflow.",
+      "workflow": {
+        "workflow_id": "workflow-tenant-mismatch-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-tenant-mismatch-1",
+        "description": "Declarative workflow reference for workflow-tenant-mismatch-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "tenant-mismatch-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-tenant-mismatch-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-tenant-mismatch-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "tenant-mismatch-approval",
+          "tenant_id": "tenant-beta",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "workflow-tenant-mismatch-1-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-tenant-mismatch-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-tenant-mismatch-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "tenant-mismatch-step-1",
+          "step_version": 1,
+          "step_type": "SYSTEM_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "TENANT_BLOCKED",
+      "expected_decision": "BLOCKED"
+    },
+    {
+      "scenario_id": "organization-mismatch-workflow",
+      "description": "The timeout reference is bound to a different organization than the workflow.",
+      "workflow": {
+        "workflow_id": "workflow-organization-mismatch-1",
+        "workflow_version": 1,
+        "tenant_id": "tenant-alpha",
+        "organization_id": "tenant-alpha:org-1",
+        "display_name": "Workflow workflow-organization-mismatch-1",
+        "description": "Declarative workflow reference for workflow-organization-mismatch-1.",
+        "status": "VALIDATED_SIMULATION",
+        "step_references": [
+          "organization-mismatch-step-1"
+        ],
+        "entry_conditions": [
+          {
+            "condition_id": "workflow-organization-mismatch-1-entry",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "exit_conditions": [
+          {
+            "condition_id": "workflow-organization-mismatch-1-exit",
+            "condition_type": "ALWAYS_REFERENCE",
+            "simulation": true,
+            "production_blocked": true,
+            "validator_version": "workflow_condition_contract_validator_v1"
+          }
+        ],
+        "approval_policy_reference": {
+          "approval_reference_id": "workflow-organization-mismatch-1-approval",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "approval_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_approval_contract_validator_v1"
+        },
+        "timeout_reference": {
+          "timeout_reference_id": "organization-mismatch-timeout",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-DIFFERENT",
+          "timeout_type": "NORMAL_REFERENCE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_timeout_contract_validator_v1"
+        },
+        "retry_reference": {
+          "retry_reference_id": "workflow-organization-mismatch-1-retry",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "retry_type": "NONE",
+          "maximum_attempts": 0,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_retry_contract_validator_v1"
+        },
+        "compensation_reference": {
+          "compensation_reference_id": "workflow-organization-mismatch-1-compensation",
+          "tenant_id": "tenant-alpha",
+          "organization_id": "tenant-alpha:org-1",
+          "compensation_type": "NONE",
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_compensation_contract_validator_v1"
+        },
+        "simulation_context": {
+          "simulation": true,
+          "production_blocked": true,
+          "runtime_enabled": false,
+          "execution_enabled": false,
+          "network_enabled": false,
+          "tools_enabled": false,
+          "memory_enabled": false,
+          "llm_enabled": false,
+          "rollout_percentage": 0,
+          "validator_version": "agent_simulation_context_validator_v1"
+        },
+        "logical_sequence": 1,
+        "validator_version": "workflow_contract_validator_v1"
+      },
+      "steps": [
+        {
+          "step_id": "organization-mismatch-step-1",
+          "step_version": 1,
+          "step_type": "SYSTEM_REFERENCE",
+          "required_capabilities": [],
+          "tool_reference": null,
+          "model_reference": null,
+          "context_reference": null,
+          "depends_on": [],
+          "priority": 500,
+          "parallelizable": false,
+          "optional": false,
+          "approval_required": false,
+          "timeout_reference": null,
+          "retry_reference": null,
+          "compensation_reference": null,
+          "estimated_cost_minor_units": 0,
+          "estimated_duration_ms": 1000,
+          "simulation": true,
+          "production_blocked": true,
+          "validator_version": "workflow_step_contract_validator_v1"
+        }
+      ],
+      "expected_status": "ORGANIZATION_BLOCKED",
+      "expected_decision": "BLOCKED"
+    }
+  ]
+}
