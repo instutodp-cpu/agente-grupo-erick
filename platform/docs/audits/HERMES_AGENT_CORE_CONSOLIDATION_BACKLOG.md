@@ -2,11 +2,13 @@
 
 Derived from `platform/docs/audits/HERMES_AGENT_CORE_ARCHITECTURE_AUDIT_79_84.md`. Each item below is scoped to be a small, independent PR — none require changing a public contract shape, an enum, a decision outcome, or an existing fingerprint. Ordered by recommended sequence, not strictly by severity (a P1 that's more entangled can reasonably follow a P2 that unblocks it — see notes per item).
 
+> **Update (PR #86):** items 1–3 (all four P1 fixes) are done — see `platform/docs/audits/HERMES_AGENT_CORE_AUDIT_FIXES.md`. Items 4–7 remain open.
+
 Every item lists: the findings it resolves, why it's sized the way it is, what must NOT change, and a rough test-impact estimate.
 
 ---
 
-## 1. Registry Organization Isolation Fix
+## 1. Registry Organization Isolation Fix — DONE (PR #86)
 
 **Resolves:** AUDIT-002 (P1)
 
@@ -22,7 +24,7 @@ Every item lists: the findings it resolves, why it's sized the way it is, what m
 
 ---
 
-## 2. Model Selection Candidate Integrity Fixes
+## 2. Model Selection Candidate Integrity Fixes — DONE (PR #86)
 
 **Resolves:** AUDIT-003, AUDIT-004 (both P1)
 
@@ -43,7 +45,7 @@ Every item lists: the findings it resolves, why it's sized the way it is, what m
 
 ---
 
-## 3. Operational Material Detector Hardening
+## 3. Operational Material Detector Hardening — DONE (PR #86, scoped to the P1 bypass classes; AUDIT-006's missing tokens remain open as a smaller follow-up)
 
 **Resolves:** AUDIT-001 (P1), AUDIT-006 (P2), AUDIT-013 (P3)
 

@@ -1675,7 +1675,7 @@
           "privacy_fingerprint": "fp-privacy",
           "health_fingerprint": "fp-health",
           "quality_tier": "STANDARD",
-          "cost_tier": "HIGH",
+          "cost_tier": "PREMIUM",
           "latency_tier": "LOW",
           "privacy_tier": "NO_TRAINING_REFERENCE",
           "supported_capabilities": [

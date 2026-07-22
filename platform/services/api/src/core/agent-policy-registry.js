@@ -13,6 +13,7 @@ const AGENT_POLICY_REGISTRY_STATUSES = Object.freeze([
   'VERSION_CONFLICT',
   'VALIDATION_FAILED',
   'TENANT_BLOCKED',
+  'ORGANIZATION_BLOCKED',
   'POLICY_CONFLICT'
 ]);
 const FORBIDDEN_AGENT_POLICY_REGISTRY_STATUSES = Object.freeze(['REGISTERED_REAL']);
@@ -54,6 +55,7 @@ function createAgentPolicyRegistry() {
     }
     const policyId = policy.policy_id;
     const tenantId = policy.tenant_id;
+    const organizationId = policy.organization_id;
     const policySlug = policy.policy_slug;
     const policyVersion = policy.policy_version;
     const existing = policiesById.get(policyId);
@@ -74,8 +76,11 @@ function createAgentPolicyRegistry() {
       if (existing.tenant_id !== tenantId) {
         return safe({ ok: false, status: 'TENANT_BLOCKED', errors: ['agent_policy_tenant_reassignment_blocked'] });
       }
+      if (existing.organization_id !== organizationId) {
+        return safe({ ok: false, status: 'ORGANIZATION_BLOCKED', errors: ['agent_policy_organization_reassignment_blocked'] });
+      }
       const stored = cloneFrozen(policy);
-      policiesById.set(policyId, { record: stored, fingerprint: payload, tenant_id: tenantId, policy_slug: policySlug, policy_version: policyVersion });
+      policiesById.set(policyId, { record: stored, fingerprint: payload, tenant_id: tenantId, organization_id: organizationId, policy_slug: policySlug, policy_version: policyVersion });
       if (existing.policy_slug !== policySlug) policyIdBySlug.delete(slugKey(existing.tenant_id, existing.policy_slug));
       policyIdBySlug.set(slugKey(tenantId, policySlug), policyId);
       return safe({ ok: true, status: 'REGISTERED_SIMULATION', policy_id: policyId, tenant_id: tenantId, policy_version: policyVersion, fingerprint: payload });
@@ -89,7 +94,7 @@ function createAgentPolicyRegistry() {
       return safe({ ok: false, status: 'PAYLOAD_MISMATCH', errors: ['agent_policy_slug_already_registered_for_tenant'] });
     }
     const stored = cloneFrozen(policy);
-    policiesById.set(policyId, { record: stored, fingerprint: payload, tenant_id: tenantId, policy_slug: policySlug, policy_version: policyVersion });
+    policiesById.set(policyId, { record: stored, fingerprint: payload, tenant_id: tenantId, organization_id: organizationId, policy_slug: policySlug, policy_version: policyVersion });
     policyIdBySlug.set(slugKey(tenantId, policySlug), policyId);
     return safe({ ok: true, status: 'REGISTERED_SIMULATION', policy_id: policyId, tenant_id: tenantId, policy_version: policyVersion, fingerprint: payload });
   }

@@ -2,6 +2,8 @@
 
 Audit branch: `audit/hermes-agent-core-architecture-79-84`. Base: `main` at merge of PR #84 (`5e0e306`). This is a diagnostic PR only — no production behavior, contract, enum, decision, or fingerprint was changed to produce this report.
 
+> **Update (PR #86):** all four P1 findings below (AUDIT-001, AUDIT-002, AUDIT-003, AUDIT-004) have been fixed. See `platform/docs/audits/HERMES_AGENT_CORE_AUDIT_FIXES.md` for the fix details, files changed, and test coverage. The findings are left below exactly as originally reported, each annotated `Status: RESOLVED in PR #86`, so this document remains an accurate historical record of the PR #85 audit.
+
 ## 1. Resumo Executivo
 
 PRs #79–#84 (Agent Core Contracts, Agent Policy Boundary, Agent Session Boundary, Agent Memory Contracts, Model Provider Contracts, Model Selection Engine) were audited end-to-end: 163 files under `src/core/`, 64 test files (1113 tests), 44 fixtures, and 6 domain docs.
@@ -240,12 +242,12 @@ Fingerprint terminology is correct throughout — both docs that discuss fingerp
 
 **P1 (4):**
 
-| ID | Domain | Files | Summary |
-|---|---|---|---|
-| AUDIT-001 | Operational material detector | agent-identity-contract.js | camelCase/glued key or value identifiers bypass detection entirely |
-| AUDIT-002 | Registries | agent-registry.js, agent-policy-registry.js | no `organization_id` reassignment block, unlike every registry from PR #81 onward |
-| AUDIT-003 | Model Selection Engine | model-selection-ranking.js, model-selection-engine.js | local `isOrderedUniqueStringList` doesn't check uniqueness/order; duplicate `candidate_id` produces a ranking where fallback == primary |
-| AUDIT-004 | Model Selection Engine | model-selection-candidate.js, model-selection-ranking.js | no cross-field check between `cost_tier` and `estimated_cost_minor_units`; a mis-declared cheap tier out-ranks an honestly-priced cheaper candidate |
+| ID | Domain | Files | Summary | Status |
+|---|---|---|---|---|
+| AUDIT-001 | Operational material detector | agent-identity-contract.js | camelCase/glued key or value identifiers bypass detection entirely | **RESOLVED in PR #86** |
+| AUDIT-002 | Registries | agent-registry.js, agent-policy-registry.js | no `organization_id` reassignment block, unlike every registry from PR #81 onward | **RESOLVED in PR #86** |
+| AUDIT-003 | Model Selection Engine | model-selection-ranking.js, model-selection-engine.js | local `isOrderedUniqueStringList` doesn't check uniqueness/order; duplicate `candidate_id` produces a ranking where fallback == primary | **RESOLVED in PR #86** |
+| AUDIT-004 | Model Selection Engine | model-selection-candidate.js, model-selection-ranking.js | no cross-field check between `cost_tier` and `estimated_cost_minor_units`; a mis-declared cheap tier out-ranks an honestly-priced cheaper candidate | **RESOLVED in PR #86** |
 
 **P2 (5):**
 
@@ -283,19 +285,21 @@ Fingerprint terminology is correct throughout — both docs that discuss fingerp
 
 See the companion document `platform/docs/audits/HERMES_AGENT_CORE_CONSOLIDATION_BACKLOG.md` for the full, PR-by-PR breakdown. Summary sequence, ordered by urgency:
 
-1. **Registry Organization Isolation Fix** (fixes AUDIT-002, P1) — small, should land first; it's the only P1 touching already-shipped foundational (PR #79/#80) code paths that real callers could already be relying on.
-2. **Model Selection Candidate Integrity Fixes** (fixes AUDIT-003, AUDIT-004, both P1) — small–medium; both sit in the freshly-merged PR #84 engine that PR #86 will build directly on top of.
-3. **Operational Material Detector Hardening** (fixes AUDIT-001 P1, AUDIT-006 P2, AUDIT-013 P3) — medium; needs careful false-positive-avoidance design, flagged as needing its own design pass rather than a quick patch.
-4. **Shared Contract Primitives** (fixes AUDIT-005 P2, AUDIT-008 P2, AUDIT-011 P3, AUDIT-015 P3) — medium; pure-move extraction of already-identical code, low behavioral risk.
-5. **Registry Kernel** (fixes AUDIT-007 P2, part of AUDIT-016 perf) — medium–large; depends on #1 landing first so the kernel doesn't inherit the organization-isolation gap.
-6. **Contract API Consistency** (fixes AUDIT-014 P3) — small, mechanical.
-7. **Test Discovery and Architecture Gates** (fixes AUDIT-009 P2) — small; this audit's own optional architectural test file is a first step toward this.
+1. ~~**Registry Organization Isolation Fix** (fixes AUDIT-002, P1)~~ — **done in PR #86.**
+2. ~~**Model Selection Candidate Integrity Fixes** (fixes AUDIT-003, AUDIT-004, both P1)~~ — **done in PR #86** (as two combined fixes, P1-3 and P1-4).
+3. ~~**Operational Material Detector Hardening** (fixes AUDIT-001 P1, part of AUDIT-013 P3)~~ — **done in PR #86**, scoped to the P1 bypass classes plus best-effort Unicode homoglyph hardening; AUDIT-006 (missing tokens like `credential`/`webhook`) remains open as a separate, smaller follow-up since it wasn't part of the original P1 finding.
+4. **Shared Contract Primitives** (fixes AUDIT-005 P2, AUDIT-008 P2, AUDIT-011 P3, AUDIT-015 P3) — medium; pure-move extraction of already-identical code, low behavioral risk. Still open.
+5. **Registry Kernel** (fixes AUDIT-007 P2, part of AUDIT-016 perf) — medium–large; its dependency on item 1 landing first is now satisfied. Still open.
+6. **Contract API Consistency** (fixes AUDIT-014 P3) — small, mechanical. Still open.
+7. **Test Discovery and Architecture Gates** (fixes AUDIT-009 P2) — small; this audit's own optional architectural test file is a first step toward this. Still open.
 
 ## 18. Critérios para Seguir ao Context Assembly Engine
 
-Before PR #86 begins:
+> **Update:** PR #86 was used to fix the four P1 findings themselves (`fix/hermes-critical-architecture-p1`, see `HERMES_AGENT_CORE_AUDIT_FIXES.md`), rather than starting the Context Assembly Engine directly. The criteria below, written at audit time, are preserved as originally stated; all of the "Required" and "Strongly recommended" items are now satisfied.
 
-- **Required:** AUDIT-002, AUDIT-003, AUDIT-004 fixed and tested (all P1, all small, all isolated — no reason to carry known correctness bugs into the next engine layer that will consume `ModelSelectionDecision`/candidate data).
-- **Strongly recommended:** AUDIT-001 fixed or explicitly risk-accepted with a documented mitigation, since Context Assembly will likely handle more free-form/derived data than the strictly-enumerated contracts audited here, raising the odds of the camelCase bypass actually mattering.
-- **Not required, but should be scheduled soon after:** the Shared Contract Primitives and Registry Kernel consolidation PRs (§17, items 4–5) — no urgency to block PR #86, but the longer they wait, the more the 10–11-file duplication patterns (AUDIT-011, AUDIT-015) will grow by copy-paste into whatever PR #86 adds.
-- **No blocker exists for starting PR #86 on the current `main`** — there is no P0, and the P1s, while real, are contained, small, and independently fixable without touching Context Assembly Engine's own future code.
+Before Context Assembly Engine begins:
+
+- **Required:** AUDIT-002, AUDIT-003, AUDIT-004 fixed and tested (all P1, all small, all isolated — no reason to carry known correctness bugs into the next engine layer that will consume `ModelSelectionDecision`/candidate data). — **Done in PR #86.**
+- **Strongly recommended:** AUDIT-001 fixed or explicitly risk-accepted with a documented mitigation, since Context Assembly will likely handle more free-form/derived data than the strictly-enumerated contracts audited here, raising the odds of the camelCase bypass actually mattering. — **Done in PR #86.**
+- **Not required, but should be scheduled soon after:** the Shared Contract Primitives and Registry Kernel consolidation PRs (§17, items 4–5) — no urgency to block Context Assembly Engine, but the longer they wait, the more the 10–11-file duplication patterns (AUDIT-011, AUDIT-015) will grow by copy-paste into whatever comes next. Still open.
+- **No blocker exists for starting the Context Assembly Engine on the current `main`** — there is no P0, the four P1s are now fixed, and the remaining P2/P3 consolidation backlog items are debt-reduction, not correctness blockers.
