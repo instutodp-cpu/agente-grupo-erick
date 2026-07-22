@@ -11,6 +11,7 @@ const AGENT_POLICY_REGISTRY_STATUSES = Object.freeze([
   'REPLAY_ACCEPTED',
   'PAYLOAD_MISMATCH',
   'VERSION_CONFLICT',
+  'FINGERPRINT_CONFLICT',
   'VALIDATION_FAILED',
   'TENANT_BLOCKED',
   'ORGANIZATION_BLOCKED',
@@ -61,6 +62,12 @@ function createAgentPolicyRegistry() {
     const existing = policiesById.get(policyId);
 
     if (existing) {
+      if (existing.tenant_id !== tenantId) {
+        return safe({ ok: false, status: 'TENANT_BLOCKED', errors: ['agent_policy_tenant_reassignment_blocked'] });
+      }
+      if (existing.organization_id !== organizationId) {
+        return safe({ ok: false, status: 'ORGANIZATION_BLOCKED', errors: ['agent_policy_organization_reassignment_blocked'] });
+      }
       if (existing.fingerprint === payload) {
         return safe({ ok: true, status: 'REPLAY_ACCEPTED', policy_id: policyId, tenant_id: tenantId, policy_version: existing.policy_version, fingerprint: payload });
       }
@@ -70,14 +77,11 @@ function createAgentPolicyRegistry() {
       if (options.expected_version !== undefined && options.expected_version !== existing.policy_version) {
         return safe({ ok: false, status: 'VERSION_CONFLICT', errors: ['agent_policy_optimistic_conflict'] });
       }
+      if (options.expected_fingerprint !== undefined && options.expected_fingerprint !== existing.fingerprint) {
+        return safe({ ok: false, status: 'FINGERPRINT_CONFLICT', errors: ['agent_policy_fingerprint_conflict'] });
+      }
       if (policyVersion < existing.policy_version) {
         return safe({ ok: false, status: 'VERSION_CONFLICT', errors: ['agent_policy_version_downgrade'] });
-      }
-      if (existing.tenant_id !== tenantId) {
-        return safe({ ok: false, status: 'TENANT_BLOCKED', errors: ['agent_policy_tenant_reassignment_blocked'] });
-      }
-      if (existing.organization_id !== organizationId) {
-        return safe({ ok: false, status: 'ORGANIZATION_BLOCKED', errors: ['agent_policy_organization_reassignment_blocked'] });
       }
       const stored = cloneFrozen(policy);
       policiesById.set(policyId, { record: stored, fingerprint: payload, tenant_id: tenantId, organization_id: organizationId, policy_slug: policySlug, policy_version: policyVersion });
@@ -129,6 +133,9 @@ function createAgentPolicyRegistry() {
       }
       if (options.expected_version !== undefined && options.expected_version !== existing.rule_version) {
         return safe({ ok: false, status: 'VERSION_CONFLICT', errors: ['agent_policy_rule_optimistic_conflict'] });
+      }
+      if (options.expected_fingerprint !== undefined && options.expected_fingerprint !== existing.fingerprint) {
+        return safe({ ok: false, status: 'FINGERPRINT_CONFLICT', errors: ['agent_policy_rule_fingerprint_conflict'] });
       }
       if (ruleVersion < existing.rule_version) {
         return safe({ ok: false, status: 'VERSION_CONFLICT', errors: ['agent_policy_rule_version_downgrade'] });

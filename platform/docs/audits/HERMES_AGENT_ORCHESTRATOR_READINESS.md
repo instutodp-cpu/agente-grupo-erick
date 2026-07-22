@@ -2,13 +2,15 @@
 
 Companion to `platform/docs/audits/HERMES_INTEGRATION_ARCHITECTURE_AUDIT_79_89.md`. This document does not implement the Agent Orchestrator — it defines the contract the Orchestrator must honor once a future PR builds it, based on what PRs #79–#89 actually provide today.
 
+> **Update (PR #91):** the `agent-registry.js`/`agent-policy-registry.js` `expected_fingerprint`/`FINGERPRINT_CONFLICT` gap noted in §1 below has been fixed — see `platform/docs/audits/HERMES_REGISTRY_FINGERPRINT_CONFLICT_FIX.md`. All 9 registries now support `expected_fingerprint` uniformly.
+
 ## 1. Dependências Permitidas
 
 The Orchestrator MAY depend on:
 
 - Every `validate*`/`build*` export from the 77 contract-bearing files across Agent Core, Agent Policy, Agent Session, Agent Memory, Model Provider, Model Selection, Context Assembly, Tool, and Workflow domains.
 - Every `evaluate*` engine function: `evaluateModelSelectionRequest` (`model-selection-engine.js`), `evaluateContextAssemblyRequest` (`context-assembly-engine.js`), and the boundary evaluators in `agent-policy-boundary.js`/`agent-session-boundary.js`/`agent-memory-decision.js`.
-- Every `create*Registry()` factory across the 9 in-scope registries, called once per Orchestrator instance (never at module scope — see §4). Note two confirmed asymmetries before relying on a uniform registry API: (1) `agent-registry.js`/`agent-policy-registry.js` (the two oldest) accept an `expected_fingerprint` option but never check it — no `FINGERPRINT_CONFLICT` status exists on either, unlike the other 7 registries; (2) `model-provider-registry.js` has no `registerDecision`/`getDecisionById` pair at all, unlike the other 8 domains.
+- Every `create*Registry()` factory across the 9 in-scope registries, called once per Orchestrator instance (never at module scope — see §4). Note one remaining confirmed asymmetry: `model-provider-registry.js` has no `registerDecision`/`getDecisionById` pair at all, unlike the other 8 domains. (The `agent-registry.js`/`agent-policy-registry.js` `expected_fingerprint` gap noted here previously was fixed in PR #91 — see the update note above.)
 - The shared kernel: `agent-identity-contract.js` (`stablePayload`, `cloneFrozen`, `exactFields`, `findAgentCoreOperationalMaterial`) and `read-only-adapter-contract.js`.
 
 ## 2. Dependências Proibidas
