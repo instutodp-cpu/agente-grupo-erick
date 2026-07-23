@@ -37,7 +37,28 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'prompt_generated',
   'requires_secret',
   'requires_filesystem',
-  'requires_runtime'
+  'requires_runtime',
+  // Execution Authorization Boundary (PR #97) field names: "authorization" here always means
+  // the declarative decision boundary this PR defines, never a credential or auth header.
+  'authorization_request_id',
+  'authorization_request_version',
+  'authorization_policy',
+  'authorization_policy_id',
+  'authorization_policy_version',
+  'authorization_scope',
+  'authorization_scope_id',
+  'budget_authorization_reference',
+  'budget_authorization_id',
+  'budget_authorization_version',
+  'budget_authorization_validated',
+  'authorization_created_sequence',
+  'authorization_mutated',
+  'authorization_evaluated',
+  'authorization_decision_id',
+  // Spec-mandated PR #97 fixture scenario names (used only as object keys in the fixture file).
+  'expired-authorization',
+  'replay-authorization',
+  'require_unexpired_authorization'
 ]));
 const AGENT_CORE_FORBIDDEN_VALUE_PATTERN = /\b(api[_-]?key|private[_-]?key|access[_-]?key|secret|token|password|authorization|bearer|jwt|oauth|cookie|filesystem|endpoint|hostname|callback|handler|execute|invoke|runtime|bootstrap|startup|plugin|tool_call|system_prompt|prompt|model|provider|sdk|eval)\b/i;
 const AGENT_CORE_FORBIDDEN_VALUE_SHAPES = Object.freeze([
