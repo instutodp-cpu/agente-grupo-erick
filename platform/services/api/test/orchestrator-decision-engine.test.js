@@ -45,8 +45,13 @@ const EXPECTED_SCENARIOS = [
   'budget-review-decision', 'dependency-review-decision', 'conflict-resolution-decision', 'policy-blocked-decision',
   'tenant-mismatch-decision', 'organization-mismatch-decision', 'project-mismatch-decision', 'session-mismatch-decision',
   'fingerprint-mismatch-decision', 'version-mismatch-decision', 'readiness-score-decision', 'canonical-order-decision',
-  'replay-decision'
+  'replay-decision', 'missing-budget-evidence-decision'
 ];
+
+// missing-budget-evidence-decision has no result/blockers/readiness/audit to reproduce -- it only
+// records the request-validation failure itself (see the fixture generator) -- so it is excluded
+// from every loop below that expects a full evaluateOrchestratorDecisionRequest outcome.
+const EVALUABLE_SCENARIOS = EXPECTED_SCENARIOS.filter((key) => key !== 'missing-budget-evidence-decision');
 
 // ---------------------------------------------------------------------------
 // Fixture sanity
@@ -58,13 +63,21 @@ test('fixture and docs exist, cover every named scenario, and are free of operat
   assert.deepEqual(findAgentCoreOperationalMaterial(fixture), []);
 });
 
-EXPECTED_SCENARIOS.forEach((key) => {
+function scenarioContext(key) {
+  return key === 'version-mismatch-decision' ? { currentRegistryVersion: 'registry-v2' } : {};
+}
+
+test('PR #96: a request missing budget_evidence_reference is rejected by request validation, recorded in the fixture instead of a decision result', () => {
+  const scenario = scenarioFixture('missing-budget-evidence-decision');
+  assert.equal('budget_evidence_reference' in scenario.request, false);
+  assert.ok(Array.isArray(scenario.requestValidationErrors) && scenario.requestValidationErrors.length > 0);
+  assert.equal(validateOrchestratorDecisionRequest(scenario.request).valid, false);
+});
+
+EVALUABLE_SCENARIOS.forEach((key) => {
   test(`fixture scenario ${key} reproduces its recorded decision result`, () => {
     const scenario = scenarioFixture(key);
-    const context = key === 'dependency-review-decision' ? { pendingDependencyReviewIds: ['dep-1'] }
-      : key === 'conflict-resolution-decision' ? { resolvableConflictIds: ['conflict-1'] }
-      : key === 'version-mismatch-decision' ? { currentRegistryVersion: 'registry-v2' } : {};
-    const outcome = evaluateOrchestratorDecisionRequest(scenario.request, context);
+    const outcome = evaluateOrchestratorDecisionRequest(scenario.request, scenarioContext(key));
     assert.equal(outcome.result.status, scenario.result.status);
     assert.equal(outcome.result.decision, scenario.result.decision);
     assert.equal(outcome.result.next_state, scenario.result.next_state);
@@ -183,7 +196,7 @@ test('planning result reference and orchestration plan reference are minimal, re
 test('decision request valid, exact fields, and rejects extra/missing fields', () => {
   const request = scenarioFixture('ready-no-llm-decision').request;
   assert.equal(validateOrchestratorDecisionRequest(request).valid, true);
-  assert.equal(ORCHESTRATOR_DECISION_REQUEST_FIELDS.length, 19);
+  assert.equal(ORCHESTRATOR_DECISION_REQUEST_FIELDS.length, 24);
   assert.equal(validateOrchestratorDecisionRequest({ ...request, unexpected: 1 }).valid, false);
   const { decision_policy, ...missingPolicy } = request;
   assert.equal(validateOrchestratorDecisionRequest(missingPolicy).valid, false);
@@ -330,28 +343,34 @@ test('budget not validated surfaces as WAITING_BUDGET_REFERENCE when a plan exis
   assert.equal(evaluateOrchestratorDecisionRequest(request).result.status, 'BUDGET_BLOCKED');
 });
 
-test('a dependency requiring revalidation surfaces as WAITING_DEPENDENCY_REFERENCE, and a real cycle surfaces as DEPENDENCY_BLOCKED', () => {
-  const waiting = evaluateOrchestratorDecisionRequest(scenarioFixture('dependency-review-decision').request, {
-    pendingDependencyReviewIds: ['dep-1']
-  });
-  assert.equal(waiting.result.status, 'WAITING_DEPENDENCY_REFERENCE');
-
-  const request = scenarioFixture('ready-no-llm-decision').request;
-  const cyclic = evaluateOrchestratorDecisionRequest(request, {
-    dependencyRecords: [{ from_stage_id: 'a', to_stage_id: 'b' }, { from_stage_id: 'b', to_stage_id: 'a' }]
-  });
-  assert.equal(cyclic.result.status, 'DEPENDENCY_BLOCKED');
+test('PR #96: a loose planning_result_reference.budget_validated=true flag never overrides a blocked budget_evidence_reference (evidence is the sole acceptable proof)', () => {
+  const request = clone(scenarioFixture('budget-review-decision').request);
+  request.decision_request_id = 'decreq-loose-flag-does-not-override-evidence';
+  request.planning_result_reference = { ...request.planning_result_reference, budget_validated: true };
+  assert.equal(request.budget_evidence_reference.budget_validated, false, 'fixture precondition: the evidence itself must be blocked');
+  assert.equal(evaluateOrchestratorDecisionRequest(request).result.status, 'WAITING_BUDGET_REFERENCE', 'a loose true flag must not resurrect READY_SIMULATION when the fingerprinted evidence disagrees');
 });
 
-test('an unresolved conflict blocks, and a resolvable conflict waits for resolution', () => {
-  const waiting = evaluateOrchestratorDecisionRequest(scenarioFixture('conflict-resolution-decision').request, {
+test('PR #96: a request missing a mandatory evidence reference is rejected by validateOrchestratorDecisionRequest before the engine ever runs', () => {
+  const request = clone(scenarioFixture('ready-no-llm-decision').request);
+  delete request.budget_evidence_reference;
+  assert.equal(validateOrchestratorDecisionRequest(request).valid, false);
+  const outcome = evaluateOrchestratorDecisionRequest(request);
+  assert.equal(outcome.result.status, 'VALIDATION_FAILED');
+});
+
+test('a cyclic dependency graph surfaces as DEPENDENCY_BLOCKED via dependency_evidence_reference (PR #96: no resolvable "waiting" state exists for dependencies -- the old side-channel pendingDependencyReviewIds/dependencyRecords context params no longer drive the engine at all)', () => {
+  const outcome = evaluateOrchestratorDecisionRequest(scenarioFixture('dependency-review-decision').request, {
+    pendingDependencyReviewIds: ['dep-1'], dependencyRecords: [{ from_stage_id: 'a', to_stage_id: 'b' }]
+  });
+  assert.equal(outcome.result.status, 'DEPENDENCY_BLOCKED', 'a stale side-channel context param must never resurrect a status the evidence contract no longer supports');
+});
+
+test('an unresolved conflict surfaces as CONFLICT_BLOCKED via conflict_evidence_reference (PR #96: conflict evidence is binary -- the old resolvableConflictIds/unresolvedConflictIds side-channel context params no longer drive the engine at all)', () => {
+  const outcome = evaluateOrchestratorDecisionRequest(scenarioFixture('conflict-resolution-decision').request, {
     resolvableConflictIds: ['conflict-1']
   });
-  assert.equal(waiting.result.status, 'WAITING_CONFLICT_RESOLUTION');
-
-  const request = scenarioFixture('ready-no-llm-decision').request;
-  const blocked = evaluateOrchestratorDecisionRequest(request, { unresolvedConflictIds: ['conflict-1'] });
-  assert.equal(blocked.result.status, 'CONFLICT_BLOCKED');
+  assert.equal(outcome.result.status, 'CONFLICT_BLOCKED', 'a stale side-channel context param must never resurrect a status the evidence contract no longer supports');
 });
 
 // ---------------------------------------------------------------------------
@@ -444,20 +463,17 @@ test('input order of tool_decision_references never changes the resulting decisi
 // Result / decision invariants
 // ---------------------------------------------------------------------------
 
-test('result accepts only the 28 documented statuses, 11 decisions, and 11 next states', () => {
-  assert.equal(RESULT_STATUSES.length, 28);
+test('result accepts only the 29 documented statuses, 11 decisions, and 11 next states', () => {
+  assert.equal(RESULT_STATUSES.length, 29);
   assert.equal(RESULT_DECISIONS.length, 11);
   assert.equal(NEXT_STATES.length, 11);
   assert.equal(ORCHESTRATOR_DECISION_RESULT_FIELDS.length, 70);
 });
 
 test('every produced result forces every safe invariant flag regardless of scenario, even READY_SIMULATION', () => {
-  for (const key of EXPECTED_SCENARIOS) {
+  for (const key of EVALUABLE_SCENARIOS) {
     const scenario = scenarioFixture(key);
-    const context = key === 'dependency-review-decision' ? { pendingDependencyReviewIds: ['dep-1'] }
-      : key === 'conflict-resolution-decision' ? { resolvableConflictIds: ['conflict-1'] }
-      : key === 'version-mismatch-decision' ? { currentRegistryVersion: 'registry-v2' } : {};
-    const outcome = evaluateOrchestratorDecisionRequest(scenario.request, context);
+    const outcome = evaluateOrchestratorDecisionRequest(scenario.request, scenarioContext(key));
     for (const [field, expected] of Object.entries(ORCHESTRATOR_DECISION_RESULT_SAFE_FLAGS)) {
       assert.equal(outcome.result[field], expected, `scenario ${key} result.${field} must be ${expected}`);
     }
@@ -699,12 +715,9 @@ test('regression PRs 79 through 94 remain untouched by this PR', () => {
 });
 
 test('regression full suite invariant: no execution is ever authorized or performed, across every named scenario', () => {
-  for (const key of EXPECTED_SCENARIOS) {
+  for (const key of EVALUABLE_SCENARIOS) {
     const scenario = scenarioFixture(key);
-    const context = key === 'dependency-review-decision' ? { pendingDependencyReviewIds: ['dep-1'] }
-      : key === 'conflict-resolution-decision' ? { resolvableConflictIds: ['conflict-1'] }
-      : key === 'version-mismatch-decision' ? { currentRegistryVersion: 'registry-v2' } : {};
-    const outcome = evaluateOrchestratorDecisionRequest(scenario.request, context);
+    const outcome = evaluateOrchestratorDecisionRequest(scenario.request, scenarioContext(key));
     assert.equal(outcome.result.execution_authorized, false);
     assert.equal(outcome.result.execution_started, false);
     assert.equal(outcome.result.agent_executed, false);

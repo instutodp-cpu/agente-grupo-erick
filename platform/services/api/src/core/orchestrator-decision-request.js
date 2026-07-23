@@ -13,6 +13,11 @@ const {
 } = require('./orchestrator-planning-request');
 const { validateOrchestrationPlanReference, validatePlanningResultReference } = require('./orchestrator-plan-reference');
 const { validateOrchestratorDecisionPolicy } = require('./orchestrator-decision-policy');
+const { validateBudgetEvidenceReference } = require('./orchestrator-budget-evidence-reference');
+const { validateDependencyEvidenceReference } = require('./orchestrator-dependency-evidence-reference');
+const { validateConflictEvidenceReference } = require('./orchestrator-conflict-evidence-reference');
+const { validateApprovalEvidenceReference } = require('./orchestrator-approval-evidence-reference');
+const { validateReadinessEvidenceBundle } = require('./orchestrator-readiness-evidence-bundle');
 
 const ORCHESTRATOR_DECISION_REQUEST_VALIDATOR_VERSION = 'orchestrator_decision_request_validator_v1';
 
@@ -20,8 +25,10 @@ const ORCHESTRATOR_DECISION_REQUEST_FIELDS = Object.freeze([
   'decision_request_id', 'decision_request_version', 'planning_result_reference', 'orchestration_plan_reference',
   'policy_decision_reference', 'session_decision_reference', 'memory_selection_decision_reference',
   'context_assembly_result_reference', 'model_selection_decision_reference', 'tool_decision_references',
-  'workflow_decision_reference', 'decision_policy', 'correlation_id', 'causation_id', 'trace_id',
-  'logical_sequence', 'expected_registry_version', 'simulation_context', 'validator_version'
+  'workflow_decision_reference', 'decision_policy', 'budget_evidence_reference', 'dependency_evidence_reference',
+  'conflict_evidence_reference', 'approval_evidence_reference', 'readiness_evidence_bundle_reference',
+  'correlation_id', 'causation_id', 'trace_id', 'logical_sequence', 'expected_registry_version',
+  'simulation_context', 'validator_version'
 ]);
 
 function validateOrchestratorDecisionRequest(request) {
@@ -44,6 +51,11 @@ function validateOrchestratorDecisionRequest(request) {
   errors.push(...validateToolDecisionReferenceList(request.tool_decision_references).errors);
   errors.push(...validateWorkflowDecisionReferenceMinimal(request.workflow_decision_reference).errors.map((e) => `workflow_decision_reference_${e}`));
   errors.push(...validateOrchestratorDecisionPolicy(request.decision_policy).errors.map((e) => `decision_policy_${e}`));
+  errors.push(...validateBudgetEvidenceReference(request.budget_evidence_reference).errors.map((e) => `budget_evidence_reference_${e}`));
+  errors.push(...validateDependencyEvidenceReference(request.dependency_evidence_reference).errors.map((e) => `dependency_evidence_reference_${e}`));
+  errors.push(...validateConflictEvidenceReference(request.conflict_evidence_reference).errors.map((e) => `conflict_evidence_reference_${e}`));
+  errors.push(...validateApprovalEvidenceReference(request.approval_evidence_reference).errors.map((e) => `approval_evidence_reference_${e}`));
+  errors.push(...validateReadinessEvidenceBundle(request.readiness_evidence_bundle_reference).errors.map((e) => `readiness_evidence_bundle_reference_${e}`));
   errors.push(...validateAgentSimulationContext(request.simulation_context).errors.map((e) => `simulation_context_${e}`));
 
   if (request.validator_version !== ORCHESTRATOR_DECISION_REQUEST_VALIDATOR_VERSION) errors.push('validator_version_invalid');
