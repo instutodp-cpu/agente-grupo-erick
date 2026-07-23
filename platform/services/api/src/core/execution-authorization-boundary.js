@@ -6,7 +6,7 @@ const {
   validateExecutionAuthorizationRequest, isOrchestratorDecisionReady, isEvidenceBundleReady
 } = require('./execution-authorization-request');
 const { isActorFullyVerified } = require('./execution-authorization-actor-context');
-const { RISK_CLASSIFICATIONS } = require('./execution-authorization-scope');
+const { computeTaskReferenceFingerprint } = require('./execution-authorization-task-reference');
 const { APPROVAL_READY_STATES } = require('./execution-authorization-approval-reference');
 const { AUTHORIZATION_STATUSES, buildExecutionAuthorizationDecision } = require('./execution-authorization-decision');
 const { buildExecutionAuthorizationAudit } = require('./execution-authorization-audit');
@@ -66,6 +66,7 @@ function evaluateExecutionAuthorizationRequest(request, context = {}) {
   const bundleRef = request.readiness_evidence_bundle_reference;
   const planningRef = request.planning_result_reference;
   const planRef = request.orchestration_plan_reference;
+  const taskRef = request.task_reference;
   const policy = request.authorization_policy;
   const scope = request.authorization_scope;
   const actor = request.actor_context;
@@ -101,6 +102,7 @@ function evaluateExecutionAuthorizationRequest(request, context = {}) {
     ['readiness_evidence_bundle_reference', bundleRef, { checkAgent: true, checkProject: true, checkSession: true }],
     ['planning_result_reference', planningRef, { checkAgent: true, checkProject: true, checkSession: true }],
     ['orchestration_plan_reference', planRef, { checkAgent: true, checkProject: true, checkSession: true }],
+    ['task_reference', taskRef, { checkAgent: true, checkProject: true, checkSession: true }],
     ['authorization_scope', scope, {}],
     ['actor_context', actor, { checkProject: true, checkSession: true }],
     ['approval_reference', approval, { checkProject: true, checkSession: true }],
@@ -112,11 +114,11 @@ function evaluateExecutionAuthorizationRequest(request, context = {}) {
   }
 
   // 10. plan e planning result.
-  const planIds = [decisionRef.plan_id, bundleRef.plan_id, planningRef.plan_id, planRef.plan_id];
+  const planIds = [decisionRef.plan_id, bundleRef.plan_id, planningRef.plan_id, planRef.plan_id, taskRef.plan_id];
   if (planIds.some((id) => id !== planIds[0])) {
     return buildOutcome(request, 'PLAN_BLOCKED', ['plan_id_inconsistent_across_references'], context);
   }
-  const planningResultIds = [decisionRef.planning_result_id, bundleRef.planning_result_id, planningRef.planning_result_id];
+  const planningResultIds = [decisionRef.planning_result_id, bundleRef.planning_result_id, planningRef.planning_result_id, taskRef.planning_result_id];
   if (planningResultIds.some((id) => id !== planningResultIds[0])) {
     return buildOutcome(request, 'PLAN_BLOCKED', ['planning_result_id_inconsistent_across_references'], context);
   }
@@ -126,9 +128,14 @@ function evaluateExecutionAuthorizationRequest(request, context = {}) {
     return buildOutcome(request, 'VERSION_BLOCKED', ['expected_registry_version_mismatch'], context);
   }
 
-  // 12. fingerprints (plan_fingerprint agreement between planning result and plan reference).
+  // 12. fingerprints (plan_fingerprint agreement between planning result and plan reference, and
+  // task_reference's own fingerprint recomputed and compared -- tamper detection, exactly like
+  // PR #96's evidence references).
   if (planningRef.plan_fingerprint !== planRef.plan_fingerprint) {
     return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['plan_fingerprint_mismatch_between_planning_result_and_plan_reference'], context);
+  }
+  if (computeTaskReferenceFingerprint(taskRef) !== taskRef.task_fingerprint) {
+    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['task_reference_fingerprint_mismatch'], context);
   }
 
   // 13. ator.
@@ -164,13 +171,26 @@ function evaluateExecutionAuthorizationRequest(request, context = {}) {
     const missingWorkflow = planningRef.selected_workflow_reference_ids.find((id) => !scope.allowed_workflow_reference_ids.includes(id));
     if (missingWorkflow) return buildOutcome(request, 'SCOPE_BLOCKED', ['workflow_reference_not_in_scope'], context);
   }
+  if (!scope.allowed_task_types.includes(taskRef.task_type)) {
+    return buildOutcome(request, 'SCOPE_BLOCKED', ['task_type_not_in_scope'], context);
+  }
 
-  // 16. risco. The risk classification being authorized is supplied out-of-band (context), the
-  // same declarative side-channel pattern PR #95 established for data no formal contract in
-  // this PR carries -- see HERMES_EXECUTION_AUTHORIZATION_BOUNDARY.md "Risco".
-  const riskClassification = context.riskClassification;
-  if (!RISK_CLASSIFICATIONS.includes(riskClassification)) {
-    return buildOutcome(request, 'RISK_BLOCKED', ['risk_classification_missing_or_invalid'], context);
+  // 16. risco. The risk classification being authorized now comes exclusively from
+  // task_reference.risk_classification -- a minimal, versioned, fingerprinted reference bound to
+  // this same tenant/organization/project/session/agent/plan/planning_result (validated above),
+  // never from a loose out-of-band parameter. See HERMES_EXECUTION_AUTHORIZATION_BOUNDARY.md
+  // "Risco" for why this replaced the earlier context.riskClassification side-channel.
+  const riskClassification = taskRef.risk_classification;
+  // Defensive re-check: execution-authorization-task-reference.js's own safe flags already force
+  // both of these false, so a task_reference carrying either as true fails request validation
+  // (step 1-2, VALIDATION_FAILED) long before this line -- these two checks are unreachable in
+  // practice today, kept only as belt-and-suspenders per the spec's explicit instruction that
+  // both must block in this PR.
+  if (taskRef.external_side_effect_reference === true) {
+    return buildOutcome(request, 'RISK_BLOCKED', ['external_side_effect_reference_not_allowed'], context);
+  }
+  if (taskRef.irreversible_reference === true) {
+    return buildOutcome(request, 'RISK_BLOCKED', ['irreversible_reference_not_allowed'], context);
   }
   if (riskClassification === 'RESTRICTED') {
     return buildOutcome(request, 'RISK_BLOCKED', ['restricted_risk_always_blocks'], context);
@@ -218,7 +238,10 @@ function evaluateExecutionAuthorizationRequest(request, context = {}) {
 
 function buildWaitingApproval(request, context) {
   const decision = buildDecisionForRequest(request, 'WAITING_APPROVAL_SIMULATION', ['waiting_for_declarative_approval_reference']);
-  const audit = buildExecutionAuthorizationAudit({ decision, reasonCodes: decision.reason_codes, logicalSequence: request.logical_sequence });
+  const audit = buildExecutionAuthorizationAudit({
+    decision, taskReference: isPlainObject(request) ? request.task_reference : undefined, reasonCodes: decision.reason_codes,
+    logicalSequence: request.logical_sequence
+  });
   return { decision, audit };
 }
 
@@ -228,6 +251,7 @@ function buildDecisionForRequest(request, status, reasonCodes) {
   const bundleRef = isPlainObject(requestSafe.readiness_evidence_bundle_reference) ? requestSafe.readiness_evidence_bundle_reference : {};
   const planRef = isPlainObject(requestSafe.orchestration_plan_reference) ? requestSafe.orchestration_plan_reference : {};
   const planningRef = isPlainObject(requestSafe.planning_result_reference) ? requestSafe.planning_result_reference : {};
+  const taskRef = isPlainObject(requestSafe.task_reference) ? requestSafe.task_reference : {};
   const scope = isPlainObject(requestSafe.authorization_scope) ? requestSafe.authorization_scope : {};
   const actor = isPlainObject(requestSafe.actor_context) ? requestSafe.actor_context : {};
   const approval = isPlainObject(requestSafe.approval_reference) ? requestSafe.approval_reference : {};
@@ -253,6 +277,7 @@ function buildDecisionForRequest(request, status, reasonCodes) {
     approval_reference_id: approval.approval_reference_id,
     budget_authorization_id: budget.budget_authorization_id,
     expiration_evaluation_id: expiration.expiration_evaluation_id,
+    task_reference_id: taskRef.task_reference_id,
     request_fingerprint: isPlainObject(request) ? safeFingerprint(request) : undefined,
     orchestrator_decision_fingerprint: decisionRef.decision_fingerprint,
     readiness_bundle_fingerprint: bundleRef.bundle_fingerprint,
@@ -262,6 +287,7 @@ function buildDecisionForRequest(request, status, reasonCodes) {
     approval_fingerprint: approval.approval_fingerprint,
     budget_fingerprint: budget.budget_fingerprint,
     expiration_fingerprint: safeFingerprint(expiration),
+    task_fingerprint: taskRef.task_fingerprint,
     registry_version: requestSafe.expected_registry_version,
     blockers: reasonCodes,
     reason_codes: reasonCodes,
@@ -277,14 +303,18 @@ function buildDecisionForRequest(request, status, reasonCodes) {
     risk_validated: true,
     approval_validated: true,
     budget_validated: true,
-    expiration_validated: true
+    expiration_validated: true,
+    task_validated: status !== 'VALIDATION_FAILED',
+    task_type_validated: status !== 'VALIDATION_FAILED',
+    risk_classification_validated: status !== 'VALIDATION_FAILED'
   });
 }
 
 function buildOutcome(request, status, reasonCodes, context) {
   const decision = buildDecisionForRequest(request, status, reasonCodes);
   const audit = buildExecutionAuthorizationAudit({
-    decision, reasonCodes, logicalSequence: isPlainObject(request) && Number.isInteger(request.logical_sequence) ? request.logical_sequence : 0
+    decision, taskReference: isPlainObject(request) ? request.task_reference : undefined, reasonCodes,
+    logicalSequence: isPlainObject(request) && Number.isInteger(request.logical_sequence) ? request.logical_sequence : 0
   });
   return { decision, audit };
 }

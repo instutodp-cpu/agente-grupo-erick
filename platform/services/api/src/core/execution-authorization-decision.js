@@ -11,15 +11,17 @@ const AUTHORIZATION_DECISION_FIELDS = Object.freeze([
   'planning_result_id', 'plan_id', 'agent_id', 'tenant_id', 'organization_id', 'project_id',
   'session_reference_id', 'status', 'decision', 'next_state', 'actor_id', 'actor_role',
   'authorization_scope_id', 'approval_reference_id', 'budget_authorization_id', 'expiration_evaluation_id',
-  'request_fingerprint', 'orchestrator_decision_fingerprint', 'readiness_bundle_fingerprint', 'plan_fingerprint',
-  'scope_fingerprint', 'actor_fingerprint', 'approval_fingerprint', 'budget_fingerprint', 'expiration_fingerprint',
-  'registry_version', 'blockers', 'reason_codes', 'request_validated', 'orchestrator_decision_validated',
-  'evidence_bundle_validated', 'bindings_validated', 'versions_validated', 'fingerprints_validated',
-  'actor_validated', 'role_validated', 'scope_validated', 'risk_validated', 'approval_validated', 'budget_validated',
-  'expiration_validated', 'authorization_evaluated', 'authorized_in_simulation', 'execution_authorized',
-  'execution_started', 'agent_executed', 'tool_called', 'workflow_executed', 'provider_called', 'model_called',
-  'network_used', 'memory_read', 'memory_written', 'tokens_consumed', 'cost_consumed', 'runtime_enabled',
-  'executed', 'simulation', 'production_blocked', 'rollout_percentage', 'validator_version'
+  'task_reference_id', 'request_fingerprint', 'orchestrator_decision_fingerprint', 'readiness_bundle_fingerprint',
+  'plan_fingerprint', 'scope_fingerprint', 'actor_fingerprint', 'approval_fingerprint', 'budget_fingerprint',
+  'expiration_fingerprint', 'task_fingerprint', 'registry_version', 'blockers', 'reason_codes',
+  'request_validated', 'orchestrator_decision_validated', 'evidence_bundle_validated', 'bindings_validated',
+  'versions_validated', 'fingerprints_validated', 'actor_validated', 'role_validated', 'scope_validated',
+  'risk_validated', 'approval_validated', 'budget_validated', 'expiration_validated', 'task_validated',
+  'task_type_validated', 'risk_classification_validated', 'authorization_evaluated', 'authorized_in_simulation',
+  'execution_authorized', 'execution_started', 'agent_executed', 'tool_called', 'workflow_executed',
+  'provider_called', 'model_called', 'network_used', 'memory_read', 'memory_written', 'tokens_consumed',
+  'cost_consumed', 'runtime_enabled', 'executed', 'simulation', 'production_blocked', 'rollout_percentage',
+  'validator_version'
 ]);
 
 const AUTHORIZATION_STATUSES = Object.freeze([
@@ -56,7 +58,8 @@ const DEFAULT_OUTCOME = Object.freeze({ decision: 'BLOCKED', next_state: 'BLOCKE
 const VALIDATION_FLAG_FIELDS = Object.freeze([
   'request_validated', 'orchestrator_decision_validated', 'evidence_bundle_validated', 'bindings_validated',
   'versions_validated', 'fingerprints_validated', 'actor_validated', 'role_validated', 'scope_validated',
-  'risk_validated', 'approval_validated', 'budget_validated', 'expiration_validated'
+  'risk_validated', 'approval_validated', 'budget_validated', 'expiration_validated', 'task_validated',
+  'task_type_validated', 'risk_classification_validated'
 ]);
 
 // Even AUTHORIZED_SIMULATION never touches anything operational -- these stay false/0 on every
@@ -97,9 +100,10 @@ function validateExecutionAuthorizationDecision(decision) {
     'authorization_decision_id', 'authorization_request_id', 'decision_result_id', 'readiness_bundle_id',
     'planning_result_id', 'plan_id', 'agent_id', 'tenant_id', 'organization_id', 'project_id',
     'session_reference_id', 'actor_id', 'authorization_scope_id', 'approval_reference_id', 'budget_authorization_id',
-    'expiration_evaluation_id', 'request_fingerprint', 'orchestrator_decision_fingerprint',
+    'expiration_evaluation_id', 'task_reference_id', 'request_fingerprint', 'orchestrator_decision_fingerprint',
     'readiness_bundle_fingerprint', 'plan_fingerprint', 'scope_fingerprint', 'actor_fingerprint',
-    'approval_fingerprint', 'budget_fingerprint', 'expiration_fingerprint', 'registry_version', 'validator_version'
+    'approval_fingerprint', 'budget_fingerprint', 'expiration_fingerprint', 'task_fingerprint', 'registry_version',
+    'validator_version'
   ]) {
     if (!isNonEmptyString(decision[field])) errors.push(`${field}_invalid`);
   }
@@ -121,6 +125,9 @@ function validateExecutionAuthorizationDecision(decision) {
   if (decision.authorization_evaluated !== true) errors.push('authorization_evaluated_must_be_true');
   if (decision.status === 'AUTHORIZED_SIMULATION' && decision.authorized_in_simulation !== true) {
     errors.push('authorized_in_simulation_must_be_true_when_status_is_authorized_simulation');
+  }
+  if (decision.status === 'AUTHORIZED_SIMULATION' && (decision.task_validated !== true || decision.task_type_validated !== true || decision.risk_classification_validated !== true)) {
+    errors.push('task_validation_flags_must_be_true_when_status_is_authorized_simulation');
   }
   if (decision.status !== 'AUTHORIZED_SIMULATION' && decision.authorized_in_simulation !== false) {
     errors.push('authorized_in_simulation_must_be_false_when_status_is_not_authorized_simulation');
@@ -164,6 +171,7 @@ function buildExecutionAuthorizationDecision(input = {}) {
     approval_reference_id: input.approval_reference_id || 'approval_reference_not_available',
     budget_authorization_id: input.budget_authorization_id || 'budget_authorization_not_available',
     expiration_evaluation_id: input.expiration_evaluation_id || 'expiration_evaluation_not_available',
+    task_reference_id: input.task_reference_id || 'task_reference_not_available',
     request_fingerprint: input.request_fingerprint || 'fingerprint_not_available',
     orchestrator_decision_fingerprint: input.orchestrator_decision_fingerprint || 'fingerprint_not_available',
     readiness_bundle_fingerprint: input.readiness_bundle_fingerprint || 'fingerprint_not_available',
@@ -173,6 +181,7 @@ function buildExecutionAuthorizationDecision(input = {}) {
     approval_fingerprint: input.approval_fingerprint || 'fingerprint_not_available',
     budget_fingerprint: input.budget_fingerprint || 'fingerprint_not_available',
     expiration_fingerprint: input.expiration_fingerprint || 'fingerprint_not_available',
+    task_fingerprint: input.task_fingerprint || 'fingerprint_not_available',
     registry_version: input.registry_version || 'registry_version_not_available',
     blockers: Array.isArray(input.blockers) ? uniqueSorted(input.blockers) : [],
     reason_codes: Array.isArray(input.reason_codes) ? uniqueSorted(input.reason_codes) : [],
@@ -189,6 +198,9 @@ function buildExecutionAuthorizationDecision(input = {}) {
     approval_validated: input.approval_validated === true,
     budget_validated: input.budget_validated === true,
     expiration_validated: input.expiration_validated === true,
+    task_validated: input.task_validated === true,
+    task_type_validated: input.task_type_validated === true,
+    risk_classification_validated: input.risk_classification_validated === true,
     authorization_evaluated: true,
     authorized_in_simulation: status === 'AUTHORIZED_SIMULATION',
     ...AUTHORIZATION_DECISION_SAFE_FLAGS,

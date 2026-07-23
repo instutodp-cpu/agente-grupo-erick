@@ -12,6 +12,7 @@ const { validateExecutionAuthorizationActorContext } = require('./execution-auth
 const { validateExecutionAuthorizationApprovalReference } = require('./execution-authorization-approval-reference');
 const { validateExecutionAuthorizationBudgetReference } = require('./execution-authorization-budget-reference');
 const { validateExecutionAuthorizationExpiration } = require('./execution-authorization-expiration');
+const { validateExecutionAuthorizationTaskReference } = require('./execution-authorization-task-reference');
 
 const EXECUTION_AUTHORIZATION_REQUEST_VALIDATOR_VERSION = 'execution_authorization_request_validator_v1';
 const ORCHESTRATOR_DECISION_REFERENCE_VALIDATOR_VERSION = 'execution_authorization_orchestrator_decision_reference_validator_v1';
@@ -20,7 +21,7 @@ const EVIDENCE_BUNDLE_REFERENCE_VALIDATOR_VERSION = 'execution_authorization_evi
 const EXECUTION_AUTHORIZATION_REQUEST_FIELDS = Object.freeze([
   'authorization_request_id', 'authorization_request_version', 'orchestrator_decision_reference',
   'readiness_evidence_bundle_reference', 'planning_result_reference', 'orchestration_plan_reference',
-  'authorization_policy', 'authorization_scope', 'actor_context', 'approval_reference',
+  'task_reference', 'authorization_policy', 'authorization_scope', 'actor_context', 'approval_reference',
   'budget_authorization_reference', 'expiration_evaluation', 'correlation_id', 'causation_id', 'trace_id',
   'logical_sequence', 'expected_registry_version', 'simulation_context', 'validator_version'
 ]);
@@ -252,6 +253,7 @@ function validateExecutionAuthorizationRequest(request) {
   errors.push(...validateEvidenceBundleReference(request.readiness_evidence_bundle_reference).errors.map((e) => `readiness_evidence_bundle_reference_${e}`));
   errors.push(...validatePlanningResultReference(request.planning_result_reference).errors.map((e) => `planning_result_reference_${e}`));
   errors.push(...validateOrchestrationPlanReference(request.orchestration_plan_reference).errors.map((e) => `orchestration_plan_reference_${e}`));
+  errors.push(...validateExecutionAuthorizationTaskReference(request.task_reference).errors.map((e) => `task_reference_${e}`));
   errors.push(...validateExecutionAuthorizationPolicy(request.authorization_policy).errors.map((e) => `authorization_policy_${e}`));
   errors.push(...validateExecutionAuthorizationScope(request.authorization_scope).errors.map((e) => `authorization_scope_${e}`));
   errors.push(...validateExecutionAuthorizationActorContext(request.actor_context).errors.map((e) => `actor_context_${e}`));
