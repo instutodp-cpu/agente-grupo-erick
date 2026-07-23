@@ -4,11 +4,11 @@ const { isNonEmptyString, isPlainObject } = require('./read-only-adapter-contrac
 const { stablePayload } = require('./agent-identity-contract');
 const { validateOrchestratorDecisionRequest } = require('./orchestrator-decision-request');
 const { PLAN_GENERATED_STATUSES: PLANNER_PLAN_GENERATED_STATUSES } = require('./orchestrator-planning-result');
-const { hasDependencyCycle } = require('./orchestrator-plan-dependency');
 const { buildOrchestratorBlocker } = require('./orchestrator-blocker');
 const { buildOrchestratorReadiness } = require('./orchestrator-readiness');
 const { RESULT_STATUSES, buildOrchestratorDecisionResult } = require('./orchestrator-decision-result');
 const { buildOrchestratorDecisionAudit } = require('./orchestrator-decision-audit');
+const { evaluateDecisionEvidence } = require('./orchestrator-decision-evidence-validator');
 
 function safeFingerprint(value) {
   try {
@@ -176,6 +176,43 @@ function evaluateOrchestratorDecisionRequest(request, context = {}) {
   if (planRef.project_id !== canonical.projectId) return blocked('PROJECT_BLOCKED', 'PROJECT_BLOCKER', 'orchestration_plan_reference', planRef.plan_id, 'plan_reference_project_mismatch');
   if (planRef.session_reference_id !== canonical.sessionId) return blocked('SESSION_BLOCKED', 'SESSION_BLOCKER', 'orchestration_plan_reference', planRef.plan_id, 'plan_reference_session_mismatch');
 
+  // [PR #96] evidence presence, evidence bindings, and evidence fingerprint integrity. Budget,
+  // dependency, conflict, and approval evidence references are mandatory on the request
+  // contract; a loose flag (e.g. planning_result_reference.budget_validated alone) is never
+  // sufficient proof once a fingerprinted evidence reference is required -- see
+  // "Decision Engine não aceita flag auxiliar solta como prova" in the test suite.
+  const evidencePrecheck = evaluateDecisionEvidence({
+    readinessBundleId: `${request.decision_request_id}-readiness-bundle`,
+    decisionRequestId: request.decision_request_id,
+    planningResultId: planningRef.planning_result_id,
+    planId: planRef.plan_id,
+    agentId: canonical.agentId,
+    tenantId: canonical.tenantId,
+    organizationId: canonical.organizationId,
+    projectId: canonical.projectId,
+    sessionReferenceId: canonical.sessionId,
+    budgetEvidence: request.budget_evidence_reference,
+    dependencyEvidence: request.dependency_evidence_reference,
+    conflictEvidence: request.conflict_evidence_reference,
+    approvalEvidence: request.approval_evidence_reference,
+    policyDecisionFingerprint: safeFingerprint(request.policy_decision_reference),
+    memorySelectionDecisionFingerprint: safeFingerprint(memoryRef),
+    contextAssemblyResultFingerprint: safeFingerprint(contextRef),
+    modelSelectionDecisionFingerprint: safeFingerprint(modelRef),
+    toolDecisionFingerprints: request.tool_decision_references.map((r) => safeFingerprint(r)),
+    workflowDecisionFingerprint: safeFingerprint(workflowRef),
+    logicalSequence
+  });
+  if (evidencePrecheck.bundle.bundle_status === 'MISSING_EVIDENCE_BLOCKED') {
+    return blocked('MISSING_EVIDENCE_BLOCKED', 'VALIDATION_BLOCKER', 'readiness_evidence_bundle', evidencePrecheck.bundle.readiness_bundle_id, evidencePrecheck.reasonCodes[0] || 'evidence_missing');
+  }
+  if (evidencePrecheck.bundle.bundle_status === 'BINDING_BLOCKED') {
+    return blocked('VALIDATION_FAILED', 'VALIDATION_BLOCKER', 'readiness_evidence_bundle', evidencePrecheck.bundle.readiness_bundle_id, evidencePrecheck.reasonCodes[0] || 'evidence_binding_inconsistent');
+  }
+  if (evidencePrecheck.bundle.bundle_status === 'FINGERPRINT_BLOCKED') {
+    return blocked('FINGERPRINT_BLOCKED', 'FINGERPRINT_BLOCKER', 'readiness_evidence_bundle', evidencePrecheck.bundle.readiness_bundle_id, evidencePrecheck.reasonCodes[0] || 'evidence_fingerprint_mismatch');
+  }
+
   // 9. versão e fingerprints.
   if (planningRef.plan_id !== planRef.plan_id || planningRef.plan_fingerprint !== planRef.plan_fingerprint) {
     return blocked('FINGERPRINT_BLOCKED', 'FINGERPRINT_BLOCKER', 'orchestration_plan_reference', planRef.plan_id, 'plan_fingerprint_mismatch_between_planning_result_and_plan_reference');
@@ -281,40 +318,47 @@ function evaluateOrchestratorDecisionRequest(request, context = {}) {
     }
   }
 
-  // 20. orçamento.
-  if (planningRef.budget_validated !== true) {
+  // 20. orçamento (evidence-driven: PR #96's budget_evidence_reference is now the sole
+  // acceptable proof -- planning_result_reference.budget_validated alone is never trusted).
+  const budgetEvidence = request.budget_evidence_reference;
+  if (budgetEvidence.evidence_status !== 'VALIDATED_SIMULATION' || budgetEvidence.budget_validated !== true) {
     if (planningRef.plan_generated !== true) {
-      return blocked('BUDGET_BLOCKED', 'BUDGET_BLOCKER', 'planning_result_reference', planningRef.planning_result_id, 'budget_not_validated_and_no_plan_generated');
+      return blocked('BUDGET_BLOCKED', 'BUDGET_BLOCKER', 'budget_evidence_reference', budgetEvidence.budget_evidence_id, 'budget_evidence_not_validated_and_no_plan_generated');
     }
-    return blocked('WAITING_BUDGET_REFERENCE', 'BUDGET_BLOCKER', 'planning_result_reference', planningRef.planning_result_id, 'budget_requires_review', { resolvable: true, resolutionType: 'INCREASE_BUDGET' });
+    return blocked('WAITING_BUDGET_REFERENCE', 'BUDGET_BLOCKER', 'budget_evidence_reference', budgetEvidence.budget_evidence_id, 'budget_evidence_requires_review', { resolvable: true, resolutionType: 'INCREASE_BUDGET' });
   }
 
-  // 21. dependências.
+  // 21. dependências (evidence-driven: PR #96's dependency_evidence_reference already ran
+  // cycle/self-dependency/missing-dependency/duplicate detection over the declarative graph).
   if (planningRef.parallel_stage_count > 0 && policy.allow_parallel_plan !== true) {
     return blocked('DEPENDENCY_BLOCKED', 'DEPENDENCY_BLOCKER', 'orchestration_plan_reference', planRef.plan_id, 'parallel_plan_not_allowed_by_decision_policy');
-  }
-  if (Array.isArray(context.dependencyRecords) && context.dependencyRecords.length > 0 && hasDependencyCycle(context.dependencyRecords)) {
-    return blocked('DEPENDENCY_BLOCKED', 'DEPENDENCY_BLOCKER', 'orchestration_plan_reference', planRef.plan_id, 'dependency_cycle_detected');
   }
   const planDependencyIds = [...planRef.dependency_ids].sort();
   const planningDependencyIds = [...planningRef.dependency_ids].sort();
   if (JSON.stringify(planDependencyIds) !== JSON.stringify(planningDependencyIds)) {
     return blocked('DEPENDENCY_BLOCKED', 'DEPENDENCY_BLOCKER', 'orchestration_plan_reference', planRef.plan_id, 'dependency_ids_inconsistent_between_planning_result_and_plan_reference');
   }
-  if (Array.isArray(context.pendingDependencyReviewIds) && context.pendingDependencyReviewIds.some((id) => planRef.dependency_ids.includes(id))) {
-    return blocked('WAITING_DEPENDENCY_REFERENCE', 'DEPENDENCY_BLOCKER', 'orchestration_plan_reference', planRef.plan_id, 'dependency_requires_revalidation', { resolvable: true, resolutionType: 'REVALIDATE_REFERENCE' });
+  const dependencyEvidence = request.dependency_evidence_reference;
+  if (dependencyEvidence.evidence_status !== 'VALIDATED_SIMULATION' || dependencyEvidence.dependency_graph_valid !== true) {
+    return blocked('DEPENDENCY_BLOCKED', 'DEPENDENCY_BLOCKER', 'dependency_evidence_reference', dependencyEvidence.dependency_evidence_id, 'dependency_evidence_graph_invalid');
   }
 
-  // conflitos (side-channel: the minimal references carry no conflict data of their own).
-  if (Array.isArray(context.unresolvedConflictIds) && context.unresolvedConflictIds.length > 0) {
-    return blocked('CONFLICT_BLOCKED', 'CONFLICT_BLOCKER', 'decision_request', request.decision_request_id, 'unresolved_conflict_detected');
-  }
-  if (Array.isArray(context.resolvableConflictIds) && context.resolvableConflictIds.length > 0) {
-    return blocked('WAITING_CONFLICT_RESOLUTION', 'CONFLICT_BLOCKER', 'decision_request', request.decision_request_id, 'conflict_requires_resolution', { resolvable: true, resolutionType: 'RESOLVE_CONFLICT' });
+  // conflitos (evidence-driven: PR #96's conflict_evidence_reference is binary -- no
+  // resolvable "waiting" state exists for conflicts, matching its own contract).
+  const conflictEvidence = request.conflict_evidence_reference;
+  if (conflictEvidence.evidence_status !== 'NO_CONFLICT_SIMULATION' || conflictEvidence.conflicts_resolved !== true) {
+    return blocked('CONFLICT_BLOCKED', 'CONFLICT_BLOCKER', 'conflict_evidence_reference', conflictEvidence.conflict_evidence_id, 'conflict_evidence_unresolved');
   }
 
-  // 22. aprovações.
+  // 22. aprovações (evidence-driven).
+  const approvalEvidence = request.approval_evidence_reference;
   const approvalRequired = planningRef.status === 'APPROVAL_REQUIRED_SIMULATION' || planningRef.approval_stage_ids.length > 0;
+  if (approvalRequired !== approvalEvidence.approval_required) {
+    return blocked('APPROVAL_BLOCKED', 'APPROVAL_BLOCKER', 'approval_evidence_reference', approvalEvidence.approval_evidence_id, 'approval_evidence_required_flag_inconsistent_with_plan');
+  }
+  if (approvalEvidence.evidence_status === 'APPROVAL_BLOCKED') {
+    return blocked('APPROVAL_BLOCKED', 'APPROVAL_BLOCKER', 'approval_evidence_reference', approvalEvidence.approval_evidence_id, 'approval_evidence_blocked');
+  }
   if (approvalRequired) {
     if (planRef.approval_stage_ids.length === 0) {
       return blocked('APPROVAL_BLOCKED', 'APPROVAL_BLOCKER', 'orchestration_plan_reference', planRef.plan_id, 'approval_required_but_no_approval_stage_declared');
@@ -358,6 +402,32 @@ function evaluateOrchestratorDecisionRequest(request, context = {}) {
     fingerprints_ready: true, versions_ready: true, blocking_count: 0, warning_count: 0, critical_count: 0,
     readiness_reason_codes: ['plan_ready_in_simulation']
   });
+
+  // [PR #96] interpret the final evidence bundle now that every domain is confirmed ready --
+  // a defensive, fail-closed re-check, not a re-derivation of anything already decided above.
+  const finalEvidenceBundle = evaluateDecisionEvidence({
+    readinessBundleId: `${request.decision_request_id}-readiness-bundle`,
+    decisionRequestId: request.decision_request_id,
+    planningResultId: planningRef.planning_result_id,
+    planId: planRef.plan_id,
+    agentId: canonical.agentId,
+    tenantId: canonical.tenantId,
+    organizationId: canonical.organizationId,
+    projectId: canonical.projectId,
+    sessionReferenceId: canonical.sessionId,
+    budgetEvidence, dependencyEvidence, conflictEvidence, approvalEvidence,
+    policyDecisionFingerprint: safeFingerprint(request.policy_decision_reference),
+    memorySelectionDecisionFingerprint: safeFingerprint(memoryRef),
+    contextAssemblyResultFingerprint: safeFingerprint(contextRef),
+    modelSelectionDecisionFingerprint: safeFingerprint(modelRef),
+    toolDecisionFingerprints: request.tool_decision_references.map((r) => safeFingerprint(r)),
+    workflowDecisionFingerprint: safeFingerprint(workflowRef),
+    policyReady: true, memoryReady: true, preferencesReady: true, projectStateReady: true, continuityReady: true,
+    contextReady: true, modelReady: true, toolsReady: true, workflowReady: true, logicalSequence
+  }).bundle;
+  if (finalEvidenceBundle.bundle_status !== 'READY_EVIDENCE_SIMULATION' || finalEvidenceBundle.overall_ready_in_simulation !== true) {
+    return blocked('VALIDATION_FAILED', 'VALIDATION_BLOCKER', 'readiness_evidence_bundle', finalEvidenceBundle.readiness_bundle_id, `evidence_bundle_not_ready::${finalEvidenceBundle.bundle_status}`);
+  }
 
   // 25. emitir decisão.
   if (policy.allow_ready_simulation !== true) {
