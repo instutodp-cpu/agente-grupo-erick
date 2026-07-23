@@ -58,7 +58,19 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   // Spec-mandated PR #97 fixture scenario names (used only as object keys in the fixture file).
   'expired-authorization',
   'replay-authorization',
-  'require_unexpired_authorization'
+  'require_unexpired_authorization',
+  // Execution Plan Contracts (PR #98) field names -- same rationale as PR #97's own entries
+  // above: "authorization" here always refers to this declarative decision boundary.
+  'authorization_decision_reference',
+  'authorization_decision_fingerprint',
+  'authorization_fingerprint',
+  'authorization_validated',
+  // idempotency_key_reference is a synthetic, normalized identifier, never a real secret or
+  // API key -- see execution-plan-idempotency.js's own IDEMPOTENCY_KEY_PATTERN and its
+  // "não armazenar chave operacional ou segredo" rule.
+  'idempotency_key_reference',
+  // Spec-mandated PR #98 fixture scenario name (used only as an object key in the fixture file).
+  'authorization-blocked-plan'
 ]));
 const AGENT_CORE_FORBIDDEN_VALUE_PATTERN = /\b(api[_-]?key|private[_-]?key|access[_-]?key|secret|token|password|authorization|bearer|jwt|oauth|cookie|filesystem|endpoint|hostname|callback|handler|execute|invoke|runtime|bootstrap|startup|plugin|tool_call|system_prompt|prompt|model|provider|sdk|eval)\b/i;
 const AGENT_CORE_FORBIDDEN_VALUE_SHAPES = Object.freeze([
