@@ -12,8 +12,8 @@ const {
 const { computeTaskReferenceFingerprint } = require('./execution-authorization-task-reference');
 const { STAGE_TYPES, buildExecutionPlanStage } = require('./execution-plan-stage');
 const { buildExecutionPlanStageBinding } = require('./execution-plan-stage-binding');
-const { analyzeExecutionPlanDependencies, buildExecutionPlanDependency } = require('./execution-plan-dependency');
-const { DEPENDENCY_TYPES } = require('./orchestrator-plan-dependency');
+const { buildExecutionPlanDependency } = require('./execution-plan-dependency');
+const { computeDependencyGraphReferenceFingerprint } = require('./execution-plan-dependency-graph-reference');
 const { EXECUTION_PLAN_STATUSES, buildExecutionPlanContract } = require('./execution-plan-contract');
 const { buildExecutionPlanResult } = require('./execution-plan-result');
 const { buildExecutionPlanAudit } = require('./execution-plan-audit');
@@ -40,23 +40,24 @@ function translateStatus(status, readyValue, translationMap) {
   return 'BLOCKED';
 }
 
-// Agent/project/session checks are null-tolerant: a reference whose own field is null is "not
-// scoped" and is never checked against canonical -- the same pattern PR #95's own engine
-// established for its minimal model/tool/workflow references. sessionField differs because the
-// "full identity" references (decision/bundle/planning-result/plan/task) use
+// Agent/project/session checks are null-tolerant: a reference whose own field is null, or which
+// carries no such field at all (e.g. DependencyGraphReference has no agent_id in its own
+// exact-fields list), is "not scoped" and is never checked against canonical -- the same pattern
+// PR #95's own engine established for its minimal model/tool/workflow references. sessionField
+// differs because the "full identity" references (decision/bundle/planning-result/plan/task) use
 // session_reference_id, while the PR #94-shaped decision references (memory/context/model/
 // tool/workflow) use session_id.
 function checkBinding(reference, canonical, label, sessionField = 'session_reference_id') {
   if (!isPlainObject(reference)) return null;
   if (reference.tenant_id !== canonical.tenantId) return { status: 'TENANT_BLOCKED', reason: `${label}_tenant_mismatch` };
   if (reference.organization_id !== canonical.organizationId) return { status: 'ORGANIZATION_BLOCKED', reason: `${label}_organization_mismatch` };
-  if (reference.agent_id !== null && reference.agent_id !== canonical.agentId) {
+  if (reference.agent_id != null && reference.agent_id !== canonical.agentId) {
     return { status: 'VALIDATION_FAILED', reason: `${label}_agent_mismatch` };
   }
-  if (reference.project_id !== null && canonical.projectId !== null && reference.project_id !== canonical.projectId) {
+  if (reference.project_id != null && canonical.projectId !== null && reference.project_id !== canonical.projectId) {
     return { status: 'PROJECT_BLOCKED', reason: `${label}_project_mismatch` };
   }
-  if (reference[sessionField] !== null && canonical.sessionId !== null && reference[sessionField] !== canonical.sessionId) {
+  if (reference[sessionField] != null && canonical.sessionId !== null && reference[sessionField] !== canonical.sessionId) {
     return { status: 'SESSION_BLOCKED', reason: `${label}_session_mismatch` };
   }
   return null;
@@ -347,28 +348,41 @@ function evaluateExecutionPlanRequest(request, context = {}) {
     return buildOutcome(request, 'BINDING_BLOCKED', ['selected_workflow_reference_id_not_bound'], context);
   }
 
-  // 20. dependências. orchestration_plan_reference only carries a flat dependency_ids list, no
-  // edge shape, so a declarative dependencyRecords side-channel is required whenever
-  // dependencies exist -- the same established pattern PR #95/#96 already use for this exact
-  // structural gap (unlike risk classification, a graph shape does not fit a scalar reference
-  // field, so this was not "fixed" the way PR #97's risk side-channel was).
-  const dependencyRecords = Array.isArray(context.dependencyRecords) ? context.dependencyRecords : [];
-  if (planRef.dependency_ids.length > 0 && dependencyRecords.length === 0) {
-    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_records_not_supplied'], context);
+  // 20. dependências (pr98fix). DependencyGraphReference replaces the former
+  // context.dependencyRecords side-channel entirely: every dependency edge now travels through a
+  // fingerprinted, versioned, tenant/organization/project/session-bound reference on the request
+  // itself, structurally guaranteed acyclic/self-dependency-free/fully-referenced at construction
+  // time (execution-plan-dependency-graph-reference.js). context.dependencyRecords is no longer
+  // read anywhere in this file -- a stale or malicious value passed there has zero effect.
+  const depGraphRef = request.dependency_graph_reference;
+  const depGraphMismatch = checkBinding(depGraphRef, canonical, 'dependency_graph_reference', 'session_reference_id');
+  if (depGraphMismatch) return buildOutcome(request, depGraphMismatch.status, [depGraphMismatch.reason], context);
+  if (depGraphRef.execution_plan_id !== executionPlanId) {
+    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_execution_plan_id_mismatch'], context);
   }
-  const analysis = analyzeExecutionPlanDependencies(dependencyRecords, stageIds);
-  if (analysis.cycleDetected || analysis.selfDependencyDetected || analysis.missingReferenceDetected || analysis.duplicateDetected) {
-    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_invalid'], context);
+  if (depGraphRef.planning_result_id !== planningRef.planning_result_id) {
+    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_planning_result_id_mismatch'], context);
   }
+  if (depGraphRef.orchestration_plan_id !== planRef.plan_id) {
+    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_orchestration_plan_id_mismatch'], context);
+  }
+  const stageIdSet = new Set(stageIds);
+  const depGraphStageIdSet = new Set(depGraphRef.stage_ids);
+  if (depGraphRef.stage_ids.length !== stageIds.length || ![...depGraphStageIdSet].every((id) => stageIdSet.has(id))) {
+    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_stage_ids_mismatch'], context);
+  }
+  if (computeDependencyGraphReferenceFingerprint(depGraphRef) !== depGraphRef.graph_fingerprint) {
+    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['dependency_graph_reference_fingerprint_mismatch'], context);
+  }
+  const dependencyRecords = depGraphRef.dependency_records;
   const parallelStageIds = new Set(dependencyRecords.filter((record) => record.dependency_type === 'PARALLEL_REFERENCE').flatMap((record) => [record.from_stage_id, record.to_stage_id]));
   if (parallelStageIds.size > 0 && policy.allow_parallel_stage !== true) {
     return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['parallel_stage_not_allowed_by_policy'], context);
   }
-  const dependencies = dependencyRecords.map((record, index) => buildExecutionPlanDependency({
-    dependency_id: `${executionPlanId}-dependency-${index}`, execution_plan_id: executionPlanId,
+  const dependencies = dependencyRecords.map((record) => buildExecutionPlanDependency({
+    dependency_id: record.dependency_id, execution_plan_id: executionPlanId,
     from_stage_id: record.from_stage_id, to_stage_id: record.to_stage_id,
-    dependency_type: DEPENDENCY_TYPES.includes(record.dependency_type) ? record.dependency_type : 'AFTER_SUCCESS_REFERENCE',
-    required: record.required !== false, dependency_validated: true
+    dependency_type: record.dependency_type, required: record.required === true, dependency_validated: true
   }));
 
   // 21. idempotência.
@@ -419,6 +433,7 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
   const workflowRef = isPlainObject(requestSafe.workflow_decision_reference) ? requestSafe.workflow_decision_reference : {};
   const budget = isPlainObject(requestSafe.execution_plan_budget) ? requestSafe.execution_plan_budget : {};
   const idempotency = isPlainObject(requestSafe.idempotency_policy_reference) ? requestSafe.idempotency_policy_reference : {};
+  const dependencyGraphRef = isPlainObject(requestSafe.dependency_graph_reference) ? requestSafe.dependency_graph_reference : {};
 
   const logicalSequence = Number.isInteger(requestSafe.logical_sequence) ? requestSafe.logical_sequence : 0;
   const executionPlanId = planRef.plan_id || 'plan_not_available';
@@ -504,6 +519,7 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     planning_result_fingerprint: planningRef.planning_result_fingerprint,
     orchestration_plan_fingerprint: planRef.plan_fingerprint,
     task_fingerprint: taskRef.task_fingerprint,
+    dependency_graph_fingerprint: dependencyGraphRef.graph_fingerprint,
     execution_plan_fingerprint: executionPlanFingerprint,
     registry_version: requestSafe.expected_registry_version,
     stage_count: stages.length,
@@ -527,7 +543,8 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
   });
 
   const audit = buildExecutionPlanAudit({
-    result, plan, stages, stopConditions, compensations, reasonCodes, logicalSequence
+    result, plan, stages, stopConditions, compensations, reasonCodes, logicalSequence,
+    dependencyGraphReferenceId: dependencyGraphRef.dependency_graph_reference_id
   });
 
   return { plan, result, audit };

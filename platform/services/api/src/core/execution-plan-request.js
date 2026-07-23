@@ -18,6 +18,7 @@ const { validateExecutionPlanBudget } = require('./execution-plan-budget');
 const { validateExecutionPlanIdempotency } = require('./execution-plan-idempotency');
 const { validateExecutionPlanStopCondition } = require('./execution-plan-stop-condition');
 const { validateExecutionPlanCompensationReference } = require('./execution-plan-compensation-reference');
+const { validateExecutionPlanDependencyGraphReference } = require('./execution-plan-dependency-graph-reference');
 
 const EXECUTION_PLAN_REQUEST_VALIDATOR_VERSION = 'execution_plan_request_validator_v1';
 const AUTHORIZATION_DECISION_REFERENCE_VALIDATOR_VERSION = 'execution_plan_authorization_decision_reference_validator_v1';
@@ -29,8 +30,9 @@ const EXECUTION_PLAN_REQUEST_FIELDS = Object.freeze([
   'orchestration_plan_reference', 'task_reference', 'memory_selection_reference', 'context_assembly_reference',
   'model_selection_reference', 'tool_decision_references', 'workflow_decision_reference',
   'execution_plan_policy_reference', 'execution_plan_budget', 'idempotency_policy_reference',
-  'stop_condition_references', 'compensation_references', 'correlation_id', 'causation_id', 'trace_id',
-  'logical_sequence', 'expected_registry_version', 'simulation_context', 'validator_version'
+  'stop_condition_references', 'compensation_references', 'dependency_graph_reference', 'correlation_id',
+  'causation_id', 'trace_id', 'logical_sequence', 'expected_registry_version', 'simulation_context',
+  'validator_version'
 ]);
 
 // --- AuthorizationDecisionReference: a minimal, 23-field mirror of PR #97's AuthorizationDecision
@@ -267,6 +269,7 @@ function validateExecutionPlanRequest(request) {
       errors.push(...validateExecutionPlanCompensationReference(reference).errors.map((e) => `compensation_references[${index}]_${e}`));
     });
   }
+  errors.push(...validateExecutionPlanDependencyGraphReference(request.dependency_graph_reference).errors.map((e) => `dependency_graph_reference_${e}`));
 
   errors.push(...validateAgentSimulationContext(request.simulation_context).errors.map((e) => `simulation_context_${e}`));
 

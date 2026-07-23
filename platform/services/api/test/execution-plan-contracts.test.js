@@ -23,6 +23,11 @@ const {
   EXECUTION_PLAN_DEPENDENCY_FIELDS, buildExecutionPlanDependency, validateExecutionPlanDependency
 } = require('../src/core/execution-plan-dependency');
 const {
+  DEPENDENCY_GRAPH_REFERENCE_FIELDS, DEPENDENCY_RECORD_FIELDS, buildDependencyRecord,
+  buildExecutionPlanDependencyGraphReference, computeDependencyGraphReferenceFingerprint,
+  validateDependencyRecord, validateExecutionPlanDependencyGraphReference
+} = require('../src/core/execution-plan-dependency-graph-reference');
+const {
   EXECUTION_PLAN_BUDGET_FIELDS, buildExecutionPlanBudget, validateExecutionPlanBudget
 } = require('../src/core/execution-plan-budget');
 const {
@@ -60,18 +65,19 @@ const EXPECTED_SCENARIOS = [
   'missing-idempotency-plan', 'duplicate-execution-plan', 'missing-stop-condition-plan',
   'state-change-with-compensation-plan', 'state-change-without-compensation-plan', 'external-effect-blocked-plan',
   'irreversible-blocked-plan', 'tenant-mismatch-plan', 'organization-mismatch-plan', 'project-mismatch-plan',
-  'session-mismatch-plan', 'fingerprint-mismatch-plan', 'version-mismatch-plan', 'replay-plan', 'canonical-order-plan'
+  'session-mismatch-plan', 'fingerprint-mismatch-plan', 'version-mismatch-plan', 'replay-plan', 'canonical-order-plan',
+  'dependency-graph-tenant-mismatch-plan', 'dependency-graph-organization-mismatch-plan',
+  'dependency-graph-project-mismatch-plan', 'dependency-graph-session-mismatch-plan',
+  'dependency-graph-plan-mismatch-plan', 'dependency-graph-planning-result-mismatch-plan',
+  'dependency-graph-orchestration-plan-mismatch-plan', 'dependency-graph-fingerprint-mismatch-plan'
 ];
 
-const SEQUENTIAL_DEPENDENCY_RECORDS = [{ from_stage_id: 'stage-1', to_stage_id: 'stage-2', dependency_type: 'AFTER_SUCCESS_REFERENCE' }];
-const PARALLEL_DEPENDENCY_RECORDS = [{ from_stage_id: 'stage-1', to_stage_id: 'stage-2', dependency_type: 'PARALLEL_REFERENCE' }];
-const CYCLIC_DEPENDENCY_RECORDS = [{ from_stage_id: 'stage-1', to_stage_id: 'stage-2' }, { from_stage_id: 'stage-2', to_stage_id: 'stage-1' }];
-
+// pr98fix: every dependency edge now travels through the request's own fingerprinted
+// dependency_graph_reference field -- context.dependencyRecords is no longer read anywhere in
+// the engine, so no fixture scenario needs special context beyond the pre-existing
+// currentRegistryVersion side-channel.
 function scenarioContext(key) {
   if (key === 'version-mismatch-plan') return { currentRegistryVersion: 'v2' };
-  if (key === 'sequential-plan') return { dependencyRecords: SEQUENTIAL_DEPENDENCY_RECORDS };
-  if (key === 'parallel-plan') return { dependencyRecords: PARALLEL_DEPENDENCY_RECORDS };
-  if (key === 'dependency-cycle-plan') return { dependencyRecords: CYCLIC_DEPENDENCY_RECORDS };
   return {};
 }
 
@@ -103,8 +109,8 @@ EXPECTED_SCENARIOS.forEach((key) => {
 // Contracts: exact fields, enums, safe flags
 // ---------------------------------------------------------------------------
 
-test('execution plan request: exact fields (25) and rejects missing/extra fields', () => {
-  assert.equal(EXECUTION_PLAN_REQUEST_FIELDS.length, 25);
+test('execution plan request: exact fields (26) and rejects missing/extra fields', () => {
+  assert.equal(EXECUTION_PLAN_REQUEST_FIELDS.length, 26);
   const request = scenarioFixture('prepared-no-llm-plan').request;
   assert.equal(validateExecutionPlanRequest(request).valid, true);
   assert.equal(validateExecutionPlanRequest({ ...request, unexpected: 1 }).valid, false);
@@ -217,15 +223,77 @@ test('compensation reference: exact fields (15), 5 compensation types, and never
   assert.equal(compensation.compensation_executed, false);
 });
 
-test('execution plan result: exact fields (67), 20 statuses, 4 decisions, 4 next states', () => {
-  assert.equal(EXECUTION_PLAN_RESULT_FIELDS.length, 67);
+test('execution plan result: exact fields (69, +2 from pr98fix), 20 statuses, 4 decisions, 4 next states', () => {
+  assert.equal(EXECUTION_PLAN_RESULT_FIELDS.length, 69);
   assert.equal(RESULT_STATUSES.length, 20);
   assert.equal(RESULT_DECISIONS.length, 4);
   assert.equal(NEXT_STATES.length, 4);
 });
 
-test('audit: exact fields (25)', () => {
-  assert.equal(EXECUTION_PLAN_AUDIT_FIELDS.length, 25);
+test('audit: exact fields (27, +2 from pr98fix)', () => {
+  assert.equal(EXECUTION_PLAN_AUDIT_FIELDS.length, 27);
+});
+
+test('dependency graph reference: exact fields (17), validated by construction, and simulation/production_blocked forced', () => {
+  assert.equal(DEPENDENCY_GRAPH_REFERENCE_FIELDS.length, 17);
+  const reference = scenarioFixture('prepared-no-llm-plan').request.dependency_graph_reference;
+  assert.equal(validateExecutionPlanDependencyGraphReference(reference).valid, true);
+  assert.equal(validateExecutionPlanDependencyGraphReference({ ...reference, simulation: false }).valid, false);
+  assert.equal(validateExecutionPlanDependencyGraphReference({ ...reference, production_blocked: false }).valid, false);
+  assert.equal(validateExecutionPlanDependencyGraphReference({ ...reference, dependency_count: 99 }).valid, false, 'dependency_count must equal dependency_records.length');
+});
+
+test('dependency record: exact fields (8), reuses PR #94 DEPENDENCY_TYPES, and rejects self-dependency', () => {
+  assert.equal(DEPENDENCY_RECORD_FIELDS.length, 8);
+  const record = buildDependencyRecord({
+    dependency_id: 'dep-record-x', from_stage_id: 'stage-1', to_stage_id: 'stage-2',
+    dependency_type: 'AFTER_SUCCESS_REFERENCE', required: true
+  });
+  assert.equal(validateDependencyRecord(record).valid, true);
+  assert.throws(() => buildDependencyRecord({
+    dependency_id: 'dep-record-self', from_stage_id: 'stage-1', to_stage_id: 'stage-1',
+    dependency_type: 'AFTER_SUCCESS_REFERENCE', required: true
+  }));
+});
+
+test('dependency graph reference construction rejects a cycle, a self-dependency, an unknown stage reference, a duplicate dependency id, and a duplicate stage id', () => {
+  const base = {
+    dependency_graph_reference_id: 'depgraph-construction-check', dependency_graph_reference_version: 1,
+    execution_plan_id: 'plan-x', planning_result_id: 'planning-result-x', orchestration_plan_id: 'plan-x',
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1', session_reference_id: 'session-1',
+    logical_sequence: 1
+  };
+
+  const recordAB = buildDependencyRecord({ dependency_id: 'dep-a', from_stage_id: 'stage-1', to_stage_id: 'stage-2', dependency_type: 'AFTER_SUCCESS_REFERENCE', required: true });
+  const recordBA = buildDependencyRecord({ dependency_id: 'dep-b', from_stage_id: 'stage-2', to_stage_id: 'stage-1', dependency_type: 'AFTER_SUCCESS_REFERENCE', required: true });
+  assert.throws(() => buildExecutionPlanDependencyGraphReference({ ...base, stage_ids: ['stage-1', 'stage-2'], dependency_records: [recordAB, recordBA] }), /cycle/, 'a cycle must be rejected');
+
+  const selfRecord = { ...recordAB, to_stage_id: 'stage-1', dependency_fingerprint: 'fp-self-tampered' };
+  assert.throws(() => buildExecutionPlanDependencyGraphReference({ ...base, stage_ids: ['stage-1', 'stage-2'], dependency_records: [selfRecord] }));
+
+  const unknownStageRecord = buildDependencyRecord({ dependency_id: 'dep-unknown', from_stage_id: 'stage-1', to_stage_id: 'stage-missing', dependency_type: 'AFTER_SUCCESS_REFERENCE', required: true });
+  assert.throws(() => buildExecutionPlanDependencyGraphReference({ ...base, stage_ids: ['stage-1', 'stage-2'], dependency_records: [unknownStageRecord] }), /unknown_stage/);
+
+  const duplicateIdA = buildDependencyRecord({ dependency_id: 'dep-dup', from_stage_id: 'stage-1', to_stage_id: 'stage-2', dependency_type: 'AFTER_SUCCESS_REFERENCE', required: true });
+  const duplicateIdB = buildDependencyRecord({ dependency_id: 'dep-dup', from_stage_id: 'stage-2', to_stage_id: 'stage-3', dependency_type: 'AFTER_SUCCESS_REFERENCE', required: true });
+  assert.throws(() => buildExecutionPlanDependencyGraphReference({ ...base, stage_ids: ['stage-1', 'stage-2', 'stage-3'], dependency_records: [duplicateIdA, duplicateIdB] }), /ids_not_unique/);
+
+  assert.throws(() => buildExecutionPlanDependencyGraphReference({ ...base, stage_ids: ['stage-1', 'stage-1'], dependency_records: [] }), /stage_ids_invalid/);
+});
+
+test('dependency graph reference: input order of dependency_records never changes graph_fingerprint (canonical ordering)', () => {
+  const recordA = buildDependencyRecord({ dependency_id: 'dep-order-a', from_stage_id: 'stage-1', to_stage_id: 'stage-2', dependency_type: 'AFTER_SUCCESS_REFERENCE', required: true });
+  const recordB = buildDependencyRecord({ dependency_id: 'dep-order-b', from_stage_id: 'stage-2', to_stage_id: 'stage-3', dependency_type: 'AFTER_SUCCESS_REFERENCE', required: true });
+  const base = {
+    dependency_graph_reference_id: 'depgraph-order-canonical', execution_plan_id: 'plan-x', planning_result_id: 'planning-result-x',
+    orchestration_plan_id: 'plan-x', tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1',
+    session_reference_id: 'session-1', stage_ids: ['stage-1', 'stage-2', 'stage-3'], logical_sequence: 1
+  };
+  const forward = buildExecutionPlanDependencyGraphReference({ ...base, dependency_records: [recordA, recordB] });
+  const reversedInput = { ...base, dependency_records: [recordB, recordA] };
+  assert.throws(() => buildExecutionPlanDependencyGraphReference(reversedInput), /not_canonically_ordered/, 'raw non-canonical input order must be rejected, not silently re-sorted');
+  const reversedThenCanonicalized = buildExecutionPlanDependencyGraphReference({ ...base, dependency_records: [...reversedInput.dependency_records].sort((a, b) => (a.dependency_id < b.dependency_id ? -1 : 1)) });
+  assert.equal(forward.graph_fingerprint, reversedThenCanonicalized.graph_fingerprint);
 });
 
 // ---------------------------------------------------------------------------
@@ -240,6 +308,16 @@ test('EXECUTION_PLAN_PREPARED_SIMULATION reachable via NO_LLM and via an already
 
   const lowCost = evaluateExecutionPlanRequest(scenarioFixture('prepared-low-cost-model-plan').request);
   assert.equal(lowCost.result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
+});
+
+test('dependency_graph_validated is true only when status is EXECUTION_PLAN_PREPARED_SIMULATION (pr98fix)', () => {
+  const prepared = evaluateExecutionPlanRequest(scenarioFixture('prepared-no-llm-plan').request);
+  assert.equal(prepared.result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
+  assert.equal(prepared.result.dependency_graph_validated, true);
+
+  const blocked = evaluateExecutionPlanRequest(scenarioFixture('budget-blocked-plan').request);
+  assert.equal(blocked.result.status, 'BUDGET_BLOCKED');
+  assert.equal(blocked.result.dependency_graph_validated, false);
 });
 
 test('the economical model selection is preserved end to end (this PR never re-selects a model)', () => {
@@ -274,30 +352,67 @@ test('deterministic, model, tool, and workflow stage types are each reachable, d
   assert.equal(workflowPlan.result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
 });
 
-test('a sequential dependency chain prepares, and a cyclic one is DEPENDENCY_BLOCKED', () => {
-  assert.equal(evaluateExecutionPlanRequest(scenarioFixture('sequential-plan').request, {
-    dependencyRecords: [{ from_stage_id: 'stage-1', to_stage_id: 'stage-2', dependency_type: 'AFTER_SUCCESS_REFERENCE' }]
-  }).result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
+test('a sequential dependency chain (via dependency_graph_reference) prepares', () => {
+  assert.equal(evaluateExecutionPlanRequest(scenarioFixture('sequential-plan').request).result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
+});
 
-  assert.equal(evaluateExecutionPlanRequest(scenarioFixture('dependency-cycle-plan').request, {
-    dependencyRecords: [{ from_stage_id: 'stage-1', to_stage_id: 'stage-2' }, { from_stage_id: 'stage-2', to_stage_id: 'stage-1' }]
-  }).result.status, 'DEPENDENCY_BLOCKED');
+test('pr98fix: a cyclic dependency_graph_reference cannot be constructed at all -- the request is VALIDATION_FAILED, not DEPENDENCY_BLOCKED', () => {
+  const scenario = scenarioFixture('dependency-cycle-plan');
+  assert.equal(validateExecutionPlanRequest(scenario.request).valid, false);
+  assert.equal(evaluateExecutionPlanRequest(scenario.request).result.status, 'VALIDATION_FAILED');
+});
+
+test('pr98fix: context.dependencyRecords is a dead side-channel -- it has zero effect on the result', () => {
+  const request = scenarioFixture('sequential-plan').request;
+  const withoutSideChannel = evaluateExecutionPlanRequest(request, {});
+  const withStaleSideChannel = evaluateExecutionPlanRequest(request, {
+    dependencyRecords: [{ from_stage_id: 'stage-2', to_stage_id: 'stage-1' }]
+  });
+  assert.equal(withoutSideChannel.result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
+  assert.equal(withStaleSideChannel.result.status, withoutSideChannel.result.status);
+  assert.deepEqual(withStaleSideChannel.plan.dependency_ids, withoutSideChannel.plan.dependency_ids);
 });
 
 test('a declarative parallel dependency prepares when allow_parallel_stage is true, and is DEPENDENCY_BLOCKED when the policy disallows it', () => {
   const request = scenarioFixture('parallel-plan').request;
-  const parallelContext = { dependencyRecords: [{ from_stage_id: 'stage-1', to_stage_id: 'stage-2', dependency_type: 'PARALLEL_REFERENCE' }] };
-  assert.equal(evaluateExecutionPlanRequest(request, parallelContext).result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
+  assert.equal(evaluateExecutionPlanRequest(request).result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
 
   const disallowed = clone(request);
   disallowed.execution_plan_request_id = 'planreq-parallel-disallowed-check';
   disallowed.execution_plan_policy_reference = { ...disallowed.execution_plan_policy_reference, allow_parallel_stage: false };
-  assert.equal(evaluateExecutionPlanRequest(disallowed, parallelContext).result.status, 'DEPENDENCY_BLOCKED');
+  assert.equal(evaluateExecutionPlanRequest(disallowed).result.status, 'DEPENDENCY_BLOCKED');
 });
 
-test('dependencies declared on the plan without a matching dependencyRecords side-channel are DEPENDENCY_BLOCKED, not silently ignored', () => {
-  const request = scenarioFixture('sequential-plan').request;
-  assert.equal(evaluateExecutionPlanRequest(request, {}).result.status, 'DEPENDENCY_BLOCKED');
+test('a dependency_graph_reference whose stage_ids disagree with the plan\'s own ordered_stage_ids is DEPENDENCY_BLOCKED', () => {
+  const request = clone(scenarioFixture('prepared-no-llm-plan').request);
+  request.execution_plan_request_id = 'planreq-dependency-graph-stage-ids-mismatch-check';
+  request.dependency_graph_reference = { ...request.dependency_graph_reference, stage_ids: ['stage-1'] };
+  assert.equal(evaluateExecutionPlanRequest(request).result.status, 'DEPENDENCY_BLOCKED');
+});
+
+test('tenant, organization, project, and session mismatches on dependency_graph_reference each block independently', () => {
+  assert.equal(evaluateExecutionPlanRequest(scenarioFixture('dependency-graph-tenant-mismatch-plan').request).result.status, 'TENANT_BLOCKED');
+  assert.equal(evaluateExecutionPlanRequest(scenarioFixture('dependency-graph-organization-mismatch-plan').request).result.status, 'ORGANIZATION_BLOCKED');
+  assert.equal(evaluateExecutionPlanRequest(scenarioFixture('dependency-graph-project-mismatch-plan').request).result.status, 'PROJECT_BLOCKED');
+  assert.equal(evaluateExecutionPlanRequest(scenarioFixture('dependency-graph-session-mismatch-plan').request).result.status, 'SESSION_BLOCKED');
+});
+
+test('execution_plan_id, planning_result_id, and orchestration_plan_id disagreement on dependency_graph_reference are each DEPENDENCY_BLOCKED', () => {
+  assert.equal(evaluateExecutionPlanRequest(scenarioFixture('dependency-graph-plan-mismatch-plan').request).result.status, 'DEPENDENCY_BLOCKED');
+  assert.equal(evaluateExecutionPlanRequest(scenarioFixture('dependency-graph-planning-result-mismatch-plan').request).result.status, 'DEPENDENCY_BLOCKED');
+  assert.equal(evaluateExecutionPlanRequest(scenarioFixture('dependency-graph-orchestration-plan-mismatch-plan').request).result.status, 'DEPENDENCY_BLOCKED');
+});
+
+test('a tampered dependency_graph_reference.graph_fingerprint is FINGERPRINT_BLOCKED (tamper detection), and the true fingerprint is recorded on the result', () => {
+  const scenario = scenarioFixture('dependency-graph-fingerprint-mismatch-plan');
+  const outcome = evaluateExecutionPlanRequest(scenario.request);
+  assert.equal(outcome.result.status, 'FINGERPRINT_BLOCKED');
+
+  const request = scenarioFixture('prepared-no-llm-plan').request;
+  const trueFingerprint = computeDependencyGraphReferenceFingerprint(request.dependency_graph_reference);
+  assert.equal(request.dependency_graph_reference.graph_fingerprint, trueFingerprint);
+  const preparedOutcome = evaluateExecutionPlanRequest(request);
+  assert.equal(preparedOutcome.result.dependency_graph_fingerprint, trueFingerprint);
 });
 
 test('input order of tool_decision_references never changes the resulting plan (canonical order)', () => {
@@ -548,7 +663,7 @@ test('regression execution plan modules do not use network, filesystem, eval, dy
     'services/api/src/core/execution-plan-idempotency.js', 'services/api/src/core/execution-plan-stop-condition.js',
     'services/api/src/core/execution-plan-compensation-reference.js', 'services/api/src/core/execution-plan-result.js',
     'services/api/src/core/execution-plan-registry.js', 'services/api/src/core/execution-plan-audit.js',
-    'services/api/src/core/execution-plan-engine.js'
+    'services/api/src/core/execution-plan-engine.js', 'services/api/src/core/execution-plan-dependency-graph-reference.js'
   ].map((file) => path.join(repoRoot, file));
   for (const file of files) {
     const source = fs.readFileSync(file, 'utf8');
@@ -596,9 +711,9 @@ test('regression PRs 79 through 97 remain untouched by this PR', () => {
   ].map((file) => path.join(repoRoot, file));
   const executionPlanModules = [
     'execution-plan-request', 'execution-plan-contract', 'execution-plan-stage-binding', 'execution-plan-stage',
-    'execution-plan-dependency', 'execution-plan-budget', 'execution-plan-idempotency', 'execution-plan-stop-condition',
-    'execution-plan-compensation-reference', 'execution-plan-result', 'execution-plan-registry', 'execution-plan-audit',
-    'execution-plan-engine'
+    'execution-plan-dependency', 'execution-plan-dependency-graph-reference', 'execution-plan-budget',
+    'execution-plan-idempotency', 'execution-plan-stop-condition', 'execution-plan-compensation-reference',
+    'execution-plan-result', 'execution-plan-registry', 'execution-plan-audit', 'execution-plan-engine'
   ];
   for (const file of files) {
     assert.equal(fs.existsSync(file), true);

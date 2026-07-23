@@ -11,11 +11,12 @@ const EXECUTION_PLAN_RESULT_FIELDS = Object.freeze([
   'session_reference_id', 'status', 'decision', 'next_state', 'stage_ids', 'dependency_ids', 'binding_ids',
   'stop_condition_ids', 'compensation_reference_ids', 'request_fingerprint', 'authorization_fingerprint',
   'evidence_bundle_fingerprint', 'planning_result_fingerprint', 'orchestration_plan_fingerprint', 'task_fingerprint',
-  'execution_plan_fingerprint', 'registry_version', 'stage_count', 'dependency_count', 'binding_count',
-  'stop_condition_count', 'compensation_count', 'estimated_total_tokens', 'estimated_total_cost_minor_units',
-  'blockers', 'reason_codes', 'request_validated', 'authorization_validated', 'evidence_validated',
-  'bindings_validated', 'budget_validated', 'dependencies_validated', 'idempotency_validated',
-  'stop_conditions_validated', 'compensations_validated', 'execution_plan_prepared', 'executable',
+  'dependency_graph_fingerprint', 'execution_plan_fingerprint', 'registry_version', 'stage_count', 'dependency_count',
+  'binding_count', 'stop_condition_count', 'compensation_count', 'estimated_total_tokens',
+  'estimated_total_cost_minor_units', 'blockers', 'reason_codes', 'request_validated', 'authorization_validated',
+  'evidence_validated', 'bindings_validated', 'budget_validated', 'dependencies_validated',
+  'dependency_graph_validated', 'idempotency_validated', 'stop_conditions_validated', 'compensations_validated',
+  'execution_plan_prepared', 'executable',
   'execution_authorized', 'execution_started', 'stage_started', 'stage_completed', 'tool_called',
   'workflow_executed', 'provider_called', 'model_called', 'network_used', 'memory_read', 'memory_written',
   'tokens_consumed', 'cost_consumed', 'runtime_enabled', 'executed', 'simulation', 'production_blocked',
@@ -56,7 +57,7 @@ const COUNT_FIELDS = Object.freeze(['stage_count', 'dependency_count', 'binding_
 
 const FINGERPRINT_FIELDS = Object.freeze([
   'request_fingerprint', 'authorization_fingerprint', 'evidence_bundle_fingerprint', 'planning_result_fingerprint',
-  'orchestration_plan_fingerprint', 'task_fingerprint', 'execution_plan_fingerprint'
+  'orchestration_plan_fingerprint', 'task_fingerprint', 'dependency_graph_fingerprint', 'execution_plan_fingerprint'
 ]);
 
 const ORDERED_LIST_FIELDS = Object.freeze(['stage_ids', 'dependency_ids', 'binding_ids', 'stop_condition_ids', 'compensation_reference_ids']);
@@ -130,6 +131,7 @@ function validateExecutionPlanResult(result) {
     if (typeof result[field] !== 'boolean') errors.push(`${field}_must_be_boolean`);
   }
   if (typeof result.execution_plan_prepared !== 'boolean') errors.push('execution_plan_prepared_must_be_boolean');
+  if (typeof result.dependency_graph_validated !== 'boolean') errors.push('dependency_graph_validated_must_be_boolean');
   for (const [field, expected] of Object.entries(EXECUTION_PLAN_RESULT_SAFE_FLAGS)) {
     if (result[field] !== expected) errors.push(`${field}_must_be_${String(expected)}`);
   }
@@ -139,6 +141,14 @@ function validateExecutionPlanResult(result) {
   }
   if (result.status !== 'EXECUTION_PLAN_PREPARED_SIMULATION' && result.execution_plan_prepared !== false) {
     errors.push('execution_plan_prepared_must_be_false_unless_status_is_prepared_simulation');
+  }
+  // pr98fix: dependency_graph_validated=true is only ever reachable together with
+  // EXECUTION_PLAN_PREPARED_SIMULATION -- same one-way binding as execution_plan_prepared above.
+  if (result.status === 'EXECUTION_PLAN_PREPARED_SIMULATION' && result.dependency_graph_validated !== true) {
+    errors.push('dependency_graph_validated_must_be_true_when_status_is_prepared_simulation');
+  }
+  if (result.status !== 'EXECUTION_PLAN_PREPARED_SIMULATION' && result.dependency_graph_validated !== false) {
+    errors.push('dependency_graph_validated_must_be_false_unless_status_is_prepared_simulation');
   }
   const expectedOutcome = STATUS_OUTCOME_MAP[result.status] || DEFAULT_OUTCOME;
   if (result.decision !== expectedOutcome.decision) errors.push(`decision_inconsistent_with_status::${result.status}`);
@@ -187,6 +197,7 @@ function buildExecutionPlanResult(input = {}) {
     planning_result_fingerprint: input.planning_result_fingerprint || fingerprintNotAvailable,
     orchestration_plan_fingerprint: input.orchestration_plan_fingerprint || fingerprintNotAvailable,
     task_fingerprint: input.task_fingerprint || fingerprintNotAvailable,
+    dependency_graph_fingerprint: input.dependency_graph_fingerprint || fingerprintNotAvailable,
     execution_plan_fingerprint: input.execution_plan_fingerprint || fingerprintNotAvailable,
     registry_version: input.registry_version || notAvailable,
     stage_count: Number.isInteger(input.stage_count) ? input.stage_count : 0,
@@ -208,6 +219,7 @@ function buildExecutionPlanResult(input = {}) {
     stop_conditions_validated: input.stop_conditions_validated === true,
     compensations_validated: input.compensations_validated === true,
     execution_plan_prepared: status === 'EXECUTION_PLAN_PREPARED_SIMULATION',
+    dependency_graph_validated: status === 'EXECUTION_PLAN_PREPARED_SIMULATION',
     ...EXECUTION_PLAN_RESULT_SAFE_FLAGS,
     validator_version: EXECUTION_PLAN_RESULT_VALIDATOR_VERSION
   };
@@ -219,7 +231,8 @@ function buildExecutionPlanResult(input = {}) {
       status: 'VALIDATION_FAILED',
       decision: 'BLOCKED',
       next_state: 'BLOCKED_REFERENCE',
-      execution_plan_prepared: false
+      execution_plan_prepared: false,
+      dependency_graph_validated: false
     });
   }
   return cloneFrozen(result);
