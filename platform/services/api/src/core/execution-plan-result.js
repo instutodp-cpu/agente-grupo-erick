@@ -11,7 +11,8 @@ const EXECUTION_PLAN_RESULT_FIELDS = Object.freeze([
   'session_reference_id', 'status', 'decision', 'next_state', 'stage_ids', 'dependency_ids', 'binding_ids',
   'stop_condition_ids', 'compensation_reference_ids', 'request_fingerprint', 'authorization_fingerprint',
   'evidence_bundle_fingerprint', 'planning_result_fingerprint', 'orchestration_plan_fingerprint', 'task_fingerprint',
-  'dependency_graph_fingerprint', 'execution_plan_fingerprint', 'registry_version', 'stage_count', 'dependency_count',
+  'dependency_graph_fingerprint', 'stage_manifest_reference_id', 'stage_manifest_fingerprint',
+  'stage_manifest_validated', 'execution_plan_fingerprint', 'registry_version', 'stage_count', 'dependency_count',
   'binding_count', 'stop_condition_count', 'compensation_count', 'estimated_total_tokens',
   'estimated_total_cost_minor_units', 'blockers', 'reason_codes', 'request_validated', 'authorization_validated',
   'evidence_validated', 'bindings_validated', 'budget_validated', 'dependencies_validated',
@@ -26,8 +27,9 @@ const EXECUTION_PLAN_RESULT_FIELDS = Object.freeze([
 const RESULT_STATUSES = Object.freeze([
   'EXECUTION_PLAN_PREPARED_SIMULATION', 'WAITING_APPROVAL_REFERENCE', 'DENY', 'VALIDATION_FAILED', 'TENANT_BLOCKED',
   'ORGANIZATION_BLOCKED', 'PROJECT_BLOCKED', 'SESSION_BLOCKED', 'TASK_BLOCKED', 'AUTHORIZATION_BLOCKED',
-  'EVIDENCE_BLOCKED', 'BINDING_BLOCKED', 'BUDGET_BLOCKED', 'DEPENDENCY_BLOCKED', 'IDEMPOTENCY_BLOCKED',
-  'STOP_CONDITION_BLOCKED', 'COMPENSATION_BLOCKED', 'FINGERPRINT_BLOCKED', 'VERSION_BLOCKED', 'CONFLICT_BLOCKED'
+  'EVIDENCE_BLOCKED', 'STAGE_MANIFEST_BLOCKED', 'BINDING_BLOCKED', 'BUDGET_BLOCKED', 'DEPENDENCY_BLOCKED',
+  'IDEMPOTENCY_BLOCKED', 'STOP_CONDITION_BLOCKED', 'COMPENSATION_BLOCKED', 'FINGERPRINT_BLOCKED', 'VERSION_BLOCKED',
+  'CONFLICT_BLOCKED'
 ]);
 
 const RESULT_DECISIONS = Object.freeze([
@@ -48,6 +50,13 @@ const STATUS_OUTCOME_MAP = Object.freeze({
 });
 const DEFAULT_OUTCOME = Object.freeze({ decision: 'BLOCKED', next_state: 'BLOCKED_REFERENCE' });
 
+// pr99: unlike execution_plan_prepared/dependency_graph_validated (true only for
+// EXECUTION_PLAN_PREPARED_SIMULATION), stage_manifest_validated is true whenever every
+// manifest-related cross-check has already passed by the time the engine stops -- which is also
+// true for WAITING_APPROVAL_REFERENCE, since the approval gate is the very last check the engine
+// runs, strictly after every stage-manifest/binding/budget/dependency-graph validation.
+const STAGE_MANIFEST_VALIDATED_STATUSES = Object.freeze(['EXECUTION_PLAN_PREPARED_SIMULATION', 'WAITING_APPROVAL_REFERENCE']);
+
 const VALIDATION_FLAG_FIELDS = Object.freeze([
   'request_validated', 'authorization_validated', 'evidence_validated', 'bindings_validated', 'budget_validated',
   'dependencies_validated', 'idempotency_validated', 'stop_conditions_validated', 'compensations_validated'
@@ -57,7 +66,8 @@ const COUNT_FIELDS = Object.freeze(['stage_count', 'dependency_count', 'binding_
 
 const FINGERPRINT_FIELDS = Object.freeze([
   'request_fingerprint', 'authorization_fingerprint', 'evidence_bundle_fingerprint', 'planning_result_fingerprint',
-  'orchestration_plan_fingerprint', 'task_fingerprint', 'dependency_graph_fingerprint', 'execution_plan_fingerprint'
+  'orchestration_plan_fingerprint', 'task_fingerprint', 'dependency_graph_fingerprint', 'stage_manifest_fingerprint',
+  'execution_plan_fingerprint'
 ]);
 
 const ORDERED_LIST_FIELDS = Object.freeze(['stage_ids', 'dependency_ids', 'binding_ids', 'stop_condition_ids', 'compensation_reference_ids']);
@@ -106,7 +116,7 @@ function validateExecutionPlanResult(result) {
   for (const field of [
     'result_id', 'execution_plan_request_id', 'execution_plan_id', 'authorization_decision_id', 'planning_result_id',
     'orchestration_plan_id', 'task_reference_id', 'agent_id', 'tenant_id', 'organization_id', 'project_id',
-    'session_reference_id', 'registry_version', 'validator_version', ...FINGERPRINT_FIELDS
+    'session_reference_id', 'registry_version', 'stage_manifest_reference_id', 'validator_version', ...FINGERPRINT_FIELDS
   ]) {
     if (!isNonEmptyString(result[field])) errors.push(`${field}_invalid`);
   }
@@ -132,6 +142,7 @@ function validateExecutionPlanResult(result) {
   }
   if (typeof result.execution_plan_prepared !== 'boolean') errors.push('execution_plan_prepared_must_be_boolean');
   if (typeof result.dependency_graph_validated !== 'boolean') errors.push('dependency_graph_validated_must_be_boolean');
+  if (typeof result.stage_manifest_validated !== 'boolean') errors.push('stage_manifest_validated_must_be_boolean');
   for (const [field, expected] of Object.entries(EXECUTION_PLAN_RESULT_SAFE_FLAGS)) {
     if (result[field] !== expected) errors.push(`${field}_must_be_${String(expected)}`);
   }
@@ -149,6 +160,12 @@ function validateExecutionPlanResult(result) {
   }
   if (result.status !== 'EXECUTION_PLAN_PREPARED_SIMULATION' && result.dependency_graph_validated !== false) {
     errors.push('dependency_graph_validated_must_be_false_unless_status_is_prepared_simulation');
+  }
+  if (STAGE_MANIFEST_VALIDATED_STATUSES.includes(result.status) && result.stage_manifest_validated !== true) {
+    errors.push('stage_manifest_validated_must_be_true_when_status_allows_it');
+  }
+  if (!STAGE_MANIFEST_VALIDATED_STATUSES.includes(result.status) && result.stage_manifest_validated !== false) {
+    errors.push('stage_manifest_validated_must_be_false_unless_status_allows_it');
   }
   const expectedOutcome = STATUS_OUTCOME_MAP[result.status] || DEFAULT_OUTCOME;
   if (result.decision !== expectedOutcome.decision) errors.push(`decision_inconsistent_with_status::${result.status}`);
@@ -198,6 +215,8 @@ function buildExecutionPlanResult(input = {}) {
     orchestration_plan_fingerprint: input.orchestration_plan_fingerprint || fingerprintNotAvailable,
     task_fingerprint: input.task_fingerprint || fingerprintNotAvailable,
     dependency_graph_fingerprint: input.dependency_graph_fingerprint || fingerprintNotAvailable,
+    stage_manifest_reference_id: input.stage_manifest_reference_id || notAvailable,
+    stage_manifest_fingerprint: input.stage_manifest_fingerprint || fingerprintNotAvailable,
     execution_plan_fingerprint: input.execution_plan_fingerprint || fingerprintNotAvailable,
     registry_version: input.registry_version || notAvailable,
     stage_count: Number.isInteger(input.stage_count) ? input.stage_count : 0,
@@ -220,6 +239,7 @@ function buildExecutionPlanResult(input = {}) {
     compensations_validated: input.compensations_validated === true,
     execution_plan_prepared: status === 'EXECUTION_PLAN_PREPARED_SIMULATION',
     dependency_graph_validated: status === 'EXECUTION_PLAN_PREPARED_SIMULATION',
+    stage_manifest_validated: STAGE_MANIFEST_VALIDATED_STATUSES.includes(status),
     ...EXECUTION_PLAN_RESULT_SAFE_FLAGS,
     validator_version: EXECUTION_PLAN_RESULT_VALIDATOR_VERSION
   };
@@ -232,7 +252,8 @@ function buildExecutionPlanResult(input = {}) {
       decision: 'BLOCKED',
       next_state: 'BLOCKED_REFERENCE',
       execution_plan_prepared: false,
-      dependency_graph_validated: false
+      dependency_graph_validated: false,
+      stage_manifest_validated: false
     });
   }
   return cloneFrozen(result);
@@ -252,6 +273,7 @@ module.exports = {
   MAX_TOKENS_REFERENCE,
   NEXT_STATES,
   ORDERED_LIST_FIELDS,
+  STAGE_MANIFEST_VALIDATED_STATUSES,
   RESULT_DECISIONS,
   RESULT_STATUSES,
   STATUS_OUTCOME_MAP,

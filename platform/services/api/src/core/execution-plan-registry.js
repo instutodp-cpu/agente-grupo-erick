@@ -12,6 +12,7 @@ const { validateExecutionPlanIdempotency } = require('./execution-plan-idempoten
 const { validateExecutionPlanStopCondition } = require('./execution-plan-stop-condition');
 const { validateExecutionPlanCompensationReference } = require('./execution-plan-compensation-reference');
 const { validateExecutionPlanResult } = require('./execution-plan-result');
+const { validateOrchestratorStageManifestReference } = require('./orchestrator-stage-manifest-reference');
 
 const EXECUTION_PLAN_REGISTRY_VALIDATOR_VERSION = 'execution_plan_registry_validator_v1';
 const EXECUTION_PLAN_REGISTRY_STATUSES = Object.freeze([
@@ -168,6 +169,11 @@ function createExecutionPlanRegistry() {
     idField: 'result_id', tenantField: 'tenant_id', organizationField: 'organization_id',
     validate: validateExecutionPlanResult, idLabel: 'execution_plan_result'
   });
+  const stageManifestStore = createEntityStore({
+    idField: 'stage_manifest_reference_id', versionField: 'stage_manifest_reference_version', tenantField: 'tenant_id',
+    organizationField: 'organization_id', validate: validateOrchestratorStageManifestReference,
+    idLabel: 'orchestrator_stage_manifest_reference'
+  });
 
   return Object.freeze({
     registerExecutionPlanRequest: requestStore.register,
@@ -201,7 +207,12 @@ function createExecutionPlanRegistry() {
 
     registerExecutionPlanResult: resultStore.register,
     getExecutionPlanResultById: resultStore.getById,
-    listExecutionPlanResultsByTenant: resultStore.listByTenant
+    listExecutionPlanResultsByTenant: resultStore.listByTenant,
+
+    registerOrchestratorStageManifestReference: stageManifestStore.register,
+    getOrchestratorStageManifestReferenceById: stageManifestStore.getById,
+    listOrchestratorStageManifestReferencesByTenant: stageManifestStore.listByTenant,
+    listOrchestratorStageManifestReferencesByOrganization: stageManifestStore.listByOrganization
   });
 }
 

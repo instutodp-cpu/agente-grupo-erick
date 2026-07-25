@@ -8,19 +8,23 @@ const NOT_AVAILABLE_FINGERPRINT = 'fingerprint_not_available';
 const NOT_AVAILABLE_LABEL = 'not_available';
 
 const EXECUTION_PLAN_AUDIT_FIELDS = Object.freeze([
-  'audit_id', 'execution_plan_request_id', 'execution_plan_id', 'dependency_graph_reference_id', 'fingerprints',
-  'tenant_binding', 'organization_binding', 'project_binding', 'session_binding', 'agent_binding', 'task_binding',
-  'counts', 'estimated_budget', 'side_effect_classifications', 'stop_condition_types', 'compensation_types',
-  'dependency_graph_validated', 'status', 'decision', 'next_state', 'blockers', 'reason_codes', 'logical_sequence',
-  'simulation', 'production_blocked', 'executed', 'validator_version'
+  'audit_id', 'execution_plan_request_id', 'execution_plan_id', 'dependency_graph_reference_id',
+  'stage_manifest_reference_id', 'stage_manifest_fingerprint', 'fingerprints', 'tenant_binding',
+  'organization_binding', 'project_binding', 'session_binding', 'agent_binding', 'task_binding', 'counts',
+  'estimated_budget', 'side_effect_classifications', 'stop_condition_types', 'compensation_types',
+  'stage_type_counts', 'parallel_stage_count', 'optional_stage_count', 'approval_stage_count',
+  'estimated_input_tokens', 'estimated_output_tokens', 'estimated_total_tokens', 'estimated_total_cost_minor_units',
+  'dependency_graph_validated', 'stage_manifest_validated', 'status', 'decision', 'next_state', 'blockers',
+  'reason_codes', 'logical_sequence', 'simulation', 'production_blocked', 'executed', 'validator_version'
 ]);
 
 const FINGERPRINT_KEYS = Object.freeze([
   'request', 'authz', 'evidence_bundle', 'planning_result', 'orchestration_plan', 'task', 'dependency_graph',
-  'execution_plan'
+  'stage_manifest', 'execution_plan'
 ]);
 const COUNT_KEYS = Object.freeze(['stage_count', 'dependency_count', 'binding_count', 'stop_condition_count', 'compensation_count']);
 const BUDGET_KEYS = Object.freeze(['estimated_total_tokens', 'estimated_total_cost_minor_units']);
+const STAGE_TYPES_MAX_KEYS = 20;
 
 const MAX_LIST_ITEMS = 50;
 
@@ -32,7 +36,10 @@ function validateExecutionPlanAudit(audit) {
   const errors = [];
   if (!isPlainObject(audit)) return { valid: false, errors: ['execution_plan_audit_must_be_object'] };
   exactFields(audit, EXECUTION_PLAN_AUDIT_FIELDS, 'execution_plan_audit', errors);
-  for (const field of ['audit_id', 'execution_plan_request_id', 'execution_plan_id', 'dependency_graph_reference_id', 'status', 'decision', 'next_state', 'validator_version']) {
+  for (const field of [
+    'audit_id', 'execution_plan_request_id', 'execution_plan_id', 'dependency_graph_reference_id',
+    'stage_manifest_reference_id', 'stage_manifest_fingerprint', 'status', 'decision', 'next_state', 'validator_version'
+  ]) {
     if (!isNonEmptyString(audit[field])) errors.push(`${field}_invalid`);
   }
   if (!isPlainObject(audit.fingerprints)) {
@@ -65,10 +72,24 @@ function validateExecutionPlanAudit(audit) {
   if (!isSanitizedStringList(audit.side_effect_classifications)) errors.push('side_effect_classifications_invalid');
   if (!isSanitizedStringList(audit.stop_condition_types)) errors.push('stop_condition_types_invalid');
   if (!isSanitizedStringList(audit.compensation_types)) errors.push('compensation_types_invalid');
+  if (!isPlainObject(audit.stage_type_counts) || Object.keys(audit.stage_type_counts).length > STAGE_TYPES_MAX_KEYS) {
+    errors.push('stage_type_counts_must_be_object');
+  } else {
+    for (const [key, value] of Object.entries(audit.stage_type_counts)) {
+      if (!isNonEmptyString(key) || !Number.isInteger(value) || value < 1) errors.push('stage_type_counts_entry_invalid');
+    }
+  }
+  for (const field of ['parallel_stage_count', 'optional_stage_count', 'approval_stage_count']) {
+    if (!Number.isInteger(audit[field]) || audit[field] < 0) errors.push(`${field}_invalid`);
+  }
+  for (const field of ['estimated_input_tokens', 'estimated_output_tokens', 'estimated_total_tokens', 'estimated_total_cost_minor_units']) {
+    if (!Number.isInteger(audit[field]) || audit[field] < 0) errors.push(`${field}_invalid`);
+  }
   if (!isSanitizedStringList(audit.blockers)) errors.push('blockers_invalid');
   if (!isSanitizedStringList(audit.reason_codes)) errors.push('reason_codes_invalid');
   if (!Number.isInteger(audit.logical_sequence) || audit.logical_sequence < 0) errors.push('logical_sequence_invalid');
   if (typeof audit.dependency_graph_validated !== 'boolean') errors.push('dependency_graph_validated_must_be_boolean');
+  if (typeof audit.stage_manifest_validated !== 'boolean') errors.push('stage_manifest_validated_must_be_boolean');
   if (audit.simulation !== true) errors.push('simulation_must_be_true');
   if (audit.production_blocked !== true) errors.push('production_blocked_must_be_true');
   if (audit.executed !== false) errors.push('executed_must_be_false');
@@ -96,6 +117,8 @@ function buildExecutionPlanAudit(input = {}) {
     execution_plan_request_id: result.execution_plan_request_id || NOT_AVAILABLE_LABEL,
     execution_plan_id: result.execution_plan_id || NOT_AVAILABLE_LABEL,
     dependency_graph_reference_id: input.dependencyGraphReferenceId || NOT_AVAILABLE_LABEL,
+    stage_manifest_reference_id: input.stageManifestReferenceId || NOT_AVAILABLE_LABEL,
+    stage_manifest_fingerprint: input.stageManifestFingerprint || NOT_AVAILABLE_FINGERPRINT,
     fingerprints: {
       request: result.request_fingerprint || NOT_AVAILABLE_FINGERPRINT,
       authz: result.authorization_fingerprint || NOT_AVAILABLE_FINGERPRINT,
@@ -104,6 +127,7 @@ function buildExecutionPlanAudit(input = {}) {
       orchestration_plan: result.orchestration_plan_fingerprint || NOT_AVAILABLE_FINGERPRINT,
       task: result.task_fingerprint || NOT_AVAILABLE_FINGERPRINT,
       dependency_graph: result.dependency_graph_fingerprint || NOT_AVAILABLE_FINGERPRINT,
+      stage_manifest: input.stageManifestFingerprint || NOT_AVAILABLE_FINGERPRINT,
       execution_plan: result.execution_plan_fingerprint || NOT_AVAILABLE_FINGERPRINT
     },
     tenant_binding: { tenant_id: result.tenant_id || 'tenant_not_available' },
@@ -126,6 +150,14 @@ function buildExecutionPlanAudit(input = {}) {
     side_effect_classifications: uniqueSorted(stages.map((stage) => stage.side_effect_classification).filter(isNonEmptyString)),
     stop_condition_types: uniqueSorted(stopConditions.map((condition) => condition.condition_type).filter(isNonEmptyString)),
     compensation_types: uniqueSorted(compensations.map((compensation) => compensation.compensation_type).filter(isNonEmptyString)),
+    stage_type_counts: isPlainObject(input.stageTypeCounts) ? { ...input.stageTypeCounts } : {},
+    parallel_stage_count: Number.isInteger(input.parallelStageCount) ? input.parallelStageCount : 0,
+    optional_stage_count: Number.isInteger(input.optionalStageCount) ? input.optionalStageCount : 0,
+    approval_stage_count: Number.isInteger(input.approvalStageCount) ? input.approvalStageCount : 0,
+    estimated_input_tokens: Number.isInteger(input.estimatedInputTokens) ? input.estimatedInputTokens : 0,
+    estimated_output_tokens: Number.isInteger(input.estimatedOutputTokens) ? input.estimatedOutputTokens : 0,
+    estimated_total_tokens: Number.isInteger(result.estimated_total_tokens) ? result.estimated_total_tokens : 0,
+    estimated_total_cost_minor_units: Number.isInteger(result.estimated_total_cost_minor_units) ? result.estimated_total_cost_minor_units : 0,
     status: result.status || 'VALIDATION_FAILED',
     decision: result.decision || 'BLOCKED',
     next_state: result.next_state || 'BLOCKED_REFERENCE',
@@ -133,6 +165,7 @@ function buildExecutionPlanAudit(input = {}) {
     reason_codes: Array.isArray(input.reasonCodes) ? uniqueSorted(input.reasonCodes) : (Array.isArray(result.reason_codes) ? uniqueSorted(result.reason_codes) : []),
     logical_sequence: Number.isInteger(input.logicalSequence) ? input.logicalSequence : 0,
     dependency_graph_validated: result.dependency_graph_validated === true,
+    stage_manifest_validated: input.stageManifestValidated === true,
     simulation: true,
     production_blocked: true,
     executed: false,
