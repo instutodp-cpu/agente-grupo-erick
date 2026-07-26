@@ -192,6 +192,62 @@ test('approval-required stages remain HUMAN_APPROVAL_STAGE and approval_required
   assert.equal(outcome.result.stage_manifest_validated, true, 'the manifest is fully validated even while waiting for approval');
 });
 
+test('pr99fix (Fix 2): a WAITING_APPROVAL_REFERENCE package carries a real canonical execution_plan_fingerprint, never fingerprint_not_available', () => {
+  const scenario = scenarioFixture('valid-approval-stage-manifest');
+  const outcome = evaluateExecutionPlanRequest(scenario.request, {});
+  assert.equal(outcome.result.status, 'WAITING_APPROVAL_REFERENCE');
+  assert.notEqual(outcome.result.execution_plan_fingerprint, 'fingerprint_not_available');
+  assert.notEqual(outcome.plan.plan_fingerprint, 'fingerprint_not_available');
+  assert.equal(typeof outcome.result.execution_plan_fingerprint, 'string');
+  assert.ok(outcome.result.execution_plan_fingerprint.length > 0);
+});
+
+test('pr99fix (Fix 2): the same package awaiting approval always produces the same fingerprint, a stage change alters it, and it still never authorizes or executes anything', () => {
+  const scenario = scenarioFixture('valid-approval-stage-manifest');
+  const outcomeA = evaluateExecutionPlanRequest(scenario.request, {});
+  const outcomeB = evaluateExecutionPlanRequest(scenario.request, {});
+  assert.equal(outcomeA.result.status, 'WAITING_APPROVAL_REFERENCE');
+  assert.equal(outcomeA.result.execution_plan_fingerprint, outcomeB.result.execution_plan_fingerprint, 'identical input must produce an identical fingerprint');
+
+  const changedRequest = clone(scenario.request);
+  changedRequest.execution_plan_request_id = 'planreq-approval-fingerprint-stage-change-check';
+  const [record0, record1] = changedRequest.stage_manifest_reference.stage_records;
+  const changedRecord0 = { ...record0, optional: true };
+  changedRecord0.stage_fingerprint = computeStageRecordFingerprint(changedRecord0);
+  changedRequest.stage_manifest_reference = buildOrchestratorStageManifestReference({ ...changedRequest.stage_manifest_reference, stage_records: [changedRecord0, record1] });
+  const changedOutcome = evaluateExecutionPlanRequest(changedRequest, {});
+  assert.equal(changedOutcome.result.status, 'WAITING_APPROVAL_REFERENCE');
+  assert.notEqual(changedOutcome.result.execution_plan_fingerprint, outcomeA.result.execution_plan_fingerprint, 'a stage change must change the approval-package fingerprint');
+
+  // approval-related package data: the authorization decision reference's own fingerprint is
+  // part of the canonical package too -- changing it must change execution_plan_fingerprint.
+  const authzChangedRequest = clone(scenario.request);
+  authzChangedRequest.execution_plan_request_id = 'planreq-approval-fingerprint-authz-change-check';
+  authzChangedRequest.authorization_decision_reference = { ...authzChangedRequest.authorization_decision_reference, authorization_decision_fingerprint: 'fp-authz-changed-for-approval-package-check' };
+  const authzChangedOutcome = evaluateExecutionPlanRequest(authzChangedRequest, {});
+  assert.equal(authzChangedOutcome.result.status, 'WAITING_APPROVAL_REFERENCE');
+  assert.notEqual(authzChangedOutcome.result.execution_plan_fingerprint, outcomeA.result.execution_plan_fingerprint, 'approval-related package data (authorization fingerprint) must also change the fingerprint');
+
+  for (const outcome of [outcomeA, changedOutcome, authzChangedOutcome]) {
+    assert.equal(outcome.plan.executable, false);
+    assert.equal(outcome.result.executable, false);
+    assert.equal(outcome.result.execution_authorized, false);
+    assert.equal(outcome.result.execution_started, false);
+    assert.equal(outcome.result.runtime_enabled, false);
+    assert.equal(outcome.result.tool_called, false);
+    assert.equal(outcome.result.workflow_executed, false);
+    assert.equal(outcome.result.model_called, false);
+    assert.equal(outcome.result.provider_called, false);
+    assert.equal(outcome.result.executed, false);
+  }
+});
+
+test('pr99fix (Fix 2): blocked statuses reached before full materialization still report fingerprint_not_available', () => {
+  const outcome = evaluateExecutionPlanRequest(scenarioFixture('tenant-mismatch-manifest').request, {});
+  assert.equal(outcome.result.status, 'TENANT_BLOCKED');
+  assert.equal(outcome.result.execution_plan_fingerprint, 'fingerprint_not_available');
+});
+
 // ---------------------------------------------------------------------------
 // Estimativas
 // ---------------------------------------------------------------------------
@@ -268,14 +324,95 @@ test('planning_result_id, orchestration_plan_id, and stage set disagreement are 
   assert.equal(evaluateExecutionPlanRequest(scenarioFixture('stage-set-mismatch-manifest').request, {}).result.status, 'STAGE_MANIFEST_BLOCKED');
 });
 
-test('a tampered StageRecord and a tampered manifest_fingerprint are both caught only by the engine\'s recompute-and-compare tamper detection, not by construction-time validation', () => {
+test('pr99fix: a tampered StageRecord and a tampered manifest_fingerprint are now caught by the validators themselves (validated by construction), not only by the engine', () => {
+  // Before pr99fix, validateStageRecord/validateOrchestratorStageManifestReference only checked
+  // that a fingerprint field was a non-empty string, never that it matched the record's own
+  // content -- meaning the registry (which calls these validators directly, not through the
+  // engine) could register a tampered object as-is. Both fixtures are now VALIDATION_FAILED at
+  // request-validation time, exactly like duplicate-stage-id-manifest and its siblings.
   const stageFingerprintScenario = scenarioFixture('stage-fingerprint-mismatch-manifest');
-  assert.equal(validateExecutionPlanRequest(stageFingerprintScenario.request).valid, true, 'construction-time validation never recomputes a stage_fingerprint');
-  assert.equal(evaluateExecutionPlanRequest(stageFingerprintScenario.request, {}).result.status, 'STAGE_MANIFEST_BLOCKED');
+  const stageValidation = validateExecutionPlanRequest(stageFingerprintScenario.request);
+  assert.equal(stageValidation.valid, false, 'construction-time validation now recomputes stage_fingerprint');
+  assert.ok(stageValidation.errors.some((e) => e.includes('stage_fingerprint_mismatch')));
+  assert.equal(evaluateExecutionPlanRequest(stageFingerprintScenario.request, {}).result.status, 'VALIDATION_FAILED');
 
   const manifestFingerprintScenario = scenarioFixture('manifest-fingerprint-mismatch');
-  assert.equal(validateExecutionPlanRequest(manifestFingerprintScenario.request).valid, true, 'construction-time validation never recomputes manifest_fingerprint either');
-  assert.equal(evaluateExecutionPlanRequest(manifestFingerprintScenario.request, {}).result.status, 'STAGE_MANIFEST_BLOCKED');
+  const manifestValidation = validateExecutionPlanRequest(manifestFingerprintScenario.request);
+  assert.equal(manifestValidation.valid, false, 'construction-time validation now recomputes manifest_fingerprint too');
+  assert.ok(manifestValidation.errors.some((e) => e.includes('manifest_fingerprint_mismatch')));
+  assert.equal(evaluateExecutionPlanRequest(manifestFingerprintScenario.request, {}).result.status, 'VALIDATION_FAILED');
+});
+
+test('pr99fix: validateStageRecord() directly rejects a tampered stage_fingerprint, with no engine involved', () => {
+  const record = scenarioFixture('valid-deterministic-stage-manifest').request.stage_manifest_reference.stage_records[0];
+  assertValid('untampered record', validateStageRecord(record));
+  const tampered = { ...record, priority: record.priority + 1 };
+  const validation = validateStageRecord(tampered);
+  assert.equal(validation.valid, false);
+  assert.ok(validation.errors.includes('stage_fingerprint_mismatch'));
+});
+
+test('pr99fix: validateOrchestratorStageManifestReference() directly rejects a tampered manifest_fingerprint, with no engine involved', () => {
+  const manifest = scenarioFixture('valid-deterministic-stage-manifest').request.stage_manifest_reference;
+  assertValid('untampered manifest', validateOrchestratorStageManifestReference(manifest));
+  const tampered = { ...manifest, manifest_fingerprint: 'fp-directly-tampered' };
+  const validation = validateOrchestratorStageManifestReference(tampered);
+  assert.equal(validation.valid, false);
+  assert.ok(validation.errors.includes('manifest_fingerprint_mismatch'));
+});
+
+test('pr99fix: a tampered StageRecord inside a manifest whose own manifest_fingerprint was correctly recalculated over the tampered content is still rejected -- the per-record check is independent of the whole-manifest check', () => {
+  const baseline = scenarioFixture('valid-deterministic-stage-manifest').request.stage_manifest_reference;
+  const [record0, record1] = baseline.stage_records;
+  const tamperedRecord = { ...record0, priority: record0.priority + 1 };
+  const rawManifest = { ...baseline, stage_records: [tamperedRecord, record1] };
+  rawManifest.manifest_fingerprint = computeManifestFingerprint(rawManifest);
+  // The manifest-level check alone would now pass (it agrees with the tampered content) --
+  // proving the per-record check is what actually catches this, not a side effect of the
+  // manifest-level one.
+  assert.equal(computeManifestFingerprint(rawManifest), rawManifest.manifest_fingerprint);
+  const validation = validateOrchestratorStageManifestReference(rawManifest);
+  assert.equal(validation.valid, false);
+  assert.ok(validation.errors.some((e) => e.includes('stage_fingerprint_mismatch')));
+});
+
+test('pr99fix: a canonicalization failure while recomputing a fingerprint is converted into a sanitized error, never an uncaught exception', () => {
+  const record = scenarioFixture('valid-deterministic-stage-manifest').request.stage_manifest_reference.stage_records[0];
+  const cyclic = { ...record };
+  cyclic.self = cyclic;
+  assert.doesNotThrow(() => validateStageRecord(cyclic));
+  const manifest = scenarioFixture('valid-deterministic-stage-manifest').request.stage_manifest_reference;
+  const cyclicManifest = { ...manifest };
+  cyclicManifest.self = cyclicManifest;
+  assert.doesNotThrow(() => validateOrchestratorStageManifestReference(cyclicManifest));
+});
+
+test('pr99fix: the registry rejects a StageRecord/manifest whose declared fingerprint diverges from its content, even when registered directly (bypassing the engine)', () => {
+  const registry = createExecutionPlanRegistry();
+  const manifest = scenarioFixture('valid-deterministic-stage-manifest').request.stage_manifest_reference;
+  const tampered = { ...manifest, manifest_fingerprint: 'fp-registry-tampered-check' };
+  const outcome = registry.registerOrchestratorStageManifestReference(tampered);
+  assert.equal(outcome.status, 'VALIDATION_FAILED');
+  assert.equal(registry.getOrchestratorStageManifestReferenceById(manifest.stage_manifest_reference_id), null, 'a rejected registration must not be stored');
+});
+
+test('pr99fix: a validly-fingerprinted manifest still builds, registers, replays, and detects fingerprint conflicts exactly as before', () => {
+  const validManifest = buildOrchestratorStageManifestReference({
+    stage_manifest_reference_id: 'stagemanifest-pr99fix-regression-check', planning_result_id: 'planning-result-x',
+    orchestration_plan_id: 'plan-x', tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1',
+    session_reference_id: 'session-1', agent_id: 'agent-1',
+    stage_records: [buildStageRecord({ stage_id: 'stage-1', stage_type: 'DETERMINISTIC_STAGE', stage_sequence: 0, task_reference_id: 'taskref-x' })],
+    logical_sequence: 1
+  });
+  assertValid('valid manifest still builds and validates', validateOrchestratorStageManifestReference(validManifest));
+
+  const registry = createExecutionPlanRegistry();
+  const first = registry.registerOrchestratorStageManifestReference(validManifest, { expected_version: 0 });
+  assert.equal(first.status, 'REGISTERED_SIMULATION');
+  assert.equal(registry.registerOrchestratorStageManifestReference(validManifest).status, 'REPLAY_ACCEPTED', 'replay still works');
+
+  const versionBumped = buildOrchestratorStageManifestReference({ ...validManifest, stage_manifest_reference_version: 2, logical_sequence: 2 });
+  assert.equal(registry.registerOrchestratorStageManifestReference(versionBumped, { expected_fingerprint: 'stale-fingerprint' }).status, 'FINGERPRINT_CONFLICT', 'fingerprint conflict detection still works');
 });
 
 test('a stale expected_registry_version is still VERSION_BLOCKED with a required stage_manifest_reference present', () => {
@@ -436,10 +573,13 @@ test('registry: OrchestratorStageManifestReference store supports register, repl
   assert.equal(first.status, 'REGISTERED_SIMULATION');
   assert.equal(registry.registerOrchestratorStageManifestReference(manifest).status, 'REPLAY_ACCEPTED');
 
-  const payloadMismatch = { ...manifest, logical_sequence: manifest.logical_sequence + 100 };
+  // pr99fix: a genuinely re-fingerprinted manifest, not a spread-override with a now-stale
+  // fingerprint (which would fail validation before the registry's own payload/tenant checks
+  // ever ran).
+  const payloadMismatch = buildOrchestratorStageManifestReference({ ...manifest, logical_sequence: manifest.logical_sequence + 100 });
   assert.equal(registry.registerOrchestratorStageManifestReference(payloadMismatch).status, 'PAYLOAD_MISMATCH');
 
-  const tenantChanged = { ...manifest, tenant_id: 'tenant-different' };
+  const tenantChanged = buildOrchestratorStageManifestReference({ ...manifest, tenant_id: 'tenant-different' });
   assert.equal(registry.registerOrchestratorStageManifestReference(tenantChanged).status, 'TENANT_BLOCKED');
 
   const fetched = registry.getOrchestratorStageManifestReferenceById(manifest.stage_manifest_reference_id);

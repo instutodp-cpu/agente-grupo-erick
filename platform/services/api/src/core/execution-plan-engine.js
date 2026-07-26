@@ -602,7 +602,13 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     estimated_total_cost_minor_units: materialized ? materialized.estimatedTotalCost : 0,
     logical_sequence: logicalSequence
   });
-  const executionPlanFingerprint = status === 'EXECUTION_PLAN_PREPARED_SIMULATION'
+  // pr99fix (Fix 2): a package awaiting approval is just as fully materialized (stages,
+  // bindings, dependencies, estimates, manifest, dependency graph, budget, idempotency, stop
+  // conditions, compensations) as a prepared one -- it needs a real canonical fingerprint too, so
+  // a future approved package can be compared against the one that was actually reviewed.
+  // `materialized` is only ever passed (truthy) for EXECUTION_PLAN_PREPARED_SIMULATION and
+  // WAITING_APPROVAL_REFERENCE; every earlier blocked status computes no fingerprint here.
+  const executionPlanFingerprint = materialized
     ? computeExecutionPlanPackageFingerprint(executionPlanPackage)
     : 'fingerprint_not_available';
 

@@ -78,6 +78,20 @@ function validateStageRecord(record) {
   } catch (error) {
     errors.push(`payload_not_serializable::${error.message}`);
   }
+  // pr99fix: recompute and compare, fail-closed -- validateStageRecord used to only check that
+  // stage_fingerprint was a non-empty string, never that it actually matched the record's own
+  // content. The registry calls this validator directly (not just the engine, which already did
+  // its own recompute-and-compare at evaluation time), so a StageRecord with a declared
+  // fingerprint that disagrees with its content could otherwise be registered as-is. A
+  // canonicalization failure (e.g. a cyclic or non-serializable field) is itself treated as a
+  // mismatch, never allowed to propagate as an uncaught exception out of this validator.
+  try {
+    if (computeStageRecordFingerprint(record) !== record.stage_fingerprint) {
+      errors.push('stage_fingerprint_mismatch');
+    }
+  } catch (error) {
+    errors.push('stage_fingerprint_mismatch');
+  }
   errors.push(...findAgentCoreOperationalMaterial(record));
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }
@@ -194,6 +208,18 @@ function validateOrchestratorStageManifestReference(manifest) {
     stablePayload(manifest);
   } catch (error) {
     errors.push(`payload_not_serializable::${error.message}`);
+  }
+  // pr99fix: recompute and compare, fail-closed -- same reasoning as validateStageRecord's own
+  // stage_fingerprint check above. Every StageRecord embedded in stage_records has already been
+  // individually fingerprint-checked by the validateStageRecord(record) call in the loop above,
+  // so this check alone is sufficient to also catch a StageRecord tampered *after* it was
+  // embedded in an otherwise-correctly-fingerprinted manifest.
+  try {
+    if (computeManifestFingerprint(manifest) !== manifest.manifest_fingerprint) {
+      errors.push('manifest_fingerprint_mismatch');
+    }
+  } catch (error) {
+    errors.push('manifest_fingerprint_mismatch');
   }
   errors.push(...findAgentCoreOperationalMaterial(manifest));
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
