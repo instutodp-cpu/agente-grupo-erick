@@ -136,20 +136,21 @@ function runValidationPipeline(registry, context, { ledgerIdentity = {}, logical
   });
 }
 
-// --- Post-hoc ledger derivation ------------------------------------------------------------------
+// --- Post-hoc ledger derivation (compatibility mapping / diagnostics / legacy fixtures ONLY) -----
 //
-// execution-plan-engine.js's own 700-line, already-tested, sequential early-return gate chain
-// (PR #94-#100) determines the *real* status for a given request; rewriting that entire control
-// flow into individually-registered validation-pipeline handlers was judged too large and too
-// risky a change to make at the same time as introducing progressive validation semantics (see
-// HERMES_VALIDATION_SEMANTICS_ARCHITECTURE_GATES.md "Limitações"). Instead, this function derives
-// the ValidationLedger a full forward pipeline run *would* have produced, directly from the status
-// the engine already computed and this taxonomy's own canonical stage ordering: every stage
-// strictly before the blocking status's own stage is VALID, the blocking stage itself is INVALID
-// (blocking, terminal), and every stage after remains NOT_EVALUATED -- exactly the same
-// observable ledger shape runValidationPipeline() itself would produce for an equivalent run,
-// without re-executing (and risking silently diverging from) the engine's own already-correct
-// decision logic.
+// pr101fix: this function infers every stage strictly before the blocking status's own taxonomy
+// position as VALID, purely from where that status sits in the taxonomy -- it never proves any of
+// those stages' corresponding validators actually ran. That is precisely the defect a GitHub MCP
+// architecture audit flagged in PR #101: "uma validação só pode ser marcada como VALID depois que
+// o validator correspondente tiver sido efetivamente executado." execution-plan-engine.js no
+// longer calls this function to build its own canonical ValidationLedger -- see validation-trace.js
+// and buildOutcome()'s own real, progressive trace instead, which marks each stage only once its
+// real corresponding gate has actually run.
+//
+// This function is kept only for: isolated tests of the taxonomy/precedence compatibility mapping
+// itself; diagnostics that are explicitly labeled as inferred, never presented as the canonical
+// record of what actually ran; and legacy fixtures that predate the real trace. It must never again
+// become the source of the canonical ValidationLedger the Execution Plan Result exposes.
 function deriveValidationLedgerFromStatus({ status, reasonCodes = [], ledgerIdentity = {} }) {
   const meta = getTaxonomyMetadata(status);
   const outcomes = [];

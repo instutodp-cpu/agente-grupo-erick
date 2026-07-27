@@ -396,7 +396,10 @@ test('execution-plan-engine: every outcome carries a validation_ledger_id/finger
 
   const prepared = evaluateExecutionPlanRequest(JSON.parse(JSON.stringify(planFixture.scenarios['prepared-no-llm-plan'].request)), {});
   assert.equal(prepared.plan.validation_pipeline_completed, true);
-  assert.equal(prepared.plan.architecture_gates_passed, true);
+  // pr101fix (FIX 2): architecture gates run in CI, never inside this declarative engine -- the
+  // engine has no evidence they passed for this specific package and must never claim otherwise.
+  assert.equal(prepared.plan.architecture_gates_passed, false);
+  assert.equal(prepared.result.architecture_gates_passed, false);
   assert.equal(prepared.result.all_required_validations_valid, true);
   assert.equal(prepared.result.first_blocking_stage, null);
   assert.equal(prepared.result.first_blocking_status, null);
