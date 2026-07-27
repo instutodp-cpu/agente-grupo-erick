@@ -2,8 +2,12 @@
 
 const { isNonEmptyString, isPlainObject } = require('./read-only-adapter-contract');
 const { stablePayload } = require('./agent-identity-contract');
+const { computeCanonicalContentDigest } = require('./canonical-content-digest');
 const { buildBindingRecord } = require('./execution-reference-binding-record');
 const { buildExecutionReferenceBindingLedger } = require('./execution-reference-binding-ledger');
+const { computeIdempotencyFingerprint } = require('./execution-plan-idempotency');
+const { computeStopConditionFingerprint } = require('./execution-plan-stop-condition');
+const { computeCompensationFingerprint } = require('./execution-plan-compensation-reference');
 
 // This module only *evaluates* -- it never resolves a reference's underlying content, never
 // calls a model/tool/workflow provider, never applies a binding, and never authorizes or starts
@@ -141,6 +145,14 @@ function validateScopeCrossChecks(scopeRef, { authzRef, canonical, planRef, task
     if (!scopeRef.allowed_stage_types.includes(record.stage_type)) {
       return { status: 'AUTHORIZATION_SCOPE_BLOCKED', reason: 'scope-stage-type-blocked' };
     }
+    // pr100fix FIX 1: every capability a StageRecord declares itself requiring must be inside the
+    // scope's own allowlist -- an empty allowed_capability_types means no capability is permitted,
+    // the same positive-allowlist principle every other allowed_* field already follows.
+    for (const capability of record.required_capabilities || []) {
+      if (!scopeRef.allowed_capability_types.includes(capability)) {
+        return { status: 'AUTHORIZATION_SCOPE_BLOCKED', reason: `scope-capability-blocked::${capability}` };
+      }
+    }
   }
   if (!scopeRef.allowed_risk_classifications.includes(taskRef.risk_classification)) {
     return { status: 'AUTHORIZATION_SCOPE_BLOCKED', reason: 'scope-risk-blocked' };
@@ -242,67 +254,48 @@ function buildReferenceLevelBindingRecords({
     reason_codes: []
   };
 
+  // pr100fix FIX 2: every reference-level binding below carries a compact SHA-256 digest
+  // (computeCanonicalContentDigest) of the *entire* validated reference object as its
+  // source_reference_fingerprint -- full-fidelity content coverage (any field changing anywhere
+  // in the referenced object changes the digest), without embedding that object's own multi-KB
+  // canonical fingerprint string verbatim, which would otherwise get re-serialized (with string-
+  // escaping overhead) at every downstream layer: BindingRecord's own recompute-and-compare, then
+  // BindingLedger, then ExecutionPlanPackage, then plan/result/audit. A fixed ~71-character digest
+  // regardless of the referenced object's size closes that compounding entirely while losing no
+  // coverage -- this is a digest, not a signature; see canonical-content-digest.js.
   records.push(buildBindingRecord({
     ...common,
     binding_record_id: `${executionPlanId}-scope-binding-record`,
     binding_type: 'AUTHORIZATION_SCOPE_BINDING',
     source_reference_id: scopeRef.authorization_scope_reference_id,
     source_reference_version: scopeRef.authorization_scope_reference_version,
-    source_reference_fingerprint: scopeRef.scope_fingerprint,
+    source_reference_fingerprint: computeCanonicalContentDigest(scopeRef),
     target_reference_id: executionPlanId,
     target_reference_version: 1,
     target_reference_fingerprint: safeFingerprint(executionPlanId),
     logical_sequence: sequence++
   }));
 
-  // Same bounded-summary reasoning as the snapshot binding above: the provenance reference's own
-  // external fingerprint (used elsewhere as the canonical authorization_provenance_fingerprint)
-  // already aggregates 41 fields' worth of upstream sub-fingerprints; embedding it again here would
-  // re-trigger the same compounding through BindingRecord -> BindingLedger -> package -> plan.
-  const provenanceBindingSummaryFingerprint = safeFingerprint({
-    authorization_provenance_reference_id: provenanceRef.authorization_provenance_reference_id,
-    authorization_provenance_reference_version: provenanceRef.authorization_provenance_reference_version,
-    authorization_decision_id: provenanceRef.authorization_decision_id,
-    plan_id: provenanceRef.plan_id,
-    provenance_validated: provenanceRef.provenance_validated
-  });
   records.push(buildBindingRecord({
     ...common,
     binding_record_id: `${executionPlanId}-provenance-binding-record`,
     binding_type: 'AUTHORIZATION_PROVENANCE_BINDING',
     source_reference_id: provenanceRef.authorization_provenance_reference_id,
     source_reference_version: provenanceRef.authorization_provenance_reference_version,
-    source_reference_fingerprint: provenanceBindingSummaryFingerprint,
+    source_reference_fingerprint: computeCanonicalContentDigest(provenanceRef),
     target_reference_id: executionPlanId,
     target_reference_version: 1,
     target_reference_fingerprint: safeFingerprint(executionPlanId),
     logical_sequence: sequence++
   }));
 
-  // The snapshot's own self-fingerprint necessarily aggregates all seven registry entity
-  // fingerprints (it has to, to detect drift in any of them) and is therefore already
-  // significantly larger than every other bounded fingerprint in this codebase. Embedding it
-  // verbatim as a BindingRecord field would mean it gets re-serialized (with string-escaping
-  // overhead) at every downstream layer -- BindingRecord's own recompute-and-compare, then the
-  // BindingLedger, then the ExecutionPlanPackage, then plan/result/audit -- compounding a ~15KB
-  // string into a multi-hundred-KB one by the time it reaches the plan. The binding only needs to
-  // *reference* the snapshot (id, version, and its own shallow consistency signal), not carry a
-  // second full copy of its fingerprint; validateSnapshotCrossChecks (run earlier, independently)
-  // is what actually verifies snapshot_fingerprint itself.
-  const snapshotBindingSummaryFingerprint = safeFingerprint({
-    registry_snapshot_reference_id: snapshotRef.registry_snapshot_reference_id,
-    registry_snapshot_reference_version: snapshotRef.registry_snapshot_reference_version,
-    expected_registry_version: snapshotRef.expected_registry_version,
-    observed_registry_version: snapshotRef.observed_registry_version,
-    snapshot_consistent: snapshotRef.snapshot_consistent
-  });
   records.push(buildBindingRecord({
     ...common,
     binding_record_id: `${executionPlanId}-snapshot-binding-record`,
     binding_type: 'REGISTRY_SNAPSHOT_BINDING',
     source_reference_id: snapshotRef.registry_snapshot_reference_id,
     source_reference_version: snapshotRef.registry_snapshot_reference_version,
-    source_reference_fingerprint: snapshotBindingSummaryFingerprint,
+    source_reference_fingerprint: computeCanonicalContentDigest(snapshotRef),
     target_reference_id: executionPlanId,
     target_reference_version: 1,
     target_reference_fingerprint: safeFingerprint(executionPlanId),
@@ -315,7 +308,7 @@ function buildReferenceLevelBindingRecords({
     binding_type: 'STAGE_MANIFEST_BINDING',
     source_reference_id: stageManifestRef.stage_manifest_reference_id,
     source_reference_version: stageManifestRef.stage_manifest_reference_version,
-    source_reference_fingerprint: stageManifestRef.manifest_fingerprint,
+    source_reference_fingerprint: computeCanonicalContentDigest(stageManifestRef),
     target_reference_id: executionPlanId,
     target_reference_version: 1,
     target_reference_fingerprint: safeFingerprint(executionPlanId),
@@ -328,80 +321,122 @@ function buildReferenceLevelBindingRecords({
     binding_type: 'DEPENDENCY_GRAPH_BINDING',
     source_reference_id: depGraphRef.dependency_graph_reference_id,
     source_reference_version: depGraphRef.dependency_graph_reference_version,
-    source_reference_fingerprint: depGraphRef.graph_fingerprint,
+    source_reference_fingerprint: computeCanonicalContentDigest(depGraphRef),
     target_reference_id: executionPlanId,
     target_reference_version: 1,
     target_reference_fingerprint: safeFingerprint(executionPlanId),
     logical_sequence: sequence++
   }));
 
-  // Idempotência: cross-checks execution_plan_id/authorization_decision_id/plan_fingerprint/
-  // request_fingerprint agreement against the same canonical sources every other reference in
-  // this ledger is checked against -- a policy reference that quietly drifted from the plan it
-  // claims to cover must never validate.
-  const idempotencyMismatches = [];
-  if (idempotency.execution_plan_id !== executionPlanId) idempotencyMismatches.push('idempotency-plan-mismatch');
-  if (isNonEmptyString(authzRef.authorization_decision_id) && idempotency.authorization_decision_id !== authzRef.authorization_decision_id) {
-    idempotencyMismatches.push('idempotency-authz-mismatch');
-  }
-  if (planFingerprint !== null && idempotency.plan_fingerprint !== planFingerprint) idempotencyMismatches.push('idempotency-fingerprint-mismatch');
-  if (requestFingerprint !== null && idempotency.request_fingerprint !== requestFingerprint) idempotencyMismatches.push('idempotency-request-fingerprint-mismatch');
+  // pr100fix FIX 3: version and fingerprint disagreement are separate, more specific failures than
+  // a generic plan/stage id conflict -- checked in this order (version first, since an invalid
+  // version makes the fingerprint recompute meaningless; fingerprint next, since a tampered
+  // reference must never be classified VALIDATED_SIMULATION merely because its plan/stage id
+  // happens to match). Never VALIDATED_SIMULATION on id agreement alone.
+  const idempotencyOutcome = resolveIdempotencyBindingOutcome(idempotency, { executionPlanId, authzRef, planFingerprint, requestFingerprint, canonical });
   records.push(buildBindingRecord({
     ...common,
     binding_record_id: `${executionPlanId}-idempotency-binding-record`,
     binding_type: 'IDEMPOTENCY_BINDING',
     source_reference_id: idempotency.idempotency_reference_id,
-    source_reference_version: 1,
+    source_reference_version: Number.isInteger(idempotency.idempotency_reference_version) ? idempotency.idempotency_reference_version : 1,
     source_reference_fingerprint: idempotency.idempotency_fingerprint,
     target_reference_id: executionPlanId,
     target_reference_version: 1,
     target_reference_fingerprint: safeFingerprint(executionPlanId),
-    binding_status: idempotencyMismatches.length > 0 ? 'CONFLICT_BLOCKED' : 'VALIDATED_SIMULATION',
-    reason_codes: idempotencyMismatches,
+    binding_status: idempotencyOutcome ? idempotencyOutcome.status : 'VALIDATED_SIMULATION',
+    reason_codes: idempotencyOutcome ? idempotencyOutcome.reasonCodes : [],
     logical_sequence: sequence++
   }));
 
   stopConditions.forEach((condition, index) => {
-    const mismatches = [];
-    if (condition.execution_plan_id !== executionPlanId) mismatches.push('stop-condition-plan-mismatch');
-    if (Array.isArray(validStageIds) && !validStageIds.includes(condition.execution_stage_id)) mismatches.push('stop-condition-stage-mismatch');
+    const outcome = resolveStopConditionBindingOutcome(condition, { executionPlanId, validStageIds });
     records.push(buildBindingRecord({
       ...common,
       binding_record_id: `${executionPlanId}-stop-condition-binding-record-${index}`,
       binding_type: 'STOP_CONDITION_BINDING',
       source_reference_id: condition.stop_condition_id,
-      source_reference_version: 1,
+      source_reference_version: Number.isInteger(condition.stop_condition_version) ? condition.stop_condition_version : 1,
       source_reference_fingerprint: condition.condition_fingerprint,
       target_reference_id: condition.execution_stage_id || executionPlanId,
       target_reference_version: 1,
       target_reference_fingerprint: safeFingerprint(condition.execution_stage_id || executionPlanId),
-      binding_status: mismatches.length > 0 ? 'CONFLICT_BLOCKED' : 'VALIDATED_SIMULATION',
-      reason_codes: mismatches,
+      binding_status: outcome ? outcome.status : 'VALIDATED_SIMULATION',
+      reason_codes: outcome ? outcome.reasonCodes : [],
       logical_sequence: sequence++
     }));
   });
 
   compensations.forEach((compensation, index) => {
-    const mismatches = [];
-    if (compensation.execution_plan_id !== executionPlanId) mismatches.push('compensation-plan-mismatch');
-    if (Array.isArray(validStageIds) && !validStageIds.includes(compensation.execution_stage_id)) mismatches.push('compensation-stage-mismatch');
+    const outcome = resolveCompensationBindingOutcome(compensation, { executionPlanId, validStageIds });
     records.push(buildBindingRecord({
       ...common,
       binding_record_id: `${executionPlanId}-compensation-binding-record-${index}`,
       binding_type: 'COMPENSATION_BINDING',
       source_reference_id: compensation.compensation_reference_id,
-      source_reference_version: 1,
+      source_reference_version: Number.isInteger(compensation.compensation_reference_version) ? compensation.compensation_reference_version : 1,
       source_reference_fingerprint: compensation.compensation_fingerprint,
       target_reference_id: compensation.execution_stage_id || executionPlanId,
       target_reference_version: 1,
       target_reference_fingerprint: safeFingerprint(compensation.execution_stage_id || executionPlanId),
-      binding_status: mismatches.length > 0 ? 'CONFLICT_BLOCKED' : 'VALIDATED_SIMULATION',
-      reason_codes: mismatches,
+      binding_status: outcome ? outcome.status : 'VALIDATED_SIMULATION',
+      reason_codes: outcome ? outcome.reasonCodes : [],
       logical_sequence: sequence++
     }));
   });
 
   return { records, nextSequence: sequence };
+}
+
+function resolveIdempotencyBindingOutcome(idempotency, { executionPlanId, authzRef, planFingerprint, requestFingerprint, canonical }) {
+  if (!Number.isInteger(idempotency.idempotency_reference_version) || idempotency.idempotency_reference_version < 1) {
+    return { status: 'VERSION_BLOCKED', reasonCodes: ['idempotency-version-invalid'] };
+  }
+  if (computeIdempotencyFingerprint(idempotency) !== idempotency.idempotency_fingerprint) {
+    return { status: 'FINGERPRINT_BLOCKED', reasonCodes: ['idempotency-self-fingerprint-mismatch'] };
+  }
+  if (idempotency.tenant_id !== canonical.tenantId) return { status: 'TENANT_BLOCKED', reasonCodes: ['idempotency-tenant-mismatch'] };
+  if (idempotency.organization_id !== canonical.organizationId) return { status: 'ORGANIZATION_BLOCKED', reasonCodes: ['idempotency-organization-mismatch'] };
+  if (canonical.projectId !== null && idempotency.project_id !== canonical.projectId) return { status: 'PROJECT_BLOCKED', reasonCodes: ['idempotency-project-mismatch'] };
+  if (canonical.sessionId !== null && idempotency.session_reference_id !== canonical.sessionId) return { status: 'SESSION_BLOCKED', reasonCodes: ['idempotency-session-mismatch'] };
+  const reasonCodes = [];
+  if (idempotency.execution_plan_id !== executionPlanId) reasonCodes.push('idempotency-plan-mismatch');
+  if (isNonEmptyString(authzRef.authorization_decision_id) && idempotency.authorization_decision_id !== authzRef.authorization_decision_id) {
+    reasonCodes.push('idempotency-authz-mismatch');
+  }
+  if (planFingerprint !== null && idempotency.plan_fingerprint !== planFingerprint) reasonCodes.push('idempotency-fingerprint-mismatch');
+  if (requestFingerprint !== null && idempotency.request_fingerprint !== requestFingerprint) reasonCodes.push('idempotency-request-fingerprint-mismatch');
+  if (idempotency.idempotency_validated !== true) reasonCodes.push('idempotency-not-validated');
+  if (reasonCodes.length > 0) return { status: 'CONFLICT_BLOCKED', reasonCodes };
+  return null;
+}
+
+function resolveStopConditionBindingOutcome(condition, { executionPlanId, validStageIds }) {
+  if (!Number.isInteger(condition.stop_condition_version) || condition.stop_condition_version < 1) {
+    return { status: 'VERSION_BLOCKED', reasonCodes: ['stop-condition-version-invalid'] };
+  }
+  if (computeStopConditionFingerprint(condition) !== condition.condition_fingerprint) {
+    return { status: 'FINGERPRINT_BLOCKED', reasonCodes: ['stop-condition-self-fingerprint-mismatch'] };
+  }
+  const reasonCodes = [];
+  if (condition.execution_plan_id !== executionPlanId) reasonCodes.push('stop-condition-plan-mismatch');
+  if (Array.isArray(validStageIds) && !validStageIds.includes(condition.execution_stage_id)) reasonCodes.push('stop-condition-stage-mismatch');
+  if (reasonCodes.length > 0) return { status: 'CONFLICT_BLOCKED', reasonCodes };
+  return null;
+}
+
+function resolveCompensationBindingOutcome(compensation, { executionPlanId, validStageIds }) {
+  if (!Number.isInteger(compensation.compensation_reference_version) || compensation.compensation_reference_version < 1) {
+    return { status: 'VERSION_BLOCKED', reasonCodes: ['compensation-version-invalid'] };
+  }
+  if (computeCompensationFingerprint(compensation) !== compensation.compensation_fingerprint) {
+    return { status: 'FINGERPRINT_BLOCKED', reasonCodes: ['compensation-self-fingerprint-mismatch'] };
+  }
+  const reasonCodes = [];
+  if (compensation.execution_plan_id !== executionPlanId) reasonCodes.push('compensation-plan-mismatch');
+  if (Array.isArray(validStageIds) && !validStageIds.includes(compensation.execution_stage_id)) reasonCodes.push('compensation-stage-mismatch');
+  if (reasonCodes.length > 0) return { status: 'CONFLICT_BLOCKED', reasonCodes };
+  return null;
 }
 
 function buildBindingLedgerForPlan({
@@ -441,6 +476,9 @@ function buildBindingLedgerForPlan({
 module.exports = {
   buildBindingLedgerForPlan,
   buildReferenceLevelBindingRecords,
+  resolveCompensationBindingOutcome,
+  resolveIdempotencyBindingOutcome,
+  resolveStopConditionBindingOutcome,
   safeFingerprint,
   validateProvenanceCrossChecks,
   validateScopeCrossChecks,

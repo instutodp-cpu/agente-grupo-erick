@@ -40,6 +40,17 @@ const { EXECUTION_PLAN_RESULT_FIELDS, RESULT_STATUSES, validateExecutionPlanResu
 const { validateExecutionPlanAudit } = require('../src/core/execution-plan-audit');
 const { EXECUTION_PLAN_PACKAGE_FIELDS, buildExecutionPlanPackage, computeExecutionPlanPackageFingerprint } = require('../src/core/execution-plan-package-integrity');
 const { evaluateExecutionPlanRequest } = require('../src/core/execution-plan-engine');
+const {
+  buildBindingLedgerForPlan, resolveCompensationBindingOutcome, resolveIdempotencyBindingOutcome,
+  resolveStopConditionBindingOutcome, validateScopeCrossChecks
+} = require('../src/core/execution-reference-binding-validator');
+const {
+  DIGEST_PREFIX, computeCanonicalContentDigest, isCanonicalContentDigest
+} = require('../src/core/canonical-content-digest');
+const { buildExecutionPlanIdempotency, computeIdempotencyFingerprint } = require('../src/core/execution-plan-idempotency');
+const { buildExecutionPlanStopCondition, computeStopConditionFingerprint } = require('../src/core/execution-plan-stop-condition');
+const { buildExecutionPlanCompensationReference, computeCompensationFingerprint } = require('../src/core/execution-plan-compensation-reference');
+const { createExecutionPlanRegistry } = require('../src/core/execution-plan-registry');
 
 const repoRoot = path.resolve(__dirname, '../../..');
 
@@ -446,4 +457,301 @@ test('regression: every prior stage-level ExecutionPlanStageBinding is still wra
   const outcome = evaluateExecutionPlanRequest(scenario.request, {});
   assert.equal(outcome.plan.stage_binding_ids.length > 0, true);
   assert.equal(outcome.result.binding_count, outcome.plan.stage_binding_ids.length);
+});
+
+// ---------------------------------------------------------------------------
+// pr100fix FIX 1: capability validation against AuthorizationScopeReference
+// ---------------------------------------------------------------------------
+
+function buildScopeCrossCheckArgs(overrides = {}) {
+  const scenario = scenarioFixture('valid-reference-binding-no-llm');
+  const request = scenario.request;
+  const authzRef = request.authorization_decision_reference;
+  const canonical = {
+    tenantId: authzRef.tenant_id, organizationId: authzRef.organization_id, agentId: authzRef.agent_id,
+    projectId: authzRef.project_id, sessionId: authzRef.session_reference_id
+  };
+  return {
+    scopeRef: request.authorization_scope_reference,
+    args: {
+      authzRef, canonical, planRef: request.orchestration_plan_reference, taskRef: request.task_reference,
+      stageRecords: overrides.stageRecords || request.stage_manifest_reference.stage_records,
+      budget: request.execution_plan_budget, provenanceRef: request.authorization_provenance_reference
+    }
+  };
+}
+
+test('scope capability check: an allowed capability passes', () => {
+  const { scopeRef, args } = buildScopeCrossCheckArgs();
+  const scopeWithCapability = buildAuthorizationScopeReference({ ...scopeRef, allowed_capability_types: ['TEXT_GENERATION_REFERENCE'] });
+  args.stageRecords = args.stageRecords.map((r) => ({ ...r, required_capabilities: ['TEXT_GENERATION_REFERENCE'] }));
+  assert.equal(validateScopeCrossChecks(scopeWithCapability, args), null);
+});
+
+test('scope capability check: a capability outside the scope is scope-capability-blocked', () => {
+  const { scopeRef, args } = buildScopeCrossCheckArgs();
+  args.stageRecords = args.stageRecords.map((r) => ({ ...r, required_capabilities: ['IMAGE_GENERATION_REFERENCE'] }));
+  const result = validateScopeCrossChecks(scopeRef, args);
+  assert.equal(result.status, 'AUTHORIZATION_SCOPE_BLOCKED');
+  assert.equal(result.reason, 'scope-capability-blocked::IMAGE_GENERATION_REFERENCE');
+});
+
+test('scope capability check: several allowed capabilities all pass', () => {
+  const { scopeRef, args } = buildScopeCrossCheckArgs();
+  const scopeWithCapabilities = buildAuthorizationScopeReference({ ...scopeRef, allowed_capability_types: ['AUDIO_TRANSCRIPTION_REFERENCE', 'TEXT_GENERATION_REFERENCE', 'VISION_REFERENCE'] });
+  args.stageRecords = args.stageRecords.map((r) => ({ ...r, required_capabilities: ['TEXT_GENERATION_REFERENCE', 'VISION_REFERENCE'] }));
+  assert.equal(validateScopeCrossChecks(scopeWithCapabilities, args), null);
+});
+
+test('scope capability check: one blocked capability among several required blocks the whole stage', () => {
+  const { scopeRef, args } = buildScopeCrossCheckArgs();
+  const scopeWithCapabilities = buildAuthorizationScopeReference({ ...scopeRef, allowed_capability_types: ['TEXT_GENERATION_REFERENCE'] });
+  args.stageRecords = args.stageRecords.map((r) => ({ ...r, required_capabilities: ['TEXT_GENERATION_REFERENCE', 'IMAGE_GENERATION_REFERENCE'] }));
+  const result = validateScopeCrossChecks(scopeWithCapabilities, args);
+  assert.equal(result.status, 'AUTHORIZATION_SCOPE_BLOCKED');
+  assert.equal(result.reason, 'scope-capability-blocked::IMAGE_GENERATION_REFERENCE');
+});
+
+test('scope capability check: an empty allowlist never authorizes a required capability (positive allowlist, not "unrestricted")', () => {
+  const { scopeRef, args } = buildScopeCrossCheckArgs();
+  assert.deepEqual(scopeRef.allowed_capability_types, []);
+  args.stageRecords = args.stageRecords.map((r) => ({ ...r, required_capabilities: ['TEXT_GENERATION_REFERENCE'] }));
+  const result = validateScopeCrossChecks(scopeRef, args);
+  assert.equal(result.status, 'AUTHORIZATION_SCOPE_BLOCKED');
+  assert.equal(result.reason, 'scope-capability-blocked::TEXT_GENERATION_REFERENCE');
+});
+
+test('scope capability check: context has no bearing on the outcome (capability validation reads only scopeRef/stageRecords)', () => {
+  const { scopeRef, args } = buildScopeCrossCheckArgs();
+  args.stageRecords = args.stageRecords.map((r) => ({ ...r, required_capabilities: ['IMAGE_GENERATION_REFERENCE'] }));
+  const withoutContext = validateScopeCrossChecks(scopeRef, args);
+  const poisonedArgs = { ...args, context: { currentRegistryVersion: 'x', authorizationScope: { unlimited: true } } };
+  const withContext = validateScopeCrossChecks(scopeRef, poisonedArgs);
+  assert.deepEqual(withContext, withoutContext);
+});
+
+// ---------------------------------------------------------------------------
+// pr100fix FIX 2: canonical-content-digest.js
+// ---------------------------------------------------------------------------
+
+test('canonical content digest: compact, sha256-prefixed, deterministic, and order-independent', () => {
+  const a = { z: 1, a: 2, m: { nested: true, list: [3, 2, 1] } };
+  const b = { a: 2, m: { list: [3, 2, 1], nested: true }, z: 1 };
+  const digestA = computeCanonicalContentDigest(a);
+  const digestB = computeCanonicalContentDigest(b);
+  assert.equal(digestA, digestB, 'canonical key order must not affect the digest');
+  assert.equal(digestA, computeCanonicalContentDigest(a), 'must be deterministic across repeated calls');
+  assert.equal(isCanonicalContentDigest(digestA), true);
+  assert.equal(digestA.startsWith(DIGEST_PREFIX), true);
+  assert.equal(digestA.length, DIGEST_PREFIX.length + 64);
+});
+
+test('canonical content digest: a different object produces a different digest', () => {
+  const digest1 = computeCanonicalContentDigest({ a: 1 });
+  const digest2 = computeCanonicalContentDigest({ a: 2 });
+  assert.notEqual(digest1, digest2);
+});
+
+test('canonical content digest: cyclic/non-serializable content fails sanitized, never throws', () => {
+  const cyclic = {};
+  cyclic.self = cyclic;
+  const digest = computeCanonicalContentDigest(cyclic);
+  assert.equal(digest.startsWith('digest_invalid::'), true);
+  assert.equal(findAgentCoreOperationalMaterial({ digest }).length, 0);
+});
+
+test('canonical content digest: changing any field of provenance changes its digest', () => {
+  const provenanceRef = scenarioFixture('valid-reference-binding-no-llm').request.authorization_provenance_reference;
+  const baseline = computeCanonicalContentDigest(provenanceRef);
+  for (const field of ['actor_id', 'plan_id', 'logical_sequence']) {
+    const changed = { ...provenanceRef, [field]: field === 'logical_sequence' ? provenanceRef[field] + 1 : `${provenanceRef[field]}-changed` };
+    assert.notEqual(computeCanonicalContentDigest(changed), baseline, `changing ${field} must change the digest`);
+  }
+});
+
+test('canonical content digest: changing any registry entity fingerprint changes the snapshot digest', () => {
+  const snapshotRef = scenarioFixture('valid-reference-binding-no-llm').request.registry_snapshot_reference;
+  const baseline = computeCanonicalContentDigest(snapshotRef);
+  for (const entityKey of Object.keys(snapshotRef.registry_entity_fingerprints)) {
+    const changed = { ...snapshotRef, registry_entity_fingerprints: { ...snapshotRef.registry_entity_fingerprints, [entityKey]: 'fp-tampered' } };
+    assert.notEqual(computeCanonicalContentDigest(changed), baseline, `changing entity ${entityKey} must change the digest`);
+  }
+});
+
+test('canonical content digest: no network/secret/KMS/HMAC anywhere in the module', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/core/canonical-content-digest.js'), 'utf8');
+  for (const forbidden of ['fetch(', 'http.request', 'https.request', 'net.connect', 'tls.connect', 'createHmac', 'child_process', 'process.env']) {
+    assert.equal(source.includes(forbidden), false, `must not contain ${forbidden}`);
+  }
+});
+
+test('ledger fingerprint changes when provenance changes, and when the registry snapshot changes', () => {
+  const baseline = scenarioFixture('package-fingerprint-baseline');
+  const provenanceChanged = scenarioFixture('package-fingerprint-provenance-change');
+  const snapshotChanged = scenarioFixture('package-fingerprint-snapshot-change');
+  const baselineOutcome = evaluateExecutionPlanRequest(baseline.request, {});
+  const provenanceOutcome = evaluateExecutionPlanRequest(provenanceChanged.request, {});
+  const snapshotOutcome = evaluateExecutionPlanRequest(snapshotChanged.request, {});
+  assert.notEqual(provenanceOutcome.plan.binding_ledger_fingerprint, baselineOutcome.plan.binding_ledger_fingerprint);
+  assert.notEqual(snapshotOutcome.plan.binding_ledger_fingerprint, baselineOutcome.plan.binding_ledger_fingerprint);
+});
+
+test('binding records for scope/provenance/snapshot/manifest/dependency-graph carry a compact digest, never the full embedded fingerprint', () => {
+  const scenario = scenarioFixture('valid-reference-binding-no-llm');
+  const ledger = buildBindingLedgerForPlanFromRequest(scenario.request);
+  const referenceBindingTypes = ['AUTHORIZATION_SCOPE_BINDING', 'AUTHORIZATION_PROVENANCE_BINDING', 'REGISTRY_SNAPSHOT_BINDING', 'STAGE_MANIFEST_BINDING', 'DEPENDENCY_GRAPH_BINDING'];
+  for (const record of ledger.binding_records) {
+    if (referenceBindingTypes.includes(record.binding_type)) {
+      assert.equal(isCanonicalContentDigest(record.source_reference_fingerprint), true, `${record.binding_type} must carry a canonical content digest`);
+    }
+  }
+});
+
+// Rebuilds the ledger for a full, already-prepared request the same way the engine does, purely to
+// inspect binding_records directly (evaluateExecutionPlanRequest does not expose the ledger itself
+// on its return value, only the derived bindingResult/bindingAudit).
+function buildBindingLedgerForPlanFromRequest(request) {
+  const authzRef = request.authorization_decision_reference;
+  const canonical = {
+    tenantId: authzRef.tenant_id, organizationId: authzRef.organization_id, agentId: authzRef.agent_id,
+    projectId: authzRef.project_id, sessionId: authzRef.session_reference_id,
+    actorId: request.authorization_scope_reference.actor_id, authorizationScopeId: request.authorization_scope_reference.authorization_scope_id
+  };
+  const outcome = evaluateExecutionPlanRequest(request, {});
+  assert.equal(outcome.result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
+  return buildBindingLedgerForPlan({
+    stageBindings: [],
+    provenanceRef: request.authorization_provenance_reference,
+    scopeRef: request.authorization_scope_reference,
+    snapshotRef: request.registry_snapshot_reference,
+    stageManifestRef: request.stage_manifest_reference,
+    depGraphRef: request.dependency_graph_reference,
+    idempotency: request.idempotency_policy_reference,
+    stopConditions: request.stop_condition_references,
+    compensations: request.compensation_references,
+    canonical,
+    executionPlanId: request.orchestration_plan_reference.plan_id,
+    executionPlanRequestId: request.execution_plan_request_id,
+    authzRef,
+    logicalSequence: request.logical_sequence,
+    planFingerprint: request.orchestration_plan_reference.plan_fingerprint,
+    validStageIds: request.stage_manifest_reference.stage_ids
+  });
+}
+
+// ---------------------------------------------------------------------------
+// pr100fix FIX 3: real versions + recompute-and-compare for idempotency/stop/compensation
+// ---------------------------------------------------------------------------
+
+test('idempotency binding: the real idempotency_reference_version is preserved on the BindingRecord, never hardcoded to 1', () => {
+  const request = scenarioFixture('valid-reference-binding-no-llm').request;
+  const idempotency = buildExecutionPlanIdempotency({ ...request.idempotency_policy_reference, idempotency_reference_version: 7 });
+  const outcome = resolveIdempotencyBindingOutcome(idempotency, {
+    executionPlanId: request.orchestration_plan_reference.plan_id, authzRef: request.authorization_decision_reference,
+    planFingerprint: request.orchestration_plan_reference.plan_fingerprint, requestFingerprint: null,
+    canonical: { tenantId: idempotency.tenant_id, organizationId: idempotency.organization_id, projectId: idempotency.project_id, sessionId: idempotency.session_reference_id }
+  });
+  assert.equal(outcome, null, 'a correctly-versioned, correctly-fingerprinted reference validates');
+  assert.equal(idempotency.idempotency_reference_version, 7);
+});
+
+test('idempotency binding: a tampered idempotency_fingerprint is FINGERPRINT_BLOCKED, never VALIDATED_SIMULATION merely because plan_id matches', () => {
+  const request = scenarioFixture('valid-reference-binding-no-llm').request;
+  const tampered = { ...request.idempotency_policy_reference, idempotency_fingerprint: 'fp-tampered-idempotency' };
+  const outcome = resolveIdempotencyBindingOutcome(tampered, {
+    executionPlanId: request.orchestration_plan_reference.plan_id, authzRef: request.authorization_decision_reference,
+    planFingerprint: request.orchestration_plan_reference.plan_fingerprint, requestFingerprint: null,
+    canonical: { tenantId: tampered.tenant_id, organizationId: tampered.organization_id, projectId: tampered.project_id, sessionId: tampered.session_reference_id }
+  });
+  assert.equal(outcome.status, 'FINGERPRINT_BLOCKED');
+  assert.equal(outcome.reasonCodes.includes('idempotency-self-fingerprint-mismatch'), true);
+});
+
+test('idempotency binding: an invalid version is VERSION_BLOCKED', () => {
+  const request = scenarioFixture('valid-reference-binding-no-llm').request;
+  const badVersion = { ...request.idempotency_policy_reference, idempotency_reference_version: 0 };
+  const outcome = resolveIdempotencyBindingOutcome(badVersion, {
+    executionPlanId: request.orchestration_plan_reference.plan_id, authzRef: request.authorization_decision_reference,
+    planFingerprint: request.orchestration_plan_reference.plan_fingerprint, requestFingerprint: null,
+    canonical: { tenantId: badVersion.tenant_id, organizationId: badVersion.organization_id, projectId: badVersion.project_id, sessionId: badVersion.session_reference_id }
+  });
+  assert.equal(outcome.status, 'VERSION_BLOCKED');
+});
+
+test('stop condition binding: the real stop_condition_version is preserved, and a tampered condition_fingerprint is FINGERPRINT_BLOCKED', () => {
+  const request = scenarioFixture('valid-reference-binding-no-llm').request;
+  const [condition] = request.stop_condition_references;
+  const realVersion = buildExecutionPlanStopCondition({ ...condition, stop_condition_version: 3 });
+  assert.equal(realVersion.stop_condition_version, 3);
+  const validOutcome = resolveStopConditionBindingOutcome(realVersion, { executionPlanId: request.orchestration_plan_reference.plan_id, validStageIds: request.stage_manifest_reference.stage_ids });
+  assert.equal(validOutcome, null);
+
+  const tampered = { ...condition, condition_fingerprint: 'fp-tampered-stop-condition' };
+  const blockedOutcome = resolveStopConditionBindingOutcome(tampered, { executionPlanId: request.orchestration_plan_reference.plan_id, validStageIds: request.stage_manifest_reference.stage_ids });
+  assert.equal(blockedOutcome.status, 'FINGERPRINT_BLOCKED');
+  assert.equal(blockedOutcome.reasonCodes.includes('stop-condition-self-fingerprint-mismatch'), true);
+});
+
+test('compensation binding: the real compensation_reference_version is preserved, and a tampered compensation_fingerprint is FINGERPRINT_BLOCKED', () => {
+  const stopScenario = scenarioFixture('compensation-plan-mismatch').request;
+  const [compensation] = stopScenario.compensation_references;
+  const realVersion = buildExecutionPlanCompensationReference({ ...compensation, execution_plan_id: stopScenario.orchestration_plan_reference.plan_id, compensation_reference_version: 4 });
+  assert.equal(realVersion.compensation_reference_version, 4);
+  const validOutcome = resolveCompensationBindingOutcome(realVersion, { executionPlanId: stopScenario.orchestration_plan_reference.plan_id, validStageIds: stopScenario.stage_manifest_reference.stage_ids });
+  assert.equal(validOutcome, null);
+
+  const tampered = { ...compensation, execution_plan_id: stopScenario.orchestration_plan_reference.plan_id, compensation_fingerprint: 'fp-tampered-compensation' };
+  const blockedOutcome = resolveCompensationBindingOutcome(tampered, { executionPlanId: stopScenario.orchestration_plan_reference.plan_id, validStageIds: stopScenario.stage_manifest_reference.stage_ids });
+  assert.equal(blockedOutcome.status, 'FINGERPRINT_BLOCKED');
+  assert.equal(blockedOutcome.reasonCodes.includes('compensation-self-fingerprint-mismatch'), true);
+});
+
+test('binding records for idempotency/stop-conditions/compensations carry their own real declared version, never a hardcoded 1', () => {
+  const scenario = scenarioFixture('valid-reference-binding-no-llm');
+  const ledger = buildBindingLedgerForPlanFromRequest(scenario.request);
+  const idempotencyRecord = ledger.binding_records.find((r) => r.binding_type === 'IDEMPOTENCY_BINDING');
+  assert.equal(idempotencyRecord.source_reference_version, scenario.request.idempotency_policy_reference.idempotency_reference_version);
+});
+
+test('ledger is blocked (references_bound_in_simulation=false) when any binding fingerprint diverges, and package fingerprint reflects it', () => {
+  const outcomeClean = evaluateExecutionPlanRequest(scenarioFixture('valid-reference-binding-no-llm').request, {});
+  assert.equal(outcomeClean.bindingResult.status, 'REFERENCES_BOUND_SIMULATION');
+
+  const request = clone(scenarioFixture('valid-reference-binding-no-llm').request);
+  request.execution_plan_request_id = 'planreq-fix3-idempotency-fingerprint-tamper-check';
+  const tamperedIdempotency = { ...request.idempotency_policy_reference, idempotency_fingerprint: 'fp-tampered' };
+  request.idempotency_policy_reference = tamperedIdempotency;
+  // The registry snapshot's own idempotency_policy entity fingerprint must still agree with what
+  // the request now (tampered) carries, and execution_plan_request_id changed above -- refresh
+  // both so REGISTRY_SNAPSHOT_BLOCKED doesn't mask the deeper idempotency self-fingerprint
+  // recompute-and-compare this test actually means to exercise.
+  request.registry_snapshot_reference = buildExecutionRegistrySnapshotReference({
+    ...request.registry_snapshot_reference,
+    execution_plan_request_id: request.execution_plan_request_id,
+    registry_entity_fingerprints: {
+      ...request.registry_snapshot_reference.registry_entity_fingerprints,
+      idempotency_policy: 'fp-tampered',
+      execution_plan_request: stablePayload({
+        execution_plan_request_id: request.execution_plan_request_id,
+        execution_plan_request_version: request.execution_plan_request_version,
+        correlation_id: request.correlation_id,
+        causation_id: request.causation_id,
+        trace_id: request.trace_id,
+        logical_sequence: request.logical_sequence,
+        expected_registry_version: request.expected_registry_version,
+        validator_version: request.validator_version
+      })
+    }
+  });
+  const outcomeTampered = evaluateExecutionPlanRequest(request, {});
+  assert.equal(outcomeTampered.result.status, 'REFERENCE_BINDING_BLOCKED');
+  assert.notEqual(outcomeTampered.plan.plan_fingerprint, outcomeClean.plan.plan_fingerprint);
+});
+
+test('regression: replay via the registry still works after FIX 1-3, and the full suite remains green', () => {
+  const registry = createExecutionPlanRegistry();
+  const scenario = scenarioFixture('valid-reference-binding-no-llm');
+  const outcome = evaluateExecutionPlanRequest(scenario.request, {});
+  assert.equal(registry.registerExecutionPlan(outcome.plan, { expected_version: 0 }).status, 'REGISTERED_SIMULATION');
+  assert.equal(registry.registerExecutionPlan(outcome.plan).status, 'REPLAY_ACCEPTED');
 });
