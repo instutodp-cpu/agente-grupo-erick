@@ -388,9 +388,13 @@ test('a fingerprint mismatch between the planning result and plan references blo
   assert.equal(evaluateOrchestratorDecisionRequest(scenarioFixture('fingerprint-mismatch-decision').request).result.status, 'FINGERPRINT_BLOCKED');
 });
 
-test('a stale expected_registry_version blocks with VERSION_BLOCKED', () => {
+// pr101: context.currentRegistryVersion was this engine's last remaining side-channel read --
+// removed entirely (see evaluateOrchestratorDecisionRequest's own step-9 comment). A stale version
+// passed through context therefore has zero effect now; VERSION_BLOCKED is kept in RESULT_STATUSES
+// only as a legacy, currently-unreachable enum member.
+test('a stale expected_registry_version passed via context has zero effect (dead side-channel)', () => {
   const outcome = evaluateOrchestratorDecisionRequest(scenarioFixture('version-mismatch-decision').request, { currentRegistryVersion: 'registry-v2' });
-  assert.equal(outcome.result.status, 'VERSION_BLOCKED');
+  assert.equal(outcome.result.status, 'READY_SIMULATION');
 });
 
 test('a Planner status outside PLAN_READY_SIMULATION/APPROVAL_REQUIRED_SIMULATION is translated 1:1 when the name matches, and falls back to VALIDATION_FAILED otherwise', () => {

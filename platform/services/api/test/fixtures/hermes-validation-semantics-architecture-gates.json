@@ -1,0 +1,651 @@
+{
+  "fixture_version": 1,
+  "simulation": true,
+  "production_blocked": true,
+  "outcome_scenarios": {
+    "valid-schema": {
+      "input": {
+        "validator_id": "schema_structural_check",
+        "validator_version": "v1",
+        "validation_stage": "SCHEMA",
+        "state": "VALID",
+        "logical_sequence": 0
+      },
+      "expected": {
+        "state": "VALID",
+        "status": "SCHEMA_VALID",
+        "severity": "INFO",
+        "evaluated": true,
+        "applicable": true,
+        "blocking": false,
+        "terminal": false
+      }
+    },
+    "invalid-tenant-blocking-terminal": {
+      "input": {
+        "validator_id": "tenant_identity_check",
+        "validator_version": "v1",
+        "validation_stage": "TENANT",
+        "state": "INVALID",
+        "status": "TENANT_BLOCKED",
+        "severity": "CRITICAL",
+        "reason_codes": [
+          "tenant_mismatch"
+        ],
+        "blocking": true,
+        "terminal": true,
+        "logical_sequence": 3
+      },
+      "expected": {
+        "state": "INVALID",
+        "status": "TENANT_BLOCKED",
+        "severity": "CRITICAL",
+        "evaluated": true,
+        "applicable": true,
+        "blocking": true,
+        "terminal": true
+      }
+    },
+    "invalid-non-blocking-warning": {
+      "input": {
+        "validator_id": "evidence_soft_check",
+        "validator_version": "v1",
+        "validation_stage": "EVIDENCE",
+        "state": "INVALID",
+        "status": "EVIDENCE_BLOCKED",
+        "severity": "WARNING",
+        "reason_codes": [
+          "evidence_soft_warning"
+        ],
+        "blocking": false,
+        "logical_sequence": 12
+      },
+      "expected": {
+        "state": "INVALID",
+        "status": "EVIDENCE_BLOCKED",
+        "severity": "WARNING",
+        "evaluated": true,
+        "applicable": true,
+        "blocking": false,
+        "terminal": false
+      }
+    },
+    "not-applicable-package-integrity": {
+      "input": {
+        "validator_id": "package_integrity_check",
+        "validator_version": "v1",
+        "validation_stage": "PACKAGE_INTEGRITY",
+        "state": "NOT_APPLICABLE",
+        "logical_sequence": 20
+      },
+      "expected": {
+        "state": "NOT_APPLICABLE",
+        "status": "PACKAGE_INTEGRITY_NOT_APPLICABLE",
+        "severity": "INFO",
+        "evaluated": true,
+        "applicable": false,
+        "blocking": false,
+        "terminal": false
+      }
+    },
+    "not-evaluated-finalization": {
+      "input": {
+        "validator_id": "finalization_check",
+        "validator_version": "v1",
+        "validation_stage": "FINALIZATION",
+        "state": "NOT_EVALUATED",
+        "logical_sequence": 21
+      },
+      "expected": {
+        "state": "NOT_EVALUATED",
+        "status": "FINALIZATION_NOT_EVALUATED",
+        "severity": "INFO",
+        "evaluated": false,
+        "applicable": false,
+        "blocking": false,
+        "terminal": false
+      }
+    },
+    "default-status-sentinel": {
+      "input": {
+        "validator_id": "session_identity_check",
+        "validator_version": "v1",
+        "validation_stage": "SESSION",
+        "state": "VALID",
+        "logical_sequence": 6
+      },
+      "expected": {
+        "state": "VALID",
+        "status": "SESSION_VALID",
+        "severity": "INFO",
+        "evaluated": true,
+        "applicable": true,
+        "blocking": false,
+        "terminal": false
+      }
+    },
+    "valid-authz-stage": {
+      "input": {
+        "validator_id": "authorization_status_check",
+        "validator_version": "v1",
+        "validation_stage": "AUTHORIZATION",
+        "state": "VALID",
+        "logical_sequence": 8
+      },
+      "expected": {
+        "state": "VALID",
+        "status": "AUTHORIZATION_VALID",
+        "severity": "INFO",
+        "evaluated": true,
+        "applicable": true,
+        "blocking": false,
+        "terminal": false
+      }
+    }
+  },
+  "ledger_scenarios": {
+    "all-valid-full-pipeline": {
+      "ledgerIdentity": {
+        "validation_ledger_id": "vl-fixture-plan-1",
+        "execution_plan_request_id": "planreq-fixture-1",
+        "execution_plan_id": "plan-fixture-1",
+        "tenant_id": "tenant-a",
+        "organization_id": "tenant-a:org-1",
+        "project_id": "proj-1",
+        "session_reference_id": "session-1",
+        "agent_id": "agent-1",
+        "actor_id": "actor-1",
+        "logical_sequence": 0
+      },
+      "outcomeInputs": [
+        {
+          "validator_id": "schema_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "SCHEMA",
+          "state": "VALID",
+          "logical_sequence": 0
+        },
+        {
+          "validator_id": "simulation_context_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "SIMULATION_CONTEXT",
+          "state": "VALID",
+          "logical_sequence": 1
+        },
+        {
+          "validator_id": "identity_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "IDENTITY",
+          "state": "VALID",
+          "logical_sequence": 2
+        },
+        {
+          "validator_id": "tenant_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "TENANT",
+          "state": "VALID",
+          "logical_sequence": 3
+        },
+        {
+          "validator_id": "organization_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "ORGANIZATION",
+          "state": "VALID",
+          "logical_sequence": 4
+        },
+        {
+          "validator_id": "project_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "PROJECT",
+          "state": "VALID",
+          "logical_sequence": 5
+        },
+        {
+          "validator_id": "session_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "SESSION",
+          "state": "VALID",
+          "logical_sequence": 6
+        },
+        {
+          "validator_id": "task_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "TASK",
+          "state": "VALID",
+          "logical_sequence": 7
+        },
+        {
+          "validator_id": "authorization_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "AUTHORIZATION",
+          "state": "VALID",
+          "logical_sequence": 8
+        },
+        {
+          "validator_id": "authorization_provenance_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "AUTHORIZATION_PROVENANCE",
+          "state": "VALID",
+          "logical_sequence": 9
+        },
+        {
+          "validator_id": "authorization_scope_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "AUTHORIZATION_SCOPE",
+          "state": "VALID",
+          "logical_sequence": 10
+        },
+        {
+          "validator_id": "registry_snapshot_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "REGISTRY_SNAPSHOT",
+          "state": "VALID",
+          "logical_sequence": 11
+        },
+        {
+          "validator_id": "evidence_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "EVIDENCE",
+          "state": "VALID",
+          "logical_sequence": 12
+        },
+        {
+          "validator_id": "stage_manifest_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "STAGE_MANIFEST",
+          "state": "VALID",
+          "logical_sequence": 13
+        },
+        {
+          "validator_id": "dependency_graph_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "DEPENDENCY_GRAPH",
+          "state": "VALID",
+          "logical_sequence": 14
+        },
+        {
+          "validator_id": "reference_binding_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "REFERENCE_BINDING",
+          "state": "VALID",
+          "logical_sequence": 15
+        },
+        {
+          "validator_id": "budget_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "BUDGET",
+          "state": "VALID",
+          "logical_sequence": 16
+        },
+        {
+          "validator_id": "idempotency_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "IDEMPOTENCY",
+          "state": "VALID",
+          "logical_sequence": 17
+        },
+        {
+          "validator_id": "stop_conditions_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "STOP_CONDITIONS",
+          "state": "VALID",
+          "logical_sequence": 18
+        },
+        {
+          "validator_id": "compensations_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "COMPENSATIONS",
+          "state": "VALID",
+          "logical_sequence": 19
+        },
+        {
+          "validator_id": "package_integrity_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "PACKAGE_INTEGRITY",
+          "state": "VALID",
+          "logical_sequence": 20
+        },
+        {
+          "validator_id": "finalization_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "FINALIZATION",
+          "state": "VALID",
+          "logical_sequence": 21
+        }
+      ],
+      "expected": {
+        "pipeline_completed": true,
+        "all_required_validations_valid": true,
+        "first_blocking_stage": null,
+        "first_blocking_status": null,
+        "valid_count": 22,
+        "invalid_count": 0,
+        "not_evaluated_count": 0
+      }
+    },
+    "blocked-mid-budget": {
+      "ledgerIdentity": {
+        "validation_ledger_id": "vl-fixture-plan-2",
+        "execution_plan_request_id": "planreq-fixture-1",
+        "execution_plan_id": "plan-fixture-1",
+        "tenant_id": "tenant-a",
+        "organization_id": "tenant-a:org-1",
+        "project_id": "proj-1",
+        "session_reference_id": "session-1",
+        "agent_id": "agent-1",
+        "actor_id": "actor-1",
+        "logical_sequence": 0
+      },
+      "outcomeInputs": [
+        {
+          "validator_id": "schema_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "SCHEMA",
+          "state": "VALID",
+          "logical_sequence": 0
+        },
+        {
+          "validator_id": "simulation_context_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "SIMULATION_CONTEXT",
+          "state": "VALID",
+          "logical_sequence": 1
+        },
+        {
+          "validator_id": "identity_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "IDENTITY",
+          "state": "VALID",
+          "logical_sequence": 2
+        },
+        {
+          "validator_id": "tenant_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "TENANT",
+          "state": "VALID",
+          "logical_sequence": 3
+        },
+        {
+          "validator_id": "organization_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "ORGANIZATION",
+          "state": "VALID",
+          "logical_sequence": 4
+        },
+        {
+          "validator_id": "project_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "PROJECT",
+          "state": "VALID",
+          "logical_sequence": 5
+        },
+        {
+          "validator_id": "session_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "SESSION",
+          "state": "VALID",
+          "logical_sequence": 6
+        },
+        {
+          "validator_id": "task_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "TASK",
+          "state": "VALID",
+          "logical_sequence": 7
+        },
+        {
+          "validator_id": "authorization_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "AUTHORIZATION",
+          "state": "VALID",
+          "logical_sequence": 8
+        },
+        {
+          "validator_id": "authorization_provenance_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "AUTHORIZATION_PROVENANCE",
+          "state": "VALID",
+          "logical_sequence": 9
+        },
+        {
+          "validator_id": "authorization_scope_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "AUTHORIZATION_SCOPE",
+          "state": "VALID",
+          "logical_sequence": 10
+        },
+        {
+          "validator_id": "registry_snapshot_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "REGISTRY_SNAPSHOT",
+          "state": "VALID",
+          "logical_sequence": 11
+        },
+        {
+          "validator_id": "evidence_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "EVIDENCE",
+          "state": "VALID",
+          "logical_sequence": 12
+        },
+        {
+          "validator_id": "stage_manifest_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "STAGE_MANIFEST",
+          "state": "VALID",
+          "logical_sequence": 13
+        },
+        {
+          "validator_id": "dependency_graph_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "DEPENDENCY_GRAPH",
+          "state": "VALID",
+          "logical_sequence": 14
+        },
+        {
+          "validator_id": "reference_binding_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "REFERENCE_BINDING",
+          "state": "VALID",
+          "logical_sequence": 15
+        },
+        {
+          "validator_id": "budget_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "BUDGET",
+          "state": "INVALID",
+          "logical_sequence": 16,
+          "status": "BUDGET_BLOCKED",
+          "severity": "CRITICAL",
+          "blocking": true,
+          "terminal": true,
+          "reason_codes": [
+            "budget_exceeded"
+          ]
+        },
+        {
+          "validator_id": "idempotency_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "IDEMPOTENCY",
+          "state": "NOT_EVALUATED",
+          "logical_sequence": 17
+        },
+        {
+          "validator_id": "stop_conditions_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "STOP_CONDITIONS",
+          "state": "NOT_EVALUATED",
+          "logical_sequence": 18
+        },
+        {
+          "validator_id": "compensations_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "COMPENSATIONS",
+          "state": "NOT_EVALUATED",
+          "logical_sequence": 19
+        },
+        {
+          "validator_id": "package_integrity_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "PACKAGE_INTEGRITY",
+          "state": "NOT_EVALUATED",
+          "logical_sequence": 20
+        },
+        {
+          "validator_id": "finalization_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "FINALIZATION",
+          "state": "NOT_EVALUATED",
+          "logical_sequence": 21
+        }
+      ],
+      "expected": {
+        "pipeline_completed": false,
+        "all_required_validations_valid": false,
+        "first_blocking_stage": "BUDGET",
+        "first_blocking_status": "BUDGET_BLOCKED",
+        "valid_count": 16,
+        "invalid_count": 1,
+        "not_evaluated_count": 5
+      }
+    },
+    "non-required-invalid-non-blocking": {
+      "ledgerIdentity": {
+        "validation_ledger_id": "vl-fixture-plan-3",
+        "execution_plan_request_id": "planreq-fixture-1",
+        "execution_plan_id": "plan-fixture-1",
+        "tenant_id": "tenant-a",
+        "organization_id": "tenant-a:org-1",
+        "project_id": "proj-1",
+        "session_reference_id": "session-1",
+        "agent_id": "agent-1",
+        "actor_id": "actor-1",
+        "logical_sequence": 0
+      },
+      "outcomeInputs": [
+        {
+          "validator_id": "schema_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "SCHEMA",
+          "state": "VALID",
+          "logical_sequence": 0
+        },
+        {
+          "validator_id": "evidence_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "EVIDENCE",
+          "state": "INVALID",
+          "logical_sequence": 1,
+          "status": "EVIDENCE_BLOCKED",
+          "severity": "WARNING",
+          "blocking": false,
+          "reason_codes": [
+            "evidence_soft_warning"
+          ]
+        },
+        {
+          "validator_id": "budget_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "BUDGET",
+          "state": "VALID",
+          "logical_sequence": 2
+        }
+      ],
+      "expected": {
+        "pipeline_completed": true,
+        "all_required_validations_valid": false,
+        "first_blocking_stage": null,
+        "invalid_count": 1,
+        "blocking_count": 0
+      }
+    },
+    "authz-boundary-nullable-ids": {
+      "ledgerIdentity": {
+        "validation_ledger_id": "vl-fixture-authz-1",
+        "execution_plan_request_id": null,
+        "execution_plan_id": null,
+        "tenant_id": "tenant-a",
+        "organization_id": "tenant-a:org-1",
+        "project_id": "proj-1",
+        "session_reference_id": "session-1",
+        "agent_id": "agent-1",
+        "actor_id": "actor-1",
+        "logical_sequence": 0
+      },
+      "outcomeInputs": [
+        {
+          "validator_id": "schema_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "SCHEMA",
+          "state": "VALID",
+          "logical_sequence": 0
+        },
+        {
+          "validator_id": "tenant_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "TENANT",
+          "state": "VALID",
+          "logical_sequence": 1
+        },
+        {
+          "validator_id": "authorization_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "AUTHORIZATION",
+          "state": "VALID",
+          "logical_sequence": 2
+        },
+        {
+          "validator_id": "budget_fixture_check",
+          "validator_version": "v1",
+          "validation_stage": "BUDGET",
+          "state": "VALID",
+          "logical_sequence": 3
+        }
+      ],
+      "expected": {
+        "execution_plan_request_id": null,
+        "execution_plan_id": null,
+        "pipeline_completed": true,
+        "all_required_validations_valid": true
+      }
+    }
+  },
+  "derive_from_status_scenarios": {
+    "BUDGET_BLOCKED": {
+      "expected": {
+        "pipeline_completed": false,
+        "all_required_validations_valid": false,
+        "first_blocking_stage": "BUDGET",
+        "first_blocking_status": "BUDGET_BLOCKED",
+        "not_evaluated_count": 5
+      }
+    },
+    "EXECUTION_PLAN_PREPARED_SIMULATION": {
+      "expected": {
+        "pipeline_completed": true,
+        "all_required_validations_valid": true,
+        "first_blocking_stage": null,
+        "first_blocking_status": null,
+        "not_evaluated_count": 0
+      }
+    },
+    "WAITING_APPROVAL_REFERENCE": {
+      "expected": {
+        "pipeline_completed": false,
+        "all_required_validations_valid": false,
+        "first_blocking_stage": null,
+        "first_blocking_status": null,
+        "not_evaluated_count": 1
+      }
+    },
+    "TOTALLY_UNKNOWN_STATUS": {
+      "expected": {
+        "pipeline_completed": false,
+        "all_required_validations_valid": false,
+        "first_blocking_stage": "SCHEMA",
+        "first_blocking_status": "VALIDATION_FAILED",
+        "not_evaluated_count": 21
+      }
+    }
+  }
+}

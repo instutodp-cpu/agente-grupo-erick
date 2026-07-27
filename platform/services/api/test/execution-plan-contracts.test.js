@@ -174,9 +174,9 @@ test('execution plan policy reference: exact fields (28) and every require_*/fai
   assert.equal(validateExecutionPlanPolicyReference({ ...policy, allow_irreversible_reference: true }).valid, false);
 });
 
-test('execution plan contract: exact fields (61, +8 from pr100), 29 statuses (+4 pr100), and executable is always false', () => {
-  assert.equal(EXECUTION_PLAN_CONTRACT_FIELDS.length, 61);
-  assert.equal(EXECUTION_PLAN_STATUSES.length, 29);
+test('execution plan contract: exact fields (65, +4 from pr101), 31 statuses (+2 pr101), and executable is always false', () => {
+  assert.equal(EXECUTION_PLAN_CONTRACT_FIELDS.length, 65);
+  assert.equal(EXECUTION_PLAN_STATUSES.length, 31);
   const plan = scenarioFixture('prepared-no-llm-plan').plan;
   assert.equal(validateExecutionPlanContract(plan).valid, true);
   assert.equal(validateExecutionPlanContract({ ...plan, executable: true }).valid, false);
@@ -261,15 +261,15 @@ test('compensation reference: exact fields (15), 5 compensation types, and never
   assert.equal(compensation.compensation_executed, false);
 });
 
-test('execution plan result: exact fields (85, +13 from pr100), 25 statuses (+4 pr100), 4 decisions, 4 next states', () => {
-  assert.equal(EXECUTION_PLAN_RESULT_FIELDS.length, 85);
+test('execution plan result: exact fields (92, +7 from pr101), 25 statuses, 4 decisions, 4 next states', () => {
+  assert.equal(EXECUTION_PLAN_RESULT_FIELDS.length, 92);
   assert.equal(RESULT_STATUSES.length, 25);
   assert.equal(RESULT_DECISIONS.length, 4);
   assert.equal(NEXT_STATES.length, 4);
 });
 
-test('audit: exact fields (39, +1 from pr100)', () => {
-  assert.equal(EXECUTION_PLAN_AUDIT_FIELDS.length, 39);
+test('audit: exact fields (42, +3 from pr101)', () => {
+  assert.equal(EXECUTION_PLAN_AUDIT_FIELDS.length, 42);
 });
 
 test('dependency graph reference: exact fields (17), validated by construction, and simulation/production_blocked forced', () => {

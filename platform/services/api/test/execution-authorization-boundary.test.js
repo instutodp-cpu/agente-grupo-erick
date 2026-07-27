@@ -512,9 +512,13 @@ test('a plan_fingerprint mismatch between planning result and plan reference is 
   assert.equal(evaluateExecutionAuthorizationRequest(scenarioFixture('fingerprint-mismatch').request).decision.status, 'FINGERPRINT_BLOCKED');
 });
 
-test('a stale expected_registry_version is VERSION_BLOCKED', () => {
+// pr101: context.currentRegistryVersion was this boundary's last remaining side-channel read --
+// removed entirely (see evaluateExecutionAuthorizationRequest's own step-11 comment). A stale
+// version passed through context therefore has zero effect now; VERSION_BLOCKED is kept in
+// AUTHORIZATION_STATUSES only as a legacy, currently-unreachable enum member.
+test('a stale expected_registry_version passed via context has zero effect (dead side-channel)', () => {
   const outcome = evaluateExecutionAuthorizationRequest(scenarioFixture('version-mismatch').request, { currentRegistryVersion: 'v2' });
-  assert.equal(outcome.decision.status, 'VERSION_BLOCKED');
+  assert.equal(outcome.decision.status, 'AUTHORIZED_SIMULATION');
 });
 
 test('an evidence bundle reporting an unresolved conflict is CONFLICT_BLOCKED', () => {

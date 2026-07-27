@@ -88,6 +88,20 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'authorization_provenance_reference',
   'authorization_scope_reference'
 ]));
+// Field *values* that are legitimate, closed-enum identifiers rather than operational material --
+// mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept
+// deliberately tiny: only exact, known-safe enum values belong here, never a prefix or pattern
+// that could also match a real credential.
+// Validation Semantics and Architecture Gates (PR #101): 'AUTHORIZATION' is one of the 22
+// canonical ValidationStage values (validation-outcome.js) -- unlike 'AUTHORIZATION_PROVENANCE'/
+// 'AUTHORIZATION_SCOPE' (which never match the word-boundary pattern below, since the character
+// immediately after "AUTHORIZATION" in those two is '_', not a boundary), the bare stage name
+// 'AUTHORIZATION' is an exact whole-string match for the forbidden word pattern's own
+// \bauthorization\b and needs an explicit exemption the same way several field *names* already
+// needed one in PR #97-#100.
+const AGENT_CORE_ALLOWLISTED_VALUE_NAMES = Object.freeze(new Set([
+  'AUTHORIZATION'
+]));
 const AGENT_CORE_FORBIDDEN_VALUE_PATTERN = /\b(api[_-]?key|private[_-]?key|access[_-]?key|secret|token|password|authorization|bearer|jwt|oauth|cookie|filesystem|endpoint|hostname|callback|handler|execute|invoke|runtime|bootstrap|startup|plugin|tool_call|system_prompt|prompt|model|provider|sdk|eval)\b/i;
 const AGENT_CORE_FORBIDDEN_VALUE_SHAPES = Object.freeze([
   [/^(https?|wss?|grpc):\/\//i, 'operational_url_value'],
@@ -171,9 +185,28 @@ function isForbiddenAgentCoreKey(key) {
   return segments.some((segment) => AGENT_CORE_SUBSTRING_KEY_TOKENS.some((token) => segment.includes(token)));
 }
 
+// A fingerprint or a composite id (e.g. ValidationLedger's `${stage}::${validator_id}` outcome
+// ids, or a `stablePayload` serialization embedding them) is built entirely out of sibling fields
+// that were already individually scanned when `visit()` reached each of them directly. So a
+// known-safe allowlisted value (e.g. 'AUTHORIZATION', a real ValidationStage enum member) that
+// reappears as an exact-case whole word inside such a derived string is not new operational
+// material, only the same already-cleared value re-serialized or re-joined with punctuation.
+// Stripping is deliberately exact-case and whole-word (never a bare case-insensitive substring
+// match), so this can never launder a real secret that merely contains "authorization" in a
+// different case or as part of a longer, otherwise-unsafe token.
+function stripAllowlistedValueSubstrings(value) {
+  let result = value;
+  for (const allowlisted of AGENT_CORE_ALLOWLISTED_VALUE_NAMES) {
+    const escaped = allowlisted.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    result = result.replace(new RegExp(`\\b${escaped}\\b`, 'g'), '');
+  }
+  return result;
+}
+
 function looksLikeOperationalValue(rawValue) {
   const value = normalizeForDetection(rawValue);
-  if (AGENT_CORE_FORBIDDEN_VALUE_PATTERN.test(value)) return 'forbidden_word_value';
+  if (AGENT_CORE_ALLOWLISTED_VALUE_NAMES.has(rawValue)) return null;
+  if (AGENT_CORE_FORBIDDEN_VALUE_PATTERN.test(stripAllowlistedValueSubstrings(value))) return 'forbidden_word_value';
   for (const [pattern, reason] of AGENT_CORE_FORBIDDEN_VALUE_SHAPES) {
     if (pattern.test(value)) return reason;
   }

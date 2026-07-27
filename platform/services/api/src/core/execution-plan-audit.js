@@ -14,7 +14,8 @@ const EXECUTION_PLAN_AUDIT_FIELDS = Object.freeze([
   'estimated_budget', 'side_effect_classifications', 'stop_condition_types', 'compensation_types',
   'stage_type_counts', 'parallel_stage_count', 'optional_stage_count', 'approval_stage_count',
   'estimated_input_tokens', 'estimated_output_tokens', 'estimated_total_tokens', 'estimated_total_cost_minor_units',
-  'dependency_graph_validated', 'stage_manifest_validated', 'references_bound_in_simulation', 'status', 'decision',
+  'dependency_graph_validated', 'stage_manifest_validated', 'references_bound_in_simulation',
+  'validation_pipeline_completed', 'first_blocking_stage', 'first_blocking_status', 'status', 'decision',
   'next_state', 'blockers', 'reason_codes', 'logical_sequence', 'simulation', 'production_blocked', 'executed',
   'validator_version'
 ]);
@@ -25,7 +26,7 @@ const EXECUTION_PLAN_AUDIT_FIELDS = Object.freeze([
 // avoid for the identical reason.
 const FINGERPRINT_KEYS = Object.freeze([
   'request', 'authz', 'evidence_bundle', 'planning_result', 'orchestration_plan', 'task', 'dependency_graph',
-  'stage_manifest', 'execution_plan', 'provenance', 'scope', 'registry_snapshot', 'binding_ledger'
+  'stage_manifest', 'execution_plan', 'provenance', 'scope', 'registry_snapshot', 'binding_ledger', 'validation_ledger'
 ]);
 const COUNT_KEYS = Object.freeze([
   'stage_count', 'dependency_count', 'binding_count', 'stop_condition_count', 'compensation_count',
@@ -99,6 +100,12 @@ function validateExecutionPlanAudit(audit) {
   if (typeof audit.dependency_graph_validated !== 'boolean') errors.push('dependency_graph_validated_must_be_boolean');
   if (typeof audit.stage_manifest_validated !== 'boolean') errors.push('stage_manifest_validated_must_be_boolean');
   if (typeof audit.references_bound_in_simulation !== 'boolean') errors.push('references_bound_in_simulation_must_be_boolean');
+  if (typeof audit.validation_pipeline_completed !== 'boolean') errors.push('validation_pipeline_completed_must_be_boolean');
+  if (audit.first_blocking_stage !== null && !isNonEmptyString(audit.first_blocking_stage)) errors.push('first_blocking_stage_invalid');
+  if (audit.first_blocking_status !== null && !isNonEmptyString(audit.first_blocking_status)) errors.push('first_blocking_status_invalid');
+  if ((audit.first_blocking_stage === null) !== (audit.first_blocking_status === null)) {
+    errors.push('first_blocking_stage_and_status_must_be_paired');
+  }
   if (audit.simulation !== true) errors.push('simulation_must_be_true');
   if (audit.production_blocked !== true) errors.push('production_blocked_must_be_true');
   if (audit.executed !== false) errors.push('executed_must_be_false');
@@ -141,7 +148,8 @@ function buildExecutionPlanAudit(input = {}) {
       provenance: result.authorization_provenance_fingerprint || NOT_AVAILABLE_FINGERPRINT,
       scope: result.authorization_scope_fingerprint || NOT_AVAILABLE_FINGERPRINT,
       registry_snapshot: result.registry_snapshot_fingerprint || NOT_AVAILABLE_FINGERPRINT,
-      binding_ledger: result.binding_ledger_fingerprint || NOT_AVAILABLE_FINGERPRINT
+      binding_ledger: result.binding_ledger_fingerprint || NOT_AVAILABLE_FINGERPRINT,
+      validation_ledger: result.validation_ledger_fingerprint || NOT_AVAILABLE_FINGERPRINT
     },
     tenant_binding: { tenant_id: result.tenant_id || 'tenant_not_available' },
     organization_binding: { organization_id: result.organization_id || 'organization_not_available' },
@@ -182,6 +190,9 @@ function buildExecutionPlanAudit(input = {}) {
     dependency_graph_validated: result.dependency_graph_validated === true,
     stage_manifest_validated: input.stageManifestValidated === true,
     references_bound_in_simulation: result.references_bound_in_simulation === true,
+    validation_pipeline_completed: result.validation_pipeline_completed === true,
+    first_blocking_stage: result.first_blocking_stage === undefined ? null : result.first_blocking_stage,
+    first_blocking_status: result.first_blocking_status === undefined ? null : result.first_blocking_status,
     simulation: true,
     production_blocked: true,
     executed: false,

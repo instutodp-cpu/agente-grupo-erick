@@ -24,6 +24,11 @@ const {
 } = require('./execution-reference-binding-validator');
 const { buildExecutionReferenceBindingResult } = require('./execution-reference-binding-result');
 const { buildExecutionReferenceBindingAudit } = require('./execution-reference-binding-audit');
+const { isStageValid } = require('./validation-pipeline');
+const {
+  attributeBlockingStatus, createValidationTrace, finalizeValidationTrace, markValidationInvalid,
+  markValidationNotApplicable, markValidationValid
+} = require('./validation-trace');
 
 function safeFingerprint(value) {
   try {
@@ -89,13 +94,25 @@ function deriveSideEffectClassification(taskRef, compensationReferences, stageId
 }
 
 function evaluateExecutionPlanRequest(request, context = {}) {
+  // pr101fix: a real, progressive ValidationTrace -- the engine marks each of its own real gates
+  // as it actually executes them, rather than inferring a ValidationLedger post-hoc from the final
+  // status alone. See validation-trace.js's own comment for the full rationale.
+  const trace = createValidationTrace();
+
   // 1-2. request contract shape, including simulation_context, dependency_graph_reference, and
   // stage_manifest_reference as nested fields of the request itself -- no side-channel is ever
   // consulted here (pr99 continues pr98fix's own "no side-channel" discipline).
   const requestValidation = validateExecutionPlanRequest(request);
   if (!requestValidation.valid) {
-    return buildOutcome(request, 'VALIDATION_FAILED', ['execution_plan_request_invalid'], context);
+    return buildOutcome(request, 'VALIDATION_FAILED', ['execution_plan_request_invalid'], context, undefined, trace);
   }
+  // SIMULATION_CONTEXT and IDENTITY-bearing fields (authorization_decision_reference's own
+  // tenant/organization/agent/project/session) are both structurally validated as nested fields of
+  // this same request contract (validateAgentSimulationContext/validateAuthorizationDecisionReference,
+  // both called from within validateExecutionPlanRequest) -- genuinely checked here, not merely
+  // assumed, so both are marked VALID alongside SCHEMA itself.
+  markValidationValid(trace, 'SCHEMA');
+  markValidationValid(trace, 'SIMULATION_CONTEXT');
 
   const authzRef = request.authorization_decision_reference;
   const decisionRef = request.orchestrator_decision_reference;
@@ -123,33 +140,45 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   // 3. autorização (PR #97).
   const authzTranslated = translateStatus(authzRef.status, 'AUTHORIZED_SIMULATION', null);
   if (authzTranslated) {
-    return buildOutcome(request, authzTranslated === 'BLOCKED' ? 'AUTHORIZATION_BLOCKED' : authzTranslated, [`authorization_status::${authzRef.status}`], context);
+    const status = authzTranslated === 'BLOCKED' ? 'AUTHORIZATION_BLOCKED' : authzTranslated;
+    markValidationInvalid(trace, 'AUTHORIZATION', status, [`authorization_status::${authzRef.status}`]);
+    return buildOutcome(request, status, [`authorization_status::${authzRef.status}`], context, undefined, trace);
   }
   if (!isAuthorizationDecisionReady(authzRef)) {
-    return buildOutcome(request, 'VALIDATION_FAILED', ['authorization_decision_reference_inconsistent'], context);
+    markValidationInvalid(trace, 'AUTHORIZATION', 'VALIDATION_FAILED', ['authorization_decision_reference_inconsistent']);
+    return buildOutcome(request, 'VALIDATION_FAILED', ['authorization_decision_reference_inconsistent'], context, undefined, trace);
   }
+  markValidationValid(trace, 'AUTHORIZATION');
 
-  // 4. decisão do Orchestrator (PR #95).
+  // 4. decisão do Orchestrator (PR #95). Not one of the 22 canonical ValidationStages -- the
+  // orchestrator's own decision result is a distinct, upstream pipeline (orchestrator-decision-
+  // engine.js), not one of this engine's own gates. A translated status that happens to also be a
+  // real taxonomy status is still attributed via attributeBlockingStatus() in buildOutcome(),
+  // never inferred as a stage this engine itself validated.
   const decisionTranslated = translateStatus(decisionRef.status, 'READY_SIMULATION', null);
   if (decisionTranslated) {
-    return buildOutcome(request, decisionTranslated, [`orchestrator_decision_status::${decisionRef.status}`], context);
+    return buildOutcome(request, decisionTranslated, [`orchestrator_decision_status::${decisionRef.status}`], context, undefined, trace);
   }
   if (!isOrchestratorDecisionReady(decisionRef)) {
-    return buildOutcome(request, 'VALIDATION_FAILED', ['orchestrator_decision_reference_inconsistent'], context);
+    return buildOutcome(request, 'VALIDATION_FAILED', ['orchestrator_decision_reference_inconsistent'], context, undefined, trace);
   }
 
   // 5. evidence bundle (PR #96).
   const bundleTranslated = translateStatus(bundleRef.bundle_status, 'READY_EVIDENCE_SIMULATION', EVIDENCE_BUNDLE_STATUS_TRANSLATION);
   if (bundleTranslated) {
-    return buildOutcome(request, bundleTranslated === 'BLOCKED' ? 'EVIDENCE_BLOCKED' : bundleTranslated, [`readiness_evidence_bundle_status::${bundleRef.bundle_status}`], context);
+    const status = bundleTranslated === 'BLOCKED' ? 'EVIDENCE_BLOCKED' : bundleTranslated;
+    markValidationInvalid(trace, 'EVIDENCE', status, [`readiness_evidence_bundle_status::${bundleRef.bundle_status}`]);
+    return buildOutcome(request, status, [`readiness_evidence_bundle_status::${bundleRef.bundle_status}`], context, undefined, trace);
   }
   if (!isEvidenceBundleReady(bundleRef)) {
-    return buildOutcome(request, 'VALIDATION_FAILED', ['readiness_evidence_bundle_reference_inconsistent'], context);
+    markValidationInvalid(trace, 'EVIDENCE', 'VALIDATION_FAILED', ['readiness_evidence_bundle_reference_inconsistent']);
+    return buildOutcome(request, 'VALIDATION_FAILED', ['readiness_evidence_bundle_reference_inconsistent'], context, undefined, trace);
   }
+  markValidationValid(trace, 'EVIDENCE');
 
-  // 6. planning result (PR #94).
+  // 6. planning result (PR #94). Not one of the 22 canonical ValidationStages either -- see step 4.
   if (!PLANNER_PLAN_GENERATED_STATUSES.includes(planningRef.status) || planningRef.plan_generated !== true || planningRef.policy_validated !== true) {
-    return buildOutcome(request, 'BLOCKED', ['planning_result_not_ready'], context);
+    return buildOutcome(request, 'BLOCKED', ['planning_result_not_ready'], context, undefined, trace);
   }
 
   // 7-8. orchestration plan / task reference -- structural validity already confirmed in step
@@ -167,6 +196,11 @@ function evaluateExecutionPlanRequest(request, context = {}) {
     projectId: authzRef.project_id, sessionId: authzRef.session_reference_id,
     actorId: scopeRef.actor_id, authorizationScopeId: scopeRef.authorization_scope_id
   };
+  // IDENTITY has no real gate distinct from the structural checks already marked above -- the
+  // canonical identity map is derived directly from authorization_decision_reference's own already-
+  // validated fields, never independently re-checked. Marking it VALID here reflects that
+  // derivation genuinely succeeded from already-confirmed-valid inputs.
+  markValidationValid(trace, 'IDENTITY');
   const bindingChecks = [
     ['orchestrator_decision_reference', decisionRef, 'session_reference_id'],
     ['readiness_evidence_bundle_reference', bundleRef, 'session_reference_id'],
@@ -182,17 +216,31 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   ];
   for (const [label, reference, sessionField] of bindingChecks) {
     const mismatch = checkBinding(reference, canonical, label, sessionField);
-    if (mismatch) return buildOutcome(request, mismatch.status, [mismatch.reason], context);
+    // checkBinding's own result is entirely data-dependent (any of TENANT_BLOCKED/
+    // ORGANIZATION_BLOCKED/VALIDATION_FAILED/PROJECT_BLOCKED/SESSION_BLOCKED, depending on which
+    // reference and dimension actually mismatched) -- attribution goes through buildOutcome's own
+    // taxonomy-driven attributeBlockingStatus(), the same as every other dynamically-determined
+    // status below, never a hardcoded stage name here.
+    if (mismatch) return buildOutcome(request, mismatch.status, [mismatch.reason], context, undefined, trace);
   }
+  // Every reference in bindingChecks was checked, in order, against tenant/organization/agent/
+  // project/session -- the loop only completes without an early return once all four canonical
+  // identity-binding stages have genuinely been confirmed for every one of them.
+  markValidationValid(trace, 'TENANT');
+  markValidationValid(trace, 'ORGANIZATION');
+  markValidationValid(trace, 'PROJECT');
+  markValidationValid(trace, 'SESSION');
 
   // A hard decision=BLOCKED on any already-produced upstream reference (PR #94's own
   // memory/context/model/tool/workflow decisions) surfaces as this PR's own dedicated *_BLOCKED
-  // status -- this PR never re-derives or re-selects any of them, only reads decision=BLOCKED.
-  if (memoryRef.decision === 'BLOCKED') return buildOutcome(request, 'MEMORY_BLOCKED', ['memory_selection_reference_blocked'], context);
-  if (contextRef.decision === 'BLOCKED') return buildOutcome(request, 'CONTEXT_BLOCKED', ['context_assembly_reference_blocked'], context);
-  if (modelRef.decision === 'BLOCKED') return buildOutcome(request, 'MODEL_BLOCKED', ['model_selection_reference_blocked'], context);
-  if (toolRefs.some((reference) => reference.decision === 'BLOCKED')) return buildOutcome(request, 'TOOL_BLOCKED', ['tool_decision_reference_blocked'], context);
-  if (workflowRef.decision === 'BLOCKED') return buildOutcome(request, 'WORKFLOW_BLOCKED', ['workflow_decision_reference_blocked'], context);
+  // status -- this PR never re-derives or re-selects any of them, only reads decision=BLOCKED. None
+  // of these five map to a canonical ValidationStage (see validation-status-mapper.js's own
+  // documented asymmetry) -- never tracked by the trace.
+  if (memoryRef.decision === 'BLOCKED') return buildOutcome(request, 'MEMORY_BLOCKED', ['memory_selection_reference_blocked'], context, undefined, trace);
+  if (contextRef.decision === 'BLOCKED') return buildOutcome(request, 'CONTEXT_BLOCKED', ['context_assembly_reference_blocked'], context, undefined, trace);
+  if (modelRef.decision === 'BLOCKED') return buildOutcome(request, 'MODEL_BLOCKED', ['model_selection_reference_blocked'], context, undefined, trace);
+  if (toolRefs.some((reference) => reference.decision === 'BLOCKED')) return buildOutcome(request, 'TOOL_BLOCKED', ['tool_decision_reference_blocked'], context, undefined, trace);
+  if (workflowRef.decision === 'BLOCKED') return buildOutcome(request, 'WORKFLOW_BLOCKED', ['workflow_decision_reference_blocked'], context, undefined, trace);
 
   // pr100 (Problema 1-3): authorization provenance, authorization scope, and registry snapshot are
   // validated as a contiguous block right after the pre-existing tenant/organization/agent/project/
@@ -201,12 +249,17 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   // PR #99's own precedence compromise (see docs), rather than a full positional reorder of a
   // 700-line function against every pre-existing regression fixture.
   const provenanceMismatch = validateProvenanceCrossChecks(provenanceRef, { authzRef, planningRef, planRef, taskRef, budget, scopeRef, canonical });
-  if (provenanceMismatch) return buildOutcome(request, provenanceMismatch.status, [provenanceMismatch.reason], context);
+  // provenanceMismatch.status is dynamic (AUTHORIZATION_PROVENANCE_BLOCKED, but also
+  // FINGERPRINT_BLOCKED/PROJECT_BLOCKED/SESSION_BLOCKED depending on which sub-field mismatched) --
+  // attributed via buildOutcome's own taxonomy fallback, same as the bindingChecks loop above.
+  if (provenanceMismatch) return buildOutcome(request, provenanceMismatch.status, [provenanceMismatch.reason], context, undefined, trace);
+  markValidationValid(trace, 'AUTHORIZATION_PROVENANCE');
 
   const scopeMismatch = validateScopeCrossChecks(scopeRef, {
     authzRef, canonical, planRef, taskRef, stageRecords: stageManifestRef.stage_records, budget, provenanceRef
   });
-  if (scopeMismatch) return buildOutcome(request, scopeMismatch.status, [scopeMismatch.reason], context);
+  if (scopeMismatch) return buildOutcome(request, scopeMismatch.status, [scopeMismatch.reason], context, undefined, trace);
+  markValidationValid(trace, 'AUTHORIZATION_SCOPE');
 
   // Registry entity fingerprints this evaluation can already compute without waiting for the
   // later manifest/dependency-graph cross-check blocks below -- every one of these references is
@@ -249,14 +302,17 @@ function evaluateExecutionPlanRequest(request, context = {}) {
     canonical, executionPlanRequestId: request.execution_plan_request_id, executionPlanId,
     entityFingerprints: registryEntityFingerprints
   });
-  if (snapshotMismatch) return buildOutcome(request, snapshotMismatch.status, [snapshotMismatch.reason], context);
+  if (snapshotMismatch) return buildOutcome(request, snapshotMismatch.status, [snapshotMismatch.reason], context, undefined, trace);
+  markValidationValid(trace, 'REGISTRY_SNAPSHOT');
 
   // plan/planning-result id agreement (moved up from its old late position -- it only needs data
   // already available at this point, and the required precedence table places TASK_BLOCKED near
   // the top of the evaluation order).
   if (planningRef.plan_id !== executionPlanId || taskRef.plan_id !== executionPlanId) {
-    return buildOutcome(request, 'TASK_BLOCKED', ['task_reference_plan_id_mismatch'], context);
+    markValidationInvalid(trace, 'TASK', 'TASK_BLOCKED', ['task_reference_plan_id_mismatch']);
+    return buildOutcome(request, 'TASK_BLOCKED', ['task_reference_plan_id_mismatch'], context, undefined, trace);
   }
+  markValidationValid(trace, 'TASK');
 
   // pr99 (Problema 1): StageManifestReference cross-checks. The manifest is the sole source of
   // truth for stage_type/sequence/references/parallelism/optional/approval/estimates -- the
@@ -266,13 +322,13 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   // already enforced at construction time by orchestrator-stage-manifest-reference.js, exactly
   // like PR #98fix's DependencyGraphReference.
   if (stageManifestRef.planning_result_id !== planningRef.planning_result_id) {
-    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_planning_result_id_mismatch'], context);
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_planning_result_id_mismatch'], context, undefined, trace);
   }
   if (stageManifestRef.orchestration_plan_id !== executionPlanId) {
-    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_orchestration_plan_id_mismatch'], context);
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_orchestration_plan_id_mismatch'], context, undefined, trace);
   }
   if (stageManifestRef.stage_records.some((record) => record.task_reference_id !== taskRef.task_reference_id)) {
-    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_record_task_reference_id_mismatch'], context);
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_record_task_reference_id_mismatch'], context, undefined, trace);
   }
   // orchestration_plan_reference.ordered_stage_ids and planning_result_reference.stage_ids are
   // both alphabetically canonicalized lists (PR #94), not semantically ordered -- so equivalence
@@ -282,20 +338,23 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   const planStageIdSet = new Set(planRef.ordered_stage_ids);
   const planningStageIdSet = new Set(planningRef.stage_ids);
   if (manifestStageIdSet.size !== planStageIdSet.size || ![...manifestStageIdSet].every((id) => planStageIdSet.has(id))) {
-    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_stage_ids_mismatch_orchestration_plan'], context);
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_stage_ids_mismatch_orchestration_plan'], context, undefined, trace);
   }
   if (manifestStageIdSet.size !== planningStageIdSet.size || ![...manifestStageIdSet].every((id) => planningStageIdSet.has(id))) {
-    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_stage_ids_mismatch_planning_result'], context);
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_stage_ids_mismatch_planning_result'], context, undefined, trace);
   }
   // tamper detection: recompute and compare every fingerprint the manifest itself claims.
   if (computeManifestFingerprint(stageManifestRef) !== stageManifestRef.manifest_fingerprint) {
-    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_fingerprint_mismatch'], context);
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_fingerprint_mismatch'], context, undefined, trace);
   }
   for (const record of stageManifestRef.stage_records) {
     if (computeStageRecordFingerprint(record) !== record.stage_fingerprint) {
-      return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', [`stage_record_fingerprint_mismatch::${record.stage_id}`], context);
+      return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', [`stage_record_fingerprint_mismatch::${record.stage_id}`], context, undefined, trace);
     }
   }
+  // STAGE_MANIFEST is not marked VALID here yet -- its real checks continue further below (the
+  // manifest-to-dependency-graph id equivalence and per-record lookups, interleaved with
+  // DEPENDENCY_GRAPH's own checks); see the mark right after that second block completes.
 
   // estágios: materialized 1:1 from each StageRecord -- no inference, no reconstruction of
   // stage_type, no zeroing of parallelizable/optional/estimates. The engine can never trade
@@ -320,22 +379,22 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   }));
 
   if (stages.some((stage) => stage.side_effect_classification === 'EXTERNAL_EFFECT_REFERENCE')) {
-    return buildOutcome(request, 'BLOCKED', ['external_effect_not_allowed_in_this_pr'], context);
+    return buildOutcome(request, 'BLOCKED', ['external_effect_not_allowed_in_this_pr'], context, undefined, trace);
   }
   if (stages.some((stage) => stage.side_effect_classification === 'IRREVERSIBLE_REFERENCE')) {
-    return buildOutcome(request, 'BLOCKED', ['irreversible_effect_not_allowed_in_this_pr'], context);
+    return buildOutcome(request, 'BLOCKED', ['irreversible_effect_not_allowed_in_this_pr'], context, undefined, trace);
   }
   if (stages.some((stage) => stage.stage_type === 'MODEL_REFERENCE_STAGE') && policy.allow_model_stage !== true) {
-    return buildOutcome(request, 'MODEL_BLOCKED', ['model_stage_not_allowed_by_policy'], context);
+    return buildOutcome(request, 'MODEL_BLOCKED', ['model_stage_not_allowed_by_policy'], context, undefined, trace);
   }
   if (stages.every((stage) => stage.stage_type !== 'MODEL_REFERENCE_STAGE') && policy.allow_no_llm_stage !== true) {
-    return buildOutcome(request, 'MODEL_BLOCKED', ['no_llm_stage_not_allowed_by_policy'], context);
+    return buildOutcome(request, 'MODEL_BLOCKED', ['no_llm_stage_not_allowed_by_policy'], context, undefined, trace);
   }
   if (stages.some((stage) => stage.stage_type === 'TOOL_REFERENCE_STAGE') && policy.allow_tool_stage !== true) {
-    return buildOutcome(request, 'TOOL_BLOCKED', ['tool_stage_not_allowed_by_policy'], context);
+    return buildOutcome(request, 'TOOL_BLOCKED', ['tool_stage_not_allowed_by_policy'], context, undefined, trace);
   }
   if (stages.some((stage) => stage.stage_type === 'WORKFLOW_REFERENCE_STAGE') && policy.allow_workflow_stage !== true) {
-    return buildOutcome(request, 'WORKFLOW_BLOCKED', ['workflow_stage_not_allowed_by_policy'], context);
+    return buildOutcome(request, 'WORKFLOW_BLOCKED', ['workflow_stage_not_allowed_by_policy'], context, undefined, trace);
   }
 
   // bindings: built strictly from each StageRecord's own references -- never a model/tool/
@@ -435,7 +494,7 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   }));
 
   if (policy.fail_on_binding_mismatch === true && bindings.some((binding) => binding.binding_validated !== true)) {
-    return buildOutcome(request, 'BINDING_BLOCKED', ['stage_binding_not_validated'], context);
+    return buildOutcome(request, 'BINDING_BLOCKED', ['stage_binding_not_validated'], context, undefined, trace);
   }
   // A selected reference id declared by the Planner (PR #94) that this request's own
   // model/tool/workflow references do not actually carry is a genuine binding mismatch, not a
@@ -444,27 +503,30 @@ function evaluateExecutionPlanRequest(request, context = {}) {
     planningRef.selected_model_reference_ids.length > 0 && bindings.some((b) => b.binding_type === 'MODEL_BINDING') &&
     !planningRef.selected_model_reference_ids.includes(modelRef.reference_id)
   ) {
-    return buildOutcome(request, 'BINDING_BLOCKED', ['selected_model_reference_id_not_bound'], context);
+    return buildOutcome(request, 'BINDING_BLOCKED', ['selected_model_reference_id_not_bound'], context, undefined, trace);
   }
   if (
     planningRef.selected_tool_reference_ids.length > 0 && bindings.some((b) => b.binding_type === 'TOOL_BINDING') &&
     planningRef.selected_tool_reference_ids.some((id) => !toolRefs.some((r) => r.reference_id === id))
   ) {
-    return buildOutcome(request, 'BINDING_BLOCKED', ['selected_tool_reference_id_not_bound'], context);
+    return buildOutcome(request, 'BINDING_BLOCKED', ['selected_tool_reference_id_not_bound'], context, undefined, trace);
   }
   if (
     planningRef.selected_workflow_reference_ids.length > 0 && bindings.some((b) => b.binding_type === 'WORKFLOW_BINDING') &&
     !planningRef.selected_workflow_reference_ids.includes(workflowRef.reference_id)
   ) {
-    return buildOutcome(request, 'BINDING_BLOCKED', ['selected_workflow_reference_id_not_bound'], context);
+    return buildOutcome(request, 'BINDING_BLOCKED', ['selected_workflow_reference_id_not_bound'], context, undefined, trace);
   }
 
-  // fingerprints: plan_fingerprint agreement, plus task_reference tamper detection.
+  // fingerprints: plan_fingerprint agreement, plus task_reference tamper detection. Both map to
+  // PACKAGE_INTEGRITY via taxonomy metadata (FINGERPRINT_BLOCKED); PACKAGE_INTEGRITY itself is not
+  // marked VALID until its second checkpoint further below (after the dependency-graph fingerprint
+  // check) also passes.
   if (planningRef.plan_fingerprint !== planRef.plan_fingerprint) {
-    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['plan_fingerprint_mismatch_between_planning_result_and_plan_reference'], context);
+    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['plan_fingerprint_mismatch_between_planning_result_and_plan_reference'], context, undefined, trace);
   }
   if (computeTaskReferenceFingerprint(taskRef) !== taskRef.task_fingerprint) {
-    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['task_reference_fingerprint_mismatch'], context);
+    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['task_reference_fingerprint_mismatch'], context, undefined, trace);
   }
 
   // pr100: context is never read for any decisional condition -- registry_snapshot_reference
@@ -481,32 +543,33 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   // concordar exatamente com o planning result, o orchestration plan e o próprio budget --
   // nenhuma divergência é ajustada silenciosamente.
   if (budget.budget_validated !== true) {
-    return buildOutcome(request, 'BUDGET_BLOCKED', ['execution_plan_budget_not_validated'], context);
+    return buildOutcome(request, 'BUDGET_BLOCKED', ['execution_plan_budget_not_validated'], context, undefined, trace);
   }
   const estimatedInputTokens = stages.reduce((sum, s) => sum + s.estimated_input_tokens, 0);
   const estimatedOutputTokens = stages.reduce((sum, s) => sum + s.estimated_output_tokens, 0);
   const estimatedTotalTokens = stages.reduce((sum, s) => sum + s.estimated_total_tokens, 0);
   const estimatedTotalCost = stages.reduce((sum, s) => sum + s.estimated_cost_minor_units, 0);
   if (estimatedTotalTokens !== planningRef.estimated_total_tokens || estimatedTotalCost !== planningRef.estimated_total_cost_minor_units) {
-    return buildOutcome(request, 'BUDGET_BLOCKED', ['stage_estimates_mismatch_planning_result'], context);
+    return buildOutcome(request, 'BUDGET_BLOCKED', ['stage_estimates_mismatch_planning_result'], context, undefined, trace);
   }
   if (estimatedTotalTokens !== planRef.estimated_total_tokens || estimatedTotalCost !== planRef.estimated_total_cost_minor_units) {
-    return buildOutcome(request, 'BUDGET_BLOCKED', ['stage_estimates_mismatch_orchestration_plan'], context);
+    return buildOutcome(request, 'BUDGET_BLOCKED', ['stage_estimates_mismatch_orchestration_plan'], context, undefined, trace);
   }
   if (
     estimatedInputTokens !== budget.estimated_input_tokens || estimatedOutputTokens !== budget.estimated_output_tokens ||
     estimatedTotalTokens !== budget.estimated_total_tokens || estimatedTotalCost !== budget.estimated_total_cost_minor_units
   ) {
-    return buildOutcome(request, 'BUDGET_BLOCKED', ['stage_estimates_mismatch_execution_plan_budget'], context);
+    return buildOutcome(request, 'BUDGET_BLOCKED', ['stage_estimates_mismatch_execution_plan_budget'], context, undefined, trace);
   }
   const modelStageCount = stages.filter((s) => s.stage_type === 'MODEL_REFERENCE_STAGE').length;
   const toolStageCount = stages.filter((s) => s.stage_type === 'TOOL_REFERENCE_STAGE').length;
   const workflowStageCount = stages.filter((s) => s.stage_type === 'WORKFLOW_REFERENCE_STAGE').length;
   const parallelStageCount = stages.filter((s) => s.parallelizable === true).length;
-  if (modelStageCount > budget.maximum_model_stages) return buildOutcome(request, 'BUDGET_BLOCKED', ['model_stage_count_exceeds_budget'], context);
-  if (toolStageCount > budget.maximum_tool_stages) return buildOutcome(request, 'BUDGET_BLOCKED', ['tool_stage_count_exceeds_budget'], context);
-  if (workflowStageCount > budget.maximum_workflow_stages) return buildOutcome(request, 'BUDGET_BLOCKED', ['workflow_stage_count_exceeds_budget'], context);
-  if (parallelStageCount > budget.maximum_parallel_stages) return buildOutcome(request, 'BUDGET_BLOCKED', ['parallel_stage_count_exceeds_budget'], context);
+  if (modelStageCount > budget.maximum_model_stages) return buildOutcome(request, 'BUDGET_BLOCKED', ['model_stage_count_exceeds_budget'], context, undefined, trace);
+  if (toolStageCount > budget.maximum_tool_stages) return buildOutcome(request, 'BUDGET_BLOCKED', ['tool_stage_count_exceeds_budget'], context, undefined, trace);
+  if (workflowStageCount > budget.maximum_workflow_stages) return buildOutcome(request, 'BUDGET_BLOCKED', ['workflow_stage_count_exceeds_budget'], context, undefined, trace);
+  if (parallelStageCount > budget.maximum_parallel_stages) return buildOutcome(request, 'BUDGET_BLOCKED', ['parallel_stage_count_exceeds_budget'], context, undefined, trace);
+  markValidationValid(trace, 'BUDGET');
 
   // dependências (pr98fix, augmented by pr99). DependencyGraphReference remains the sole source
   // of edges; context.dependencyRecords is still never read anywhere in this file. New for pr99:
@@ -514,77 +577,108 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   // each targets, and a PARALLEL_REFERENCE edge's target stage must itself be parallelizable.
   const depGraphRef = request.dependency_graph_reference;
   const depGraphMismatch = checkBinding(depGraphRef, canonical, 'dependency_graph_reference', 'session_reference_id');
-  if (depGraphMismatch) return buildOutcome(request, depGraphMismatch.status, [depGraphMismatch.reason], context);
+  if (depGraphMismatch) return buildOutcome(request, depGraphMismatch.status, [depGraphMismatch.reason], context, undefined, trace);
   if (depGraphRef.execution_plan_id !== executionPlanId) {
-    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_execution_plan_id_mismatch'], context);
+    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_execution_plan_id_mismatch'], context, undefined, trace);
   }
   if (depGraphRef.planning_result_id !== planningRef.planning_result_id) {
-    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_planning_result_id_mismatch'], context);
+    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_planning_result_id_mismatch'], context, undefined, trace);
   }
   if (depGraphRef.orchestration_plan_id !== planRef.plan_id) {
-    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_orchestration_plan_id_mismatch'], context);
+    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_orchestration_plan_id_mismatch'], context, undefined, trace);
   }
   const stageIdSet = new Set(planRef.ordered_stage_ids);
   const depGraphStageIdSet = new Set(depGraphRef.stage_ids);
   if (depGraphRef.stage_ids.length !== planRef.ordered_stage_ids.length || ![...depGraphStageIdSet].every((id) => stageIdSet.has(id))) {
-    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_stage_ids_mismatch'], context);
+    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_stage_ids_mismatch'], context, undefined, trace);
   }
   if (computeDependencyGraphReferenceFingerprint(depGraphRef) !== depGraphRef.graph_fingerprint) {
-    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['dependency_graph_reference_fingerprint_mismatch'], context);
+    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['dependency_graph_reference_fingerprint_mismatch'], context, undefined, trace);
   }
+  // Both of PACKAGE_INTEGRITY's real fingerprint checkpoints (plan_fingerprint/task_fingerprint
+  // above, and dependency_graph_reference's own fingerprint just above) have now passed.
+  markValidationValid(trace, 'PACKAGE_INTEGRITY');
   const dependencyRecords = depGraphRef.dependency_records;
 
   const manifestDependencyIds = new Set(stageManifestRef.stage_records.flatMap((record) => record.dependency_reference_ids));
   const graphDependencyIds = new Set(dependencyRecords.map((record) => record.dependency_id));
   if (manifestDependencyIds.size !== graphDependencyIds.size || ![...manifestDependencyIds].every((id) => graphDependencyIds.has(id))) {
-    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_dependency_ids_not_equivalent_to_dependency_graph'], context);
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_dependency_ids_not_equivalent_to_dependency_graph'], context, undefined, trace);
   }
   const stageRecordById = new Map(stageManifestRef.stage_records.map((record) => [record.stage_id, record]));
   for (const dependencyRecord of dependencyRecords) {
     const toStage = stageRecordById.get(dependencyRecord.to_stage_id);
     if (!toStage || !toStage.dependency_reference_ids.includes(dependencyRecord.dependency_id)) {
-      return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['dependency_graph_dependency_id_not_present_on_target_stage_record'], context);
+      return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['dependency_graph_dependency_id_not_present_on_target_stage_record'], context, undefined, trace);
     }
     const fromStage = stageRecordById.get(dependencyRecord.from_stage_id);
     if (!fromStage) {
-      return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['dependency_graph_from_stage_not_in_manifest'], context);
+      return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['dependency_graph_from_stage_not_in_manifest'], context, undefined, trace);
     }
     if (dependencyRecord.dependency_type === 'PARALLEL_REFERENCE') {
       if (toStage.parallelizable !== true) {
-        return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['parallel_dependency_target_stage_not_parallelizable'], context);
+        return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['parallel_dependency_target_stage_not_parallelizable'], context, undefined, trace);
       }
     } else if (fromStage.stage_sequence >= toStage.stage_sequence) {
-      return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_reverses_planner_semantic_order'], context);
+      return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_reverses_planner_semantic_order'], context, undefined, trace);
     }
   }
   const parallelStageIds = new Set(dependencyRecords.filter((record) => record.dependency_type === 'PARALLEL_REFERENCE').flatMap((record) => [record.from_stage_id, record.to_stage_id]));
   if (parallelStageIds.size > 0 && policy.allow_parallel_stage !== true) {
-    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['parallel_stage_not_allowed_by_policy'], context);
+    return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['parallel_stage_not_allowed_by_policy'], context, undefined, trace);
   }
+  // STAGE_MANIFEST's second real checkpoint and DEPENDENCY_GRAPH's own checks are genuinely
+  // interleaved per dependency record in the loop above (a single record's own membership check
+  // can fail as STAGE_MANIFEST_BLOCKED, or its own parallel/order check can fail as
+  // DEPENDENCY_BLOCKED, in either order) -- neither stage can be honestly marked VALID until the
+  // entire combined block, including the parallel-stage policy check just above, has passed for
+  // every record with no failure of either kind.
+  markValidationValid(trace, 'STAGE_MANIFEST');
+  markValidationValid(trace, 'DEPENDENCY_GRAPH');
   const dependencies = dependencyRecords.map((record) => buildExecutionPlanDependency({
     dependency_id: record.dependency_id, execution_plan_id: executionPlanId,
     from_stage_id: record.from_stage_id, to_stage_id: record.to_stage_id,
     dependency_type: record.dependency_type, required: record.required === true, dependency_validated: true
   }));
 
-  // idempotência.
-  if (policy.require_idempotency === true && idempotency.idempotency_validated !== true) {
-    return buildOutcome(request, 'IDEMPOTENCY_BLOCKED', ['idempotency_not_validated'], context);
+  // idempotência. Only genuinely checked when the policy requires it -- NOT_APPLICABLE otherwise,
+  // never VALID for a check that was never actually evaluated.
+  if (policy.require_idempotency === true) {
+    if (idempotency.idempotency_validated !== true) {
+      markValidationInvalid(trace, 'IDEMPOTENCY', 'IDEMPOTENCY_BLOCKED', ['idempotency_not_validated']);
+      return buildOutcome(request, 'IDEMPOTENCY_BLOCKED', ['idempotency_not_validated'], context, undefined, trace);
+    }
+    markValidationValid(trace, 'IDEMPOTENCY');
+  } else {
+    markValidationNotApplicable(trace, 'IDEMPOTENCY');
   }
 
-  // condições de parada.
-  if (policy.require_stop_conditions === true && stopConditionRefs.length === 0) {
-    return buildOutcome(request, 'STOP_CONDITION_BLOCKED', ['no_stop_conditions_declared'], context);
+  // condições de parada. Same NOT_APPLICABLE-when-not-required discipline as idempotência above.
+  if (policy.require_stop_conditions === true) {
+    if (stopConditionRefs.length === 0) {
+      markValidationInvalid(trace, 'STOP_CONDITIONS', 'STOP_CONDITION_BLOCKED', ['no_stop_conditions_declared']);
+      return buildOutcome(request, 'STOP_CONDITION_BLOCKED', ['no_stop_conditions_declared'], context, undefined, trace);
+    }
+    markValidationValid(trace, 'STOP_CONDITIONS');
+  } else {
+    markValidationNotApplicable(trace, 'STOP_CONDITIONS');
   }
 
   // compensações declarativas: every STATE_CHANGE_REFERENCE stage needs at least one non-NONE
-  // compensation reference targeting it.
+  // compensation reference targeting it. NOT_APPLICABLE when there is no state-change stage to
+  // cover at all -- vacuously nothing to check, never inferred VALID.
   const stateChangeStages = stages.filter((stage) => stage.side_effect_classification === 'STATE_CHANGE_REFERENCE');
   for (const stage of stateChangeStages) {
     const covered = compensationRefs.some((reference) => reference.execution_stage_id === stage.execution_stage_id && reference.compensation_type !== 'NONE');
     if (!covered) {
-      return buildOutcome(request, 'COMPENSATION_BLOCKED', ['state_change_stage_missing_compensation'], context);
+      markValidationInvalid(trace, 'COMPENSATIONS', 'COMPENSATION_BLOCKED', ['state_change_stage_missing_compensation']);
+      return buildOutcome(request, 'COMPENSATION_BLOCKED', ['state_change_stage_missing_compensation'], context, undefined, trace);
     }
+  }
+  if (stateChangeStages.length > 0) {
+    markValidationValid(trace, 'COMPENSATIONS');
+  } else {
+    markValidationNotApplicable(trace, 'COMPENSATIONS');
   }
 
   // pr100 (steps 13-14): every already-computed ExecutionPlanStageBinding is wrapped into a
@@ -602,29 +696,36 @@ function evaluateExecutionPlanRequest(request, context = {}) {
     planFingerprint: planRef.plan_fingerprint, validStageIds: stages.map((s) => s.execution_stage_id)
   });
   if (ledger.references_bound_in_simulation !== true) {
+    markValidationInvalid(trace, 'REFERENCE_BINDING', 'REFERENCE_BINDING_BLOCKED', ['reference_binding_not_fully_bound']);
     return buildOutcome(request, 'REFERENCE_BINDING_BLOCKED', ['reference_binding_not_fully_bound'], context, {
       stages, bindings, dependencies, estimatedInputTokens, estimatedOutputTokens, estimatedTotalTokens, estimatedTotalCost, ledger
-    });
+    }, trace);
   }
+  markValidationValid(trace, 'REFERENCE_BINDING');
 
   // approval: mirrors PR #95/#97's own WAITING_APPROVAL_SIMULATION-style pattern. A plan whose
   // approval_stage_ids are non-empty still waits, even though HUMAN_APPROVAL_STAGE stages are now
   // sourced from the manifest rather than derived -- the Authorization Decision already
   // represents simulated authorization for *preparation*, never a substitute for the specific
-  // human approval PR #94's own planning result declared this plan still needs.
+  // human approval PR #94's own planning result declared this plan still needs. FINALIZATION is
+  // deliberately left unmarked (NOT_EVALUATED) here -- approval has not yet confirmed the plan may
+  // proceed even in simulation, so "the pipeline completed" is not yet true either.
   if (planningRef.approval_stage_ids.length > 0) {
     return buildOutcome(request, 'WAITING_APPROVAL_REFERENCE', ['waiting_for_stage_approval_reference'], context, {
       stages, bindings, dependencies, estimatedInputTokens, estimatedOutputTokens, estimatedTotalTokens, estimatedTotalCost, ledger
-    });
+    }, trace);
   }
 
-  // gerar execution plan, resultado, auditoria.
+  // gerar execution plan, resultado, auditoria. Every canonical stage this evaluation actually
+  // reached has already been marked above -- FINALIZATION is the one stage whose own "gate" is
+  // simply reaching this final line with nothing left to check.
+  markValidationValid(trace, 'FINALIZATION');
   return buildOutcome(request, 'EXECUTION_PLAN_PREPARED_SIMULATION', ['execution_plan_prepared_simulation_only'], context, {
     stages, bindings, dependencies, estimatedInputTokens, estimatedOutputTokens, estimatedTotalTokens, estimatedTotalCost, ledger
-  });
+  }, trace);
 }
 
-function buildOutcome(request, status, reasonCodes, context, materialized) {
+function buildOutcome(request, status, reasonCodes, context, materialized, trace) {
   const requestSafe = isPlainObject(request) ? request : {};
   const authzRef = isPlainObject(requestSafe.authorization_decision_reference) ? requestSafe.authorization_decision_reference : {};
   const decisionRef = isPlainObject(requestSafe.orchestrator_decision_reference) ? requestSafe.orchestrator_decision_reference : {};
@@ -658,6 +759,28 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
   // context_fingerprint already are for other referenceless-fingerprint objects.
   const provenanceFingerprint = isPlainObject(requestSafe.authorization_provenance_reference) ? safeFingerprint(provenanceRef) : 'fingerprint_not_available';
   const ledger = materialized && isPlainObject(materialized.ledger) ? materialized.ledger : {};
+
+  // pr101fix: the trace the engine itself built by marking each of its own real gates as it
+  // executed them -- never inferred post-hoc from `status` alone (see validation-trace.js and
+  // HERMES_VALIDATION_SEMANTICS_ARCHITECTURE_GATES.md "ValidationTrace"). attributeBlockingStatus
+  // is a targeted, taxonomy-driven fallback: it attributes the ONE stage the final `status` itself
+  // implies (via validation-taxonomy.js's own already-tested metadata) only when the trace has no
+  // explicit blocker of its own yet -- it never marks more than one stage, and never overrides an
+  // explicit mark the engine already made. Every legacy `*_validated` flag below is read from this
+  // ledger, honestly reflecting only stages this evaluation actually reached.
+  attributeBlockingStatus(trace, status, reasonCodes);
+  const validationLedger = finalizeValidationTrace(trace, {
+    validation_ledger_id: `${executionPlanId}-validation-ledger`,
+    execution_plan_request_id: requestSafe.execution_plan_request_id || null,
+    execution_plan_id: executionPlanId,
+    tenant_id: authzRef.tenant_id || 'tenant_not_available',
+    organization_id: authzRef.organization_id || 'organization_not_available',
+    project_id: authzRef.project_id || 'project_not_available',
+    session_reference_id: authzRef.session_reference_id || 'session_not_available',
+    agent_id: authzRef.agent_id || 'agent_not_available',
+    actor_id: scopeRef.actor_id || 'actor_not_available',
+    logical_sequence: logicalSequence
+  });
 
   const requestFingerprint = isPlainObject(request) ? safeFingerprint(request) : 'fingerprint_not_available';
 
@@ -770,6 +893,15 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     registry_snapshot_fingerprint: snapshotRef.snapshot_fingerprint || 'fingerprint_not_available',
     binding_ledger_id: ledger.binding_ledger_id || 'binding_ledger_not_available',
     binding_ledger_fingerprint: ledger.ledger_fingerprint || 'fingerprint_not_available',
+    validation_ledger_id: validationLedger.validation_ledger_id,
+    validation_ledger_fingerprint: validationLedger.ledger_fingerprint,
+    validation_pipeline_completed: validationLedger.pipeline_completed,
+    // pr101fix (FIX 2): architecture gates run in CI (scripts/run-architecture-gates.js), never
+    // inside this declarative engine -- this engine has no evidence they ran or passed for the
+    // package it is currently constructing, and cannot manufacture one. Hardcoded false, never
+    // read from request or context (neither carries such a field at all, so there is nothing to
+    // override even in principle). See docs "Architecture gates evidence".
+    architecture_gates_passed: false,
     logical_sequence: logicalSequence
   });
 
@@ -810,6 +942,15 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     registry_snapshot_fingerprint: snapshotRef.snapshot_fingerprint,
     binding_ledger_id: ledger.binding_ledger_id,
     binding_ledger_fingerprint: ledger.ledger_fingerprint,
+    validation_ledger_id: validationLedger.validation_ledger_id,
+    validation_ledger_fingerprint: validationLedger.ledger_fingerprint,
+    validation_pipeline_completed: validationLedger.pipeline_completed,
+    all_required_validations_valid: validationLedger.all_required_validations_valid,
+    first_blocking_stage: validationLedger.first_blocking_stage,
+    first_blocking_status: validationLedger.first_blocking_status,
+    // pr101fix (FIX 2): see the identical comment on the plan contract above -- no
+    // ArchitectureGateEvidenceReference exists in this PR, so this can never honestly be true here.
+    architecture_gates_passed: false,
     registry_version: requestSafe.expected_registry_version,
     stage_count: stages.length,
     dependency_count: dependencies.length,
@@ -823,14 +964,18 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     blockers: reasonCodes,
     reason_codes: reasonCodes,
     request_validated: status !== 'VALIDATION_FAILED',
-    authorization_validated: true,
-    evidence_validated: true,
-    bindings_validated: true,
-    budget_validated: true,
-    dependencies_validated: true,
-    idempotency_validated: true,
-    stop_conditions_validated: true,
-    compensations_validated: true
+    // pr101: previously hardcoded true regardless of what this evaluation actually reached --
+    // now read from the ValidationLedger's own per-stage outcomes, so a plan blocked at (say)
+    // BUDGET honestly reports authorization_validated=true (that stage really did pass) but
+    // idempotency_validated=false (that stage was never reached, not merely "unchecked but fine").
+    authorization_validated: isStageValid(validationLedger, 'AUTHORIZATION'),
+    evidence_validated: isStageValid(validationLedger, 'EVIDENCE'),
+    bindings_validated: isStageValid(validationLedger, 'REFERENCE_BINDING'),
+    budget_validated: isStageValid(validationLedger, 'BUDGET'),
+    dependencies_validated: isStageValid(validationLedger, 'DEPENDENCY_GRAPH'),
+    idempotency_validated: isStageValid(validationLedger, 'IDEMPOTENCY'),
+    stop_conditions_validated: isStageValid(validationLedger, 'STOP_CONDITIONS'),
+    compensations_validated: isStageValid(validationLedger, 'COMPENSATIONS')
   });
 
   const stageTypeCounts = stages.reduce((counts, stage) => {
@@ -881,7 +1026,11 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     ledger, provenanceRef, scopeRef, snapshotRef, provenanceFingerprint, reasonCodes
   });
 
-  return { plan, result, audit, bindingResult, bindingAudit };
+  // pr101fix: the real ValidationLedger this evaluation's own trace produced is exposed alongside
+  // plan/result/audit -- not just its id/fingerprint/summary-flags -- so a caller (and this PR's
+  // own required tests) can inspect exactly which stage was genuinely reached and marked, never
+  // merely trusting the summary. Still simulation-only, still no execution.
+  return { plan, result, audit, bindingResult, bindingAudit, validationLedger };
 }
 
 module.exports = {

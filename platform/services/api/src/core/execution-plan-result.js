@@ -21,6 +21,8 @@ const EXECUTION_PLAN_RESULT_FIELDS = Object.freeze([
   'authorization_scope_reference_id', 'authorization_scope_fingerprint', 'authorization_scope_validated',
   'registry_snapshot_reference_id', 'registry_snapshot_fingerprint', 'registry_snapshot_validated',
   'binding_ledger_id', 'binding_ledger_fingerprint', 'binding_ledger_validated', 'references_bound_in_simulation',
+  'validation_ledger_id', 'validation_ledger_fingerprint', 'validation_pipeline_completed',
+  'all_required_validations_valid', 'first_blocking_stage', 'first_blocking_status', 'architecture_gates_passed',
   'execution_plan_prepared', 'executable',
   'execution_authorized', 'execution_started', 'stage_started', 'stage_completed', 'tool_called',
   'workflow_executed', 'provider_called', 'model_called', 'network_used', 'memory_read', 'memory_written',
@@ -133,9 +135,16 @@ function validateExecutionPlanResult(result) {
     'orchestration_plan_id', 'task_reference_id', 'agent_id', 'tenant_id', 'organization_id', 'project_id',
     'session_reference_id', 'registry_version', 'stage_manifest_reference_id',
     'authorization_provenance_reference_id', 'authorization_scope_reference_id', 'registry_snapshot_reference_id',
-    'binding_ledger_id', 'validator_version', ...FINGERPRINT_FIELDS
+    'binding_ledger_id', 'validation_ledger_id', 'validation_ledger_fingerprint', 'validator_version',
+    ...FINGERPRINT_FIELDS
   ]) {
     if (!isNonEmptyString(result[field])) errors.push(`${field}_invalid`);
+  }
+  for (const field of ['first_blocking_stage', 'first_blocking_status']) {
+    if (result[field] !== null && !isNonEmptyString(result[field])) errors.push(`${field}_must_be_null_or_string`);
+  }
+  if ((result.first_blocking_stage === null) !== (result.first_blocking_status === null)) {
+    errors.push('first_blocking_stage_and_status_must_be_both_null_or_both_set');
   }
   if (!RESULT_STATUSES.includes(result.status)) errors.push(`status_not_allowed::${result.status}`);
   if (!RESULT_DECISIONS.includes(result.decision)) errors.push(`decision_not_allowed::${result.decision}`);
@@ -164,6 +173,9 @@ function validateExecutionPlanResult(result) {
     if (typeof result[field] !== 'boolean') errors.push(`${field}_must_be_boolean`);
   }
   if (typeof result.references_bound_in_simulation !== 'boolean') errors.push('references_bound_in_simulation_must_be_boolean');
+  if (typeof result.validation_pipeline_completed !== 'boolean') errors.push('validation_pipeline_completed_must_be_boolean');
+  if (typeof result.all_required_validations_valid !== 'boolean') errors.push('all_required_validations_valid_must_be_boolean');
+  if (typeof result.architecture_gates_passed !== 'boolean') errors.push('architecture_gates_passed_must_be_boolean');
   for (const [field, expected] of Object.entries(EXECUTION_PLAN_RESULT_SAFE_FLAGS)) {
     if (result[field] !== expected) errors.push(`${field}_must_be_${String(expected)}`);
   }
@@ -264,6 +276,10 @@ function buildExecutionPlanResult(input = {}) {
     registry_snapshot_fingerprint: input.registry_snapshot_fingerprint || fingerprintNotAvailable,
     binding_ledger_id: input.binding_ledger_id || notAvailable,
     binding_ledger_fingerprint: input.binding_ledger_fingerprint || fingerprintNotAvailable,
+    validation_ledger_id: input.validation_ledger_id || notAvailable,
+    validation_ledger_fingerprint: input.validation_ledger_fingerprint || fingerprintNotAvailable,
+    first_blocking_stage: input.first_blocking_stage === undefined ? null : input.first_blocking_stage,
+    first_blocking_status: input.first_blocking_status === undefined ? null : input.first_blocking_status,
     registry_version: input.registry_version || notAvailable,
     stage_count: Number.isInteger(input.stage_count) ? input.stage_count : 0,
     dependency_count: Number.isInteger(input.dependency_count) ? input.dependency_count : 0,
@@ -291,6 +307,9 @@ function buildExecutionPlanResult(input = {}) {
     registry_snapshot_validated: STAGE_MANIFEST_VALIDATED_STATUSES.includes(status),
     binding_ledger_validated: STAGE_MANIFEST_VALIDATED_STATUSES.includes(status),
     references_bound_in_simulation: status === 'EXECUTION_PLAN_PREPARED_SIMULATION',
+    validation_pipeline_completed: input.validation_pipeline_completed === true,
+    all_required_validations_valid: input.all_required_validations_valid === true,
+    architecture_gates_passed: input.architecture_gates_passed === true,
     ...EXECUTION_PLAN_RESULT_SAFE_FLAGS,
     validator_version: EXECUTION_PLAN_RESULT_VALIDATOR_VERSION
   };
@@ -309,7 +328,10 @@ function buildExecutionPlanResult(input = {}) {
       authorization_scope_validated: false,
       registry_snapshot_validated: false,
       binding_ledger_validated: false,
-      references_bound_in_simulation: false
+      references_bound_in_simulation: false,
+      validation_pipeline_completed: false,
+      all_required_validations_valid: false,
+      architecture_gates_passed: false
     });
   }
   return cloneFrozen(result);

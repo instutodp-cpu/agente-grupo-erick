@@ -19,21 +19,35 @@ const EXECUTION_PLAN_CONTRACT_FIELDS = Object.freeze([
   'idempotency_fingerprint', 'plan_fingerprint', 'authorization_provenance_reference_id',
   'authorization_provenance_fingerprint', 'authorization_scope_reference_id', 'authorization_scope_fingerprint',
   'registry_snapshot_reference_id', 'registry_snapshot_fingerprint', 'binding_ledger_id', 'binding_ledger_fingerprint',
+  'validation_ledger_id', 'validation_ledger_fingerprint', 'validation_pipeline_completed', 'architecture_gates_passed',
   'logical_sequence', 'execution_plan_prepared', 'executable',
   'execution_authorized', 'execution_started', 'executed', 'runtime_enabled', 'simulation', 'production_blocked',
   'rollout_percentage', 'validator_version'
 ]);
 
+// pr101 fix: 'EXECUTION_PLAN_PREPARED_SIMULATION' and 'BINDING_BLOCKED' are both genuine, already-
+// producible statuses execution-plan-engine.js has passed as `status` since PR #96/PR #98
+// respectively -- but this enum never actually contained either literal string, so
+// buildExecutionPlanContract silently downgraded both to VALIDATION_FAILED at construction time.
+// This was the "Status colapsados" defect PR #101 exists to fix; see
+// HERMES_VALIDATION_SEMANTICS_ARCHITECTURE_GATES.md. 'PREPARED_SIMULATION' remains for backward
+// compatibility ("não remover cobertura existente") but validation-status-mapper.js never produces
+// it going forward -- only 'EXECUTION_PLAN_PREPARED_SIMULATION' is.
 const EXECUTION_PLAN_STATUSES = Object.freeze([
-  'PREPARED_SIMULATION', 'WAITING_APPROVAL_REFERENCE', 'BLOCKED', 'VALIDATION_FAILED', 'TENANT_BLOCKED',
-  'ORGANIZATION_BLOCKED', 'PROJECT_BLOCKED', 'SESSION_BLOCKED', 'TASK_BLOCKED', 'AUTHORIZATION_BLOCKED',
-  'AUTHORIZATION_PROVENANCE_BLOCKED', 'AUTHORIZATION_SCOPE_BLOCKED', 'REGISTRY_SNAPSHOT_BLOCKED',
-  'EVIDENCE_BLOCKED', 'STAGE_MANIFEST_BLOCKED', 'MEMORY_BLOCKED', 'CONTEXT_BLOCKED', 'MODEL_BLOCKED', 'TOOL_BLOCKED',
-  'WORKFLOW_BLOCKED', 'BUDGET_BLOCKED', 'DEPENDENCY_BLOCKED', 'IDEMPOTENCY_BLOCKED', 'STOP_CONDITION_BLOCKED',
-  'COMPENSATION_BLOCKED', 'FINGERPRINT_BLOCKED', 'VERSION_BLOCKED', 'CONFLICT_BLOCKED', 'REFERENCE_BINDING_BLOCKED'
+  'PREPARED_SIMULATION', 'EXECUTION_PLAN_PREPARED_SIMULATION', 'WAITING_APPROVAL_REFERENCE', 'BLOCKED',
+  'VALIDATION_FAILED', 'TENANT_BLOCKED', 'ORGANIZATION_BLOCKED', 'PROJECT_BLOCKED', 'SESSION_BLOCKED',
+  'TASK_BLOCKED', 'AUTHORIZATION_BLOCKED', 'AUTHORIZATION_PROVENANCE_BLOCKED', 'AUTHORIZATION_SCOPE_BLOCKED',
+  'REGISTRY_SNAPSHOT_BLOCKED', 'EVIDENCE_BLOCKED', 'STAGE_MANIFEST_BLOCKED', 'MEMORY_BLOCKED', 'CONTEXT_BLOCKED',
+  'MODEL_BLOCKED', 'TOOL_BLOCKED', 'WORKFLOW_BLOCKED', 'BUDGET_BLOCKED', 'DEPENDENCY_BLOCKED', 'IDEMPOTENCY_BLOCKED',
+  'STOP_CONDITION_BLOCKED', 'COMPENSATION_BLOCKED', 'FINGERPRINT_BLOCKED', 'VERSION_BLOCKED', 'CONFLICT_BLOCKED',
+  'REFERENCE_BINDING_BLOCKED', 'BINDING_BLOCKED'
 ]);
 
 const NULLABLE_REFERENCE_ID_FIELDS = Object.freeze(['model_selection_reference_id', 'workflow_reference_id', 'model_fingerprint', 'workflow_fingerprint']);
+
+// Both the legacy short form and the correct, now-produced long form count as "prepared" for the
+// execution_plan_prepared derived-boolean rule -- see the pr101 fix note above.
+const PREPARED_STATUS_ALIASES = Object.freeze(['PREPARED_SIMULATION', 'EXECUTION_PLAN_PREPARED_SIMULATION']);
 
 const ORDERED_LIST_FIELDS = Object.freeze([
   'ordered_stage_ids', 'dependency_ids', 'stage_binding_ids', 'stop_condition_ids', 'compensation_reference_ids',
@@ -81,7 +95,8 @@ function validateExecutionPlanContract(plan) {
     'session_reference_id', 'memory_selection_reference_id', 'context_assembly_reference_id', 'budget_reference_id',
     'idempotency_reference_id', 'execution_scope_reference_id', 'stage_manifest_reference_id',
     'authorization_provenance_reference_id', 'authorization_scope_reference_id', 'registry_snapshot_reference_id',
-    'binding_ledger_id', 'validator_version', ...FINGERPRINT_FIELDS
+    'binding_ledger_id', 'validation_ledger_id', 'validation_ledger_fingerprint', 'validator_version',
+    ...FINGERPRINT_FIELDS
   ]) {
     if (!isNonEmptyString(plan[field])) errors.push(`${field}_invalid`);
   }
@@ -95,14 +110,17 @@ function validateExecutionPlanContract(plan) {
   }
   if (!Number.isInteger(plan.logical_sequence) || plan.logical_sequence < 0) errors.push('logical_sequence_invalid');
   if (typeof plan.execution_plan_prepared !== 'boolean') errors.push('execution_plan_prepared_must_be_boolean');
+  if (typeof plan.validation_pipeline_completed !== 'boolean') errors.push('validation_pipeline_completed_must_be_boolean');
+  if (typeof plan.architecture_gates_passed !== 'boolean') errors.push('architecture_gates_passed_must_be_boolean');
   for (const [field, expected] of Object.entries(EXECUTION_PLAN_CONTRACT_SAFE_FLAGS)) {
     if (plan[field] !== expected) errors.push(`${field}_must_be_${String(expected)}`);
   }
 
-  if (plan.execution_plan_status === 'PREPARED_SIMULATION' && plan.execution_plan_prepared !== true) {
+  const isPreparedStatus = PREPARED_STATUS_ALIASES.includes(plan.execution_plan_status);
+  if (isPreparedStatus && plan.execution_plan_prepared !== true) {
     errors.push('execution_plan_prepared_must_be_true_when_prepared_simulation');
   }
-  if (plan.execution_plan_status !== 'PREPARED_SIMULATION' && plan.execution_plan_prepared !== false) {
+  if (!isPreparedStatus && plan.execution_plan_prepared !== false) {
     errors.push('execution_plan_prepared_must_be_false_unless_prepared_simulation');
   }
 
@@ -169,8 +187,12 @@ function buildExecutionPlanContract(input = {}) {
     registry_snapshot_fingerprint: input.registry_snapshot_fingerprint,
     binding_ledger_id: input.binding_ledger_id,
     binding_ledger_fingerprint: input.binding_ledger_fingerprint,
+    validation_ledger_id: input.validation_ledger_id,
+    validation_ledger_fingerprint: input.validation_ledger_fingerprint,
+    validation_pipeline_completed: input.validation_pipeline_completed === true,
+    architecture_gates_passed: input.architecture_gates_passed === true,
     logical_sequence: Number.isInteger(input.logical_sequence) ? input.logical_sequence : 0,
-    execution_plan_prepared: status === 'PREPARED_SIMULATION',
+    execution_plan_prepared: PREPARED_STATUS_ALIASES.includes(status),
     executable: false,
     execution_authorized: false,
     execution_started: false,
