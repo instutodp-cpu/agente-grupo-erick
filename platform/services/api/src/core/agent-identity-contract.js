@@ -70,7 +70,23 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   // "não armazenar chave operacional ou segredo" rule.
   'idempotency_key_reference',
   // Spec-mandated PR #98 fixture scenario name (used only as an object key in the fixture file).
-  'authorization-blocked-plan'
+  'authorization-blocked-plan',
+  // Execution Reference Binding and Authorization Provenance (PR #100) field names -- same
+  // rationale as PR #97/#98's own entries above: "authorization" here always refers to this
+  // declarative decision/provenance/scope boundary, never a real credential.
+  'authorization_provenance_reference_id',
+  'authorization_provenance_reference_version',
+  'authorization_provenance_fingerprint',
+  'authorization_provenance_validated',
+  'authorization_scope_reference_id',
+  'authorization_scope_reference_version',
+  'authorization_scope_fingerprint',
+  'authorization_scope_validated',
+  'authorization_request_fingerprint',
+  'authorization_policy_fingerprint',
+  'budget_authorization_fingerprint',
+  'authorization_provenance_reference',
+  'authorization_scope_reference'
 ]));
 const AGENT_CORE_FORBIDDEN_VALUE_PATTERN = /\b(api[_-]?key|private[_-]?key|access[_-]?key|secret|token|password|authorization|bearer|jwt|oauth|cookie|filesystem|endpoint|hostname|callback|handler|execute|invoke|runtime|bootstrap|startup|plugin|tool_call|system_prompt|prompt|model|provider|sdk|eval)\b/i;
 const AGENT_CORE_FORBIDDEN_VALUE_SHAPES = Object.freeze([

@@ -14,6 +14,8 @@ const EXECUTION_PLAN_PACKAGE_FIELDS = Object.freeze([
   'context_fingerprint', 'model_fingerprint', 'tool_fingerprints', 'workflow_fingerprint', 'ordered_stage_ids',
   'stage_fingerprints', 'dependency_ids', 'dependency_fingerprints', 'binding_ids', 'binding_fingerprints',
   'stop_condition_ids', 'stop_condition_fingerprints', 'compensation_reference_ids', 'compensation_fingerprints',
+  'authorization_provenance_fingerprint', 'authorization_scope_fingerprint', 'registry_snapshot_fingerprint',
+  'binding_ledger_fingerprint', 'binding_record_ids', 'binding_record_fingerprints',
   'estimated_input_tokens', 'estimated_output_tokens', 'estimated_total_tokens', 'estimated_total_cost_minor_units',
   'logical_sequence', 'simulation', 'production_blocked'
 ]);
@@ -47,6 +49,10 @@ function buildExecutionPlanPackage(input = {}) {
     Array.isArray(input.compensation_reference_ids) ? input.compensation_reference_ids : [],
     Array.isArray(input.compensation_fingerprints) ? input.compensation_fingerprints : []
   );
+  const bindingRecordPairs = sortIdFingerprintPairs(
+    Array.isArray(input.binding_record_ids) ? input.binding_record_ids : [],
+    Array.isArray(input.binding_record_fingerprints) ? input.binding_record_fingerprints : []
+  );
 
   return {
     execution_plan_id: input.execution_plan_id || NOT_AVAILABLE_LABEL,
@@ -77,6 +83,12 @@ function buildExecutionPlanPackage(input = {}) {
     stop_condition_fingerprints: stopConditionPairs.fingerprints,
     compensation_reference_ids: compensationPairs.ids,
     compensation_fingerprints: compensationPairs.fingerprints,
+    authorization_provenance_fingerprint: input.authorization_provenance_fingerprint || NOT_AVAILABLE_FINGERPRINT,
+    authorization_scope_fingerprint: input.authorization_scope_fingerprint || NOT_AVAILABLE_FINGERPRINT,
+    registry_snapshot_fingerprint: input.registry_snapshot_fingerprint || NOT_AVAILABLE_FINGERPRINT,
+    binding_ledger_fingerprint: input.binding_ledger_fingerprint || NOT_AVAILABLE_FINGERPRINT,
+    binding_record_ids: bindingRecordPairs.ids,
+    binding_record_fingerprints: bindingRecordPairs.fingerprints,
     estimated_input_tokens: Number.isInteger(input.estimated_input_tokens) ? input.estimated_input_tokens : 0,
     estimated_output_tokens: Number.isInteger(input.estimated_output_tokens) ? input.estimated_output_tokens : 0,
     estimated_total_tokens: Number.isInteger(input.estimated_total_tokens) ? input.estimated_total_tokens : 0,

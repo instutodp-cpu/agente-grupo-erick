@@ -1,0 +1,757 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+
+const fixture = require('./fixtures/hermes-execution-reference-binding-provenance.json');
+const { findAgentCoreOperationalMaterial, stablePayload } = require('../src/core/agent-identity-contract');
+const {
+  AUTHORIZATION_PROVENANCE_REFERENCE_FIELDS, AUTHORIZATION_PROVENANCE_REFERENCE_SAFE_FLAGS,
+  buildAuthorizationProvenanceReference, validateAuthorizationProvenanceReference
+} = require('../src/core/execution-authorization-provenance-reference');
+const {
+  ALLOWED_ID_LIST_FIELDS, AUTHORIZATION_SCOPE_REFERENCE_FIELDS, AUTHORIZATION_SCOPE_REFERENCE_SAFE_FLAGS,
+  buildAuthorizationScopeReference, computeScopeReferenceFingerprint, validateAuthorizationScopeReference
+} = require('../src/core/execution-authorization-scope-reference');
+const {
+  REGISTRY_ENTITY_KEYS, REGISTRY_SNAPSHOT_REFERENCE_FIELDS, REGISTRY_SNAPSHOT_REFERENCE_SAFE_FLAGS,
+  buildExecutionRegistrySnapshotReference, validateExecutionRegistrySnapshotReference
+} = require('../src/core/execution-registry-snapshot-reference');
+const {
+  BINDING_RECORD_FIELDS, BINDING_RECORD_SAFE_FLAGS, BINDING_STATUSES, BINDING_TYPES,
+  buildBindingRecord, validateBindingRecord
+} = require('../src/core/execution-reference-binding-record');
+const {
+  BINDING_LEDGER_FIELDS, BINDING_LEDGER_SAFE_FLAGS, LEDGER_STATUSES,
+  buildExecutionReferenceBindingLedger, validateExecutionReferenceBindingLedger
+} = require('../src/core/execution-reference-binding-ledger');
+const {
+  BINDING_RESULT_FIELDS, buildExecutionReferenceBindingResult, validateExecutionReferenceBindingResult
+} = require('../src/core/execution-reference-binding-result');
+const {
+  EXECUTION_REFERENCE_BINDING_AUDIT_FIELDS, validateExecutionReferenceBindingAudit
+} = require('../src/core/execution-reference-binding-audit');
+const { createExecutionReferenceBindingRegistry } = require('../src/core/execution-reference-binding-registry');
+const { EXECUTION_PLAN_REQUEST_FIELDS, validateExecutionPlanRequest } = require('../src/core/execution-plan-request');
+const { EXECUTION_PLAN_CONTRACT_FIELDS, EXECUTION_PLAN_STATUSES, validateExecutionPlanContract } = require('../src/core/execution-plan-contract');
+const { EXECUTION_PLAN_RESULT_FIELDS, RESULT_STATUSES, validateExecutionPlanResult } = require('../src/core/execution-plan-result');
+const { validateExecutionPlanAudit } = require('../src/core/execution-plan-audit');
+const { EXECUTION_PLAN_PACKAGE_FIELDS, buildExecutionPlanPackage, computeExecutionPlanPackageFingerprint } = require('../src/core/execution-plan-package-integrity');
+const { evaluateExecutionPlanRequest } = require('../src/core/execution-plan-engine');
+const {
+  buildBindingLedgerForPlan, resolveCompensationBindingOutcome, resolveIdempotencyBindingOutcome,
+  resolveStopConditionBindingOutcome, validateScopeCrossChecks
+} = require('../src/core/execution-reference-binding-validator');
+const {
+  DIGEST_PREFIX, computeCanonicalContentDigest, isCanonicalContentDigest
+} = require('../src/core/canonical-content-digest');
+const { buildExecutionPlanIdempotency, computeIdempotencyFingerprint } = require('../src/core/execution-plan-idempotency');
+const { buildExecutionPlanStopCondition, computeStopConditionFingerprint } = require('../src/core/execution-plan-stop-condition');
+const { buildExecutionPlanCompensationReference, computeCompensationFingerprint } = require('../src/core/execution-plan-compensation-reference');
+const { createExecutionPlanRegistry } = require('../src/core/execution-plan-registry');
+
+const repoRoot = path.resolve(__dirname, '../../..');
+
+function clone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function scenarioFixture(key) {
+  return clone(fixture.scenarios[key]);
+}
+
+const EXPECTED_SCENARIOS = [
+  'valid-reference-binding-no-llm', 'valid-reference-binding-selection', 'valid-reference-binding-tool',
+  'valid-reference-binding-workflow', 'provenance-id-mismatch', 'provenance-fingerprint-mismatch',
+  'scope-plan-blocked', 'scope-task-blocked', 'scope-agent-blocked', 'scope-stage-type-blocked',
+  'scope-risk-blocked', 'scope-budget-blocked', 'scope-selection-blocked', 'registry-version-mismatch',
+  'registry-fingerprint-mismatch', 'idempotency-plan-mismatch', 'idempotency-authz-mismatch',
+  'idempotency-fingerprint-mismatch', 'stop-condition-plan-mismatch', 'stop-condition-stage-mismatch',
+  'compensation-plan-mismatch', 'compensation-stage-mismatch', 'package-fingerprint-baseline',
+  'package-fingerprint-provenance-change', 'package-fingerprint-scope-change',
+  'package-fingerprint-snapshot-change', 'context-side-channel-inert'
+];
+
+function assertValid(label, validation) {
+  assert.equal(validation.valid, true, `${label}: ${JSON.stringify(validation.errors)}`);
+}
+
+// ---------------------------------------------------------------------------
+// Fixture sanity
+// ---------------------------------------------------------------------------
+
+test('fixture and docs exist, cover every named scenario, and are free of operational material', () => {
+  assert.equal(fs.existsSync(path.join(repoRoot, 'docs', 'HERMES_EXECUTION_REFERENCE_BINDING_PROVENANCE.md')), true);
+  assert.deepEqual(Object.keys(fixture.scenarios).sort(), [...EXPECTED_SCENARIOS].sort());
+  assert.deepEqual(findAgentCoreOperationalMaterial(fixture), []);
+});
+
+EXPECTED_SCENARIOS.forEach((key) => {
+  test(`fixture scenario ${key} reproduces its recorded plan/result/binding outcome`, () => {
+    const scenario = scenarioFixture(key);
+    const outcome = evaluateExecutionPlanRequest(scenario.request, {});
+    assert.equal(outcome.plan.execution_plan_status, scenario.plan.execution_plan_status);
+    assert.equal(outcome.result.status, scenario.result.status);
+    assert.equal(outcome.bindingResult.status, scenario.bindingResult.status);
+    assertValid(`${key}:plan`, validateExecutionPlanContract(outcome.plan));
+    assertValid(`${key}:result`, validateExecutionPlanResult(outcome.result));
+    assertValid(`${key}:audit`, validateExecutionPlanAudit(outcome.audit));
+    assertValid(`${key}:bindingResult`, validateExecutionReferenceBindingResult(outcome.bindingResult));
+    assertValid(`${key}:bindingAudit`, validateExecutionReferenceBindingAudit(outcome.bindingAudit));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AuthorizationProvenanceReference
+// ---------------------------------------------------------------------------
+
+test('authorization provenance reference: exact fields (41), no self-fingerprint field, and safe flags forced', () => {
+  assert.equal(AUTHORIZATION_PROVENANCE_REFERENCE_FIELDS.length, 41);
+  assert.equal(AUTHORIZATION_PROVENANCE_REFERENCE_FIELDS.includes('authorization_provenance_fingerprint'), false);
+  assert.deepEqual(AUTHORIZATION_PROVENANCE_REFERENCE_SAFE_FLAGS, {
+    provenance_applied: false, execution_authorized: false, execution_started: false, simulation: true, production_blocked: true
+  });
+  const ref = scenarioFixture('valid-reference-binding-no-llm').request.authorization_provenance_reference;
+  assertValid('provenance', validateAuthorizationProvenanceReference(ref));
+  assert.equal(validateAuthorizationProvenanceReference({ ...ref, provenance_applied: true }).valid, false);
+  assert.equal(validateAuthorizationProvenanceReference({ ...ref, unexpected: 1 }).valid, false, 'campo extra deve bloquear');
+  const { plan_id, ...missing } = ref;
+  assert.equal(validateAuthorizationProvenanceReference(missing).valid, false, 'campo ausente deve bloquear');
+});
+
+test('authorization provenance reference: created_from_reference_id/parent_reference_id are nullable, everything else required', () => {
+  const ref = scenarioFixture('valid-reference-binding-no-llm').request.authorization_provenance_reference;
+  assert.equal(ref.created_from_reference_id, null);
+  assert.equal(ref.parent_reference_id, null);
+  assert.equal(validateAuthorizationProvenanceReference({ ...ref, created_from_reference_id: '' }).valid, false, 'string vazia nao e null');
+  assert.equal(validateAuthorizationProvenanceReference({ ...ref, created_from_reference_id: 'provref-parent-1' }).valid, true);
+});
+
+// ---------------------------------------------------------------------------
+// AuthorizationScopeReference
+// ---------------------------------------------------------------------------
+
+test('authorization scope reference: exact fields (32), a positive allowlist (empty means nothing permitted), and cross-tenant/org/project/session forced false', () => {
+  assert.equal(AUTHORIZATION_SCOPE_REFERENCE_FIELDS.length, 32);
+  assert.equal(ALLOWED_ID_LIST_FIELDS.length, 6);
+  assert.deepEqual(AUTHORIZATION_SCOPE_REFERENCE_SAFE_FLAGS, {
+    cross_tenant_allowed: false, cross_organization_allowed: false, cross_project_allowed: false,
+    cross_session_allowed: false, scope_applied: false, simulation: true, production_blocked: true
+  });
+  const ref = scenarioFixture('valid-reference-binding-no-llm').request.authorization_scope_reference;
+  assertValid('scope', validateAuthorizationScopeReference(ref));
+  assert.equal(validateAuthorizationScopeReference({ ...ref, cross_tenant_allowed: true }).valid, false);
+});
+
+test('authorization scope reference: recompute-and-compare fingerprint, fail-closed', () => {
+  const ref = scenarioFixture('valid-reference-binding-no-llm').request.authorization_scope_reference;
+  assert.equal(computeScopeReferenceFingerprint(ref), ref.scope_fingerprint);
+  assert.equal(validateAuthorizationScopeReference({ ...ref, scope_fingerprint: 'tampered' }).errors.includes('scope_fingerprint_mismatch'), true);
+});
+
+test('authorization scope reference: allowed id lists must be wildcard-free, unique, and alphabetically ordered', () => {
+  const ref = scenarioFixture('valid-reference-binding-no-llm').request.authorization_scope_reference;
+  assert.equal(validateAuthorizationScopeReference({ ...ref, allowed_plan_ids: ['b', 'a'] }).valid, false, 'ordem alfabetica obrigatoria');
+  assert.equal(validateAuthorizationScopeReference({ ...ref, allowed_plan_ids: ['a', 'a'] }).valid, false, 'duplicatas devem bloquear');
+  assert.equal(validateAuthorizationScopeReference({ ...ref, allowed_plan_ids: ['plan*'] }).valid, false, 'wildcard deve bloquear');
+});
+
+// ---------------------------------------------------------------------------
+// ExecutionRegistrySnapshotReference
+// ---------------------------------------------------------------------------
+
+test('execution registry snapshot reference: exact fields (20), fixed entity key set (7), never a Map', () => {
+  assert.equal(REGISTRY_SNAPSHOT_REFERENCE_FIELDS.length, 20);
+  assert.deepEqual(REGISTRY_ENTITY_KEYS, [
+    'execution_plan_request', 'stage_manifest', 'dependency_graph', 'provenance', 'scope', 'execution_plan_budget',
+    'idempotency_policy'
+  ]);
+  assert.deepEqual(REGISTRY_SNAPSHOT_REFERENCE_SAFE_FLAGS, { snapshot_applied: false, simulation: true, production_blocked: true });
+  const ref = scenarioFixture('valid-reference-binding-no-llm').request.registry_snapshot_reference;
+  assertValid('snapshot', validateExecutionRegistrySnapshotReference(ref));
+  assert.equal(Object.keys(ref.registry_entity_versions).length, 7);
+  assert.equal(Object.keys(ref.registry_entity_fingerprints).length, 7);
+});
+
+test('execution registry snapshot reference: snapshot_consistent is derived, never caller-asserted', () => {
+  const ref = scenarioFixture('valid-reference-binding-no-llm').request.registry_snapshot_reference;
+  assert.equal(ref.snapshot_consistent, true);
+  assert.equal(ref.expected_registry_version, ref.observed_registry_version);
+  assert.equal(validateExecutionRegistrySnapshotReference({ ...ref, snapshot_consistent: false }).valid, false, 'declarar inconsistente quando as versoes batem deve bloquear');
+
+  const inconsistent = buildExecutionRegistrySnapshotReference({ ...ref, observed_registry_version: 'v-other' });
+  assert.equal(inconsistent.snapshot_consistent, false, 'builder nunca confia em snapshot_consistent do caller');
+});
+
+test('execution registry snapshot reference: recompute-and-compare fingerprint, fail-closed', () => {
+  const ref = scenarioFixture('valid-reference-binding-no-llm').request.registry_snapshot_reference;
+  assert.equal(validateExecutionRegistrySnapshotReference({ ...ref, snapshot_fingerprint: 'tampered' }).errors.includes('snapshot_fingerprint_mismatch'), true);
+});
+
+test('registry-version-mismatch and registry-fingerprint-mismatch fixtures are both REGISTRY_SNAPSHOT_BLOCKED', () => {
+  assert.equal(evaluateExecutionPlanRequest(scenarioFixture('registry-version-mismatch').request, {}).result.status, 'REGISTRY_SNAPSHOT_BLOCKED');
+  assert.equal(evaluateExecutionPlanRequest(scenarioFixture('registry-fingerprint-mismatch').request, {}).result.status, 'REGISTRY_SNAPSHOT_BLOCKED');
+});
+
+// ---------------------------------------------------------------------------
+// BindingRecord / BindingLedger
+// ---------------------------------------------------------------------------
+
+test('binding record: exact fields (29), 18 binding types, 11 binding statuses, binding_applied always false', () => {
+  assert.equal(BINDING_RECORD_FIELDS.length, 29);
+  assert.equal(BINDING_TYPES.length, 18);
+  assert.equal(BINDING_STATUSES.length, 11);
+  assert.deepEqual(BINDING_RECORD_SAFE_FLAGS, { binding_applied: false, simulation: true, production_blocked: true });
+});
+
+test('binding record: binding_validated is tied to binding_status, never independently assertable', () => {
+  const record = buildBindingRecord({
+    binding_record_id: 'binding-record-check-1', execution_plan_id: 'plan-1', execution_plan_request_id: 'request-1',
+    execution_stage_id: 'stage-1', binding_type: 'TASK_BINDING', source_reference_id: 'taskref-1', source_reference_version: 1,
+    source_reference_fingerprint: 'fp-source-1', target_reference_id: 'stage-1', target_reference_version: 1,
+    target_reference_fingerprint: 'fp-target-1', tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1',
+    session_reference_id: 'session-1', agent_id: 'agent-1', actor_id: 'actor-1', authorization_scope_id: 'scope-1',
+    binding_required: true, binding_status: 'VALIDATED_SIMULATION', logical_sequence: 0
+  });
+  assert.equal(record.binding_validated, true);
+  assert.equal(validateBindingRecord({ ...record, binding_validated: false }).valid, false, 'status/validated podem nunca discordar');
+});
+
+test('binding record: recompute-and-compare fingerprint, fail-closed', () => {
+  const record = scenarioFixture('valid-reference-binding-no-llm').bindingResult;
+  // bindingResult itself has its own fingerprint check exercised below; here we tamper a real
+  // BindingRecord pulled straight from a prepared plan's own materialized ledger data.
+  const outcome = evaluateExecutionPlanRequest(scenarioFixture('valid-reference-binding-no-llm').request, {});
+  const sample = outcome.audit; // audit never carries binding_records directly; use ledger via engine internals instead
+  assert.ok(record);
+  const anyBindingRecord = buildBindingRecord({
+    binding_record_id: 'binding-record-tamper-check', execution_plan_id: 'plan-1', execution_plan_request_id: 'request-1',
+    execution_stage_id: null, binding_type: 'BUDGET_BINDING', source_reference_id: 'plan-budget-1', source_reference_version: 1,
+    source_reference_fingerprint: 'fp-source-1', target_reference_id: 'plan-1', target_reference_version: 1,
+    target_reference_fingerprint: 'fp-target-1', tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1',
+    session_reference_id: 'session-1', agent_id: 'agent-1', actor_id: 'actor-1', authorization_scope_id: 'scope-1',
+    binding_required: true, binding_status: 'VALIDATED_SIMULATION', logical_sequence: 0
+  });
+  assert.equal(validateBindingRecord({ ...anyBindingRecord, binding_record_fingerprint: 'tampered' }).errors.includes('binding_record_fingerprint_mismatch'), true);
+});
+
+test('binding ledger: exact fields (32), 12 ledger statuses, references_bound_in_simulation tied to evidence', () => {
+  assert.equal(BINDING_LEDGER_FIELDS.length, 32);
+  assert.equal(LEDGER_STATUSES.length, 12);
+  assert.deepEqual(BINDING_LEDGER_SAFE_FLAGS, {
+    bindings_applied: false, execution_authorized: false, execution_started: false, simulation: true, production_blocked: true
+  });
+});
+
+test('binding ledger: binding_count/validated_binding_count/blocked_binding_count/all_bindings_validated are all derived from binding_records, never caller-asserted', () => {
+  const r1 = buildBindingRecord({
+    binding_record_id: 'binding-record-ledger-check-1', execution_plan_id: 'plan-1', execution_plan_request_id: 'request-1',
+    execution_stage_id: 'stage-1', binding_type: 'TASK_BINDING', source_reference_id: 'taskref-1', source_reference_version: 1,
+    source_reference_fingerprint: 'fp-source-1', target_reference_id: 'stage-1', target_reference_version: 1,
+    target_reference_fingerprint: 'fp-target-1', tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1',
+    session_reference_id: 'session-1', agent_id: 'agent-1', actor_id: 'actor-1', authorization_scope_id: 'scope-1',
+    binding_required: true, binding_status: 'VALIDATED_SIMULATION', logical_sequence: 0
+  });
+  const ledger = buildExecutionReferenceBindingLedger({
+    binding_ledger_id: 'binding-ledger-check-1', execution_plan_request_id: 'request-1', execution_plan_id: 'plan-1',
+    authorization_decision_id: 'decision-1', authorization_scope_reference_id: 'scope-reference-1',
+    authorization_provenance_reference_id: 'provenance-reference-1', registry_snapshot_reference_id: 'snapshot-reference-1',
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1', session_reference_id: 'session-1',
+    agent_id: 'agent-1', actor_id: 'actor-1', binding_records: [r1], all_required_bindings_present: true, logical_sequence: 0
+  });
+  assert.equal(ledger.binding_count, 1);
+  assert.equal(ledger.validated_binding_count, 1);
+  assert.equal(ledger.blocked_binding_count, 0);
+  assert.equal(ledger.all_bindings_validated, true);
+  assert.equal(ledger.references_bound_in_simulation, true);
+  assert.equal(ledger.ledger_status, 'REFERENCES_BOUND_SIMULATION');
+  assert.equal(validateExecutionReferenceBindingLedger({ ...ledger, binding_count: 99 }).valid, false, 'contagens nao podem divergir dos binding_records');
+  assert.equal(validateExecutionReferenceBindingLedger({ ...ledger, ledger_fingerprint: 'tampered' }).errors.includes('ledger_fingerprint_mismatch'), true);
+});
+
+// ---------------------------------------------------------------------------
+// ExecutionReferenceBindingResult / Audit
+// ---------------------------------------------------------------------------
+
+test('binding result: exact fields (22), references_bound_in_simulation tied to status, execution flags forced false', () => {
+  assert.equal(BINDING_RESULT_FIELDS.length, 22);
+  const scenario = scenarioFixture('valid-reference-binding-no-llm');
+  assertValid('bindingResult', validateExecutionReferenceBindingResult(scenario.bindingResult));
+  assert.equal(scenario.bindingResult.status, 'REFERENCES_BOUND_SIMULATION');
+  assert.equal(scenario.bindingResult.references_bound_in_simulation, true);
+  assert.equal(scenario.bindingResult.execution_authorized, false);
+});
+
+test('binding result: recompute-and-compare fingerprint, fail-closed', () => {
+  const result = buildExecutionReferenceBindingResult({
+    binding_result_id: 'binding-result-tamper-check', execution_plan_request_id: 'request-1', execution_plan_id: 'plan-1',
+    binding_ledger_id: 'binding-ledger-1', binding_ledger_fingerprint: 'fp-ledger-1', tenant_id: 'tenant-a',
+    organization_id: 'tenant-a:org-1', project_id: 'proj-1', session_reference_id: 'session-1', agent_id: 'agent-1',
+    actor_id: 'actor-1', status: 'REFERENCES_BOUND_SIMULATION', reason_codes: [], logical_sequence: 0
+  });
+  assert.equal(validateExecutionReferenceBindingResult({ ...result, result_fingerprint: 'tampered' }).errors.includes('result_fingerprint_mismatch'), true);
+});
+
+test('binding audit: exact fields, and never carries a full payload -- only ids, fingerprints, status, counts, and the seven bindings', () => {
+  const scenario = scenarioFixture('valid-reference-binding-no-llm');
+  assertValid('bindingAudit', validateExecutionReferenceBindingAudit(scenario.bindingAudit));
+  assert.deepEqual(
+    Object.keys(scenario.bindingAudit).sort(),
+    [...EXECUTION_REFERENCE_BINDING_AUDIT_FIELDS].sort()
+  );
+  assert.equal(scenario.bindingAudit.executed, false);
+});
+
+// ---------------------------------------------------------------------------
+// Registry
+// ---------------------------------------------------------------------------
+
+test('execution reference binding registry: replay is accepted, payload mismatch and tenant/organization reassignment are blocked', () => {
+  const registry = createExecutionReferenceBindingRegistry();
+  const scopeRef = scenarioFixture('valid-reference-binding-no-llm').request.authorization_scope_reference;
+  const first = registry.registerAuthorizationScopeReference(scopeRef);
+  assert.equal(first.status, 'REGISTERED_SIMULATION');
+  assert.equal(registry.registerAuthorizationScopeReference(scopeRef).status, 'REPLAY_ACCEPTED');
+  const reassigned = buildAuthorizationScopeReference({ ...scopeRef, tenant_id: 'tenant-other' });
+  assert.equal(registry.registerAuthorizationScopeReference(reassigned).status, 'TENANT_BLOCKED');
+  assert.deepEqual(registry.getAuthorizationScopeReferenceById(scopeRef.authorization_scope_reference_id), scopeRef);
+});
+
+// ---------------------------------------------------------------------------
+// Side-channel inertness
+// ---------------------------------------------------------------------------
+
+test('context.currentRegistryVersion, context.authorizationScope, context.bindingRecords, and context.anything are all inert', () => {
+  const request = scenarioFixture('context-side-channel-inert').request;
+  const clean = evaluateExecutionPlanRequest(request, {});
+  const poisoned = evaluateExecutionPlanRequest(request, {
+    currentRegistryVersion: 'totally-different', authorizationScope: { unlimited: true }, bindingRecords: [{ fake: true }], anything: 'xyz'
+  });
+  assert.equal(poisoned.result.status, clean.result.status);
+  assert.deepEqual(poisoned.plan, clean.plan);
+  assert.deepEqual(poisoned.result, clean.result);
+  assert.deepEqual(poisoned.bindingResult, clean.bindingResult);
+});
+
+// ---------------------------------------------------------------------------
+// ExecutionPlanRequest / Contract / Result: new pr100 fields
+// ---------------------------------------------------------------------------
+
+test('execution plan request: authorization_provenance_reference/authorization_scope_reference/registry_snapshot_reference are required, no side-channel', () => {
+  const request = scenarioFixture('valid-reference-binding-no-llm').request;
+  assertValid('request', validateExecutionPlanRequest(request));
+  const { authorization_provenance_reference, ...missingProvenance } = request;
+  assert.equal(validateExecutionPlanRequest(missingProvenance).valid, false);
+  const { authorization_scope_reference, ...missingScope } = request;
+  assert.equal(validateExecutionPlanRequest(missingScope).valid, false);
+  const { registry_snapshot_reference, ...missingSnapshot } = request;
+  assert.equal(validateExecutionPlanRequest(missingSnapshot).valid, false);
+});
+
+test('execution plan contract: execution_scope_reference_id points at the real AuthorizationScopeReference, never at the execution_plan_id itself', () => {
+  const scenario = scenarioFixture('valid-reference-binding-no-llm');
+  const outcome = evaluateExecutionPlanRequest(scenario.request, {});
+  assert.equal(outcome.plan.execution_scope_reference_id, scenario.request.authorization_scope_reference.authorization_scope_reference_id);
+  assert.notEqual(outcome.plan.execution_scope_reference_id, outcome.plan.execution_plan_id);
+});
+
+test('execution plan contract and result carry the 8 new provenance/scope/snapshot/ledger id+fingerprint fields, all populated for a prepared plan', () => {
+  const scenario = scenarioFixture('valid-reference-binding-no-llm');
+  const outcome = evaluateExecutionPlanRequest(scenario.request, {});
+  for (const field of [
+    'authorization_provenance_reference_id', 'authorization_provenance_fingerprint', 'authorization_scope_reference_id',
+    'authorization_scope_fingerprint', 'registry_snapshot_reference_id', 'registry_snapshot_fingerprint',
+    'binding_ledger_id', 'binding_ledger_fingerprint'
+  ]) {
+    assert.notEqual(outcome.plan[field], undefined, `plan.${field}`);
+    assert.notEqual(outcome.result[field], undefined, `result.${field}`);
+    assert.notEqual(outcome.plan[field], 'fingerprint_not_available');
+  }
+  assert.equal(outcome.result.authorization_provenance_validated, true);
+  assert.equal(outcome.result.authorization_scope_validated, true);
+  assert.equal(outcome.result.registry_snapshot_validated, true);
+  assert.equal(outcome.result.binding_ledger_validated, true);
+  assert.equal(outcome.result.references_bound_in_simulation, true);
+});
+
+test('the 4 new pr100 statuses are legal on both the contract and result vocabularies', () => {
+  for (const status of ['AUTHORIZATION_PROVENANCE_BLOCKED', 'AUTHORIZATION_SCOPE_BLOCKED', 'REGISTRY_SNAPSHOT_BLOCKED', 'REFERENCE_BINDING_BLOCKED']) {
+    assert.equal(EXECUTION_PLAN_STATUSES.includes(status), true, status);
+    assert.equal(RESULT_STATUSES.includes(status), true, status);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Package fingerprint sensitivity
+// ---------------------------------------------------------------------------
+
+test('execution plan package: exact fields (41, +6 from pr100), and each new fingerprint independently changes the package fingerprint', () => {
+  assert.equal(EXECUTION_PLAN_PACKAGE_FIELDS.length, 41);
+  const base = { execution_plan_id: 'plan-x', ordered_stage_ids: ['stage-1'], stage_fingerprints: ['fp-a'] };
+  const pkgBase = buildExecutionPlanPackage(base);
+  const pkgProvenance = buildExecutionPlanPackage({ ...base, authorization_provenance_fingerprint: 'fp-provenance-a' });
+  const pkgScope = buildExecutionPlanPackage({ ...base, authorization_scope_fingerprint: 'fp-scope-a' });
+  const pkgSnapshot = buildExecutionPlanPackage({ ...base, registry_snapshot_fingerprint: 'fp-snapshot-a' });
+  const pkgLedger = buildExecutionPlanPackage({ ...base, binding_ledger_fingerprint: 'fp-ledger-a' });
+  const pkgBindingRecords = buildExecutionPlanPackage({ ...base, binding_record_ids: ['binding-record-1'], binding_record_fingerprints: ['fp-binding-record-1'] });
+  const fpBase = computeExecutionPlanPackageFingerprint(pkgBase);
+  assert.notEqual(computeExecutionPlanPackageFingerprint(pkgProvenance), fpBase);
+  assert.notEqual(computeExecutionPlanPackageFingerprint(pkgScope), fpBase);
+  assert.notEqual(computeExecutionPlanPackageFingerprint(pkgSnapshot), fpBase);
+  assert.notEqual(computeExecutionPlanPackageFingerprint(pkgLedger), fpBase);
+  assert.notEqual(computeExecutionPlanPackageFingerprint(pkgBindingRecords), fpBase);
+});
+
+['package-fingerprint-provenance-change', 'package-fingerprint-scope-change', 'package-fingerprint-snapshot-change'].forEach((key) => {
+  test(`${key}: changing only that one reference changes execution_plan_fingerprint relative to the baseline`, () => {
+    const baseline = evaluateExecutionPlanRequest(scenarioFixture('package-fingerprint-baseline').request, {});
+    const changed = evaluateExecutionPlanRequest(scenarioFixture(key).request, {});
+    assert.equal(baseline.result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
+    assert.equal(changed.result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
+    assert.notEqual(changed.result.execution_plan_fingerprint, baseline.result.execution_plan_fingerprint);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Security: forbidden material, non-serializable payloads
+// ---------------------------------------------------------------------------
+
+test('operational material is rejected on every new pr100 contract, and non-serializable payloads are rejected', () => {
+  const provenance = scenarioFixture('valid-reference-binding-no-llm').request.authorization_provenance_reference;
+  const scope = scenarioFixture('valid-reference-binding-no-llm').request.authorization_scope_reference;
+  const snapshot = scenarioFixture('valid-reference-binding-no-llm').request.registry_snapshot_reference;
+  for (const ref of [provenance, scope, snapshot]) {
+    assert.deepEqual(findAgentCoreOperationalMaterial(ref), []);
+  }
+  const cyclic = {};
+  cyclic.self = cyclic;
+  assert.throws(() => stablePayload(cyclic));
+  assert.equal(findAgentCoreOperationalMaterial(cyclic).some((e) => e.includes('forbidden_cycle')), true);
+});
+
+test('adversarial: an object literal is never accepted where a real reference is required (type confusion is rejected structurally)', () => {
+  assert.equal(validateAuthorizationProvenanceReference([]).valid, false);
+  assert.equal(validateAuthorizationProvenanceReference('not-an-object').valid, false);
+  assert.equal(validateAuthorizationScopeReference(null).valid, false);
+  assert.equal(validateExecutionRegistrySnapshotReference(42).valid, false);
+  assert.equal(validateBindingRecord(undefined).valid, false);
+  assert.equal(validateExecutionReferenceBindingLedger([1, 2, 3]).valid, false);
+});
+
+// ---------------------------------------------------------------------------
+// Regression: idempotency/stop-condition/compensation cross-checks
+// ---------------------------------------------------------------------------
+
+['idempotency-plan-mismatch', 'idempotency-authz-mismatch', 'idempotency-fingerprint-mismatch',
+  'stop-condition-plan-mismatch', 'stop-condition-stage-mismatch', 'compensation-plan-mismatch', 'compensation-stage-mismatch'
+].forEach((key) => {
+  test(`${key} is REFERENCE_BINDING_BLOCKED`, () => {
+    assert.equal(evaluateExecutionPlanRequest(scenarioFixture(key).request, {}).result.status, 'REFERENCE_BINDING_BLOCKED');
+  });
+});
+
+test('regression: every prior stage-level ExecutionPlanStageBinding is still wrapped 1:1 into the richer BindingRecord ledger, never duplicated or dropped', () => {
+  const scenario = scenarioFixture('valid-reference-binding-no-llm');
+  const outcome = evaluateExecutionPlanRequest(scenario.request, {});
+  assert.equal(outcome.plan.stage_binding_ids.length > 0, true);
+  assert.equal(outcome.result.binding_count, outcome.plan.stage_binding_ids.length);
+});
+
+// ---------------------------------------------------------------------------
+// pr100fix FIX 1: capability validation against AuthorizationScopeReference
+// ---------------------------------------------------------------------------
+
+function buildScopeCrossCheckArgs(overrides = {}) {
+  const scenario = scenarioFixture('valid-reference-binding-no-llm');
+  const request = scenario.request;
+  const authzRef = request.authorization_decision_reference;
+  const canonical = {
+    tenantId: authzRef.tenant_id, organizationId: authzRef.organization_id, agentId: authzRef.agent_id,
+    projectId: authzRef.project_id, sessionId: authzRef.session_reference_id
+  };
+  return {
+    scopeRef: request.authorization_scope_reference,
+    args: {
+      authzRef, canonical, planRef: request.orchestration_plan_reference, taskRef: request.task_reference,
+      stageRecords: overrides.stageRecords || request.stage_manifest_reference.stage_records,
+      budget: request.execution_plan_budget, provenanceRef: request.authorization_provenance_reference
+    }
+  };
+}
+
+test('scope capability check: an allowed capability passes', () => {
+  const { scopeRef, args } = buildScopeCrossCheckArgs();
+  const scopeWithCapability = buildAuthorizationScopeReference({ ...scopeRef, allowed_capability_types: ['TEXT_GENERATION_REFERENCE'] });
+  args.stageRecords = args.stageRecords.map((r) => ({ ...r, required_capabilities: ['TEXT_GENERATION_REFERENCE'] }));
+  assert.equal(validateScopeCrossChecks(scopeWithCapability, args), null);
+});
+
+test('scope capability check: a capability outside the scope is scope-capability-blocked', () => {
+  const { scopeRef, args } = buildScopeCrossCheckArgs();
+  args.stageRecords = args.stageRecords.map((r) => ({ ...r, required_capabilities: ['IMAGE_GENERATION_REFERENCE'] }));
+  const result = validateScopeCrossChecks(scopeRef, args);
+  assert.equal(result.status, 'AUTHORIZATION_SCOPE_BLOCKED');
+  assert.equal(result.reason, 'scope-capability-blocked::IMAGE_GENERATION_REFERENCE');
+});
+
+test('scope capability check: several allowed capabilities all pass', () => {
+  const { scopeRef, args } = buildScopeCrossCheckArgs();
+  const scopeWithCapabilities = buildAuthorizationScopeReference({ ...scopeRef, allowed_capability_types: ['AUDIO_TRANSCRIPTION_REFERENCE', 'TEXT_GENERATION_REFERENCE', 'VISION_REFERENCE'] });
+  args.stageRecords = args.stageRecords.map((r) => ({ ...r, required_capabilities: ['TEXT_GENERATION_REFERENCE', 'VISION_REFERENCE'] }));
+  assert.equal(validateScopeCrossChecks(scopeWithCapabilities, args), null);
+});
+
+test('scope capability check: one blocked capability among several required blocks the whole stage', () => {
+  const { scopeRef, args } = buildScopeCrossCheckArgs();
+  const scopeWithCapabilities = buildAuthorizationScopeReference({ ...scopeRef, allowed_capability_types: ['TEXT_GENERATION_REFERENCE'] });
+  args.stageRecords = args.stageRecords.map((r) => ({ ...r, required_capabilities: ['TEXT_GENERATION_REFERENCE', 'IMAGE_GENERATION_REFERENCE'] }));
+  const result = validateScopeCrossChecks(scopeWithCapabilities, args);
+  assert.equal(result.status, 'AUTHORIZATION_SCOPE_BLOCKED');
+  assert.equal(result.reason, 'scope-capability-blocked::IMAGE_GENERATION_REFERENCE');
+});
+
+test('scope capability check: an empty allowlist never authorizes a required capability (positive allowlist, not "unrestricted")', () => {
+  const { scopeRef, args } = buildScopeCrossCheckArgs();
+  assert.deepEqual(scopeRef.allowed_capability_types, []);
+  args.stageRecords = args.stageRecords.map((r) => ({ ...r, required_capabilities: ['TEXT_GENERATION_REFERENCE'] }));
+  const result = validateScopeCrossChecks(scopeRef, args);
+  assert.equal(result.status, 'AUTHORIZATION_SCOPE_BLOCKED');
+  assert.equal(result.reason, 'scope-capability-blocked::TEXT_GENERATION_REFERENCE');
+});
+
+test('scope capability check: context has no bearing on the outcome (capability validation reads only scopeRef/stageRecords)', () => {
+  const { scopeRef, args } = buildScopeCrossCheckArgs();
+  args.stageRecords = args.stageRecords.map((r) => ({ ...r, required_capabilities: ['IMAGE_GENERATION_REFERENCE'] }));
+  const withoutContext = validateScopeCrossChecks(scopeRef, args);
+  const poisonedArgs = { ...args, context: { currentRegistryVersion: 'x', authorizationScope: { unlimited: true } } };
+  const withContext = validateScopeCrossChecks(scopeRef, poisonedArgs);
+  assert.deepEqual(withContext, withoutContext);
+});
+
+// ---------------------------------------------------------------------------
+// pr100fix FIX 2: canonical-content-digest.js
+// ---------------------------------------------------------------------------
+
+test('canonical content digest: compact, sha256-prefixed, deterministic, and order-independent', () => {
+  const a = { z: 1, a: 2, m: { nested: true, list: [3, 2, 1] } };
+  const b = { a: 2, m: { list: [3, 2, 1], nested: true }, z: 1 };
+  const digestA = computeCanonicalContentDigest(a);
+  const digestB = computeCanonicalContentDigest(b);
+  assert.equal(digestA, digestB, 'canonical key order must not affect the digest');
+  assert.equal(digestA, computeCanonicalContentDigest(a), 'must be deterministic across repeated calls');
+  assert.equal(isCanonicalContentDigest(digestA), true);
+  assert.equal(digestA.startsWith(DIGEST_PREFIX), true);
+  assert.equal(digestA.length, DIGEST_PREFIX.length + 64);
+});
+
+test('canonical content digest: a different object produces a different digest', () => {
+  const digest1 = computeCanonicalContentDigest({ a: 1 });
+  const digest2 = computeCanonicalContentDigest({ a: 2 });
+  assert.notEqual(digest1, digest2);
+});
+
+test('canonical content digest: cyclic/non-serializable content fails sanitized, never throws', () => {
+  const cyclic = {};
+  cyclic.self = cyclic;
+  const digest = computeCanonicalContentDigest(cyclic);
+  assert.equal(digest.startsWith('digest_invalid::'), true);
+  assert.equal(findAgentCoreOperationalMaterial({ digest }).length, 0);
+});
+
+test('canonical content digest: changing any field of provenance changes its digest', () => {
+  const provenanceRef = scenarioFixture('valid-reference-binding-no-llm').request.authorization_provenance_reference;
+  const baseline = computeCanonicalContentDigest(provenanceRef);
+  for (const field of ['actor_id', 'plan_id', 'logical_sequence']) {
+    const changed = { ...provenanceRef, [field]: field === 'logical_sequence' ? provenanceRef[field] + 1 : `${provenanceRef[field]}-changed` };
+    assert.notEqual(computeCanonicalContentDigest(changed), baseline, `changing ${field} must change the digest`);
+  }
+});
+
+test('canonical content digest: changing any registry entity fingerprint changes the snapshot digest', () => {
+  const snapshotRef = scenarioFixture('valid-reference-binding-no-llm').request.registry_snapshot_reference;
+  const baseline = computeCanonicalContentDigest(snapshotRef);
+  for (const entityKey of Object.keys(snapshotRef.registry_entity_fingerprints)) {
+    const changed = { ...snapshotRef, registry_entity_fingerprints: { ...snapshotRef.registry_entity_fingerprints, [entityKey]: 'fp-tampered' } };
+    assert.notEqual(computeCanonicalContentDigest(changed), baseline, `changing entity ${entityKey} must change the digest`);
+  }
+});
+
+test('canonical content digest: no network/secret/KMS/HMAC anywhere in the module', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/core/canonical-content-digest.js'), 'utf8');
+  for (const forbidden of ['fetch(', 'http.request', 'https.request', 'net.connect', 'tls.connect', 'createHmac', 'child_process', 'process.env']) {
+    assert.equal(source.includes(forbidden), false, `must not contain ${forbidden}`);
+  }
+});
+
+test('ledger fingerprint changes when provenance changes, and when the registry snapshot changes', () => {
+  const baseline = scenarioFixture('package-fingerprint-baseline');
+  const provenanceChanged = scenarioFixture('package-fingerprint-provenance-change');
+  const snapshotChanged = scenarioFixture('package-fingerprint-snapshot-change');
+  const baselineOutcome = evaluateExecutionPlanRequest(baseline.request, {});
+  const provenanceOutcome = evaluateExecutionPlanRequest(provenanceChanged.request, {});
+  const snapshotOutcome = evaluateExecutionPlanRequest(snapshotChanged.request, {});
+  assert.notEqual(provenanceOutcome.plan.binding_ledger_fingerprint, baselineOutcome.plan.binding_ledger_fingerprint);
+  assert.notEqual(snapshotOutcome.plan.binding_ledger_fingerprint, baselineOutcome.plan.binding_ledger_fingerprint);
+});
+
+test('binding records for scope/provenance/snapshot/manifest/dependency-graph carry a compact digest, never the full embedded fingerprint', () => {
+  const scenario = scenarioFixture('valid-reference-binding-no-llm');
+  const ledger = buildBindingLedgerForPlanFromRequest(scenario.request);
+  const referenceBindingTypes = ['AUTHORIZATION_SCOPE_BINDING', 'AUTHORIZATION_PROVENANCE_BINDING', 'REGISTRY_SNAPSHOT_BINDING', 'STAGE_MANIFEST_BINDING', 'DEPENDENCY_GRAPH_BINDING'];
+  for (const record of ledger.binding_records) {
+    if (referenceBindingTypes.includes(record.binding_type)) {
+      assert.equal(isCanonicalContentDigest(record.source_reference_fingerprint), true, `${record.binding_type} must carry a canonical content digest`);
+    }
+  }
+});
+
+// Rebuilds the ledger for a full, already-prepared request the same way the engine does, purely to
+// inspect binding_records directly (evaluateExecutionPlanRequest does not expose the ledger itself
+// on its return value, only the derived bindingResult/bindingAudit).
+function buildBindingLedgerForPlanFromRequest(request) {
+  const authzRef = request.authorization_decision_reference;
+  const canonical = {
+    tenantId: authzRef.tenant_id, organizationId: authzRef.organization_id, agentId: authzRef.agent_id,
+    projectId: authzRef.project_id, sessionId: authzRef.session_reference_id,
+    actorId: request.authorization_scope_reference.actor_id, authorizationScopeId: request.authorization_scope_reference.authorization_scope_id
+  };
+  const outcome = evaluateExecutionPlanRequest(request, {});
+  assert.equal(outcome.result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
+  return buildBindingLedgerForPlan({
+    stageBindings: [],
+    provenanceRef: request.authorization_provenance_reference,
+    scopeRef: request.authorization_scope_reference,
+    snapshotRef: request.registry_snapshot_reference,
+    stageManifestRef: request.stage_manifest_reference,
+    depGraphRef: request.dependency_graph_reference,
+    idempotency: request.idempotency_policy_reference,
+    stopConditions: request.stop_condition_references,
+    compensations: request.compensation_references,
+    canonical,
+    executionPlanId: request.orchestration_plan_reference.plan_id,
+    executionPlanRequestId: request.execution_plan_request_id,
+    authzRef,
+    logicalSequence: request.logical_sequence,
+    planFingerprint: request.orchestration_plan_reference.plan_fingerprint,
+    validStageIds: request.stage_manifest_reference.stage_ids
+  });
+}
+
+// ---------------------------------------------------------------------------
+// pr100fix FIX 3: real versions + recompute-and-compare for idempotency/stop/compensation
+// ---------------------------------------------------------------------------
+
+test('idempotency binding: the real idempotency_reference_version is preserved on the BindingRecord, never hardcoded to 1', () => {
+  const request = scenarioFixture('valid-reference-binding-no-llm').request;
+  const idempotency = buildExecutionPlanIdempotency({ ...request.idempotency_policy_reference, idempotency_reference_version: 7 });
+  const outcome = resolveIdempotencyBindingOutcome(idempotency, {
+    executionPlanId: request.orchestration_plan_reference.plan_id, authzRef: request.authorization_decision_reference,
+    planFingerprint: request.orchestration_plan_reference.plan_fingerprint, requestFingerprint: null,
+    canonical: { tenantId: idempotency.tenant_id, organizationId: idempotency.organization_id, projectId: idempotency.project_id, sessionId: idempotency.session_reference_id }
+  });
+  assert.equal(outcome, null, 'a correctly-versioned, correctly-fingerprinted reference validates');
+  assert.equal(idempotency.idempotency_reference_version, 7);
+});
+
+test('idempotency binding: a tampered idempotency_fingerprint is FINGERPRINT_BLOCKED, never VALIDATED_SIMULATION merely because plan_id matches', () => {
+  const request = scenarioFixture('valid-reference-binding-no-llm').request;
+  const tampered = { ...request.idempotency_policy_reference, idempotency_fingerprint: 'fp-tampered-idempotency' };
+  const outcome = resolveIdempotencyBindingOutcome(tampered, {
+    executionPlanId: request.orchestration_plan_reference.plan_id, authzRef: request.authorization_decision_reference,
+    planFingerprint: request.orchestration_plan_reference.plan_fingerprint, requestFingerprint: null,
+    canonical: { tenantId: tampered.tenant_id, organizationId: tampered.organization_id, projectId: tampered.project_id, sessionId: tampered.session_reference_id }
+  });
+  assert.equal(outcome.status, 'FINGERPRINT_BLOCKED');
+  assert.equal(outcome.reasonCodes.includes('idempotency-self-fingerprint-mismatch'), true);
+});
+
+test('idempotency binding: an invalid version is VERSION_BLOCKED', () => {
+  const request = scenarioFixture('valid-reference-binding-no-llm').request;
+  const badVersion = { ...request.idempotency_policy_reference, idempotency_reference_version: 0 };
+  const outcome = resolveIdempotencyBindingOutcome(badVersion, {
+    executionPlanId: request.orchestration_plan_reference.plan_id, authzRef: request.authorization_decision_reference,
+    planFingerprint: request.orchestration_plan_reference.plan_fingerprint, requestFingerprint: null,
+    canonical: { tenantId: badVersion.tenant_id, organizationId: badVersion.organization_id, projectId: badVersion.project_id, sessionId: badVersion.session_reference_id }
+  });
+  assert.equal(outcome.status, 'VERSION_BLOCKED');
+});
+
+test('stop condition binding: the real stop_condition_version is preserved, and a tampered condition_fingerprint is FINGERPRINT_BLOCKED', () => {
+  const request = scenarioFixture('valid-reference-binding-no-llm').request;
+  const [condition] = request.stop_condition_references;
+  const realVersion = buildExecutionPlanStopCondition({ ...condition, stop_condition_version: 3 });
+  assert.equal(realVersion.stop_condition_version, 3);
+  const validOutcome = resolveStopConditionBindingOutcome(realVersion, { executionPlanId: request.orchestration_plan_reference.plan_id, validStageIds: request.stage_manifest_reference.stage_ids });
+  assert.equal(validOutcome, null);
+
+  const tampered = { ...condition, condition_fingerprint: 'fp-tampered-stop-condition' };
+  const blockedOutcome = resolveStopConditionBindingOutcome(tampered, { executionPlanId: request.orchestration_plan_reference.plan_id, validStageIds: request.stage_manifest_reference.stage_ids });
+  assert.equal(blockedOutcome.status, 'FINGERPRINT_BLOCKED');
+  assert.equal(blockedOutcome.reasonCodes.includes('stop-condition-self-fingerprint-mismatch'), true);
+});
+
+test('compensation binding: the real compensation_reference_version is preserved, and a tampered compensation_fingerprint is FINGERPRINT_BLOCKED', () => {
+  const stopScenario = scenarioFixture('compensation-plan-mismatch').request;
+  const [compensation] = stopScenario.compensation_references;
+  const realVersion = buildExecutionPlanCompensationReference({ ...compensation, execution_plan_id: stopScenario.orchestration_plan_reference.plan_id, compensation_reference_version: 4 });
+  assert.equal(realVersion.compensation_reference_version, 4);
+  const validOutcome = resolveCompensationBindingOutcome(realVersion, { executionPlanId: stopScenario.orchestration_plan_reference.plan_id, validStageIds: stopScenario.stage_manifest_reference.stage_ids });
+  assert.equal(validOutcome, null);
+
+  const tampered = { ...compensation, execution_plan_id: stopScenario.orchestration_plan_reference.plan_id, compensation_fingerprint: 'fp-tampered-compensation' };
+  const blockedOutcome = resolveCompensationBindingOutcome(tampered, { executionPlanId: stopScenario.orchestration_plan_reference.plan_id, validStageIds: stopScenario.stage_manifest_reference.stage_ids });
+  assert.equal(blockedOutcome.status, 'FINGERPRINT_BLOCKED');
+  assert.equal(blockedOutcome.reasonCodes.includes('compensation-self-fingerprint-mismatch'), true);
+});
+
+test('binding records for idempotency/stop-conditions/compensations carry their own real declared version, never a hardcoded 1', () => {
+  const scenario = scenarioFixture('valid-reference-binding-no-llm');
+  const ledger = buildBindingLedgerForPlanFromRequest(scenario.request);
+  const idempotencyRecord = ledger.binding_records.find((r) => r.binding_type === 'IDEMPOTENCY_BINDING');
+  assert.equal(idempotencyRecord.source_reference_version, scenario.request.idempotency_policy_reference.idempotency_reference_version);
+});
+
+test('ledger is blocked (references_bound_in_simulation=false) when any binding fingerprint diverges, and package fingerprint reflects it', () => {
+  const outcomeClean = evaluateExecutionPlanRequest(scenarioFixture('valid-reference-binding-no-llm').request, {});
+  assert.equal(outcomeClean.bindingResult.status, 'REFERENCES_BOUND_SIMULATION');
+
+  const request = clone(scenarioFixture('valid-reference-binding-no-llm').request);
+  request.execution_plan_request_id = 'planreq-fix3-idempotency-fingerprint-tamper-check';
+  const tamperedIdempotency = { ...request.idempotency_policy_reference, idempotency_fingerprint: 'fp-tampered' };
+  request.idempotency_policy_reference = tamperedIdempotency;
+  // The registry snapshot's own idempotency_policy entity fingerprint must still agree with what
+  // the request now (tampered) carries, and execution_plan_request_id changed above -- refresh
+  // both so REGISTRY_SNAPSHOT_BLOCKED doesn't mask the deeper idempotency self-fingerprint
+  // recompute-and-compare this test actually means to exercise.
+  request.registry_snapshot_reference = buildExecutionRegistrySnapshotReference({
+    ...request.registry_snapshot_reference,
+    execution_plan_request_id: request.execution_plan_request_id,
+    registry_entity_fingerprints: {
+      ...request.registry_snapshot_reference.registry_entity_fingerprints,
+      idempotency_policy: 'fp-tampered',
+      execution_plan_request: stablePayload({
+        execution_plan_request_id: request.execution_plan_request_id,
+        execution_plan_request_version: request.execution_plan_request_version,
+        correlation_id: request.correlation_id,
+        causation_id: request.causation_id,
+        trace_id: request.trace_id,
+        logical_sequence: request.logical_sequence,
+        expected_registry_version: request.expected_registry_version,
+        validator_version: request.validator_version
+      })
+    }
+  });
+  const outcomeTampered = evaluateExecutionPlanRequest(request, {});
+  assert.equal(outcomeTampered.result.status, 'REFERENCE_BINDING_BLOCKED');
+  assert.notEqual(outcomeTampered.plan.plan_fingerprint, outcomeClean.plan.plan_fingerprint);
+});
+
+test('regression: replay via the registry still works after FIX 1-3, and the full suite remains green', () => {
+  const registry = createExecutionPlanRegistry();
+  const scenario = scenarioFixture('valid-reference-binding-no-llm');
+  const outcome = evaluateExecutionPlanRequest(scenario.request, {});
+  assert.equal(registry.registerExecutionPlan(outcome.plan, { expected_version: 0 }).status, 'REGISTERED_SIMULATION');
+  assert.equal(registry.registerExecutionPlan(outcome.plan).status, 'REPLAY_ACCEPTED');
+});

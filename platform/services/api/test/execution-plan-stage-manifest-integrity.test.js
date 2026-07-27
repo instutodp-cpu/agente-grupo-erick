@@ -19,11 +19,48 @@ const { RESULT_STATUSES, validateExecutionPlanResult } = require('../src/core/ex
 const { validateExecutionPlanAudit } = require('../src/core/execution-plan-audit');
 const { evaluateExecutionPlanRequest } = require('../src/core/execution-plan-engine');
 const { createExecutionPlanRegistry } = require('../src/core/execution-plan-registry');
+const { buildExecutionRegistrySnapshotReference } = require('../src/core/execution-registry-snapshot-reference');
+const { buildAuthorizationProvenanceReference } = require('../src/core/execution-authorization-provenance-reference');
 
 const repoRoot = path.resolve(__dirname, '../../..');
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+// pr100: registry_snapshot_reference.registry_entity_fingerprints.execution_plan_request covers
+// only the request's own shallow identity fields, never the whole request -- see the identical,
+// more fully commented helper in execution-plan-contracts.test.js. Any test that mutates a request
+// after loading it from a fixture must refresh the snapshot afterwards, or the mutation is caught
+// as REGISTRY_SNAPSHOT_BLOCKED before it ever reaches whatever gate the test actually means to
+// exercise.
+function refreshSnapshot(request) {
+  const old = request.registry_snapshot_reference;
+  const entityFingerprints = {
+    execution_plan_request: stablePayload({
+      execution_plan_request_id: request.execution_plan_request_id,
+      execution_plan_request_version: request.execution_plan_request_version,
+      correlation_id: request.correlation_id,
+      causation_id: request.causation_id,
+      trace_id: request.trace_id,
+      logical_sequence: request.logical_sequence,
+      expected_registry_version: request.expected_registry_version,
+      validator_version: request.validator_version
+    }),
+    stage_manifest: request.stage_manifest_reference.manifest_fingerprint,
+    dependency_graph: request.dependency_graph_reference.graph_fingerprint,
+    provenance: stablePayload(request.authorization_provenance_reference),
+    scope: request.authorization_scope_reference.scope_fingerprint,
+    execution_plan_budget: request.execution_plan_budget.budget_fingerprint,
+    idempotency_policy: request.idempotency_policy_reference.idempotency_fingerprint
+  };
+  request.registry_snapshot_reference = buildExecutionRegistrySnapshotReference({
+    ...old,
+    execution_plan_request_id: request.execution_plan_request_id,
+    execution_plan_id: request.orchestration_plan_reference.plan_id,
+    registry_entity_fingerprints: entityFingerprints
+  });
+  return request;
 }
 
 function scenarioFixture(key) {
@@ -151,6 +188,7 @@ test('VALIDATION_STAGE, MEMORY_REFERENCE_STAGE, CONTEXT_REFERENCE_STAGE, AUDIT_S
     request.stage_manifest_reference = buildOrchestratorStageManifestReference({
       ...request.stage_manifest_reference, stage_records: [record0, record1]
     });
+    refreshSnapshot(request);
     const outcome = evaluateExecutionPlanRequest(request, {});
     assert.equal(outcome.result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION', `${stageType}: request should prepare`);
     // The engine never derives a stage_type -- the manifest's own declared type is the only source.
@@ -215,6 +253,7 @@ test('pr99fix (Fix 2): the same package awaiting approval always produces the sa
   const changedRecord0 = { ...record0, optional: true };
   changedRecord0.stage_fingerprint = computeStageRecordFingerprint(changedRecord0);
   changedRequest.stage_manifest_reference = buildOrchestratorStageManifestReference({ ...changedRequest.stage_manifest_reference, stage_records: [changedRecord0, record1] });
+  refreshSnapshot(changedRequest);
   const changedOutcome = evaluateExecutionPlanRequest(changedRequest, {});
   assert.equal(changedOutcome.result.status, 'WAITING_APPROVAL_REFERENCE');
   assert.notEqual(changedOutcome.result.execution_plan_fingerprint, outcomeA.result.execution_plan_fingerprint, 'a stage change must change the approval-package fingerprint');
@@ -224,6 +263,10 @@ test('pr99fix (Fix 2): the same package awaiting approval always produces the sa
   const authzChangedRequest = clone(scenario.request);
   authzChangedRequest.execution_plan_request_id = 'planreq-approval-fingerprint-authz-change-check';
   authzChangedRequest.authorization_decision_reference = { ...authzChangedRequest.authorization_decision_reference, authorization_decision_fingerprint: 'fp-authz-changed-for-approval-package-check' };
+  authzChangedRequest.authorization_provenance_reference = buildAuthorizationProvenanceReference({
+    ...authzChangedRequest.authorization_provenance_reference, authorization_decision_fingerprint: 'fp-authz-changed-for-approval-package-check'
+  });
+  refreshSnapshot(authzChangedRequest);
   const authzChangedOutcome = evaluateExecutionPlanRequest(authzChangedRequest, {});
   assert.equal(authzChangedOutcome.result.status, 'WAITING_APPROVAL_REFERENCE');
   assert.notEqual(authzChangedOutcome.result.execution_plan_fingerprint, outcomeA.result.execution_plan_fingerprint, 'approval-related package data (authorization fingerprint) must also change the fingerprint');
@@ -287,6 +330,10 @@ test('parallel stage count exceeding maximum_parallel_stages blocks with BUDGET_
   request.execution_plan_budget.budget_fingerprint = undefined;
   const { buildExecutionPlanBudget } = require('../src/core/execution-plan-budget');
   request.execution_plan_budget = buildExecutionPlanBudget({ ...request.execution_plan_budget, maximum_parallel_stages: 0 });
+  request.authorization_provenance_reference = buildAuthorizationProvenanceReference({
+    ...request.authorization_provenance_reference, budget_authorization_fingerprint: request.execution_plan_budget.budget_fingerprint
+  });
+  refreshSnapshot(request);
   assert.equal(evaluateExecutionPlanRequest(request, {}).result.status, 'BUDGET_BLOCKED');
 });
 
@@ -415,10 +462,17 @@ test('pr99fix: a validly-fingerprinted manifest still builds, registers, replays
   assert.equal(registry.registerOrchestratorStageManifestReference(versionBumped, { expected_fingerprint: 'stale-fingerprint' }).status, 'FINGERPRINT_CONFLICT', 'fingerprint conflict detection still works');
 });
 
-test('a stale expected_registry_version is still VERSION_BLOCKED with a required stage_manifest_reference present', () => {
+test('context.currentRegistryVersion remains inert with a required stage_manifest_reference present, and a real registry snapshot mismatch is REGISTRY_SNAPSHOT_BLOCKED', () => {
   const scenario = scenarioFixture('valid-deterministic-stage-manifest');
   const outcome = evaluateExecutionPlanRequest(scenario.request, { currentRegistryVersion: 'v2' });
-  assert.equal(outcome.result.status, 'VERSION_BLOCKED');
+  assert.equal(outcome.result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
+
+  const request = clone(scenario.request);
+  request.execution_plan_request_id = 'planreq-registry-version-mismatch-manifest-check';
+  request.registry_snapshot_reference = buildExecutionRegistrySnapshotReference({
+    ...request.registry_snapshot_reference, observed_registry_version: 'v2'
+  });
+  assert.equal(evaluateExecutionPlanRequest(request, {}).result.status, 'REGISTRY_SNAPSHOT_BLOCKED');
 });
 
 test('operational material is rejected everywhere in the manifest, and a non-serializable payload is rejected', () => {
@@ -461,6 +515,7 @@ test('policy disabling parallel stages still blocks a structurally valid paralle
   const updatedRecord1 = { ...record1, dependency_reference_ids: ['dep-policy-disabled-1'] };
   updatedRecord1.stage_fingerprint = computeStageRecordFingerprint(updatedRecord1);
   request.stage_manifest_reference = buildOrchestratorStageManifestReference({ ...request.stage_manifest_reference, stage_records: [record0, updatedRecord1] });
+  refreshSnapshot(request);
   assert.equal(evaluateExecutionPlanRequest(request, {}).result.status, 'DEPENDENCY_BLOCKED');
 });
 
@@ -488,6 +543,7 @@ test('memory and context bindings are created only for stages whose own record d
   };
   withMemoryContext.stage_fingerprint = computeStageRecordFingerprint(withMemoryContext);
   request.stage_manifest_reference = buildOrchestratorStageManifestReference({ ...request.stage_manifest_reference, stage_records: [withMemoryContext, record1] });
+  refreshSnapshot(request);
   const outcome = evaluateExecutionPlanRequest(request, {});
   assert.equal(outcome.result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
 });
@@ -500,6 +556,18 @@ test('a binding source id that does not match the request\'s own model/tool/work
   const mismatched = { ...record0, model_selection_reference_id: 'selection-decision-not-the-real-one' };
   mismatched.stage_fingerprint = computeStageRecordFingerprint(mismatched);
   request.stage_manifest_reference = buildOrchestratorStageManifestReference({ ...request.stage_manifest_reference, stage_records: [mismatched, record1] });
+  // The made-up reference id must still be inside the authorization scope's own allowlist -- this
+  // test is about a *binding* mismatch (the id the stage declares vs. what the request's own
+  // decision reference actually carries), not a scope-authorization mismatch, which is a
+  // different, earlier gate this PR introduced.
+  request.authorization_scope_reference = require('../src/core/execution-authorization-scope-reference').buildAuthorizationScopeReference({
+    ...request.authorization_scope_reference,
+    allowed_model_reference_ids: [...request.authorization_scope_reference.allowed_model_reference_ids, 'selection-decision-not-the-real-one'].sort()
+  });
+  request.authorization_provenance_reference = buildAuthorizationProvenanceReference({
+    ...request.authorization_provenance_reference, authorization_scope_fingerprint: request.authorization_scope_reference.scope_fingerprint
+  });
+  refreshSnapshot(request);
   assert.equal(evaluateExecutionPlanRequest(request, {}).result.status, 'BINDING_BLOCKED');
 });
 
@@ -513,8 +581,8 @@ test('missing-binding-plan (from execution-plan-contracts fixture): a selected t
 // Package fingerprint
 // ---------------------------------------------------------------------------
 
-test('execution plan package: exact fields (35)', () => {
-  assert.equal(EXECUTION_PLAN_PACKAGE_FIELDS.length, 35);
+test('execution plan package: exact fields (41, +6 from pr100)', () => {
+  assert.equal(EXECUTION_PLAN_PACKAGE_FIELDS.length, 41);
 });
 
 test('two identical packages produce identical fingerprints, and changing stage_type, tokens, dependencies, or bindings each changes execution_plan_fingerprint', () => {

@@ -17,6 +17,10 @@ const EXECUTION_PLAN_RESULT_FIELDS = Object.freeze([
   'estimated_total_cost_minor_units', 'blockers', 'reason_codes', 'request_validated', 'authorization_validated',
   'evidence_validated', 'bindings_validated', 'budget_validated', 'dependencies_validated',
   'dependency_graph_validated', 'idempotency_validated', 'stop_conditions_validated', 'compensations_validated',
+  'authorization_provenance_reference_id', 'authorization_provenance_fingerprint', 'authorization_provenance_validated',
+  'authorization_scope_reference_id', 'authorization_scope_fingerprint', 'authorization_scope_validated',
+  'registry_snapshot_reference_id', 'registry_snapshot_fingerprint', 'registry_snapshot_validated',
+  'binding_ledger_id', 'binding_ledger_fingerprint', 'binding_ledger_validated', 'references_bound_in_simulation',
   'execution_plan_prepared', 'executable',
   'execution_authorized', 'execution_started', 'stage_started', 'stage_completed', 'tool_called',
   'workflow_executed', 'provider_called', 'model_called', 'network_used', 'memory_read', 'memory_written',
@@ -27,9 +31,10 @@ const EXECUTION_PLAN_RESULT_FIELDS = Object.freeze([
 const RESULT_STATUSES = Object.freeze([
   'EXECUTION_PLAN_PREPARED_SIMULATION', 'WAITING_APPROVAL_REFERENCE', 'DENY', 'VALIDATION_FAILED', 'TENANT_BLOCKED',
   'ORGANIZATION_BLOCKED', 'PROJECT_BLOCKED', 'SESSION_BLOCKED', 'TASK_BLOCKED', 'AUTHORIZATION_BLOCKED',
+  'AUTHORIZATION_PROVENANCE_BLOCKED', 'AUTHORIZATION_SCOPE_BLOCKED', 'REGISTRY_SNAPSHOT_BLOCKED',
   'EVIDENCE_BLOCKED', 'STAGE_MANIFEST_BLOCKED', 'BINDING_BLOCKED', 'BUDGET_BLOCKED', 'DEPENDENCY_BLOCKED',
   'IDEMPOTENCY_BLOCKED', 'STOP_CONDITION_BLOCKED', 'COMPENSATION_BLOCKED', 'FINGERPRINT_BLOCKED', 'VERSION_BLOCKED',
-  'CONFLICT_BLOCKED'
+  'CONFLICT_BLOCKED', 'REFERENCE_BINDING_BLOCKED'
 ]);
 
 const RESULT_DECISIONS = Object.freeze([
@@ -67,7 +72,17 @@ const COUNT_FIELDS = Object.freeze(['stage_count', 'dependency_count', 'binding_
 const FINGERPRINT_FIELDS = Object.freeze([
   'request_fingerprint', 'authorization_fingerprint', 'evidence_bundle_fingerprint', 'planning_result_fingerprint',
   'orchestration_plan_fingerprint', 'task_fingerprint', 'dependency_graph_fingerprint', 'stage_manifest_fingerprint',
-  'execution_plan_fingerprint'
+  'execution_plan_fingerprint', 'authorization_provenance_fingerprint', 'authorization_scope_fingerprint',
+  'registry_snapshot_fingerprint', 'binding_ledger_fingerprint'
+]);
+
+// pr100: true whenever the corresponding reference has passed every cross-check this evaluation
+// performed -- the same "true for both the terminal prepared state and the still-waiting-for-
+// approval state, since the approval gate runs strictly after these" semantics as
+// stage_manifest_validated above, applied to the four new reference kinds.
+const REFERENCE_BINDING_VALIDATED_FIELDS = Object.freeze([
+  'authorization_provenance_validated', 'authorization_scope_validated', 'registry_snapshot_validated',
+  'binding_ledger_validated'
 ]);
 
 const ORDERED_LIST_FIELDS = Object.freeze(['stage_ids', 'dependency_ids', 'binding_ids', 'stop_condition_ids', 'compensation_reference_ids']);
@@ -116,7 +131,9 @@ function validateExecutionPlanResult(result) {
   for (const field of [
     'result_id', 'execution_plan_request_id', 'execution_plan_id', 'authorization_decision_id', 'planning_result_id',
     'orchestration_plan_id', 'task_reference_id', 'agent_id', 'tenant_id', 'organization_id', 'project_id',
-    'session_reference_id', 'registry_version', 'stage_manifest_reference_id', 'validator_version', ...FINGERPRINT_FIELDS
+    'session_reference_id', 'registry_version', 'stage_manifest_reference_id',
+    'authorization_provenance_reference_id', 'authorization_scope_reference_id', 'registry_snapshot_reference_id',
+    'binding_ledger_id', 'validator_version', ...FINGERPRINT_FIELDS
   ]) {
     if (!isNonEmptyString(result[field])) errors.push(`${field}_invalid`);
   }
@@ -143,6 +160,10 @@ function validateExecutionPlanResult(result) {
   if (typeof result.execution_plan_prepared !== 'boolean') errors.push('execution_plan_prepared_must_be_boolean');
   if (typeof result.dependency_graph_validated !== 'boolean') errors.push('dependency_graph_validated_must_be_boolean');
   if (typeof result.stage_manifest_validated !== 'boolean') errors.push('stage_manifest_validated_must_be_boolean');
+  for (const field of REFERENCE_BINDING_VALIDATED_FIELDS) {
+    if (typeof result[field] !== 'boolean') errors.push(`${field}_must_be_boolean`);
+  }
+  if (typeof result.references_bound_in_simulation !== 'boolean') errors.push('references_bound_in_simulation_must_be_boolean');
   for (const [field, expected] of Object.entries(EXECUTION_PLAN_RESULT_SAFE_FLAGS)) {
     if (result[field] !== expected) errors.push(`${field}_must_be_${String(expected)}`);
   }
@@ -166,6 +187,23 @@ function validateExecutionPlanResult(result) {
   }
   if (!STAGE_MANIFEST_VALIDATED_STATUSES.includes(result.status) && result.stage_manifest_validated !== false) {
     errors.push('stage_manifest_validated_must_be_false_unless_status_allows_it');
+  }
+  for (const field of REFERENCE_BINDING_VALIDATED_FIELDS) {
+    if (STAGE_MANIFEST_VALIDATED_STATUSES.includes(result.status) && result[field] !== true) {
+      errors.push(`${field}_must_be_true_when_status_allows_it`);
+    }
+    if (!STAGE_MANIFEST_VALIDATED_STATUSES.includes(result.status) && result[field] !== false) {
+      errors.push(`${field}_must_be_false_unless_status_allows_it`);
+    }
+  }
+  // references_bound_in_simulation mirrors the binding ledger's own REFERENCES_BOUND_SIMULATION
+  // semantics: true only in the terminal prepared state, never merely while still waiting for
+  // approval -- approval has not yet confirmed the plan may proceed even in simulation.
+  if (result.status === 'EXECUTION_PLAN_PREPARED_SIMULATION' && result.references_bound_in_simulation !== true) {
+    errors.push('references_bound_in_simulation_must_be_true_when_status_is_prepared_simulation');
+  }
+  if (result.status !== 'EXECUTION_PLAN_PREPARED_SIMULATION' && result.references_bound_in_simulation !== false) {
+    errors.push('references_bound_in_simulation_must_be_false_unless_status_is_prepared_simulation');
   }
   const expectedOutcome = STATUS_OUTCOME_MAP[result.status] || DEFAULT_OUTCOME;
   if (result.decision !== expectedOutcome.decision) errors.push(`decision_inconsistent_with_status::${result.status}`);
@@ -218,6 +256,14 @@ function buildExecutionPlanResult(input = {}) {
     stage_manifest_reference_id: input.stage_manifest_reference_id || notAvailable,
     stage_manifest_fingerprint: input.stage_manifest_fingerprint || fingerprintNotAvailable,
     execution_plan_fingerprint: input.execution_plan_fingerprint || fingerprintNotAvailable,
+    authorization_provenance_reference_id: input.authorization_provenance_reference_id || notAvailable,
+    authorization_provenance_fingerprint: input.authorization_provenance_fingerprint || fingerprintNotAvailable,
+    authorization_scope_reference_id: input.authorization_scope_reference_id || notAvailable,
+    authorization_scope_fingerprint: input.authorization_scope_fingerprint || fingerprintNotAvailable,
+    registry_snapshot_reference_id: input.registry_snapshot_reference_id || notAvailable,
+    registry_snapshot_fingerprint: input.registry_snapshot_fingerprint || fingerprintNotAvailable,
+    binding_ledger_id: input.binding_ledger_id || notAvailable,
+    binding_ledger_fingerprint: input.binding_ledger_fingerprint || fingerprintNotAvailable,
     registry_version: input.registry_version || notAvailable,
     stage_count: Number.isInteger(input.stage_count) ? input.stage_count : 0,
     dependency_count: Number.isInteger(input.dependency_count) ? input.dependency_count : 0,
@@ -240,6 +286,11 @@ function buildExecutionPlanResult(input = {}) {
     execution_plan_prepared: status === 'EXECUTION_PLAN_PREPARED_SIMULATION',
     dependency_graph_validated: status === 'EXECUTION_PLAN_PREPARED_SIMULATION',
     stage_manifest_validated: STAGE_MANIFEST_VALIDATED_STATUSES.includes(status),
+    authorization_provenance_validated: STAGE_MANIFEST_VALIDATED_STATUSES.includes(status),
+    authorization_scope_validated: STAGE_MANIFEST_VALIDATED_STATUSES.includes(status),
+    registry_snapshot_validated: STAGE_MANIFEST_VALIDATED_STATUSES.includes(status),
+    binding_ledger_validated: STAGE_MANIFEST_VALIDATED_STATUSES.includes(status),
+    references_bound_in_simulation: status === 'EXECUTION_PLAN_PREPARED_SIMULATION',
     ...EXECUTION_PLAN_RESULT_SAFE_FLAGS,
     validator_version: EXECUTION_PLAN_RESULT_VALIDATOR_VERSION
   };
@@ -253,7 +304,12 @@ function buildExecutionPlanResult(input = {}) {
       next_state: 'BLOCKED_REFERENCE',
       execution_plan_prepared: false,
       dependency_graph_validated: false,
-      stage_manifest_validated: false
+      stage_manifest_validated: false,
+      authorization_provenance_validated: false,
+      authorization_scope_validated: false,
+      registry_snapshot_validated: false,
+      binding_ledger_validated: false,
+      references_bound_in_simulation: false
     });
   }
   return cloneFrozen(result);
@@ -273,6 +329,7 @@ module.exports = {
   MAX_TOKENS_REFERENCE,
   NEXT_STATES,
   ORDERED_LIST_FIELDS,
+  REFERENCE_BINDING_VALIDATED_FIELDS,
   STAGE_MANIFEST_VALIDATED_STATUSES,
   RESULT_DECISIONS,
   RESULT_STATUSES,
