@@ -20,6 +20,9 @@ const { validateExecutionPlanStopCondition } = require('./execution-plan-stop-co
 const { validateExecutionPlanCompensationReference } = require('./execution-plan-compensation-reference');
 const { validateExecutionPlanDependencyGraphReference } = require('./execution-plan-dependency-graph-reference');
 const { validateOrchestratorStageManifestReference } = require('./orchestrator-stage-manifest-reference');
+const { validateAuthorizationProvenanceReference } = require('./execution-authorization-provenance-reference');
+const { validateAuthorizationScopeReference } = require('./execution-authorization-scope-reference');
+const { validateExecutionRegistrySnapshotReference } = require('./execution-registry-snapshot-reference');
 
 const EXECUTION_PLAN_REQUEST_VALIDATOR_VERSION = 'execution_plan_request_validator_v1';
 const AUTHORIZATION_DECISION_REFERENCE_VALIDATOR_VERSION = 'execution_plan_authorization_decision_reference_validator_v1';
@@ -32,6 +35,7 @@ const EXECUTION_PLAN_REQUEST_FIELDS = Object.freeze([
   'model_selection_reference', 'tool_decision_references', 'workflow_decision_reference',
   'execution_plan_policy_reference', 'execution_plan_budget', 'idempotency_policy_reference',
   'stop_condition_references', 'compensation_references', 'dependency_graph_reference', 'stage_manifest_reference',
+  'authorization_provenance_reference', 'authorization_scope_reference', 'registry_snapshot_reference',
   'correlation_id', 'causation_id', 'trace_id', 'logical_sequence', 'expected_registry_version', 'simulation_context',
   'validator_version'
 ]);
@@ -272,6 +276,13 @@ function validateExecutionPlanRequest(request) {
   }
   errors.push(...validateExecutionPlanDependencyGraphReference(request.dependency_graph_reference).errors.map((e) => `dependency_graph_reference_${e}`));
   errors.push(...validateOrchestratorStageManifestReference(request.stage_manifest_reference).errors.map((e) => `stage_manifest_reference_${e}`));
+
+  // pr100: the full authorization provenance chain, the authorization scope, and the registry
+  // snapshot all travel as required, versioned, fingerprinted fields of the request itself --
+  // never as a side-channel (see docs "Nenhuma condição decisória é lida de context").
+  errors.push(...validateAuthorizationProvenanceReference(request.authorization_provenance_reference).errors.map((e) => `authorization_provenance_reference_${e}`));
+  errors.push(...validateAuthorizationScopeReference(request.authorization_scope_reference).errors.map((e) => `authorization_scope_reference_${e}`));
+  errors.push(...validateExecutionRegistrySnapshotReference(request.registry_snapshot_reference).errors.map((e) => `registry_snapshot_reference_${e}`));
 
   errors.push(...validateAgentSimulationContext(request.simulation_context).errors.map((e) => `simulation_context_${e}`));
 

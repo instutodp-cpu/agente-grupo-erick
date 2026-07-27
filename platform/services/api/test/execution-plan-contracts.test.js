@@ -46,11 +46,49 @@ const {
 const { EXECUTION_PLAN_AUDIT_FIELDS, validateExecutionPlanAudit } = require('../src/core/execution-plan-audit');
 const { evaluateExecutionPlanRequest } = require('../src/core/execution-plan-engine');
 const { createExecutionPlanRegistry } = require('../src/core/execution-plan-registry');
+const { buildExecutionRegistrySnapshotReference } = require('../src/core/execution-registry-snapshot-reference');
 
 const repoRoot = path.resolve(__dirname, '../../..');
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+// pr100: registry_snapshot_reference.registry_entity_fingerprints.execution_plan_request covers
+// only the request's own *shallow* identity fields (never the whole request -- every nested
+// reference already has its own dedicated tamper check, and embedding the whole request here
+// would compound into a multi-hundred-KB fingerprint once re-embedded through BindingRecord ->
+// BindingLedger -> ExecutionPlanPackage -> plan/result/audit). Any test that mutates a request
+// after loading it from a fixture must refresh the snapshot to match, or the mutation is caught as
+// REGISTRY_SNAPSHOT_BLOCKED before it ever reaches whatever gate the test actually means to
+// exercise.
+function refreshSnapshot(request) {
+  const old = request.registry_snapshot_reference;
+  const entityFingerprints = {
+    execution_plan_request: stablePayload({
+      execution_plan_request_id: request.execution_plan_request_id,
+      execution_plan_request_version: request.execution_plan_request_version,
+      correlation_id: request.correlation_id,
+      causation_id: request.causation_id,
+      trace_id: request.trace_id,
+      logical_sequence: request.logical_sequence,
+      expected_registry_version: request.expected_registry_version,
+      validator_version: request.validator_version
+    }),
+    stage_manifest: request.stage_manifest_reference.manifest_fingerprint,
+    dependency_graph: request.dependency_graph_reference.graph_fingerprint,
+    provenance: stablePayload(request.authorization_provenance_reference),
+    scope: request.authorization_scope_reference.scope_fingerprint,
+    execution_plan_budget: request.execution_plan_budget.budget_fingerprint,
+    idempotency_policy: request.idempotency_policy_reference.idempotency_fingerprint
+  };
+  request.registry_snapshot_reference = buildExecutionRegistrySnapshotReference({
+    ...old,
+    execution_plan_request_id: request.execution_plan_request_id,
+    execution_plan_id: request.orchestration_plan_reference.plan_id,
+    registry_entity_fingerprints: entityFingerprints
+  });
+  return request;
 }
 
 function scenarioFixture(key) {
@@ -109,8 +147,8 @@ EXPECTED_SCENARIOS.forEach((key) => {
 // Contracts: exact fields, enums, safe flags
 // ---------------------------------------------------------------------------
 
-test('execution plan request: exact fields (27, +1 from pr99) and rejects missing/extra fields', () => {
-  assert.equal(EXECUTION_PLAN_REQUEST_FIELDS.length, 27);
+test('execution plan request: exact fields (30, +3 from pr100) and rejects missing/extra fields', () => {
+  assert.equal(EXECUTION_PLAN_REQUEST_FIELDS.length, 30);
   const request = scenarioFixture('prepared-no-llm-plan').request;
   assert.equal(validateExecutionPlanRequest(request).valid, true);
   assert.equal(validateExecutionPlanRequest({ ...request, unexpected: 1 }).valid, false);
@@ -136,9 +174,9 @@ test('execution plan policy reference: exact fields (28) and every require_*/fai
   assert.equal(validateExecutionPlanPolicyReference({ ...policy, allow_irreversible_reference: true }).valid, false);
 });
 
-test('execution plan contract: exact fields (53, +2 from pr99), 25 statuses (+1 STAGE_MANIFEST_BLOCKED), and executable is always false', () => {
-  assert.equal(EXECUTION_PLAN_CONTRACT_FIELDS.length, 53);
-  assert.equal(EXECUTION_PLAN_STATUSES.length, 25);
+test('execution plan contract: exact fields (61, +8 from pr100), 29 statuses (+4 pr100), and executable is always false', () => {
+  assert.equal(EXECUTION_PLAN_CONTRACT_FIELDS.length, 61);
+  assert.equal(EXECUTION_PLAN_STATUSES.length, 29);
   const plan = scenarioFixture('prepared-no-llm-plan').plan;
   assert.equal(validateExecutionPlanContract(plan).valid, true);
   assert.equal(validateExecutionPlanContract({ ...plan, executable: true }).valid, false);
@@ -223,15 +261,15 @@ test('compensation reference: exact fields (15), 5 compensation types, and never
   assert.equal(compensation.compensation_executed, false);
 });
 
-test('execution plan result: exact fields (72, +3 from pr99), 21 statuses (+1 STAGE_MANIFEST_BLOCKED), 4 decisions, 4 next states', () => {
-  assert.equal(EXECUTION_PLAN_RESULT_FIELDS.length, 72);
-  assert.equal(RESULT_STATUSES.length, 21);
+test('execution plan result: exact fields (85, +13 from pr100), 25 statuses (+4 pr100), 4 decisions, 4 next states', () => {
+  assert.equal(EXECUTION_PLAN_RESULT_FIELDS.length, 85);
+  assert.equal(RESULT_STATUSES.length, 25);
   assert.equal(RESULT_DECISIONS.length, 4);
   assert.equal(NEXT_STATES.length, 4);
 });
 
-test('audit: exact fields (38, +11 from pr99)', () => {
-  assert.equal(EXECUTION_PLAN_AUDIT_FIELDS.length, 38);
+test('audit: exact fields (39, +1 from pr100)', () => {
+  assert.equal(EXECUTION_PLAN_AUDIT_FIELDS.length, 39);
 });
 
 test('dependency graph reference: exact fields (17), validated by construction, and simulation/production_blocked forced', () => {
@@ -380,6 +418,7 @@ test('a declarative parallel dependency prepares when allow_parallel_stage is tr
   const disallowed = clone(request);
   disallowed.execution_plan_request_id = 'planreq-parallel-disallowed-check';
   disallowed.execution_plan_policy_reference = { ...disallowed.execution_plan_policy_reference, allow_parallel_stage: false };
+  refreshSnapshot(disallowed);
   assert.equal(evaluateExecutionPlanRequest(disallowed).result.status, 'DEPENDENCY_BLOCKED');
 });
 
@@ -387,6 +426,7 @@ test('a dependency_graph_reference whose stage_ids disagree with the plan\'s own
   const request = clone(scenarioFixture('prepared-no-llm-plan').request);
   request.execution_plan_request_id = 'planreq-dependency-graph-stage-ids-mismatch-check';
   request.dependency_graph_reference = { ...request.dependency_graph_reference, stage_ids: ['stage-1'] };
+  refreshSnapshot(request);
   assert.equal(evaluateExecutionPlanRequest(request).result.status, 'DEPENDENCY_BLOCKED');
 });
 
@@ -420,6 +460,7 @@ test('input order of tool_decision_references never changes the resulting plan (
   const forward = evaluateExecutionPlanRequest(scenario.request);
   const reversedRequest = clone(scenario.request);
   reversedRequest.tool_decision_references = [...reversedRequest.tool_decision_references].reverse();
+  refreshSnapshot(reversedRequest);
   const reversed = evaluateExecutionPlanRequest(reversedRequest);
   assert.equal(forward.result.status, reversed.result.status);
   assert.deepEqual([...forward.plan.tool_reference_ids].sort(), [...reversed.plan.tool_reference_ids].sort());
@@ -521,12 +562,23 @@ test('a tampered task_reference fingerprint is FINGERPRINT_BLOCKED (tamper detec
   const request = clone(scenarioFixture('prepared-no-llm-plan').request);
   request.execution_plan_request_id = 'planreq-task-fingerprint-tamper-check';
   request.task_reference = { ...request.task_reference, task_complexity: 'TIER_4_COMPLEX' };
+  refreshSnapshot(request);
   assert.equal(evaluateExecutionPlanRequest(request).result.status, 'FINGERPRINT_BLOCKED');
 });
 
-test('a stale expected_registry_version is VERSION_BLOCKED', () => {
-  const outcome = evaluateExecutionPlanRequest(scenarioFixture('version-mismatch-plan').request, { currentRegistryVersion: 'v2' });
-  assert.equal(outcome.result.status, 'VERSION_BLOCKED');
+// pr100: context.currentRegistryVersion is permanently inert (the last side-channel this engine
+// ever read, removed the same way context.dependencyRecords was in pr98fix) -- registry version
+// agreement is now exclusively the registry_snapshot_reference's own concern.
+test('context.currentRegistryVersion is inert, and a registry snapshot whose observed version disagrees with expected is REGISTRY_SNAPSHOT_BLOCKED', () => {
+  const withStaleSideChannel = evaluateExecutionPlanRequest(scenarioFixture('prepared-no-llm-plan').request, { currentRegistryVersion: 'v2' });
+  assert.equal(withStaleSideChannel.result.status, 'EXECUTION_PLAN_PREPARED_SIMULATION');
+
+  const request = clone(scenarioFixture('prepared-no-llm-plan').request);
+  request.execution_plan_request_id = 'planreq-registry-version-mismatch-check';
+  request.registry_snapshot_reference = buildExecutionRegistrySnapshotReference({
+    ...request.registry_snapshot_reference, observed_registry_version: 'v2'
+  });
+  assert.equal(evaluateExecutionPlanRequest(request).result.status, 'REGISTRY_SNAPSHOT_BLOCKED');
 });
 
 // ---------------------------------------------------------------------------
@@ -544,6 +596,7 @@ test('precedence: a fingerprint mismatch wins over an also-invalid idempotency r
   const request = clone(scenarioFixture('fingerprint-mismatch-plan').request);
   request.execution_plan_request_id = 'planreq-precedence-fingerprint-over-idempotency';
   request.idempotency_policy_reference = { ...request.idempotency_policy_reference, idempotency_validated: false };
+  refreshSnapshot(request);
   assert.equal(evaluateExecutionPlanRequest(request).result.status, 'FINGERPRINT_BLOCKED');
 });
 

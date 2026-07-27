@@ -16,7 +16,10 @@ const EXECUTION_PLAN_CONTRACT_FIELDS = Object.freeze([
   'orchestrator_decision_fingerprint', 'readiness_bundle_fingerprint', 'planning_result_fingerprint',
   'orchestration_plan_fingerprint', 'task_fingerprint', 'memory_fingerprint', 'context_fingerprint',
   'model_fingerprint', 'tool_fingerprints', 'workflow_fingerprint', 'budget_fingerprint',
-  'idempotency_fingerprint', 'plan_fingerprint', 'logical_sequence', 'execution_plan_prepared', 'executable',
+  'idempotency_fingerprint', 'plan_fingerprint', 'authorization_provenance_reference_id',
+  'authorization_provenance_fingerprint', 'authorization_scope_reference_id', 'authorization_scope_fingerprint',
+  'registry_snapshot_reference_id', 'registry_snapshot_fingerprint', 'binding_ledger_id', 'binding_ledger_fingerprint',
+  'logical_sequence', 'execution_plan_prepared', 'executable',
   'execution_authorized', 'execution_started', 'executed', 'runtime_enabled', 'simulation', 'production_blocked',
   'rollout_percentage', 'validator_version'
 ]);
@@ -24,9 +27,10 @@ const EXECUTION_PLAN_CONTRACT_FIELDS = Object.freeze([
 const EXECUTION_PLAN_STATUSES = Object.freeze([
   'PREPARED_SIMULATION', 'WAITING_APPROVAL_REFERENCE', 'BLOCKED', 'VALIDATION_FAILED', 'TENANT_BLOCKED',
   'ORGANIZATION_BLOCKED', 'PROJECT_BLOCKED', 'SESSION_BLOCKED', 'TASK_BLOCKED', 'AUTHORIZATION_BLOCKED',
+  'AUTHORIZATION_PROVENANCE_BLOCKED', 'AUTHORIZATION_SCOPE_BLOCKED', 'REGISTRY_SNAPSHOT_BLOCKED',
   'EVIDENCE_BLOCKED', 'STAGE_MANIFEST_BLOCKED', 'MEMORY_BLOCKED', 'CONTEXT_BLOCKED', 'MODEL_BLOCKED', 'TOOL_BLOCKED',
   'WORKFLOW_BLOCKED', 'BUDGET_BLOCKED', 'DEPENDENCY_BLOCKED', 'IDEMPOTENCY_BLOCKED', 'STOP_CONDITION_BLOCKED',
-  'COMPENSATION_BLOCKED', 'FINGERPRINT_BLOCKED', 'VERSION_BLOCKED', 'CONFLICT_BLOCKED'
+  'COMPENSATION_BLOCKED', 'FINGERPRINT_BLOCKED', 'VERSION_BLOCKED', 'CONFLICT_BLOCKED', 'REFERENCE_BINDING_BLOCKED'
 ]);
 
 const NULLABLE_REFERENCE_ID_FIELDS = Object.freeze(['model_selection_reference_id', 'workflow_reference_id', 'model_fingerprint', 'workflow_fingerprint']);
@@ -39,7 +43,9 @@ const ORDERED_LIST_FIELDS = Object.freeze([
 const FINGERPRINT_FIELDS = Object.freeze([
   'authorization_fingerprint', 'orchestrator_decision_fingerprint', 'readiness_bundle_fingerprint',
   'planning_result_fingerprint', 'orchestration_plan_fingerprint', 'task_fingerprint', 'stage_manifest_fingerprint',
-  'memory_fingerprint', 'context_fingerprint', 'budget_fingerprint', 'idempotency_fingerprint', 'plan_fingerprint'
+  'memory_fingerprint', 'context_fingerprint', 'budget_fingerprint', 'idempotency_fingerprint', 'plan_fingerprint',
+  'authorization_provenance_fingerprint', 'authorization_scope_fingerprint', 'registry_snapshot_fingerprint',
+  'binding_ledger_fingerprint'
 ]);
 
 // executable is never true in this PR regardless of status -- "Nenhum status deve permitir
@@ -73,8 +79,9 @@ function validateExecutionPlanContract(plan) {
     'execution_plan_id', 'authorization_decision_id', 'orchestrator_decision_id', 'planning_result_id',
     'orchestration_plan_id', 'task_reference_id', 'agent_id', 'tenant_id', 'organization_id', 'project_id',
     'session_reference_id', 'memory_selection_reference_id', 'context_assembly_reference_id', 'budget_reference_id',
-    'idempotency_reference_id', 'execution_scope_reference_id', 'stage_manifest_reference_id', 'validator_version',
-    ...FINGERPRINT_FIELDS
+    'idempotency_reference_id', 'execution_scope_reference_id', 'stage_manifest_reference_id',
+    'authorization_provenance_reference_id', 'authorization_scope_reference_id', 'registry_snapshot_reference_id',
+    'binding_ledger_id', 'validator_version', ...FINGERPRINT_FIELDS
   ]) {
     if (!isNonEmptyString(plan[field])) errors.push(`${field}_invalid`);
   }
@@ -154,6 +161,14 @@ function buildExecutionPlanContract(input = {}) {
     budget_fingerprint: input.budget_fingerprint,
     idempotency_fingerprint: input.idempotency_fingerprint,
     plan_fingerprint: input.plan_fingerprint,
+    authorization_provenance_reference_id: input.authorization_provenance_reference_id,
+    authorization_provenance_fingerprint: input.authorization_provenance_fingerprint,
+    authorization_scope_reference_id: input.authorization_scope_reference_id,
+    authorization_scope_fingerprint: input.authorization_scope_fingerprint,
+    registry_snapshot_reference_id: input.registry_snapshot_reference_id,
+    registry_snapshot_fingerprint: input.registry_snapshot_fingerprint,
+    binding_ledger_id: input.binding_ledger_id,
+    binding_ledger_fingerprint: input.binding_ledger_fingerprint,
     logical_sequence: Number.isInteger(input.logical_sequence) ? input.logical_sequence : 0,
     execution_plan_prepared: status === 'PREPARED_SIMULATION',
     executable: false,

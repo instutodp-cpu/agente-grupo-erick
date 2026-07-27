@@ -14,15 +14,23 @@ const EXECUTION_PLAN_AUDIT_FIELDS = Object.freeze([
   'estimated_budget', 'side_effect_classifications', 'stop_condition_types', 'compensation_types',
   'stage_type_counts', 'parallel_stage_count', 'optional_stage_count', 'approval_stage_count',
   'estimated_input_tokens', 'estimated_output_tokens', 'estimated_total_tokens', 'estimated_total_cost_minor_units',
-  'dependency_graph_validated', 'stage_manifest_validated', 'status', 'decision', 'next_state', 'blockers',
-  'reason_codes', 'logical_sequence', 'simulation', 'production_blocked', 'executed', 'validator_version'
+  'dependency_graph_validated', 'stage_manifest_validated', 'references_bound_in_simulation', 'status', 'decision',
+  'next_state', 'blockers', 'reason_codes', 'logical_sequence', 'simulation', 'production_blocked', 'executed',
+  'validator_version'
 ]);
 
+// pr100's provenance/scope keys are bare 'provenance'/'scope', not 'authorization_provenance'/
+// 'authorization_scope' -- the underscore-joined longer forms trip the same forbidden-key segment
+// scan that execution-registry-snapshot-reference.js's own REGISTRY_ENTITY_KEYS already had to
+// avoid for the identical reason.
 const FINGERPRINT_KEYS = Object.freeze([
   'request', 'authz', 'evidence_bundle', 'planning_result', 'orchestration_plan', 'task', 'dependency_graph',
-  'stage_manifest', 'execution_plan'
+  'stage_manifest', 'execution_plan', 'provenance', 'scope', 'registry_snapshot', 'binding_ledger'
 ]);
-const COUNT_KEYS = Object.freeze(['stage_count', 'dependency_count', 'binding_count', 'stop_condition_count', 'compensation_count']);
+const COUNT_KEYS = Object.freeze([
+  'stage_count', 'dependency_count', 'binding_count', 'stop_condition_count', 'compensation_count',
+  'validated_binding_count', 'blocked_binding_count'
+]);
 const BUDGET_KEYS = Object.freeze(['estimated_total_tokens', 'estimated_total_cost_minor_units']);
 const STAGE_TYPES_MAX_KEYS = 20;
 
@@ -90,6 +98,7 @@ function validateExecutionPlanAudit(audit) {
   if (!Number.isInteger(audit.logical_sequence) || audit.logical_sequence < 0) errors.push('logical_sequence_invalid');
   if (typeof audit.dependency_graph_validated !== 'boolean') errors.push('dependency_graph_validated_must_be_boolean');
   if (typeof audit.stage_manifest_validated !== 'boolean') errors.push('stage_manifest_validated_must_be_boolean');
+  if (typeof audit.references_bound_in_simulation !== 'boolean') errors.push('references_bound_in_simulation_must_be_boolean');
   if (audit.simulation !== true) errors.push('simulation_must_be_true');
   if (audit.production_blocked !== true) errors.push('production_blocked_must_be_true');
   if (audit.executed !== false) errors.push('executed_must_be_false');
@@ -128,7 +137,11 @@ function buildExecutionPlanAudit(input = {}) {
       task: result.task_fingerprint || NOT_AVAILABLE_FINGERPRINT,
       dependency_graph: result.dependency_graph_fingerprint || NOT_AVAILABLE_FINGERPRINT,
       stage_manifest: input.stageManifestFingerprint || NOT_AVAILABLE_FINGERPRINT,
-      execution_plan: result.execution_plan_fingerprint || NOT_AVAILABLE_FINGERPRINT
+      execution_plan: result.execution_plan_fingerprint || NOT_AVAILABLE_FINGERPRINT,
+      provenance: result.authorization_provenance_fingerprint || NOT_AVAILABLE_FINGERPRINT,
+      scope: result.authorization_scope_fingerprint || NOT_AVAILABLE_FINGERPRINT,
+      registry_snapshot: result.registry_snapshot_fingerprint || NOT_AVAILABLE_FINGERPRINT,
+      binding_ledger: result.binding_ledger_fingerprint || NOT_AVAILABLE_FINGERPRINT
     },
     tenant_binding: { tenant_id: result.tenant_id || 'tenant_not_available' },
     organization_binding: { organization_id: result.organization_id || 'organization_not_available' },
@@ -141,7 +154,9 @@ function buildExecutionPlanAudit(input = {}) {
       dependency_count: Number.isInteger(result.dependency_count) ? result.dependency_count : 0,
       binding_count: Number.isInteger(result.binding_count) ? result.binding_count : 0,
       stop_condition_count: Number.isInteger(result.stop_condition_count) ? result.stop_condition_count : 0,
-      compensation_count: Number.isInteger(result.compensation_count) ? result.compensation_count : 0
+      compensation_count: Number.isInteger(result.compensation_count) ? result.compensation_count : 0,
+      validated_binding_count: Number.isInteger(input.validatedBindingCount) ? input.validatedBindingCount : 0,
+      blocked_binding_count: Number.isInteger(input.blockedBindingCount) ? input.blockedBindingCount : 0
     },
     estimated_budget: {
       estimated_total_tokens: Number.isInteger(result.estimated_total_tokens) ? result.estimated_total_tokens : 0,
@@ -166,6 +181,7 @@ function buildExecutionPlanAudit(input = {}) {
     logical_sequence: Number.isInteger(input.logicalSequence) ? input.logicalSequence : 0,
     dependency_graph_validated: result.dependency_graph_validated === true,
     stage_manifest_validated: input.stageManifestValidated === true,
+    references_bound_in_simulation: result.references_bound_in_simulation === true,
     simulation: true,
     production_blocked: true,
     executed: false,

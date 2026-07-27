@@ -1,6 +1,6 @@
 'use strict';
 
-const { isNonEmptyString, isPlainObject } = require('./read-only-adapter-contract');
+const { isPlainObject } = require('./read-only-adapter-contract');
 const { stablePayload } = require('./agent-identity-contract');
 const { PLAN_GENERATED_STATUSES: PLANNER_PLAN_GENERATED_STATUSES } = require('./orchestrator-planning-result');
 const {
@@ -19,6 +19,11 @@ const { EXECUTION_PLAN_STATUSES, buildExecutionPlanContract } = require('./execu
 const { buildExecutionPlanResult } = require('./execution-plan-result');
 const { buildExecutionPlanAudit } = require('./execution-plan-audit');
 const { buildExecutionPlanPackage, computeExecutionPlanPackageFingerprint } = require('./execution-plan-package-integrity');
+const {
+  buildBindingLedgerForPlan, validateProvenanceCrossChecks, validateScopeCrossChecks, validateSnapshotCrossChecks
+} = require('./execution-reference-binding-validator');
+const { buildExecutionReferenceBindingResult } = require('./execution-reference-binding-result');
+const { buildExecutionReferenceBindingAudit } = require('./execution-reference-binding-audit');
 
 function safeFingerprint(value) {
   try {
@@ -109,6 +114,9 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   const stopConditionRefs = request.stop_condition_references;
   const compensationRefs = request.compensation_references;
   const stageManifestRef = request.stage_manifest_reference;
+  const provenanceRef = request.authorization_provenance_reference;
+  const scopeRef = request.authorization_scope_reference;
+  const snapshotRef = request.registry_snapshot_reference;
   const logicalSequence = request.logical_sequence;
   const executionPlanId = planRef.plan_id;
 
@@ -150,9 +158,14 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   // 9-13. tenant / organização / projeto / sessão / agent, across every reference carrying them
   // (now including stage_manifest_reference -- pr99's own manifest is bound exactly like every
   // other reference in the request).
+  // pr100: actorId/authorizationScopeId are sourced from the request's own AuthorizationScopeReference
+  // (already structurally valid from step 1-2) -- never from context, and never re-derived once
+  // scope cross-checks below confirm this scope is the correct one for this decision/canonical
+  // identity.
   const canonical = {
     tenantId: authzRef.tenant_id, organizationId: authzRef.organization_id, agentId: authzRef.agent_id,
-    projectId: authzRef.project_id, sessionId: authzRef.session_reference_id
+    projectId: authzRef.project_id, sessionId: authzRef.session_reference_id,
+    actorId: scopeRef.actor_id, authorizationScopeId: scopeRef.authorization_scope_id
   };
   const bindingChecks = [
     ['orchestrator_decision_reference', decisionRef, 'session_reference_id'],
@@ -180,6 +193,63 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   if (modelRef.decision === 'BLOCKED') return buildOutcome(request, 'MODEL_BLOCKED', ['model_selection_reference_blocked'], context);
   if (toolRefs.some((reference) => reference.decision === 'BLOCKED')) return buildOutcome(request, 'TOOL_BLOCKED', ['tool_decision_reference_blocked'], context);
   if (workflowRef.decision === 'BLOCKED') return buildOutcome(request, 'WORKFLOW_BLOCKED', ['workflow_decision_reference_blocked'], context);
+
+  // pr100 (Problema 1-3): authorization provenance, authorization scope, and registry snapshot are
+  // validated as a contiguous block right after the pre-existing tenant/organization/agent/project/
+  // session and blocked-decision gates above, and before every manifest/dependency/budget check
+  // below that this PR did not move -- a documented, scoped judgment call in the same spirit as
+  // PR #99's own precedence compromise (see docs), rather than a full positional reorder of a
+  // 700-line function against every pre-existing regression fixture.
+  const provenanceMismatch = validateProvenanceCrossChecks(provenanceRef, { authzRef, planningRef, planRef, taskRef, budget, scopeRef, canonical });
+  if (provenanceMismatch) return buildOutcome(request, provenanceMismatch.status, [provenanceMismatch.reason], context);
+
+  const scopeMismatch = validateScopeCrossChecks(scopeRef, {
+    authzRef, canonical, planRef, taskRef, stageRecords: stageManifestRef.stage_records, budget, provenanceRef
+  });
+  if (scopeMismatch) return buildOutcome(request, scopeMismatch.status, [scopeMismatch.reason], context);
+
+  // Registry entity fingerprints this evaluation can already compute without waiting for the
+  // later manifest/dependency-graph cross-check blocks below -- every one of these references is
+  // already structurally valid from step 1-2, so its own self-declared fingerprint field (or, for
+  // AuthorizationProvenanceReference, which carries no self-fingerprint field by design, its
+  // externally-computed one) is safe to read now.
+  //
+  // execution_plan_request is deliberately fingerprinted over the request's own *shallow* identity
+  // fields only -- never the entire request object. Every nested reference this request carries
+  // (stage_manifest, dependency_graph, provenance, scope, budget, idempotency, task, planning
+  // result, orchestration plan, ...) already has its own dedicated tamper check elsewhere in this
+  // engine or is one of this snapshot's own other six entities; fingerprinting the whole request
+  // here would mean this fingerprint embeds every one of those nested fingerprints as a string
+  // value, which then gets embedded again as a BindingRecord field, then the BindingLedger, then
+  // the ExecutionPlanPackage, then plan/result/audit -- each layer re-serializing the same content
+  // as an escaped string inside a string, compounding into a multi-hundred-KB fingerprint per
+  // plan. Every other fingerprint in this codebase fingerprints one bounded record for exactly
+  // this reason; this one now does too.
+  const depGraphRefForSnapshot = request.dependency_graph_reference;
+  const requestShallowIdentity = {
+    execution_plan_request_id: request.execution_plan_request_id,
+    execution_plan_request_version: request.execution_plan_request_version,
+    correlation_id: request.correlation_id,
+    causation_id: request.causation_id,
+    trace_id: request.trace_id,
+    logical_sequence: request.logical_sequence,
+    expected_registry_version: request.expected_registry_version,
+    validator_version: request.validator_version
+  };
+  const registryEntityFingerprints = {
+    execution_plan_request: safeFingerprint(requestShallowIdentity),
+    stage_manifest: stageManifestRef.manifest_fingerprint,
+    dependency_graph: depGraphRefForSnapshot.graph_fingerprint,
+    provenance: safeFingerprint(provenanceRef),
+    scope: scopeRef.scope_fingerprint,
+    execution_plan_budget: budget.budget_fingerprint,
+    idempotency_policy: idempotency.idempotency_fingerprint
+  };
+  const snapshotMismatch = validateSnapshotCrossChecks(snapshotRef, {
+    canonical, executionPlanRequestId: request.execution_plan_request_id, executionPlanId,
+    entityFingerprints: registryEntityFingerprints
+  });
+  if (snapshotMismatch) return buildOutcome(request, snapshotMismatch.status, [snapshotMismatch.reason], context);
 
   // plan/planning-result id agreement (moved up from its old late position -- it only needs data
   // already available at this point, and the required precedence table places TASK_BLOCKED near
@@ -397,15 +467,15 @@ function evaluateExecutionPlanRequest(request, context = {}) {
     return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['task_reference_fingerprint_mismatch'], context);
   }
 
-  // versão (side-channel, mirroring every prior PR's own registry-version check pattern).
-  if (isNonEmptyString(context.currentRegistryVersion) && context.currentRegistryVersion !== request.expected_registry_version) {
-    return buildOutcome(request, 'VERSION_BLOCKED', ['expected_registry_version_mismatch'], context);
-  }
+  // pr100: context is never read for any decisional condition -- registry_snapshot_reference
+  // (validated above, step 5) is the sole source of registry-version agreement now, replacing the
+  // last context.currentRegistryVersion side-channel this engine ever had (context.dependencyRecords
+  // was already removed in pr98fix). A dedicated test proves context.currentRegistryVersion,
+  // context.authorizationScope, context.bindingRecords, and context.anything are all inert.
 
-  // escopo autorizado -- this PR's request carries no standalone AuthorizationScope object of
-  // its own (PR #97's AuthorizationScope never travels through ExecutionPlanRequest); the
-  // tenant/organization/project/session/agent bindings already checked above are what this PR
-  // has available to represent "authorized scope." See docs "Limitações".
+  // escopo autorizado: pr100's AuthorizationScopeReference (validated above, step 4) is now the
+  // real source of authorized scope, replacing the tenant/organization/project/session/agent
+  // bindings-only substitute this PR's own predecessor relied on. See docs.
 
   // orçamento: validado, e as estimativas dos estágios (agora reais, nunca zeradas) devem
   // concordar exatamente com o planning result, o orchestration plan e o próprio budget --
@@ -517,6 +587,26 @@ function evaluateExecutionPlanRequest(request, context = {}) {
     }
   }
 
+  // pr100 (steps 13-14): every already-computed ExecutionPlanStageBinding is wrapped into a
+  // BindingRecord, reference-level BindingRecords are appended for the scope/provenance/snapshot/
+  // manifest/dependency-graph/idempotency/stop-conditions/compensations this evaluation already
+  // validated above, and the whole set is consolidated into one BindingLedger. This never applies
+  // a binding, resolves a reference's content, or authorizes/starts execution -- only validates
+  // and records.
+  // request_fingerprint on IdempotencyPolicyReference predates this PR's own registry snapshot
+  // envelope and is never cross-checked against the live request here -- see docs "Limitações".
+  const ledger = buildBindingLedgerForPlan({
+    stageBindings: bindings, provenanceRef, scopeRef, snapshotRef, stageManifestRef,
+    depGraphRef, idempotency, stopConditions: stopConditionRefs, compensations: compensationRefs,
+    canonical, executionPlanId, executionPlanRequestId: request.execution_plan_request_id, authzRef, logicalSequence,
+    planFingerprint: planRef.plan_fingerprint, validStageIds: stages.map((s) => s.execution_stage_id)
+  });
+  if (ledger.references_bound_in_simulation !== true) {
+    return buildOutcome(request, 'REFERENCE_BINDING_BLOCKED', ['reference_binding_not_fully_bound'], context, {
+      stages, bindings, dependencies, estimatedInputTokens, estimatedOutputTokens, estimatedTotalTokens, estimatedTotalCost, ledger
+    });
+  }
+
   // approval: mirrors PR #95/#97's own WAITING_APPROVAL_SIMULATION-style pattern. A plan whose
   // approval_stage_ids are non-empty still waits, even though HUMAN_APPROVAL_STAGE stages are now
   // sourced from the manifest rather than derived -- the Authorization Decision already
@@ -524,13 +614,13 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   // human approval PR #94's own planning result declared this plan still needs.
   if (planningRef.approval_stage_ids.length > 0) {
     return buildOutcome(request, 'WAITING_APPROVAL_REFERENCE', ['waiting_for_stage_approval_reference'], context, {
-      stages, bindings, dependencies, estimatedInputTokens, estimatedOutputTokens, estimatedTotalTokens, estimatedTotalCost
+      stages, bindings, dependencies, estimatedInputTokens, estimatedOutputTokens, estimatedTotalTokens, estimatedTotalCost, ledger
     });
   }
 
   // gerar execution plan, resultado, auditoria.
   return buildOutcome(request, 'EXECUTION_PLAN_PREPARED_SIMULATION', ['execution_plan_prepared_simulation_only'], context, {
-    stages, bindings, dependencies, estimatedInputTokens, estimatedOutputTokens, estimatedTotalTokens, estimatedTotalCost
+    stages, bindings, dependencies, estimatedInputTokens, estimatedOutputTokens, estimatedTotalTokens, estimatedTotalCost, ledger
   });
 }
 
@@ -551,6 +641,9 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
   const idempotency = isPlainObject(requestSafe.idempotency_policy_reference) ? requestSafe.idempotency_policy_reference : {};
   const dependencyGraphRef = isPlainObject(requestSafe.dependency_graph_reference) ? requestSafe.dependency_graph_reference : {};
   const stageManifestRef = isPlainObject(requestSafe.stage_manifest_reference) ? requestSafe.stage_manifest_reference : {};
+  const provenanceRef = isPlainObject(requestSafe.authorization_provenance_reference) ? requestSafe.authorization_provenance_reference : {};
+  const scopeRef = isPlainObject(requestSafe.authorization_scope_reference) ? requestSafe.authorization_scope_reference : {};
+  const snapshotRef = isPlainObject(requestSafe.registry_snapshot_reference) ? requestSafe.registry_snapshot_reference : {};
 
   const logicalSequence = Number.isInteger(requestSafe.logical_sequence) ? requestSafe.logical_sequence : 0;
   const executionPlanId = planRef.plan_id || 'plan_not_available';
@@ -560,6 +653,11 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
   const stopConditions = Array.isArray(requestSafe.stop_condition_references) ? requestSafe.stop_condition_references : [];
   const compensations = Array.isArray(requestSafe.compensation_references) ? requestSafe.compensation_references : [];
   const stageManifestFingerprint = stageManifestRef.manifest_fingerprint || 'fingerprint_not_available';
+  // AuthorizationProvenanceReference carries no self-fingerprint field by design (see docs) --
+  // its fingerprint is always computed externally here, the same way memory_fingerprint/
+  // context_fingerprint already are for other referenceless-fingerprint objects.
+  const provenanceFingerprint = isPlainObject(requestSafe.authorization_provenance_reference) ? safeFingerprint(provenanceRef) : 'fingerprint_not_available';
+  const ledger = materialized && isPlainObject(materialized.ledger) ? materialized.ledger : {};
 
   const requestFingerprint = isPlainObject(request) ? safeFingerprint(request) : 'fingerprint_not_available';
 
@@ -596,6 +694,12 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     stop_condition_fingerprints: stopConditions.map((c) => c.condition_fingerprint),
     compensation_reference_ids: compensations.map((c) => c.compensation_reference_id),
     compensation_fingerprints: compensations.map((c) => c.compensation_fingerprint),
+    authorization_provenance_fingerprint: provenanceFingerprint,
+    authorization_scope_fingerprint: scopeRef.scope_fingerprint,
+    registry_snapshot_fingerprint: snapshotRef.snapshot_fingerprint,
+    binding_ledger_fingerprint: ledger.ledger_fingerprint,
+    binding_record_ids: Array.isArray(ledger.binding_record_ids) ? ledger.binding_record_ids : [],
+    binding_record_fingerprints: Array.isArray(ledger.binding_records) ? ledger.binding_records.map((r) => r.binding_record_fingerprint) : [],
     estimated_input_tokens: materialized ? materialized.estimatedInputTokens : 0,
     estimated_output_tokens: materialized ? materialized.estimatedOutputTokens : 0,
     estimated_total_tokens: materialized ? materialized.estimatedTotalTokens : 0,
@@ -637,7 +741,11 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     workflow_reference_id: workflowRef.reference_id || null,
     budget_reference_id: budget.execution_budget_id || 'execution_budget_not_available',
     idempotency_reference_id: idempotency.idempotency_reference_id || 'idempotency_reference_not_available',
-    execution_scope_reference_id: executionPlanId,
+    // pr100 fix: previously the execution plan's own id, standing in for a real authorized scope
+    // -- now the actual AuthorizationScopeReference this plan was bound against (docs: "O campo
+    // execution_scope_reference_id aponta para o AuthorizationScopeReference real, nunca para o
+    // próprio Execution Plan.").
+    execution_scope_reference_id: scopeRef.authorization_scope_reference_id || 'authorization_scope_reference_not_available',
     stage_manifest_reference_id: stageManifestRef.stage_manifest_reference_id || 'stage_manifest_reference_not_available',
     stage_manifest_fingerprint: stageManifestFingerprint,
     authorization_fingerprint: authzRef.authorization_decision_fingerprint || 'fingerprint_not_available',
@@ -654,6 +762,14 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     budget_fingerprint: budget.budget_fingerprint || 'fingerprint_not_available',
     idempotency_fingerprint: idempotency.idempotency_fingerprint || 'fingerprint_not_available',
     plan_fingerprint: executionPlanFingerprint,
+    authorization_provenance_reference_id: provenanceRef.authorization_provenance_reference_id || 'authorization_provenance_reference_not_available',
+    authorization_provenance_fingerprint: provenanceFingerprint,
+    authorization_scope_reference_id: scopeRef.authorization_scope_reference_id || 'authorization_scope_reference_not_available',
+    authorization_scope_fingerprint: scopeRef.scope_fingerprint || 'fingerprint_not_available',
+    registry_snapshot_reference_id: snapshotRef.registry_snapshot_reference_id || 'registry_snapshot_reference_not_available',
+    registry_snapshot_fingerprint: snapshotRef.snapshot_fingerprint || 'fingerprint_not_available',
+    binding_ledger_id: ledger.binding_ledger_id || 'binding_ledger_not_available',
+    binding_ledger_fingerprint: ledger.ledger_fingerprint || 'fingerprint_not_available',
     logical_sequence: logicalSequence
   });
 
@@ -686,6 +802,14 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     stage_manifest_reference_id: stageManifestRef.stage_manifest_reference_id,
     stage_manifest_fingerprint: stageManifestFingerprint,
     execution_plan_fingerprint: executionPlanFingerprint,
+    authorization_provenance_reference_id: provenanceRef.authorization_provenance_reference_id,
+    authorization_provenance_fingerprint: provenanceFingerprint,
+    authorization_scope_reference_id: scopeRef.authorization_scope_reference_id,
+    authorization_scope_fingerprint: scopeRef.scope_fingerprint,
+    registry_snapshot_reference_id: snapshotRef.registry_snapshot_reference_id,
+    registry_snapshot_fingerprint: snapshotRef.snapshot_fingerprint,
+    binding_ledger_id: ledger.binding_ledger_id,
+    binding_ledger_fingerprint: ledger.ledger_fingerprint,
     registry_version: requestSafe.expected_registry_version,
     stage_count: stages.length,
     dependency_count: dependencies.length,
@@ -725,10 +849,39 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     optionalStageCount: stages.filter((s) => s.optional === true).length,
     approvalStageCount: stages.filter((s) => s.approval_required === true).length,
     estimatedInputTokens: materialized ? materialized.estimatedInputTokens : 0,
-    estimatedOutputTokens: materialized ? materialized.estimatedOutputTokens : 0
+    estimatedOutputTokens: materialized ? materialized.estimatedOutputTokens : 0,
+    validatedBindingCount: Number.isInteger(ledger.validated_binding_count) ? ledger.validated_binding_count : 0,
+    blockedBindingCount: Number.isInteger(ledger.blocked_binding_count) ? ledger.blocked_binding_count : 0
   });
 
-  return { plan, result, audit };
+  // pr100: the ledger status this evaluation actually reached, translated into the same
+  // *_BLOCKED/REFERENCES_BOUND_SIMULATION vocabulary the ledger itself already uses -- a plan
+  // blocked for any OTHER reason (budget, dependency, idempotency, etc.) still produces a
+  // structurally valid binding result/audit reflecting whatever ledger state existed at that
+  // point (empty if the plan never reached binding-ledger construction).
+  const bindingLedgerStatus = ledger.ledger_status || 'VALIDATION_FAILED';
+  const bindingResult = buildExecutionReferenceBindingResult({
+    binding_result_id: `${requestSafe.execution_plan_request_id || 'execution_plan_request_not_available'}-binding-result`,
+    execution_plan_request_id: requestSafe.execution_plan_request_id || 'execution_plan_request_not_available',
+    execution_plan_id: executionPlanId,
+    binding_ledger_id: ledger.binding_ledger_id || 'binding_ledger_not_available',
+    binding_ledger_fingerprint: ledger.ledger_fingerprint || 'fingerprint_not_available',
+    tenant_id: authzRef.tenant_id || 'tenant_not_available',
+    organization_id: authzRef.organization_id || 'organization_not_available',
+    project_id: authzRef.project_id || 'project_not_available',
+    session_reference_id: authzRef.session_reference_id || 'session_not_available',
+    agent_id: authzRef.agent_id || 'agent_not_available',
+    actor_id: scopeRef.actor_id || 'actor_not_available',
+    status: bindingLedgerStatus,
+    reason_codes: reasonCodes,
+    logical_sequence: logicalSequence
+  });
+
+  const bindingAudit = buildExecutionReferenceBindingAudit({
+    ledger, provenanceRef, scopeRef, snapshotRef, provenanceFingerprint, reasonCodes
+  });
+
+  return { plan, result, audit, bindingResult, bindingAudit };
 }
 
 module.exports = {
