@@ -1,6 +1,6 @@
 'use strict';
 
-const { isNonEmptyString, isPlainObject } = require('./read-only-adapter-contract');
+const { isPlainObject } = require('./read-only-adapter-contract');
 const { stablePayload } = require('./agent-identity-contract');
 const {
   validateExecutionAuthorizationRequest, isOrchestratorDecisionReady, isEvidenceBundleReady
@@ -10,6 +10,40 @@ const { computeTaskReferenceFingerprint } = require('./execution-authorization-t
 const { APPROVAL_READY_STATES } = require('./execution-authorization-approval-reference');
 const { AUTHORIZATION_STATUSES, buildExecutionAuthorizationDecision } = require('./execution-authorization-decision');
 const { buildExecutionAuthorizationAudit } = require('./execution-authorization-audit');
+
+// pr101: the real sequential order evaluateExecutionAuthorizationRequest() below already checks
+// its domains in (steps 3, 4, 5-10, 12, 13, 14, 15, 16, 17, 18, 19) -- BINDINGS folds together both
+// the tenant/organization/project/session identity-binding checks (steps 5-9) and the plan/planning
+// consistency checks (step 10), matching the single 'bindings_validated' flag the contract already
+// exposes (there is no separate 'plan_validated' field). Every call site below tags itself with
+// exactly which of these it reached, so buildDecisionForRequest() never has to guess a stage back
+// out of a `status` string alone -- several statuses (TENANT_BLOCKED, BUDGET_BLOCKED, ...) are
+// reachable both from an early orchestrator/evidence-bundle translation AND from this module's own
+// later native check, and only the call site itself knows honestly which one actually happened.
+const AUTHORIZATION_VALIDATION_STAGE_ORDER = Object.freeze([
+  'orchestrator_decision_validated', 'evidence_bundle_validated', 'bindings_validated',
+  'fingerprints_validated', 'actor_validated', 'role_validated', 'scope_validated',
+  'risk_validated', 'approval_validated', 'budget_validated', 'expiration_validated'
+]);
+
+// `reachedFlag` is either 'REQUEST' (nothing past request-contract validation was ever reached),
+// the name of the flag whose own check blocked (that flag is false unless `pending` -- everything
+// strictly before it is true, everything at or after it is false), or 'SUCCESS' (every domain in
+// AUTHORIZATION_VALIDATION_STAGE_ORDER was genuinely reached and passed, including a case like DENY
+// where every domain validated and only the final policy veto blocked).
+function deriveAuthorizationValidationFlags(reachedFlag, { pending = false } = {}) {
+  if (reachedFlag === 'SUCCESS') {
+    return AUTHORIZATION_VALIDATION_STAGE_ORDER.reduce((flags, flag) => { flags[flag] = true; return flags; }, {});
+  }
+  const blockedIndex = reachedFlag === 'REQUEST' ? -1 : AUTHORIZATION_VALIDATION_STAGE_ORDER.indexOf(reachedFlag);
+  const flags = {};
+  AUTHORIZATION_VALIDATION_STAGE_ORDER.forEach((flag, index) => {
+    if (index < blockedIndex) flags[flag] = true;
+    else if (index === blockedIndex) flags[flag] = pending !== true;
+    else flags[flag] = false;
+  });
+  return flags;
+}
 
 function safeFingerprint(value) {
   try {
@@ -59,7 +93,7 @@ function evaluateExecutionAuthorizationRequest(request, context = {}) {
   // 1-2. request contract shape, including simulation_context as one of its nested fields.
   const requestValidation = validateExecutionAuthorizationRequest(request);
   if (!requestValidation.valid) {
-    return buildOutcome(request, 'VALIDATION_FAILED', ['execution_authorization_request_invalid'], context);
+    return buildOutcome(request, 'VALIDATION_FAILED', ['execution_authorization_request_invalid'], context, 'REQUEST');
   }
 
   const decisionRef = request.orchestrator_decision_reference;
@@ -78,19 +112,19 @@ function evaluateExecutionAuthorizationRequest(request, context = {}) {
   // 3. decisão do Orchestrator (PR #95).
   const orchestratorTranslated = translateOrchestratorStatus(decisionRef.status);
   if (orchestratorTranslated) {
-    return buildOutcome(request, orchestratorTranslated, [`orchestrator_decision_status::${decisionRef.status}`], context);
+    return buildOutcome(request, orchestratorTranslated, [`orchestrator_decision_status::${decisionRef.status}`], context, 'orchestrator_decision_validated');
   }
   if (!isOrchestratorDecisionReady(decisionRef)) {
-    return buildOutcome(request, 'VALIDATION_FAILED', ['orchestrator_decision_reference_inconsistent'], context);
+    return buildOutcome(request, 'VALIDATION_FAILED', ['orchestrator_decision_reference_inconsistent'], context, 'orchestrator_decision_validated');
   }
 
   // 4. readiness evidence bundle (PR #96).
   const bundleTranslated = translateEvidenceBundleStatus(bundleRef.bundle_status);
   if (bundleTranslated) {
-    return buildOutcome(request, bundleTranslated, [`readiness_evidence_bundle_status::${bundleRef.bundle_status}`], context);
+    return buildOutcome(request, bundleTranslated, [`readiness_evidence_bundle_status::${bundleRef.bundle_status}`], context, 'evidence_bundle_validated');
   }
   if (!isEvidenceBundleReady(bundleRef)) {
-    return buildOutcome(request, 'VALIDATION_FAILED', ['readiness_evidence_bundle_reference_inconsistent'], context);
+    return buildOutcome(request, 'VALIDATION_FAILED', ['readiness_evidence_bundle_reference_inconsistent'], context, 'evidence_bundle_validated');
   }
 
   // 5-9. tenant / organização / agent / projeto / sessão, across every object carrying identity.
@@ -110,42 +144,43 @@ function evaluateExecutionAuthorizationRequest(request, context = {}) {
   ];
   for (const [label, reference, options] of bindingChecks) {
     const mismatch = checkBinding(reference, canonical, label, options);
-    if (mismatch) return buildOutcome(request, mismatch.status, [mismatch.reason], context);
+    if (mismatch) return buildOutcome(request, mismatch.status, [mismatch.reason], context, 'bindings_validated');
   }
 
   // 10. plan e planning result.
   const planIds = [decisionRef.plan_id, bundleRef.plan_id, planningRef.plan_id, planRef.plan_id, taskRef.plan_id];
   if (planIds.some((id) => id !== planIds[0])) {
-    return buildOutcome(request, 'PLAN_BLOCKED', ['plan_id_inconsistent_across_references'], context);
+    return buildOutcome(request, 'PLAN_BLOCKED', ['plan_id_inconsistent_across_references'], context, 'bindings_validated');
   }
   const planningResultIds = [decisionRef.planning_result_id, bundleRef.planning_result_id, planningRef.planning_result_id, taskRef.planning_result_id];
   if (planningResultIds.some((id) => id !== planningResultIds[0])) {
-    return buildOutcome(request, 'PLAN_BLOCKED', ['planning_result_id_inconsistent_across_references'], context);
+    return buildOutcome(request, 'PLAN_BLOCKED', ['planning_result_id_inconsistent_across_references'], context, 'bindings_validated');
   }
 
-  // 11. versão (side-channel, mirroring PR #95/#96's own registry-version check pattern).
-  if (isNonEmptyString(context.currentRegistryVersion) && context.currentRegistryVersion !== request.expected_registry_version) {
-    return buildOutcome(request, 'VERSION_BLOCKED', ['expected_registry_version_mismatch'], context);
-  }
+  // 11. versão -- pr101: context.currentRegistryVersion was this boundary's last remaining
+  // side-channel read, removed entirely (mirrors an earlier PR's own removal of the identical
+  // side-channel from the sibling execution plan module, and this same PR's removal from the
+  // sibling orchestrator decision module). `context` is retained as a parameter only for
+  // backward compatibility; nothing in this file reads it anymore.
 
   // 12. fingerprints (plan_fingerprint agreement between planning result and plan reference, and
   // task_reference's own fingerprint recomputed and compared -- tamper detection, exactly like
   // PR #96's evidence references).
   if (planningRef.plan_fingerprint !== planRef.plan_fingerprint) {
-    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['plan_fingerprint_mismatch_between_planning_result_and_plan_reference'], context);
+    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['plan_fingerprint_mismatch_between_planning_result_and_plan_reference'], context, 'fingerprints_validated');
   }
   if (computeTaskReferenceFingerprint(taskRef) !== taskRef.task_fingerprint) {
-    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['task_reference_fingerprint_mismatch'], context);
+    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['task_reference_fingerprint_mismatch'], context, 'fingerprints_validated');
   }
 
   // 13. ator.
   if (!isActorFullyVerified(actor)) {
-    return buildOutcome(request, 'ACTOR_BLOCKED', ['actor_not_fully_verified'], context);
+    return buildOutcome(request, 'ACTOR_BLOCKED', ['actor_not_fully_verified'], context, 'actor_validated');
   }
 
   // 14. papel.
   if (scope.allowed_actor_roles.length === 0 || !scope.allowed_actor_roles.includes(actor.actor_role)) {
-    return buildOutcome(request, 'ROLE_BLOCKED', ['actor_role_not_authorized_by_scope'], context);
+    return buildOutcome(request, 'ROLE_BLOCKED', ['actor_role_not_authorized_by_scope'], context, 'role_validated');
   }
 
   // 15. escopo. An empty allowed-id list never authorizes anything ("escopo vazio não concede
@@ -160,19 +195,19 @@ function evaluateExecutionAuthorizationRequest(request, context = {}) {
   ];
   for (const [allowedList, value, reason] of scopeChecks) {
     if (allowedList.length === 0 || !allowedList.includes(value)) {
-      return buildOutcome(request, 'SCOPE_BLOCKED', [reason], context);
+      return buildOutcome(request, 'SCOPE_BLOCKED', [reason], context, 'scope_validated');
     }
   }
   if (planningRef.selected_tool_reference_ids.length > 0) {
     const missingTool = planningRef.selected_tool_reference_ids.find((id) => !scope.allowed_tool_reference_ids.includes(id));
-    if (missingTool) return buildOutcome(request, 'SCOPE_BLOCKED', ['tool_reference_not_in_scope'], context);
+    if (missingTool) return buildOutcome(request, 'SCOPE_BLOCKED', ['tool_reference_not_in_scope'], context, 'scope_validated');
   }
   if (planningRef.selected_workflow_reference_ids.length > 0) {
     const missingWorkflow = planningRef.selected_workflow_reference_ids.find((id) => !scope.allowed_workflow_reference_ids.includes(id));
-    if (missingWorkflow) return buildOutcome(request, 'SCOPE_BLOCKED', ['workflow_reference_not_in_scope'], context);
+    if (missingWorkflow) return buildOutcome(request, 'SCOPE_BLOCKED', ['workflow_reference_not_in_scope'], context, 'scope_validated');
   }
   if (!scope.allowed_task_types.includes(taskRef.task_type)) {
-    return buildOutcome(request, 'SCOPE_BLOCKED', ['task_type_not_in_scope'], context);
+    return buildOutcome(request, 'SCOPE_BLOCKED', ['task_type_not_in_scope'], context, 'scope_validated');
   }
 
   // 16. risco. The risk classification being authorized now comes exclusively from
@@ -187,31 +222,31 @@ function evaluateExecutionAuthorizationRequest(request, context = {}) {
   // practice today, kept only as belt-and-suspenders per the spec's explicit instruction that
   // both must block in this PR.
   if (taskRef.external_side_effect_reference === true) {
-    return buildOutcome(request, 'RISK_BLOCKED', ['external_side_effect_reference_not_allowed'], context);
+    return buildOutcome(request, 'RISK_BLOCKED', ['external_side_effect_reference_not_allowed'], context, 'risk_validated');
   }
   if (taskRef.irreversible_reference === true) {
-    return buildOutcome(request, 'RISK_BLOCKED', ['irreversible_reference_not_allowed'], context);
+    return buildOutcome(request, 'RISK_BLOCKED', ['irreversible_reference_not_allowed'], context, 'risk_validated');
   }
   if (riskClassification === 'RESTRICTED') {
-    return buildOutcome(request, 'RISK_BLOCKED', ['restricted_risk_always_blocks'], context);
+    return buildOutcome(request, 'RISK_BLOCKED', ['restricted_risk_always_blocks'], context, 'risk_validated');
   }
   if (!scope.allowed_risk_classifications.includes(riskClassification)) {
-    return buildOutcome(request, 'RISK_BLOCKED', ['risk_classification_not_in_scope'], context);
+    return buildOutcome(request, 'RISK_BLOCKED', ['risk_classification_not_in_scope'], context, 'risk_validated');
   }
   if (riskClassification === 'HIGH' && !HIGH_RISK_COMPATIBLE_ROLES.includes(actor.actor_role)) {
-    return buildOutcome(request, 'RISK_BLOCKED', ['high_risk_requires_compatible_role'], context);
+    return buildOutcome(request, 'RISK_BLOCKED', ['high_risk_requires_compatible_role'], context, 'risk_validated');
   }
   // CRITICAL risk requires a declared, compatible approval mechanism -- an approval reference
   // that says NOT_REQUIRED for a critical-risk action is itself a risk-level failure, not
   // something to merely wait on. A PENDING or APPROVED_SIMULATION approval is compatible and
   // is fully resolved by the dedicated approval step (17) below.
   if (riskClassification === 'CRITICAL' && approval.approval_state === 'NOT_REQUIRED') {
-    return buildOutcome(request, 'RISK_BLOCKED', ['critical_risk_requires_a_declared_approval_mechanism'], context);
+    return buildOutcome(request, 'RISK_BLOCKED', ['critical_risk_requires_a_declared_approval_mechanism'], context, 'risk_validated');
   }
 
   // 17. aprovação.
   if (['DENIED', 'EXPIRED_LOGICAL', 'CONFLICTED'].includes(approval.approval_state)) {
-    return buildOutcome(request, 'APPROVAL_BLOCKED', [`approval_state::${approval.approval_state}`], context);
+    return buildOutcome(request, 'APPROVAL_BLOCKED', [`approval_state::${approval.approval_state}`], context, 'approval_validated');
   }
   if (approval.approval_state === 'PENDING') {
     return buildWaitingApproval(request, context);
@@ -219,25 +254,25 @@ function evaluateExecutionAuthorizationRequest(request, context = {}) {
 
   // 18. orçamento autorizado.
   if (budget.budget_authorization_validated !== true) {
-    return buildOutcome(request, 'BUDGET_BLOCKED', ['budget_authorization_not_validated'], context);
+    return buildOutcome(request, 'BUDGET_BLOCKED', ['budget_authorization_not_validated'], context, 'budget_validated');
   }
 
   // 19. expiração lógica.
   if (expiration.expired_logically === true) {
-    return buildOutcome(request, 'EXPIRED_AUTHORIZATION', ['authorization_expired_logically'], context);
+    return buildOutcome(request, 'EXPIRED_AUTHORIZATION', ['authorization_expired_logically'], context, 'expiration_validated');
   }
 
   // final policy gate, mirroring PR #95's own last-step DENY veto.
   if (policy.allow_authorized_simulation !== true) {
-    return buildOutcome(request, 'DENY', ['authorization_policy_disallows_authorized_simulation'], context);
+    return buildOutcome(request, 'DENY', ['authorization_policy_disallows_authorized_simulation'], context, 'SUCCESS');
   }
 
   // 20-21. consolidar blockers (none) e emitir AUTHORIZED_SIMULATION.
-  return buildOutcome(request, 'AUTHORIZED_SIMULATION', ['plan_execution_reference_authorized_simulation_only'], context);
+  return buildOutcome(request, 'AUTHORIZED_SIMULATION', ['plan_execution_reference_authorized_simulation_only'], context, 'SUCCESS');
 }
 
 function buildWaitingApproval(request, context) {
-  const decision = buildDecisionForRequest(request, 'WAITING_APPROVAL_SIMULATION', ['waiting_for_declarative_approval_reference']);
+  const decision = buildDecisionForRequest(request, 'WAITING_APPROVAL_SIMULATION', ['waiting_for_declarative_approval_reference'], 'approval_validated', { pending: true });
   const audit = buildExecutionAuthorizationAudit({
     decision, taskReference: isPlainObject(request) ? request.task_reference : undefined, reasonCodes: decision.reason_codes,
     logicalSequence: request.logical_sequence
@@ -245,8 +280,9 @@ function buildWaitingApproval(request, context) {
   return { decision, audit };
 }
 
-function buildDecisionForRequest(request, status, reasonCodes) {
+function buildDecisionForRequest(request, status, reasonCodes, reachedFlag, flagOptions) {
   const requestSafe = isPlainObject(request) ? request : {};
+  const validationFlags = deriveAuthorizationValidationFlags(reachedFlag, flagOptions);
   const decisionRef = isPlainObject(requestSafe.orchestrator_decision_reference) ? requestSafe.orchestrator_decision_reference : {};
   const bundleRef = isPlainObject(requestSafe.readiness_evidence_bundle_reference) ? requestSafe.readiness_evidence_bundle_reference : {};
   const planRef = isPlainObject(requestSafe.orchestration_plan_reference) ? requestSafe.orchestration_plan_reference : {};
@@ -292,26 +328,30 @@ function buildDecisionForRequest(request, status, reasonCodes) {
     blockers: reasonCodes,
     reason_codes: reasonCodes,
     request_validated: status !== 'VALIDATION_FAILED',
-    orchestrator_decision_validated: true,
-    evidence_bundle_validated: true,
-    bindings_validated: true,
+    orchestrator_decision_validated: validationFlags.orchestrator_decision_validated,
+    evidence_bundle_validated: validationFlags.evidence_bundle_validated,
+    bindings_validated: validationFlags.bindings_validated,
+    // versions_validated has no corresponding check left to gate it -- the registry-version
+    // side-channel this flag used to reflect was removed entirely (see the pr101 comment further
+    // down in evaluateExecutionAuthorizationRequest), so there is nothing left that can ever mark
+    // it false. Vacuously true, same as before, just no longer coupled to a dead check.
     versions_validated: true,
-    fingerprints_validated: true,
-    actor_validated: true,
-    role_validated: true,
-    scope_validated: true,
-    risk_validated: true,
-    approval_validated: true,
-    budget_validated: true,
-    expiration_validated: true,
+    fingerprints_validated: validationFlags.fingerprints_validated,
+    actor_validated: validationFlags.actor_validated,
+    role_validated: validationFlags.role_validated,
+    scope_validated: validationFlags.scope_validated,
+    risk_validated: validationFlags.risk_validated,
+    approval_validated: validationFlags.approval_validated,
+    budget_validated: validationFlags.budget_validated,
+    expiration_validated: validationFlags.expiration_validated,
     task_validated: status !== 'VALIDATION_FAILED',
     task_type_validated: status !== 'VALIDATION_FAILED',
     risk_classification_validated: status !== 'VALIDATION_FAILED'
   });
 }
 
-function buildOutcome(request, status, reasonCodes, context) {
-  const decision = buildDecisionForRequest(request, status, reasonCodes);
+function buildOutcome(request, status, reasonCodes, context, reachedFlag, flagOptions) {
+  const decision = buildDecisionForRequest(request, status, reasonCodes, reachedFlag, flagOptions);
   const audit = buildExecutionAuthorizationAudit({
     decision, taskReference: isPlainObject(request) ? request.task_reference : undefined, reasonCodes,
     logicalSequence: isPlainObject(request) && Number.isInteger(request.logical_sequence) ? request.logical_sequence : 0

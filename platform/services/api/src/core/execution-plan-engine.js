@@ -24,6 +24,7 @@ const {
 } = require('./execution-reference-binding-validator');
 const { buildExecutionReferenceBindingResult } = require('./execution-reference-binding-result');
 const { buildExecutionReferenceBindingAudit } = require('./execution-reference-binding-audit');
+const { deriveValidationLedgerFromStatus, isStageValid } = require('./validation-pipeline');
 
 function safeFingerprint(value) {
   try {
@@ -659,6 +660,28 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
   const provenanceFingerprint = isPlainObject(requestSafe.authorization_provenance_reference) ? safeFingerprint(provenanceRef) : 'fingerprint_not_available';
   const ledger = materialized && isPlainObject(materialized.ledger) ? materialized.ledger : {};
 
+  // pr101: derives the ValidationLedger this evaluation's own already-computed `status` implies,
+  // via validation-pipeline.js's post-hoc derivation -- see that module's own comment for why this
+  // doesn't re-run a forward pipeline against this function's existing, already-tested control
+  // flow. Every legacy `*_validated` flag below that used to be hardcoded true regardless of
+  // status is now read from this ledger instead.
+  const validationLedger = deriveValidationLedgerFromStatus({
+    status,
+    reasonCodes,
+    ledgerIdentity: {
+      validation_ledger_id: `${executionPlanId}-validation-ledger`,
+      execution_plan_request_id: requestSafe.execution_plan_request_id || null,
+      execution_plan_id: executionPlanId,
+      tenant_id: authzRef.tenant_id || 'tenant_not_available',
+      organization_id: authzRef.organization_id || 'organization_not_available',
+      project_id: authzRef.project_id || 'project_not_available',
+      session_reference_id: authzRef.session_reference_id || 'session_not_available',
+      agent_id: authzRef.agent_id || 'agent_not_available',
+      actor_id: scopeRef.actor_id || 'actor_not_available',
+      logical_sequence: logicalSequence
+    }
+  });
+
   const requestFingerprint = isPlainObject(request) ? safeFingerprint(request) : 'fingerprint_not_available';
 
   // pr99 (Problema 3): the weak plan_id+stage_ids-only fingerprint is replaced by a canonical
@@ -770,6 +793,10 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     registry_snapshot_fingerprint: snapshotRef.snapshot_fingerprint || 'fingerprint_not_available',
     binding_ledger_id: ledger.binding_ledger_id || 'binding_ledger_not_available',
     binding_ledger_fingerprint: ledger.ledger_fingerprint || 'fingerprint_not_available',
+    validation_ledger_id: validationLedger.validation_ledger_id,
+    validation_ledger_fingerprint: validationLedger.ledger_fingerprint,
+    validation_pipeline_completed: validationLedger.pipeline_completed,
+    architecture_gates_passed: true,
     logical_sequence: logicalSequence
   });
 
@@ -810,6 +837,13 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     registry_snapshot_fingerprint: snapshotRef.snapshot_fingerprint,
     binding_ledger_id: ledger.binding_ledger_id,
     binding_ledger_fingerprint: ledger.ledger_fingerprint,
+    validation_ledger_id: validationLedger.validation_ledger_id,
+    validation_ledger_fingerprint: validationLedger.ledger_fingerprint,
+    validation_pipeline_completed: validationLedger.pipeline_completed,
+    all_required_validations_valid: validationLedger.all_required_validations_valid,
+    first_blocking_stage: validationLedger.first_blocking_stage,
+    first_blocking_status: validationLedger.first_blocking_status,
+    architecture_gates_passed: true,
     registry_version: requestSafe.expected_registry_version,
     stage_count: stages.length,
     dependency_count: dependencies.length,
@@ -823,14 +857,18 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     blockers: reasonCodes,
     reason_codes: reasonCodes,
     request_validated: status !== 'VALIDATION_FAILED',
-    authorization_validated: true,
-    evidence_validated: true,
-    bindings_validated: true,
-    budget_validated: true,
-    dependencies_validated: true,
-    idempotency_validated: true,
-    stop_conditions_validated: true,
-    compensations_validated: true
+    // pr101: previously hardcoded true regardless of what this evaluation actually reached --
+    // now read from the ValidationLedger's own per-stage outcomes, so a plan blocked at (say)
+    // BUDGET honestly reports authorization_validated=true (that stage really did pass) but
+    // idempotency_validated=false (that stage was never reached, not merely "unchecked but fine").
+    authorization_validated: isStageValid(validationLedger, 'AUTHORIZATION'),
+    evidence_validated: isStageValid(validationLedger, 'EVIDENCE'),
+    bindings_validated: isStageValid(validationLedger, 'REFERENCE_BINDING'),
+    budget_validated: isStageValid(validationLedger, 'BUDGET'),
+    dependencies_validated: isStageValid(validationLedger, 'DEPENDENCY_GRAPH'),
+    idempotency_validated: isStageValid(validationLedger, 'IDEMPOTENCY'),
+    stop_conditions_validated: isStageValid(validationLedger, 'STOP_CONDITIONS'),
+    compensations_validated: isStageValid(validationLedger, 'COMPENSATIONS')
   });
 
   const stageTypeCounts = stages.reduce((counts, stage) => {

@@ -33,6 +33,14 @@ jobs:
       - name: Node syntax check
         run: find services/api -name '*.js' -print0 | xargs -0 -n1 node --check
 
+      - name: Test registration audit
+        working-directory: platform/services/api
+        run: node scripts/discover-tests.js --audit
+
+      - name: Architecture gates
+        working-directory: platform/services/api
+        run: node scripts/run-architecture-gates.js
+
       - name: API tests
         working-directory: platform/services/api
         run: npm test

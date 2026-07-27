@@ -1,0 +1,187 @@
+'use strict';
+
+// The one module in this whole PR allowed to touch the filesystem -- and only because it is the
+// architecture *gate* itself, invoked exclusively from scripts/run-architecture-gates.js and from
+// test/architecture-gates.test.js, never from any declarative contract or from
+// execution-plan-engine.js/execution-authorization-boundary.js at evaluation time. "Pode usar
+// filesystem somente no script/test de arquitetura, nunca nos contratos runtime."
+const fs = require('node:fs');
+const path = require('node:path');
+const {
+  ALLOWLIST, PATTERN_GATE_IDS, STRUCTURAL_GATE_IDS, scanFileForPatternGates
+} = require('./architecture-gate-rules');
+
+const CORE_DIR = path.join(__dirname);
+const TEST_DIR = path.join(__dirname, '..', '..', 'test');
+const PACKAGE_JSON_PATH = path.join(__dirname, '..', '..', 'package.json');
+const WORKFLOWS_DIR = path.join(__dirname, '..', '..', '..', '..', '.github', 'workflows');
+
+// The explicit, curated manifest of "audited contracts" the structural gates
+// (SIMULATION_FLAG_REQUIRED/PRODUCTION_BLOCKED_REQUIRED/ROLLOUT_ZERO_REQUIRED/
+// FINGERPRINT_COVERAGE_REQUIRED/VERSION_COVERAGE_REQUIRED/EXACT_FIELDS_REQUIRED) check --
+// "Usar manifesto explícito de contratos auditados para evitar heurística frágil." Scoped to the
+// Execution Plan / Authorization Boundary / Reference Binding / Validation lineage this PR and its
+// immediate predecessors (PR #94-#101) built, not the entire 280-file codebase history.
+const AUDITED_CONTRACTS_MANIFEST = Object.freeze([
+  { module: './execution-plan-request', fieldsExport: 'EXECUTION_PLAN_REQUEST_FIELDS', hasVersion: true, versionField: 'execution_plan_request_version', hasFingerprint: false },
+  { module: './execution-plan-contract', fieldsExport: 'EXECUTION_PLAN_CONTRACT_FIELDS', safeFlagsExport: 'EXECUTION_PLAN_CONTRACT_SAFE_FLAGS', hasVersion: true, versionField: 'execution_plan_version', hasFingerprint: true, fingerprintField: 'plan_fingerprint' },
+  { module: './execution-plan-result', fieldsExport: 'EXECUTION_PLAN_RESULT_FIELDS', safeFlagsExport: 'EXECUTION_PLAN_RESULT_SAFE_FLAGS', hasVersion: false, hasFingerprint: true, fingerprintField: 'execution_plan_fingerprint' },
+  { module: './execution-plan-stage', fieldsExport: 'EXECUTION_PLAN_STAGE_FIELDS', hasVersion: true, versionField: 'execution_stage_version', hasFingerprint: false },
+  { module: './execution-plan-stage-binding', fieldsExport: 'EXECUTION_PLAN_STAGE_BINDING_FIELDS', safeFlagsExport: 'EXECUTION_PLAN_STAGE_BINDING_SAFE_FLAGS', hasVersion: true, versionField: 'binding_version', hasFingerprint: true, fingerprintField: 'binding_fingerprint' },
+  { module: './execution-plan-dependency-graph-reference', fieldsExport: 'DEPENDENCY_GRAPH_REFERENCE_FIELDS', safeFlagsExport: 'DEPENDENCY_GRAPH_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'dependency_graph_reference_version', hasFingerprint: true, fingerprintField: 'graph_fingerprint' },
+  { module: './execution-plan-budget', fieldsExport: 'EXECUTION_PLAN_BUDGET_FIELDS', hasVersion: true, versionField: 'execution_budget_version', hasFingerprint: true, fingerprintField: 'budget_fingerprint' },
+  { module: './execution-plan-idempotency', fieldsExport: 'EXECUTION_PLAN_IDEMPOTENCY_FIELDS', safeFlagsExport: 'EXECUTION_PLAN_IDEMPOTENCY_SAFE_FLAGS', hasVersion: true, versionField: 'idempotency_reference_version', hasFingerprint: true, fingerprintField: 'idempotency_fingerprint' },
+  { module: './execution-plan-stop-condition', fieldsExport: 'EXECUTION_PLAN_STOP_CONDITION_FIELDS', safeFlagsExport: 'EXECUTION_PLAN_STOP_CONDITION_SAFE_FLAGS', hasVersion: true, versionField: 'stop_condition_version', hasFingerprint: true, fingerprintField: 'condition_fingerprint' },
+  { module: './execution-plan-compensation-reference', fieldsExport: 'EXECUTION_PLAN_COMPENSATION_REFERENCE_FIELDS', safeFlagsExport: 'EXECUTION_PLAN_COMPENSATION_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'compensation_reference_version', hasFingerprint: true, fingerprintField: 'compensation_fingerprint' },
+  { module: './orchestrator-stage-manifest-reference', fieldsExport: 'STAGE_MANIFEST_REFERENCE_FIELDS', safeFlagsExport: 'STAGE_MANIFEST_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'stage_manifest_reference_version', hasFingerprint: true, fingerprintField: 'manifest_fingerprint' },
+  { module: './execution-authorization-provenance-reference', fieldsExport: 'AUTHORIZATION_PROVENANCE_REFERENCE_FIELDS', safeFlagsExport: 'AUTHORIZATION_PROVENANCE_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'authorization_provenance_reference_version', hasFingerprint: false },
+  { module: './execution-authorization-scope-reference', fieldsExport: 'AUTHORIZATION_SCOPE_REFERENCE_FIELDS', safeFlagsExport: 'AUTHORIZATION_SCOPE_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'authorization_scope_reference_version', hasFingerprint: true, fingerprintField: 'scope_fingerprint' },
+  { module: './execution-registry-snapshot-reference', fieldsExport: 'REGISTRY_SNAPSHOT_REFERENCE_FIELDS', safeFlagsExport: 'REGISTRY_SNAPSHOT_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'registry_snapshot_reference_version', hasFingerprint: true, fingerprintField: 'snapshot_fingerprint' },
+  { module: './execution-reference-binding-record', fieldsExport: 'BINDING_RECORD_FIELDS', safeFlagsExport: 'BINDING_RECORD_SAFE_FLAGS', hasVersion: true, versionField: 'binding_record_version', hasFingerprint: true, fingerprintField: 'binding_record_fingerprint' },
+  { module: './execution-reference-binding-ledger', fieldsExport: 'BINDING_LEDGER_FIELDS', safeFlagsExport: 'BINDING_LEDGER_SAFE_FLAGS', hasVersion: true, versionField: 'binding_ledger_version', hasFingerprint: true, fingerprintField: 'ledger_fingerprint' },
+  { module: './execution-reference-binding-result', fieldsExport: 'BINDING_RESULT_FIELDS', hasVersion: true, versionField: 'binding_result_version', hasFingerprint: true, fingerprintField: 'result_fingerprint' },
+  { module: './validation-outcome', fieldsExport: 'VALIDATION_OUTCOME_FIELDS', safeFlagsExport: 'VALIDATION_OUTCOME_SAFE_FLAGS', hasVersion: false, hasFingerprint: true, fingerprintField: 'output_fingerprint' },
+  { module: './validation-ledger', fieldsExport: 'VALIDATION_LEDGER_FIELDS', safeFlagsExport: 'VALIDATION_LEDGER_SAFE_FLAGS', hasVersion: true, versionField: 'validation_ledger_version', hasFingerprint: true, fingerprintField: 'ledger_fingerprint' }
+]);
+
+function readDirFiles(dir, extension) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter((f) => f.endsWith(extension)).sort();
+}
+
+// --- Pattern gates (src/core only -- tests legitimately reference these patterns as literal
+// strings to test the detector itself; see architecture-gate-rules.js's own header comment). ------
+function runPatternGates() {
+  const findings = [];
+  for (const fileName of readDirFiles(CORE_DIR, '.js')) {
+    const content = fs.readFileSync(path.join(CORE_DIR, fileName), 'utf8');
+    findings.push(...scanFileForPatternGates(`src/core/${fileName}`, content));
+  }
+  return findings;
+}
+
+// --- Structural gates (explicit manifest) ---------------------------------------------------------
+function runStructuralGates() {
+  const findings = [];
+  for (const entry of AUDITED_CONTRACTS_MANIFEST) {
+    let mod;
+    try {
+      mod = require(entry.module);
+    } catch (error) {
+      findings.push({ gate: 'EXACT_FIELDS_REQUIRED', file: entry.module, description: `module failed to load::${error.message}` });
+      continue;
+    }
+
+    if (!Array.isArray(mod[entry.fieldsExport]) || mod[entry.fieldsExport].length === 0) {
+      findings.push({ gate: 'EXACT_FIELDS_REQUIRED', file: entry.module, description: `missing or empty exact-fields export ${entry.fieldsExport}` });
+    }
+
+    if (entry.hasVersion) {
+      const fields = mod[entry.fieldsExport] || [];
+      if (!fields.includes(entry.versionField)) {
+        findings.push({ gate: 'VERSION_COVERAGE_REQUIRED', file: entry.module, description: `exact fields do not include declared version field ${entry.versionField}` });
+      }
+    }
+
+    if (entry.hasFingerprint) {
+      const fields = mod[entry.fieldsExport] || [];
+      if (!fields.includes(entry.fingerprintField)) {
+        findings.push({ gate: 'FINGERPRINT_COVERAGE_REQUIRED', file: entry.module, description: `exact fields do not include declared fingerprint field ${entry.fingerprintField}` });
+      }
+    }
+
+    if (entry.safeFlagsExport) {
+      const safeFlags = mod[entry.safeFlagsExport];
+      if (!safeFlags || typeof safeFlags !== 'object') {
+        findings.push({ gate: 'SIMULATION_FLAG_REQUIRED', file: entry.module, description: `missing safe-flags export ${entry.safeFlagsExport}` });
+      } else {
+        if ('simulation' in safeFlags && safeFlags.simulation !== true) {
+          findings.push({ gate: 'SIMULATION_FLAG_REQUIRED', file: entry.module, description: 'safe flags declare simulation but do not force it true' });
+        }
+        if ('production_blocked' in safeFlags && safeFlags.production_blocked !== true) {
+          findings.push({ gate: 'PRODUCTION_BLOCKED_REQUIRED', file: entry.module, description: 'safe flags declare production_blocked but do not force it true' });
+        }
+        if ('rollout_percentage' in safeFlags && safeFlags.rollout_percentage !== 0) {
+          findings.push({ gate: 'ROLLOUT_ZERO_REQUIRED', file: entry.module, description: 'safe flags declare rollout_percentage but do not force it 0' });
+        }
+      }
+    }
+  }
+  return findings;
+}
+
+// --- Test registration gate ------------------------------------------------------------------------
+//
+// Compares the test files that actually exist on disk against the test files package.json's own
+// `test` script would run. Delegates to scripts/discover-tests.js's own comparison logic so there
+// is exactly one implementation of "what counts as a registered test file", not two that could
+// drift apart.
+function runTestRegistrationGate() {
+  const findings = [];
+  const discoverTests = require(path.join(__dirname, '..', '..', 'scripts', 'discover-tests.js'));
+  const discovered = discoverTests.discoverTestFiles(TEST_DIR);
+  if (discovered.length === 0) {
+    findings.push({ gate: 'TEST_REGISTRATION_REQUIRED', file: 'test/', description: 'zero test files discovered' });
+  }
+  const packageJson = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
+  const testScript = (packageJson.scripts && packageJson.scripts.test) || '';
+  const usesDiscovery = testScript.includes('discover-tests') || testScript.includes('test/*.test.js') || testScript.includes('--test');
+  if (!usesDiscovery) {
+    findings.push({ gate: 'TEST_REGISTRATION_REQUIRED', file: 'package.json', description: 'npm test script does not appear to run every test/*.test.js file' });
+  }
+  return findings;
+}
+
+// --- Validator registration gate ---------------------------------------------------------------
+function runValidatorRegistrationGate() {
+  const findings = [];
+  const { executionPlanValidationRegistry } = require('./execution-plan-validation-registry');
+  let validators;
+  try {
+    validators = executionPlanValidationRegistry.getAllValidators();
+  } catch (error) {
+    findings.push({ gate: 'VALIDATOR_REGISTRATION_REQUIRED', file: 'validation-registry.js', description: `registry failed to build::${error.message}` });
+    return findings;
+  }
+  if (!Array.isArray(validators) || validators.length === 0) {
+    findings.push({ gate: 'VALIDATOR_REGISTRATION_REQUIRED', file: 'validation-registry.js', description: 'no validators registered' });
+  }
+  return findings;
+}
+
+// --- Status taxonomy gate -----------------------------------------------------------------------
+function runStatusTaxonomyGate() {
+  const findings = [];
+  const { TAXONOMY_STATUSES, PRECEDENCE_ORDER, getTaxonomyMetadata } = require('./validation-taxonomy');
+  for (const status of TAXONOMY_STATUSES) {
+    if (!PRECEDENCE_ORDER.includes(status)) {
+      findings.push({ gate: 'STATUS_TAXONOMY_REQUIRED', file: 'validation-taxonomy.js', description: `status ${status} missing from precedence order` });
+    }
+    if (!getTaxonomyMetadata(status)) {
+      findings.push({ gate: 'STATUS_TAXONOMY_REQUIRED', file: 'validation-taxonomy.js', description: `status ${status} missing taxonomy metadata` });
+    }
+  }
+  return findings;
+}
+
+function runAllGates() {
+  return [
+    ...runPatternGates(),
+    ...runStructuralGates(),
+    ...runTestRegistrationGate(),
+    ...runValidatorRegistrationGate(),
+    ...runStatusTaxonomyGate()
+  ];
+}
+
+module.exports = {
+  AUDITED_CONTRACTS_MANIFEST,
+  PATTERN_GATE_IDS,
+  STRUCTURAL_GATE_IDS,
+  runAllGates,
+  runPatternGates,
+  runStatusTaxonomyGate,
+  runStructuralGates,
+  runTestRegistrationGate,
+  runValidatorRegistrationGate
+};

@@ -1,6 +1,6 @@
 'use strict';
 
-const { isNonEmptyString, isPlainObject } = require('./read-only-adapter-contract');
+const { isPlainObject } = require('./read-only-adapter-contract');
 const { stablePayload } = require('./agent-identity-contract');
 const { validateOrchestratorDecisionRequest } = require('./orchestrator-decision-request');
 const { PLAN_GENERATED_STATUSES: PLANNER_PLAN_GENERATED_STATUSES } = require('./orchestrator-planning-result');
@@ -217,9 +217,10 @@ function evaluateOrchestratorDecisionRequest(request, context = {}) {
   if (planningRef.plan_id !== planRef.plan_id || planningRef.plan_fingerprint !== planRef.plan_fingerprint) {
     return blocked('FINGERPRINT_BLOCKED', 'FINGERPRINT_BLOCKER', 'orchestration_plan_reference', planRef.plan_id, 'plan_fingerprint_mismatch_between_planning_result_and_plan_reference');
   }
-  if (isNonEmptyString(context.currentRegistryVersion) && context.currentRegistryVersion !== request.expected_registry_version) {
-    return blocked('VERSION_BLOCKED', 'VERSION_BLOCKER', 'decision_request', request.decision_request_id, 'expected_registry_version_mismatch');
-  }
+  // pr101: context.currentRegistryVersion was this engine's last remaining side-channel read --
+  // removed entirely (mirrors this PR's own removal of the identical side-channel from the sibling
+  // execution plan module). `context` is retained as a parameter only for backward compatibility;
+  // nothing in this file reads it anymore.
 
   // 10. status do Planner.
   if (!PLANNER_PLAN_GENERATED_STATUSES.includes(planningRef.status)) {
