@@ -11,7 +11,8 @@ const EXECUTION_PLAN_CONTRACT_FIELDS = Object.freeze([
   'tenant_id', 'organization_id', 'project_id', 'session_reference_id', 'ordered_stage_ids', 'dependency_ids',
   'stage_binding_ids', 'stop_condition_ids', 'compensation_reference_ids', 'memory_selection_reference_id',
   'context_assembly_reference_id', 'model_selection_reference_id', 'tool_reference_ids', 'workflow_reference_id',
-  'budget_reference_id', 'idempotency_reference_id', 'execution_scope_reference_id', 'authorization_fingerprint',
+  'budget_reference_id', 'idempotency_reference_id', 'execution_scope_reference_id', 'stage_manifest_reference_id',
+  'stage_manifest_fingerprint', 'authorization_fingerprint',
   'orchestrator_decision_fingerprint', 'readiness_bundle_fingerprint', 'planning_result_fingerprint',
   'orchestration_plan_fingerprint', 'task_fingerprint', 'memory_fingerprint', 'context_fingerprint',
   'model_fingerprint', 'tool_fingerprints', 'workflow_fingerprint', 'budget_fingerprint',
@@ -23,9 +24,9 @@ const EXECUTION_PLAN_CONTRACT_FIELDS = Object.freeze([
 const EXECUTION_PLAN_STATUSES = Object.freeze([
   'PREPARED_SIMULATION', 'WAITING_APPROVAL_REFERENCE', 'BLOCKED', 'VALIDATION_FAILED', 'TENANT_BLOCKED',
   'ORGANIZATION_BLOCKED', 'PROJECT_BLOCKED', 'SESSION_BLOCKED', 'TASK_BLOCKED', 'AUTHORIZATION_BLOCKED',
-  'EVIDENCE_BLOCKED', 'MEMORY_BLOCKED', 'CONTEXT_BLOCKED', 'MODEL_BLOCKED', 'TOOL_BLOCKED', 'WORKFLOW_BLOCKED',
-  'BUDGET_BLOCKED', 'DEPENDENCY_BLOCKED', 'IDEMPOTENCY_BLOCKED', 'STOP_CONDITION_BLOCKED', 'COMPENSATION_BLOCKED',
-  'FINGERPRINT_BLOCKED', 'VERSION_BLOCKED', 'CONFLICT_BLOCKED'
+  'EVIDENCE_BLOCKED', 'STAGE_MANIFEST_BLOCKED', 'MEMORY_BLOCKED', 'CONTEXT_BLOCKED', 'MODEL_BLOCKED', 'TOOL_BLOCKED',
+  'WORKFLOW_BLOCKED', 'BUDGET_BLOCKED', 'DEPENDENCY_BLOCKED', 'IDEMPOTENCY_BLOCKED', 'STOP_CONDITION_BLOCKED',
+  'COMPENSATION_BLOCKED', 'FINGERPRINT_BLOCKED', 'VERSION_BLOCKED', 'CONFLICT_BLOCKED'
 ]);
 
 const NULLABLE_REFERENCE_ID_FIELDS = Object.freeze(['model_selection_reference_id', 'workflow_reference_id', 'model_fingerprint', 'workflow_fingerprint']);
@@ -37,8 +38,8 @@ const ORDERED_LIST_FIELDS = Object.freeze([
 
 const FINGERPRINT_FIELDS = Object.freeze([
   'authorization_fingerprint', 'orchestrator_decision_fingerprint', 'readiness_bundle_fingerprint',
-  'planning_result_fingerprint', 'orchestration_plan_fingerprint', 'task_fingerprint', 'memory_fingerprint',
-  'context_fingerprint', 'budget_fingerprint', 'idempotency_fingerprint', 'plan_fingerprint'
+  'planning_result_fingerprint', 'orchestration_plan_fingerprint', 'task_fingerprint', 'stage_manifest_fingerprint',
+  'memory_fingerprint', 'context_fingerprint', 'budget_fingerprint', 'idempotency_fingerprint', 'plan_fingerprint'
 ]);
 
 // executable is never true in this PR regardless of status -- "Nenhum status deve permitir
@@ -72,7 +73,8 @@ function validateExecutionPlanContract(plan) {
     'execution_plan_id', 'authorization_decision_id', 'orchestrator_decision_id', 'planning_result_id',
     'orchestration_plan_id', 'task_reference_id', 'agent_id', 'tenant_id', 'organization_id', 'project_id',
     'session_reference_id', 'memory_selection_reference_id', 'context_assembly_reference_id', 'budget_reference_id',
-    'idempotency_reference_id', 'execution_scope_reference_id', 'validator_version', ...FINGERPRINT_FIELDS
+    'idempotency_reference_id', 'execution_scope_reference_id', 'stage_manifest_reference_id', 'validator_version',
+    ...FINGERPRINT_FIELDS
   ]) {
     if (!isNonEmptyString(plan[field])) errors.push(`${field}_invalid`);
   }
@@ -136,6 +138,8 @@ function buildExecutionPlanContract(input = {}) {
     budget_reference_id: input.budget_reference_id,
     idempotency_reference_id: input.idempotency_reference_id,
     execution_scope_reference_id: input.execution_scope_reference_id,
+    stage_manifest_reference_id: input.stage_manifest_reference_id,
+    stage_manifest_fingerprint: input.stage_manifest_fingerprint,
     authorization_fingerprint: input.authorization_fingerprint,
     orchestrator_decision_fingerprint: input.orchestrator_decision_fingerprint,
     readiness_bundle_fingerprint: input.readiness_bundle_fingerprint,

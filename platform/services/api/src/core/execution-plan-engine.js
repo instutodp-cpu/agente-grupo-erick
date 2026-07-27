@@ -10,13 +10,15 @@ const {
   isOrchestratorDecisionReady, isEvidenceBundleReady
 } = require('./execution-authorization-request');
 const { computeTaskReferenceFingerprint } = require('./execution-authorization-task-reference');
-const { STAGE_TYPES, buildExecutionPlanStage } = require('./execution-plan-stage');
+const { buildExecutionPlanStage } = require('./execution-plan-stage');
 const { buildExecutionPlanStageBinding } = require('./execution-plan-stage-binding');
 const { buildExecutionPlanDependency } = require('./execution-plan-dependency');
 const { computeDependencyGraphReferenceFingerprint } = require('./execution-plan-dependency-graph-reference');
+const { computeManifestFingerprint, computeStageRecordFingerprint } = require('./orchestrator-stage-manifest-reference');
 const { EXECUTION_PLAN_STATUSES, buildExecutionPlanContract } = require('./execution-plan-contract');
 const { buildExecutionPlanResult } = require('./execution-plan-result');
 const { buildExecutionPlanAudit } = require('./execution-plan-audit');
+const { buildExecutionPlanPackage, computeExecutionPlanPackageFingerprint } = require('./execution-plan-package-integrity');
 
 function safeFingerprint(value) {
   try {
@@ -44,9 +46,9 @@ function translateStatus(status, readyValue, translationMap) {
 // carries no such field at all (e.g. DependencyGraphReference has no agent_id in its own
 // exact-fields list), is "not scoped" and is never checked against canonical -- the same pattern
 // PR #95's own engine established for its minimal model/tool/workflow references. sessionField
-// differs because the "full identity" references (decision/bundle/planning-result/plan/task) use
-// session_reference_id, while the PR #94-shaped decision references (memory/context/model/
-// tool/workflow) use session_id.
+// differs because the "full identity" references (decision/bundle/planning-result/plan/task/
+// stage-manifest) use session_reference_id, while the PR #94-shaped decision references
+// (memory/context/model/tool/workflow) use session_id.
 function checkBinding(reference, canonical, label, sessionField = 'session_reference_id') {
   if (!isPlainObject(reference)) return null;
   if (reference.tenant_id !== canonical.tenantId) return { status: 'TENANT_BLOCKED', reason: `${label}_tenant_mismatch` };
@@ -63,18 +65,6 @@ function checkBinding(reference, canonical, label, sessionField = 'session_refer
   return null;
 }
 
-// Derives a uniform stage_type for every materialized stage from which plan-level references
-// are actually present -- orchestration_plan_reference (PR #94/#95) carries only a flat
-// ordered_stage_ids list, with no per-stage type breakdown, so this PR cannot recover a
-// genuinely per-stage stage_type. See docs "Limitações".
-function deriveStageType(modelRef, toolRefs, workflowRef, approvalStageIds, stageId) {
-  if (Array.isArray(approvalStageIds) && approvalStageIds.includes(stageId)) return 'HUMAN_APPROVAL_STAGE';
-  if (isPlainObject(modelRef) && modelRef.status === 'MODEL_SELECTED_SIMULATION') return 'MODEL_REFERENCE_STAGE';
-  if (Array.isArray(toolRefs) && toolRefs.length > 0) return 'TOOL_REFERENCE_STAGE';
-  if (isPlainObject(workflowRef) && workflowRef.status === 'WORKFLOW_REGISTERED_SIMULATION') return 'WORKFLOW_REFERENCE_STAGE';
-  return 'DETERMINISTIC_STAGE';
-}
-
 // Derives side_effect_classification from data already present in the request as proper
 // fingerprinted references (never a loose side-channel, per the lesson from PR #97's fix):
 // task_reference's own external_side_effect_reference/irreversible_reference flags (always
@@ -83,7 +73,7 @@ function deriveStageType(modelRef, toolRefs, workflowRef, approvalStageIds, stag
 // stage and declares itself `required` (the caller's own declaration that the stage changes
 // state) -- independent of whether that same entry's compensation_type is actually non-NONE,
 // so a state-change stage with a NONE-typed compensation is still classified STATE_CHANGE_
-// REFERENCE and can then correctly fail the separate "compensation covers it" check (step 23).
+// REFERENCE and can then correctly fail the separate "compensation covers it" check.
 function deriveSideEffectClassification(taskRef, compensationReferences, stageId) {
   if (taskRef.external_side_effect_reference === true) return 'EXTERNAL_EFFECT_REFERENCE';
   if (taskRef.irreversible_reference === true) return 'IRREVERSIBLE_REFERENCE';
@@ -94,7 +84,9 @@ function deriveSideEffectClassification(taskRef, compensationReferences, stageId
 }
 
 function evaluateExecutionPlanRequest(request, context = {}) {
-  // 1-2. request contract shape, including simulation_context as one of its own nested fields.
+  // 1-2. request contract shape, including simulation_context, dependency_graph_reference, and
+  // stage_manifest_reference as nested fields of the request itself -- no side-channel is ever
+  // consulted here (pr99 continues pr98fix's own "no side-channel" discipline).
   const requestValidation = validateExecutionPlanRequest(request);
   if (!requestValidation.valid) {
     return buildOutcome(request, 'VALIDATION_FAILED', ['execution_plan_request_invalid'], context);
@@ -116,6 +108,7 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   const idempotency = request.idempotency_policy_reference;
   const stopConditionRefs = request.stop_condition_references;
   const compensationRefs = request.compensation_references;
+  const stageManifestRef = request.stage_manifest_reference;
   const logicalSequence = request.logical_sequence;
   const executionPlanId = planRef.plan_id;
 
@@ -154,7 +147,9 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   // 7-8. orchestration plan / task reference -- structural validity already confirmed in step
   // 1-2; consistency is checked below (bindings, plan/planning-result agreement, fingerprints).
 
-  // 9-13. tenant / organização / projeto / sessão / agent, across every reference carrying them.
+  // 9-13. tenant / organização / projeto / sessão / agent, across every reference carrying them
+  // (now including stage_manifest_reference -- pr99's own manifest is bound exactly like every
+  // other reference in the request).
   const canonical = {
     tenantId: authzRef.tenant_id, organizationId: authzRef.organization_id, agentId: authzRef.agent_id,
     projectId: authzRef.project_id, sessionId: authzRef.session_reference_id
@@ -165,6 +160,7 @@ function evaluateExecutionPlanRequest(request, context = {}) {
     ['planning_result_reference', planningRef, 'session_reference_id'],
     ['orchestration_plan_reference', planRef, 'session_reference_id'],
     ['task_reference', taskRef, 'session_reference_id'],
+    ['stage_manifest_reference', stageManifestRef, 'session_reference_id'],
     ['memory_selection_reference', memoryRef, 'session_id'],
     ['context_assembly_reference', contextRef, 'session_id'],
     ['model_selection_reference', modelRef, 'session_id'],
@@ -185,56 +181,73 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   if (toolRefs.some((reference) => reference.decision === 'BLOCKED')) return buildOutcome(request, 'TOOL_BLOCKED', ['tool_decision_reference_blocked'], context);
   if (workflowRef.decision === 'BLOCKED') return buildOutcome(request, 'WORKFLOW_BLOCKED', ['workflow_decision_reference_blocked'], context);
 
-  // 14. versão (side-channel, mirroring every prior PR's own registry-version check pattern).
-  if (isNonEmptyString(context.currentRegistryVersion) && context.currentRegistryVersion !== request.expected_registry_version) {
-    return buildOutcome(request, 'VERSION_BLOCKED', ['expected_registry_version_mismatch'], context);
-  }
-
-  // 15. fingerprints: plan_fingerprint agreement, plus task_reference tamper detection.
-  if (planningRef.plan_fingerprint !== planRef.plan_fingerprint) {
-    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['plan_fingerprint_mismatch_between_planning_result_and_plan_reference'], context);
-  }
-  if (computeTaskReferenceFingerprint(taskRef) !== taskRef.task_fingerprint) {
-    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['task_reference_fingerprint_mismatch'], context);
-  }
+  // plan/planning-result id agreement (moved up from its old late position -- it only needs data
+  // already available at this point, and the required precedence table places TASK_BLOCKED near
+  // the top of the evaluation order).
   if (planningRef.plan_id !== executionPlanId || taskRef.plan_id !== executionPlanId) {
     return buildOutcome(request, 'TASK_BLOCKED', ['task_reference_plan_id_mismatch'], context);
   }
 
-  // 16. escopo autorizado -- this PR's request carries no standalone AuthorizationScope object
-  // of its own (PR #97's AuthorizationScope never travels through ExecutionPlanRequest); the
-  // tenant/organization/project/session/agent bindings already checked in steps 9-13 are what
-  // this PR has available to represent "authorized scope." See docs "Limitações".
-
-  // 17. orçamento.
-  if (budget.budget_validated !== true) {
-    return buildOutcome(request, 'BUDGET_BLOCKED', ['execution_plan_budget_not_validated'], context);
+  // pr99 (Problema 1): StageManifestReference cross-checks. The manifest is the sole source of
+  // truth for stage_type/sequence/references/parallelism/optional/approval/estimates -- the
+  // engine never derives or reconstructs any of it. Only cross-reference agreement with the rest
+  // of the request, and tamper detection, are engine-level concerns; every purely-structural rule
+  // (canonical sequence order, stage_ids/stage_records/stage_count agreement, no duplicates) was
+  // already enforced at construction time by orchestrator-stage-manifest-reference.js, exactly
+  // like PR #98fix's DependencyGraphReference.
+  if (stageManifestRef.planning_result_id !== planningRef.planning_result_id) {
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_planning_result_id_mismatch'], context);
+  }
+  if (stageManifestRef.orchestration_plan_id !== executionPlanId) {
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_orchestration_plan_id_mismatch'], context);
+  }
+  if (stageManifestRef.stage_records.some((record) => record.task_reference_id !== taskRef.task_reference_id)) {
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_record_task_reference_id_mismatch'], context);
+  }
+  // orchestration_plan_reference.ordered_stage_ids and planning_result_reference.stage_ids are
+  // both alphabetically canonicalized lists (PR #94), not semantically ordered -- so equivalence
+  // with the manifest's own stage_sequence-ordered stage_ids is checked as a set, never
+  // positionally.
+  const manifestStageIdSet = new Set(stageManifestRef.stage_ids);
+  const planStageIdSet = new Set(planRef.ordered_stage_ids);
+  const planningStageIdSet = new Set(planningRef.stage_ids);
+  if (manifestStageIdSet.size !== planStageIdSet.size || ![...manifestStageIdSet].every((id) => planStageIdSet.has(id))) {
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_stage_ids_mismatch_orchestration_plan'], context);
+  }
+  if (manifestStageIdSet.size !== planningStageIdSet.size || ![...manifestStageIdSet].every((id) => planningStageIdSet.has(id))) {
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_stage_ids_mismatch_planning_result'], context);
+  }
+  // tamper detection: recompute and compare every fingerprint the manifest itself claims.
+  if (computeManifestFingerprint(stageManifestRef) !== stageManifestRef.manifest_fingerprint) {
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_reference_fingerprint_mismatch'], context);
+  }
+  for (const record of stageManifestRef.stage_records) {
+    if (computeStageRecordFingerprint(record) !== record.stage_fingerprint) {
+      return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', [`stage_record_fingerprint_mismatch::${record.stage_id}`], context);
+    }
   }
 
-  // 18. estágios.
-  const stageIds = planRef.ordered_stage_ids;
-  if (stageIds.length === 0) {
-    return buildOutcome(request, 'BLOCKED', ['no_stages_declared'], context);
-  }
-  const stages = stageIds.map((stageId, index) => {
-    const stageType = deriveStageType(modelRef, toolRefs, workflowRef, planningRef.approval_stage_ids, stageId);
-    const sideEffect = deriveSideEffectClassification(taskRef, compensationRefs, stageId);
-    return buildExecutionPlanStage({
-      execution_stage_id: stageId, execution_plan_id: executionPlanId, source_orchestrator_stage_id: stageId,
-      stage_sequence: index, stage_type: stageType, task_reference_id: taskRef.task_reference_id,
-      agent_reference_id: canonical.agentId, memory_selection_reference_id: memoryRef.reference_id,
-      context_assembly_reference_id: contextRef.reference_id,
-      model_selection_reference_id: stageType === 'MODEL_REFERENCE_STAGE' ? modelRef.reference_id : null,
-      tool_reference_ids: stageType === 'TOOL_REFERENCE_STAGE' ? toolRefs.map((r) => r.reference_id) : [],
-      workflow_reference_id: stageType === 'WORKFLOW_REFERENCE_STAGE' ? workflowRef.reference_id : null,
-      priority: index, parallelizable: false, optional: false,
-      approval_required: stageType === 'HUMAN_APPROVAL_STAGE',
-      side_effect_classification: sideEffect, risk_classification: taskRef.risk_classification,
-      estimated_input_tokens: 0, estimated_output_tokens: 0, estimated_cost_minor_units: 0,
-      maximum_attempts_reference: idempotency.maximum_execution_attempts, timeout_reference: null,
-      stage_status: 'PREPARED_SIMULATION', logical_sequence: logicalSequence
-    });
-  });
+  // estágios: materialized 1:1 from each StageRecord -- no inference, no reconstruction of
+  // stage_type, no zeroing of parallelizable/optional/estimates. The engine can never trade
+  // stage_type, reorder stages semantically, add a model/tool/workflow reference a stage's own
+  // record didn't already declare, or select a different model/tool/workflow.
+  const stages = stageManifestRef.stage_records.map((record) => buildExecutionPlanStage({
+    execution_stage_id: record.stage_id, execution_plan_id: executionPlanId, source_orchestrator_stage_id: record.stage_id,
+    stage_sequence: record.stage_sequence, stage_type: record.stage_type, task_reference_id: record.task_reference_id,
+    agent_reference_id: record.agent_reference_id, memory_selection_reference_id: record.memory_selection_reference_id,
+    context_assembly_reference_id: record.context_assembly_reference_id,
+    model_selection_reference_id: record.model_selection_reference_id,
+    tool_reference_ids: record.tool_reference_ids, workflow_reference_id: record.workflow_reference_id,
+    dependency_ids: record.dependency_reference_ids,
+    priority: record.priority, parallelizable: record.parallelizable, optional: record.optional,
+    approval_required: record.approval_required,
+    side_effect_classification: deriveSideEffectClassification(taskRef, compensationRefs, record.stage_id),
+    risk_classification: taskRef.risk_classification,
+    estimated_input_tokens: record.estimated_input_tokens, estimated_output_tokens: record.estimated_output_tokens,
+    estimated_total_tokens: record.estimated_total_tokens, estimated_cost_minor_units: record.estimated_cost_minor_units,
+    maximum_attempts_reference: idempotency.maximum_execution_attempts, timeout_reference: null,
+    stage_status: 'PREPARED_SIMULATION'
+  }));
 
   if (stages.some((stage) => stage.side_effect_classification === 'EXTERNAL_EFFECT_REFERENCE')) {
     return buildOutcome(request, 'BLOCKED', ['external_effect_not_allowed_in_this_pr'], context);
@@ -255,10 +268,14 @@ function evaluateExecutionPlanRequest(request, context = {}) {
     return buildOutcome(request, 'WORKFLOW_BLOCKED', ['workflow_stage_not_allowed_by_policy'], context);
   }
 
-  // 19. bindings dos estágios: one binding per stage per reference type it actually uses, plus
-  // an authorization/budget binding shared across the whole plan.
+  // bindings: built strictly from each StageRecord's own references -- never a model/tool/
+  // workflow/memory/context binding for a stage whose own record does not declare one, and every
+  // declared reference id must match the single decision object the request actually carries for
+  // that reference type (a stage cannot silently point at "another" model/tool/workflow).
   const bindings = [];
-  for (const stage of stages) {
+  stages.forEach((stage, index) => {
+    const record = stageManifestRef.stage_records[index];
+    const stageAgentId = record.agent_reference_id || canonical.agentId;
     bindings.push(buildExecutionPlanStageBinding({
       binding_id: `${stage.execution_stage_id}-task-binding`, execution_plan_id: executionPlanId,
       execution_stage_id: stage.execution_stage_id, binding_type: 'TASK_BINDING', source_reference_id: taskRef.task_reference_id,
@@ -268,44 +285,63 @@ function evaluateExecutionPlanRequest(request, context = {}) {
     }));
     bindings.push(buildExecutionPlanStageBinding({
       binding_id: `${stage.execution_stage_id}-agent-binding`, execution_plan_id: executionPlanId,
-      execution_stage_id: stage.execution_stage_id, binding_type: 'AGENT_BINDING', source_reference_id: canonical.agentId,
-      source_reference_version: 1, source_reference_fingerprint: safeFingerprint(canonical.agentId),
+      execution_stage_id: stage.execution_stage_id, binding_type: 'AGENT_BINDING', source_reference_id: stageAgentId,
+      source_reference_version: 1, source_reference_fingerprint: safeFingerprint(stageAgentId),
       tenant_id: canonical.tenantId, organization_id: canonical.organizationId, project_id: canonical.projectId,
       session_reference_id: canonical.sessionId, agent_id: canonical.agentId, binding_required: true, binding_validated: true
     }));
-    if (stage.stage_type === 'MODEL_REFERENCE_STAGE') {
+    if (record.memory_selection_reference_id !== null) {
+      bindings.push(buildExecutionPlanStageBinding({
+        binding_id: `${stage.execution_stage_id}-memory-binding`, execution_plan_id: executionPlanId,
+        execution_stage_id: stage.execution_stage_id, binding_type: 'MEMORY_BINDING', source_reference_id: record.memory_selection_reference_id,
+        source_reference_version: 1, source_reference_fingerprint: safeFingerprint(memoryRef),
+        tenant_id: canonical.tenantId, organization_id: canonical.organizationId, project_id: canonical.projectId,
+        session_reference_id: canonical.sessionId, agent_id: canonical.agentId, binding_required: true,
+        binding_validated: record.memory_selection_reference_id === memoryRef.reference_id && memoryRef.decision !== 'BLOCKED'
+      }));
+    }
+    if (record.context_assembly_reference_id !== null) {
+      bindings.push(buildExecutionPlanStageBinding({
+        binding_id: `${stage.execution_stage_id}-context-binding`, execution_plan_id: executionPlanId,
+        execution_stage_id: stage.execution_stage_id, binding_type: 'CONTEXT_BINDING', source_reference_id: record.context_assembly_reference_id,
+        source_reference_version: 1, source_reference_fingerprint: safeFingerprint(contextRef),
+        tenant_id: canonical.tenantId, organization_id: canonical.organizationId, project_id: canonical.projectId,
+        session_reference_id: canonical.sessionId, agent_id: canonical.agentId, binding_required: true,
+        binding_validated: record.context_assembly_reference_id === contextRef.reference_id && contextRef.decision !== 'BLOCKED'
+      }));
+    }
+    if (record.model_selection_reference_id !== null) {
       bindings.push(buildExecutionPlanStageBinding({
         binding_id: `${stage.execution_stage_id}-selection-binding`, execution_plan_id: executionPlanId,
-        execution_stage_id: stage.execution_stage_id, binding_type: 'MODEL_BINDING', source_reference_id: modelRef.reference_id,
+        execution_stage_id: stage.execution_stage_id, binding_type: 'MODEL_BINDING', source_reference_id: record.model_selection_reference_id,
         source_reference_version: 1, source_reference_fingerprint: safeFingerprint(modelRef),
         tenant_id: canonical.tenantId, organization_id: canonical.organizationId, project_id: canonical.projectId,
         session_reference_id: canonical.sessionId, agent_id: canonical.agentId, binding_required: true,
-        binding_validated: modelRef.decision !== 'BLOCKED'
+        binding_validated: record.model_selection_reference_id === modelRef.reference_id && modelRef.decision !== 'BLOCKED'
       }));
     }
-    if (stage.stage_type === 'TOOL_REFERENCE_STAGE') {
-      toolRefs.forEach((toolRef, toolIndex) => {
-        bindings.push(buildExecutionPlanStageBinding({
-          binding_id: `${stage.execution_stage_id}-tool-binding-${toolIndex}`, execution_plan_id: executionPlanId,
-          execution_stage_id: stage.execution_stage_id, binding_type: 'TOOL_BINDING', source_reference_id: toolRef.reference_id,
-          source_reference_version: 1, source_reference_fingerprint: safeFingerprint(toolRef),
-          tenant_id: canonical.tenantId, organization_id: canonical.organizationId, project_id: canonical.projectId,
-          session_reference_id: canonical.sessionId, agent_id: canonical.agentId, binding_required: true,
-          binding_validated: toolRef.decision !== 'BLOCKED'
-        }));
-      });
-    }
-    if (stage.stage_type === 'WORKFLOW_REFERENCE_STAGE') {
+    record.tool_reference_ids.forEach((toolId, toolIndex) => {
+      const toolRef = toolRefs.find((r) => r.reference_id === toolId);
+      bindings.push(buildExecutionPlanStageBinding({
+        binding_id: `${stage.execution_stage_id}-tool-binding-${toolIndex}`, execution_plan_id: executionPlanId,
+        execution_stage_id: stage.execution_stage_id, binding_type: 'TOOL_BINDING', source_reference_id: toolId,
+        source_reference_version: 1, source_reference_fingerprint: safeFingerprint(toolRef || toolId),
+        tenant_id: canonical.tenantId, organization_id: canonical.organizationId, project_id: canonical.projectId,
+        session_reference_id: canonical.sessionId, agent_id: canonical.agentId, binding_required: true,
+        binding_validated: Boolean(toolRef) && toolRef.decision !== 'BLOCKED'
+      }));
+    });
+    if (record.workflow_reference_id !== null) {
       bindings.push(buildExecutionPlanStageBinding({
         binding_id: `${stage.execution_stage_id}-workflow-binding`, execution_plan_id: executionPlanId,
-        execution_stage_id: stage.execution_stage_id, binding_type: 'WORKFLOW_BINDING', source_reference_id: workflowRef.reference_id,
+        execution_stage_id: stage.execution_stage_id, binding_type: 'WORKFLOW_BINDING', source_reference_id: record.workflow_reference_id,
         source_reference_version: 1, source_reference_fingerprint: safeFingerprint(workflowRef),
         tenant_id: canonical.tenantId, organization_id: canonical.organizationId, project_id: canonical.projectId,
         session_reference_id: canonical.sessionId, agent_id: canonical.agentId, binding_required: true,
-        binding_validated: workflowRef.decision !== 'BLOCKED'
+        binding_validated: record.workflow_reference_id === workflowRef.reference_id && workflowRef.decision !== 'BLOCKED'
       }));
     }
-  }
+  });
   bindings.push(buildExecutionPlanStageBinding({
     binding_id: `${executionPlanId}-authz-binding`, execution_plan_id: executionPlanId,
     execution_stage_id: stages[0].execution_stage_id, binding_type: 'AUTHORIZATION_BINDING',
@@ -320,7 +356,12 @@ function evaluateExecutionPlanRequest(request, context = {}) {
     source_reference_id: budget.execution_budget_id, source_reference_version: budget.execution_budget_version,
     source_reference_fingerprint: budget.budget_fingerprint, tenant_id: canonical.tenantId,
     organization_id: canonical.organizationId, project_id: canonical.projectId, session_reference_id: canonical.sessionId,
-    agent_id: canonical.agentId, binding_required: true, binding_validated: budget.budget_validated === true
+    // binding_validated is never coupled to budget.budget_validated here -- the binding only
+    // asserts that the plan is structurally bound to *a* budget reference. Whether that budget is
+    // itself within limits is a separate, more specific check (further below), and must remain
+    // reachable as BUDGET_BLOCKED rather than being masked by the generic BINDING_BLOCKED, per
+    // "usar status específico quando houver causa específica."
+    agent_id: canonical.agentId, binding_required: true, binding_validated: true
   }));
 
   if (policy.fail_on_binding_mismatch === true && bindings.some((binding) => binding.binding_validated !== true)) {
@@ -330,30 +371,77 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   // model/tool/workflow references do not actually carry is a genuine binding mismatch, not a
   // *_BLOCKED status for the reference itself (which is otherwise structurally fine).
   if (
-    planningRef.selected_model_reference_ids.length > 0 && stages.some((s) => s.stage_type === 'MODEL_REFERENCE_STAGE') &&
+    planningRef.selected_model_reference_ids.length > 0 && bindings.some((b) => b.binding_type === 'MODEL_BINDING') &&
     !planningRef.selected_model_reference_ids.includes(modelRef.reference_id)
   ) {
     return buildOutcome(request, 'BINDING_BLOCKED', ['selected_model_reference_id_not_bound'], context);
   }
   if (
-    planningRef.selected_tool_reference_ids.length > 0 && stages.some((s) => s.stage_type === 'TOOL_REFERENCE_STAGE') &&
+    planningRef.selected_tool_reference_ids.length > 0 && bindings.some((b) => b.binding_type === 'TOOL_BINDING') &&
     planningRef.selected_tool_reference_ids.some((id) => !toolRefs.some((r) => r.reference_id === id))
   ) {
     return buildOutcome(request, 'BINDING_BLOCKED', ['selected_tool_reference_id_not_bound'], context);
   }
   if (
-    planningRef.selected_workflow_reference_ids.length > 0 && stages.some((s) => s.stage_type === 'WORKFLOW_REFERENCE_STAGE') &&
+    planningRef.selected_workflow_reference_ids.length > 0 && bindings.some((b) => b.binding_type === 'WORKFLOW_BINDING') &&
     !planningRef.selected_workflow_reference_ids.includes(workflowRef.reference_id)
   ) {
     return buildOutcome(request, 'BINDING_BLOCKED', ['selected_workflow_reference_id_not_bound'], context);
   }
 
-  // 20. dependências (pr98fix). DependencyGraphReference replaces the former
-  // context.dependencyRecords side-channel entirely: every dependency edge now travels through a
-  // fingerprinted, versioned, tenant/organization/project/session-bound reference on the request
-  // itself, structurally guaranteed acyclic/self-dependency-free/fully-referenced at construction
-  // time (execution-plan-dependency-graph-reference.js). context.dependencyRecords is no longer
-  // read anywhere in this file -- a stale or malicious value passed there has zero effect.
+  // fingerprints: plan_fingerprint agreement, plus task_reference tamper detection.
+  if (planningRef.plan_fingerprint !== planRef.plan_fingerprint) {
+    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['plan_fingerprint_mismatch_between_planning_result_and_plan_reference'], context);
+  }
+  if (computeTaskReferenceFingerprint(taskRef) !== taskRef.task_fingerprint) {
+    return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['task_reference_fingerprint_mismatch'], context);
+  }
+
+  // versão (side-channel, mirroring every prior PR's own registry-version check pattern).
+  if (isNonEmptyString(context.currentRegistryVersion) && context.currentRegistryVersion !== request.expected_registry_version) {
+    return buildOutcome(request, 'VERSION_BLOCKED', ['expected_registry_version_mismatch'], context);
+  }
+
+  // escopo autorizado -- this PR's request carries no standalone AuthorizationScope object of
+  // its own (PR #97's AuthorizationScope never travels through ExecutionPlanRequest); the
+  // tenant/organization/project/session/agent bindings already checked above are what this PR
+  // has available to represent "authorized scope." See docs "Limitações".
+
+  // orçamento: validado, e as estimativas dos estágios (agora reais, nunca zeradas) devem
+  // concordar exatamente com o planning result, o orchestration plan e o próprio budget --
+  // nenhuma divergência é ajustada silenciosamente.
+  if (budget.budget_validated !== true) {
+    return buildOutcome(request, 'BUDGET_BLOCKED', ['execution_plan_budget_not_validated'], context);
+  }
+  const estimatedInputTokens = stages.reduce((sum, s) => sum + s.estimated_input_tokens, 0);
+  const estimatedOutputTokens = stages.reduce((sum, s) => sum + s.estimated_output_tokens, 0);
+  const estimatedTotalTokens = stages.reduce((sum, s) => sum + s.estimated_total_tokens, 0);
+  const estimatedTotalCost = stages.reduce((sum, s) => sum + s.estimated_cost_minor_units, 0);
+  if (estimatedTotalTokens !== planningRef.estimated_total_tokens || estimatedTotalCost !== planningRef.estimated_total_cost_minor_units) {
+    return buildOutcome(request, 'BUDGET_BLOCKED', ['stage_estimates_mismatch_planning_result'], context);
+  }
+  if (estimatedTotalTokens !== planRef.estimated_total_tokens || estimatedTotalCost !== planRef.estimated_total_cost_minor_units) {
+    return buildOutcome(request, 'BUDGET_BLOCKED', ['stage_estimates_mismatch_orchestration_plan'], context);
+  }
+  if (
+    estimatedInputTokens !== budget.estimated_input_tokens || estimatedOutputTokens !== budget.estimated_output_tokens ||
+    estimatedTotalTokens !== budget.estimated_total_tokens || estimatedTotalCost !== budget.estimated_total_cost_minor_units
+  ) {
+    return buildOutcome(request, 'BUDGET_BLOCKED', ['stage_estimates_mismatch_execution_plan_budget'], context);
+  }
+  const modelStageCount = stages.filter((s) => s.stage_type === 'MODEL_REFERENCE_STAGE').length;
+  const toolStageCount = stages.filter((s) => s.stage_type === 'TOOL_REFERENCE_STAGE').length;
+  const workflowStageCount = stages.filter((s) => s.stage_type === 'WORKFLOW_REFERENCE_STAGE').length;
+  const parallelStageCount = stages.filter((s) => s.parallelizable === true).length;
+  if (modelStageCount > budget.maximum_model_stages) return buildOutcome(request, 'BUDGET_BLOCKED', ['model_stage_count_exceeds_budget'], context);
+  if (toolStageCount > budget.maximum_tool_stages) return buildOutcome(request, 'BUDGET_BLOCKED', ['tool_stage_count_exceeds_budget'], context);
+  if (workflowStageCount > budget.maximum_workflow_stages) return buildOutcome(request, 'BUDGET_BLOCKED', ['workflow_stage_count_exceeds_budget'], context);
+  if (parallelStageCount > budget.maximum_parallel_stages) return buildOutcome(request, 'BUDGET_BLOCKED', ['parallel_stage_count_exceeds_budget'], context);
+
+  // dependências (pr98fix, augmented by pr99). DependencyGraphReference remains the sole source
+  // of edges; context.dependencyRecords is still never read anywhere in this file. New for pr99:
+  // the graph and the manifest must agree on exactly which dependency ids exist and which stage
+  // each targets, and a PARALLEL_REFERENCE edge's target stage must itself be parallelizable.
   const depGraphRef = request.dependency_graph_reference;
   const depGraphMismatch = checkBinding(depGraphRef, canonical, 'dependency_graph_reference', 'session_reference_id');
   if (depGraphMismatch) return buildOutcome(request, depGraphMismatch.status, [depGraphMismatch.reason], context);
@@ -366,15 +454,39 @@ function evaluateExecutionPlanRequest(request, context = {}) {
   if (depGraphRef.orchestration_plan_id !== planRef.plan_id) {
     return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_orchestration_plan_id_mismatch'], context);
   }
-  const stageIdSet = new Set(stageIds);
+  const stageIdSet = new Set(planRef.ordered_stage_ids);
   const depGraphStageIdSet = new Set(depGraphRef.stage_ids);
-  if (depGraphRef.stage_ids.length !== stageIds.length || ![...depGraphStageIdSet].every((id) => stageIdSet.has(id))) {
+  if (depGraphRef.stage_ids.length !== planRef.ordered_stage_ids.length || ![...depGraphStageIdSet].every((id) => stageIdSet.has(id))) {
     return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_graph_reference_stage_ids_mismatch'], context);
   }
   if (computeDependencyGraphReferenceFingerprint(depGraphRef) !== depGraphRef.graph_fingerprint) {
     return buildOutcome(request, 'FINGERPRINT_BLOCKED', ['dependency_graph_reference_fingerprint_mismatch'], context);
   }
   const dependencyRecords = depGraphRef.dependency_records;
+
+  const manifestDependencyIds = new Set(stageManifestRef.stage_records.flatMap((record) => record.dependency_reference_ids));
+  const graphDependencyIds = new Set(dependencyRecords.map((record) => record.dependency_id));
+  if (manifestDependencyIds.size !== graphDependencyIds.size || ![...manifestDependencyIds].every((id) => graphDependencyIds.has(id))) {
+    return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['stage_manifest_dependency_ids_not_equivalent_to_dependency_graph'], context);
+  }
+  const stageRecordById = new Map(stageManifestRef.stage_records.map((record) => [record.stage_id, record]));
+  for (const dependencyRecord of dependencyRecords) {
+    const toStage = stageRecordById.get(dependencyRecord.to_stage_id);
+    if (!toStage || !toStage.dependency_reference_ids.includes(dependencyRecord.dependency_id)) {
+      return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['dependency_graph_dependency_id_not_present_on_target_stage_record'], context);
+    }
+    const fromStage = stageRecordById.get(dependencyRecord.from_stage_id);
+    if (!fromStage) {
+      return buildOutcome(request, 'STAGE_MANIFEST_BLOCKED', ['dependency_graph_from_stage_not_in_manifest'], context);
+    }
+    if (dependencyRecord.dependency_type === 'PARALLEL_REFERENCE') {
+      if (toStage.parallelizable !== true) {
+        return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['parallel_dependency_target_stage_not_parallelizable'], context);
+      }
+    } else if (fromStage.stage_sequence >= toStage.stage_sequence) {
+      return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['dependency_reverses_planner_semantic_order'], context);
+    }
+  }
   const parallelStageIds = new Set(dependencyRecords.filter((record) => record.dependency_type === 'PARALLEL_REFERENCE').flatMap((record) => [record.from_stage_id, record.to_stage_id]));
   if (parallelStageIds.size > 0 && policy.allow_parallel_stage !== true) {
     return buildOutcome(request, 'DEPENDENCY_BLOCKED', ['parallel_stage_not_allowed_by_policy'], context);
@@ -385,18 +497,18 @@ function evaluateExecutionPlanRequest(request, context = {}) {
     dependency_type: record.dependency_type, required: record.required === true, dependency_validated: true
   }));
 
-  // 21. idempotência.
+  // idempotência.
   if (policy.require_idempotency === true && idempotency.idempotency_validated !== true) {
     return buildOutcome(request, 'IDEMPOTENCY_BLOCKED', ['idempotency_not_validated'], context);
   }
 
-  // 22. condições de parada.
+  // condições de parada.
   if (policy.require_stop_conditions === true && stopConditionRefs.length === 0) {
     return buildOutcome(request, 'STOP_CONDITION_BLOCKED', ['no_stop_conditions_declared'], context);
   }
 
-  // 23. compensações declarativas: every STATE_CHANGE_REFERENCE stage needs at least one
-  // non-NONE compensation reference targeting it.
+  // compensações declarativas: every STATE_CHANGE_REFERENCE stage needs at least one non-NONE
+  // compensation reference targeting it.
   const stateChangeStages = stages.filter((stage) => stage.side_effect_classification === 'STATE_CHANGE_REFERENCE');
   for (const stage of stateChangeStages) {
     const covered = compensationRefs.some((reference) => reference.execution_stage_id === stage.execution_stage_id && reference.compensation_type !== 'NONE');
@@ -405,16 +517,20 @@ function evaluateExecutionPlanRequest(request, context = {}) {
     }
   }
 
-  // approval: mirrors PR #95/#97's own WAITING_APPROVAL_SIMULATION-style pattern.
+  // approval: mirrors PR #95/#97's own WAITING_APPROVAL_SIMULATION-style pattern. A plan whose
+  // approval_stage_ids are non-empty still waits, even though HUMAN_APPROVAL_STAGE stages are now
+  // sourced from the manifest rather than derived -- the Authorization Decision already
+  // represents simulated authorization for *preparation*, never a substitute for the specific
+  // human approval PR #94's own planning result declared this plan still needs.
   if (planningRef.approval_stage_ids.length > 0) {
     return buildOutcome(request, 'WAITING_APPROVAL_REFERENCE', ['waiting_for_stage_approval_reference'], context, {
-      stages, bindings, dependencies
+      stages, bindings, dependencies, estimatedInputTokens, estimatedOutputTokens, estimatedTotalTokens, estimatedTotalCost
     });
   }
 
-  // 24-26. gerar execution plan, resultado, auditoria.
+  // gerar execution plan, resultado, auditoria.
   return buildOutcome(request, 'EXECUTION_PLAN_PREPARED_SIMULATION', ['execution_plan_prepared_simulation_only'], context, {
-    stages, bindings, dependencies
+    stages, bindings, dependencies, estimatedInputTokens, estimatedOutputTokens, estimatedTotalTokens, estimatedTotalCost
   });
 }
 
@@ -434,6 +550,7 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
   const budget = isPlainObject(requestSafe.execution_plan_budget) ? requestSafe.execution_plan_budget : {};
   const idempotency = isPlainObject(requestSafe.idempotency_policy_reference) ? requestSafe.idempotency_policy_reference : {};
   const dependencyGraphRef = isPlainObject(requestSafe.dependency_graph_reference) ? requestSafe.dependency_graph_reference : {};
+  const stageManifestRef = isPlainObject(requestSafe.stage_manifest_reference) ? requestSafe.stage_manifest_reference : {};
 
   const logicalSequence = Number.isInteger(requestSafe.logical_sequence) ? requestSafe.logical_sequence : 0;
   const executionPlanId = planRef.plan_id || 'plan_not_available';
@@ -442,10 +559,57 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
   const dependencies = materialized && Array.isArray(materialized.dependencies) ? materialized.dependencies : [];
   const stopConditions = Array.isArray(requestSafe.stop_condition_references) ? requestSafe.stop_condition_references : [];
   const compensations = Array.isArray(requestSafe.compensation_references) ? requestSafe.compensation_references : [];
+  const stageManifestFingerprint = stageManifestRef.manifest_fingerprint || 'fingerprint_not_available';
 
   const requestFingerprint = isPlainObject(request) ? safeFingerprint(request) : 'fingerprint_not_available';
-  const executionPlanFingerprint = status === 'EXECUTION_PLAN_PREPARED_SIMULATION'
-    ? safeFingerprint({ executionPlanId, stages: stages.map((s) => s.execution_stage_id) })
+
+  // pr99 (Problema 3): the weak plan_id+stage_ids-only fingerprint is replaced by a canonical
+  // package covering the manifest, dependencies, bindings, budget, idempotency, stops,
+  // compensations, and every upstream reference fingerprint -- see execution-plan-package-
+  // integrity.js and docs "Canonical fingerprint versus autenticidade".
+  const executionPlanPackage = buildExecutionPlanPackage({
+    execution_plan_id: executionPlanId,
+    execution_plan_version: 1,
+    authorization_decision_fingerprint: authzRef.authorization_decision_fingerprint,
+    orchestrator_decision_fingerprint: decisionRef.decision_fingerprint,
+    readiness_bundle_fingerprint: bundleRef.bundle_fingerprint,
+    planning_result_fingerprint: planningRef.planning_result_fingerprint,
+    orchestration_plan_fingerprint: planRef.plan_fingerprint,
+    task_fingerprint: taskRef.task_fingerprint,
+    stage_manifest_reference_id: stageManifestRef.stage_manifest_reference_id,
+    stage_manifest_fingerprint: stageManifestFingerprint,
+    dependency_graph_fingerprint: dependencyGraphRef.graph_fingerprint,
+    budget_fingerprint: budget.budget_fingerprint,
+    idempotency_fingerprint: idempotency.idempotency_fingerprint,
+    memory_fingerprint: safeFingerprint(memoryRef),
+    context_fingerprint: safeFingerprint(contextRef),
+    model_fingerprint: isPlainObject(requestSafe.model_selection_reference) ? safeFingerprint(modelRef) : null,
+    tool_fingerprints: toolRefs.map((r) => safeFingerprint(r)),
+    workflow_fingerprint: isPlainObject(requestSafe.workflow_decision_reference) ? safeFingerprint(workflowRef) : null,
+    ordered_stage_ids: stages.map((s) => s.execution_stage_id),
+    stage_fingerprints: Array.isArray(stageManifestRef.stage_records) ? stageManifestRef.stage_records.map((r) => r.stage_fingerprint) : [],
+    dependency_ids: dependencies.map((d) => d.dependency_id),
+    dependency_fingerprints: dependencies.map((d) => d.dependency_fingerprint),
+    binding_ids: bindings.map((b) => b.binding_id),
+    binding_fingerprints: bindings.map((b) => b.binding_fingerprint),
+    stop_condition_ids: stopConditions.map((c) => c.stop_condition_id),
+    stop_condition_fingerprints: stopConditions.map((c) => c.condition_fingerprint),
+    compensation_reference_ids: compensations.map((c) => c.compensation_reference_id),
+    compensation_fingerprints: compensations.map((c) => c.compensation_fingerprint),
+    estimated_input_tokens: materialized ? materialized.estimatedInputTokens : 0,
+    estimated_output_tokens: materialized ? materialized.estimatedOutputTokens : 0,
+    estimated_total_tokens: materialized ? materialized.estimatedTotalTokens : 0,
+    estimated_total_cost_minor_units: materialized ? materialized.estimatedTotalCost : 0,
+    logical_sequence: logicalSequence
+  });
+  // pr99fix (Fix 2): a package awaiting approval is just as fully materialized (stages,
+  // bindings, dependencies, estimates, manifest, dependency graph, budget, idempotency, stop
+  // conditions, compensations) as a prepared one -- it needs a real canonical fingerprint too, so
+  // a future approved package can be compared against the one that was actually reviewed.
+  // `materialized` is only ever passed (truthy) for EXECUTION_PLAN_PREPARED_SIMULATION and
+  // WAITING_APPROVAL_REFERENCE; every earlier blocked status computes no fingerprint here.
+  const executionPlanFingerprint = materialized
+    ? computeExecutionPlanPackageFingerprint(executionPlanPackage)
     : 'fingerprint_not_available';
 
   const plan = buildExecutionPlanContract({
@@ -474,6 +638,8 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     budget_reference_id: budget.execution_budget_id || 'execution_budget_not_available',
     idempotency_reference_id: idempotency.idempotency_reference_id || 'idempotency_reference_not_available',
     execution_scope_reference_id: executionPlanId,
+    stage_manifest_reference_id: stageManifestRef.stage_manifest_reference_id || 'stage_manifest_reference_not_available',
+    stage_manifest_fingerprint: stageManifestFingerprint,
     authorization_fingerprint: authzRef.authorization_decision_fingerprint || 'fingerprint_not_available',
     orchestrator_decision_fingerprint: decisionRef.decision_fingerprint || 'fingerprint_not_available',
     readiness_bundle_fingerprint: bundleRef.bundle_fingerprint || 'fingerprint_not_available',
@@ -490,9 +656,6 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     plan_fingerprint: executionPlanFingerprint,
     logical_sequence: logicalSequence
   });
-
-  const estimatedTotalTokens = stages.reduce((sum, s) => sum + s.estimated_total_tokens, 0);
-  const estimatedTotalCost = stages.reduce((sum, s) => sum + s.estimated_cost_minor_units, 0);
 
   const result = buildExecutionPlanResult({
     result_id: `${requestSafe.execution_plan_request_id || 'execution_plan_request_not_available'}-result`,
@@ -520,6 +683,8 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     orchestration_plan_fingerprint: planRef.plan_fingerprint,
     task_fingerprint: taskRef.task_fingerprint,
     dependency_graph_fingerprint: dependencyGraphRef.graph_fingerprint,
+    stage_manifest_reference_id: stageManifestRef.stage_manifest_reference_id,
+    stage_manifest_fingerprint: stageManifestFingerprint,
     execution_plan_fingerprint: executionPlanFingerprint,
     registry_version: requestSafe.expected_registry_version,
     stage_count: stages.length,
@@ -527,8 +692,10 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     binding_count: bindings.length,
     stop_condition_count: stopConditions.length,
     compensation_count: compensations.length,
-    estimated_total_tokens: estimatedTotalTokens,
-    estimated_total_cost_minor_units: estimatedTotalCost,
+    estimated_input_tokens: materialized ? materialized.estimatedInputTokens : 0,
+    estimated_output_tokens: materialized ? materialized.estimatedOutputTokens : 0,
+    estimated_total_tokens: materialized ? materialized.estimatedTotalTokens : 0,
+    estimated_total_cost_minor_units: materialized ? materialized.estimatedTotalCost : 0,
     blockers: reasonCodes,
     reason_codes: reasonCodes,
     request_validated: status !== 'VALIDATION_FAILED',
@@ -542,9 +709,23 @@ function buildOutcome(request, status, reasonCodes, context, materialized) {
     compensations_validated: true
   });
 
+  const stageTypeCounts = stages.reduce((counts, stage) => {
+    counts[stage.stage_type] = (counts[stage.stage_type] || 0) + 1;
+    return counts;
+  }, {});
+
   const audit = buildExecutionPlanAudit({
     result, plan, stages, stopConditions, compensations, reasonCodes, logicalSequence,
-    dependencyGraphReferenceId: dependencyGraphRef.dependency_graph_reference_id
+    dependencyGraphReferenceId: dependencyGraphRef.dependency_graph_reference_id,
+    stageManifestReferenceId: stageManifestRef.stage_manifest_reference_id,
+    stageManifestFingerprint,
+    stageManifestValidated: result.stage_manifest_validated,
+    stageTypeCounts,
+    parallelStageCount: stages.filter((s) => s.parallelizable === true).length,
+    optionalStageCount: stages.filter((s) => s.optional === true).length,
+    approvalStageCount: stages.filter((s) => s.approval_required === true).length,
+    estimatedInputTokens: materialized ? materialized.estimatedInputTokens : 0,
+    estimatedOutputTokens: materialized ? materialized.estimatedOutputTokens : 0
   });
 
   return { plan, result, audit };
