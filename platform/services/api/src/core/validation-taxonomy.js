@@ -7,6 +7,14 @@
 // vocabulary scoped to AUTHORIZATION_STATUSES in execution-authorization-decision.js -- it is not
 // duplicated here, since this PR's own instruction is "não ampliar escopo excessivamente."
 //
+// pr102: the Execution Gateway Boundary Simulation has its own separate, self-contained 29-status
+// taxonomy (GATEWAY_STATUSES/STATUS_OUTCOME_MAP/GATEWAY_PRECEDENCE_ORDER in
+// execution-gateway-decision.js), for the same reason -- extending VALIDATION_STAGES itself would
+// require modifying validation-outcome.js, which is outside this PR's own stated scope, and the
+// spec explicitly permits "uma taxonomy própria" for gateway-specific stages that have no
+// equivalent among the 22 Execution Plan stages (POLICY, PACKAGE_REFERENCE, PACKAGE_DIGEST,
+// FRESHNESS, REPLAY, ...). Not merged into this module.
+//
 // Two distinct "orders" are captured deliberately as two distinct fields, never conflated:
 // - `declarationOrder`: the order this PR's own spec lists the 24 statuses in.
 // - `precedence`: the real order execution-plan-engine.js actually evaluates gates in, documented

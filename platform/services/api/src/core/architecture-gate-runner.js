@@ -21,7 +21,7 @@ const WORKFLOWS_DIR = path.join(__dirname, '..', '..', '..', '..', '.github', 'w
 // FINGERPRINT_COVERAGE_REQUIRED/VERSION_COVERAGE_REQUIRED/EXACT_FIELDS_REQUIRED) check --
 // "Usar manifesto explícito de contratos auditados para evitar heurística frágil." Scoped to the
 // Execution Plan / Authorization Boundary / Reference Binding / Validation lineage this PR and its
-// immediate predecessors (PR #94-#101) built, not the entire 280-file codebase history.
+// immediate predecessors (PR #94-#102) built, not the entire 280-file codebase history.
 const AUDITED_CONTRACTS_MANIFEST = Object.freeze([
   { module: './execution-plan-request', fieldsExport: 'EXECUTION_PLAN_REQUEST_FIELDS', hasVersion: true, versionField: 'execution_plan_request_version', hasFingerprint: false },
   { module: './execution-plan-contract', fieldsExport: 'EXECUTION_PLAN_CONTRACT_FIELDS', safeFlagsExport: 'EXECUTION_PLAN_CONTRACT_SAFE_FLAGS', hasVersion: true, versionField: 'execution_plan_version', hasFingerprint: true, fingerprintField: 'plan_fingerprint' },
@@ -41,7 +41,16 @@ const AUDITED_CONTRACTS_MANIFEST = Object.freeze([
   { module: './execution-reference-binding-ledger', fieldsExport: 'BINDING_LEDGER_FIELDS', safeFlagsExport: 'BINDING_LEDGER_SAFE_FLAGS', hasVersion: true, versionField: 'binding_ledger_version', hasFingerprint: true, fingerprintField: 'ledger_fingerprint' },
   { module: './execution-reference-binding-result', fieldsExport: 'BINDING_RESULT_FIELDS', hasVersion: true, versionField: 'binding_result_version', hasFingerprint: true, fingerprintField: 'result_fingerprint' },
   { module: './validation-outcome', fieldsExport: 'VALIDATION_OUTCOME_FIELDS', safeFlagsExport: 'VALIDATION_OUTCOME_SAFE_FLAGS', hasVersion: false, hasFingerprint: true, fingerprintField: 'output_fingerprint' },
-  { module: './validation-ledger', fieldsExport: 'VALIDATION_LEDGER_FIELDS', safeFlagsExport: 'VALIDATION_LEDGER_SAFE_FLAGS', hasVersion: true, versionField: 'validation_ledger_version', hasFingerprint: true, fingerprintField: 'ledger_fingerprint' }
+  { module: './validation-ledger', fieldsExport: 'VALIDATION_LEDGER_FIELDS', safeFlagsExport: 'VALIDATION_LEDGER_SAFE_FLAGS', hasVersion: true, versionField: 'validation_ledger_version', hasFingerprint: true, fingerprintField: 'ledger_fingerprint' },
+  // pr102: Execution Gateway Boundary Simulation's own new contracts.
+  { module: './architecture-gate-evidence-reference', fieldsExport: 'ARCHITECTURE_GATE_EVIDENCE_REFERENCE_FIELDS', safeFlagsExport: 'ARCHITECTURE_GATE_EVIDENCE_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'architecture_gate_evidence_reference_version', hasFingerprint: true, fingerprintField: 'evidence_fingerprint' },
+  { module: './execution-gateway-policy', fieldsExport: 'EXECUTION_GATEWAY_POLICY_FIELDS', safeFlagsExport: 'EXECUTION_GATEWAY_POLICY_SAFE_FLAGS', hasVersion: true, versionField: 'gateway_policy_version', hasFingerprint: false },
+  { module: './execution-gateway-freshness-reference', fieldsExport: 'EXECUTION_GATEWAY_FRESHNESS_REFERENCE_FIELDS', safeFlagsExport: 'EXECUTION_GATEWAY_FRESHNESS_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'freshness_reference_version', hasFingerprint: true, fingerprintField: 'freshness_fingerprint' },
+  { module: './execution-gateway-replay-reference', fieldsExport: 'EXECUTION_GATEWAY_REPLAY_REFERENCE_FIELDS', safeFlagsExport: 'EXECUTION_GATEWAY_REPLAY_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'gateway_replay_reference_version', hasFingerprint: true, fingerprintField: 'replay_fingerprint' },
+  { module: './execution-gateway-package-reference', fieldsExport: 'EXECUTION_GATEWAY_PACKAGE_REFERENCE_FIELDS', safeFlagsExport: 'EXECUTION_GATEWAY_PACKAGE_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'gateway_package_reference_version', hasFingerprint: false },
+  { module: './execution-gateway-request', fieldsExport: 'EXECUTION_GATEWAY_REQUEST_FIELDS', hasVersion: true, versionField: 'gateway_request_version', hasFingerprint: false },
+  { module: './execution-gateway-decision', fieldsExport: 'EXECUTION_GATEWAY_DECISION_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
+  { module: './execution-gateway-result', fieldsExport: 'EXECUTION_GATEWAY_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false }
 ]);
 
 function readDirFiles(dir, extension) {
