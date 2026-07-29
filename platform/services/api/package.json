@@ -9,6 +9,7 @@
     "trial:public-web": "node scripts/public-web-canary-operational-trial.js",
     "test": "node scripts/discover-tests.js",
     "test:audit": "node scripts/discover-tests.js --audit",
+    "test:runtime-readiness-admission": "node --test test/runtime-readiness-admission-boundary.test.js",
     "gates": "node scripts/run-architecture-gates.js"
   }
 }

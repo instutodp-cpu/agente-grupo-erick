@@ -6,6 +6,12 @@ const {
   RUNTIME_EXECUTION_SIMULATION_STATUSES, RUNTIME_DECISIONS, RUNTIME_NEXT_STATES, STATUS_OUTCOME_MAP, DEFAULT_OUTCOME
 } = require('./runtime-execution-simulation-decision');
 
+// pr104: this result's own runtime_package_prepared_in_simulation/runtime_admitted_in_simulation
+// flags remain exactly as PR #103 defined them (the latter always false here) -- runtime-admission-
+// boundary.js's own RuntimeReadinessRequest carries this result by reference
+// (runtime_execution_simulation_result_reference) and independently cross-checks it against a
+// freshly re-derived package, never trusting it as already-final proof that a package may proceed
+// to readiness or admission.
 const RUNTIME_EXECUTION_SIMULATION_RESULT_VALIDATOR_VERSION = 'runtime_execution_simulation_result_validator_v1';
 
 const RUNTIME_EXECUTION_SIMULATION_RESULT_FIELDS = Object.freeze([

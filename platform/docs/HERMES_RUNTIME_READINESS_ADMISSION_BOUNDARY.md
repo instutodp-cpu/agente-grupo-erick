@@ -1,0 +1,91 @@
+# Hermes Agent Core - Runtime Readiness and Admission Boundary
+
+## Objetivo
+
+A PR #103 termina em `RUNTIME_PACKAGE_PREPARED_SIMULATION` — um Runtime Execution Package declarativo, mas ainda sem nenhuma fronteira que reavalie se esse pacote continua íntegro, autorizado, dentro do escopo, dentro do orçamento, fresco segundo sequência lógica, protegido contra replay, com capacidade declarativa disponível e dentro de limites de concorrência antes de seguir para uma futura simulação de scheduler. Esta PR cria essa fronteira em duas fases: **Readiness** (o pacote atende a todos os requisitos técnicos e declarativos) e **Admission** (além de ready, a policy de admissão permitiu a entrada declarativa do pacote).
+
+**RUNTIME_READY_SIMULATION significa que o pacote declarativo atende aos requisitos de readiness. Nenhuma capacidade foi reservada ou consumida.**
+
+**RUNTIME_ADMITTED_SIMULATION significa apenas que a policy permitiu a admissão declarativa do pacote. Nenhum scheduler, job, queue, worker ou estágio foi iniciado.**
+
+## Package prepared ≠ Ready ≠ Admitted
+
+`RUNTIME_PACKAGE_PREPARED_SIMULATION` (PR #103) prova que um pacote foi construído corretamente no momento da preparação — mas nunca reavalia isso depois. `RUNTIME_READY_SIMULATION` (esta PR, Fase A) é uma camada inteiramente nova que **revalida** — nunca simplesmente reafirma — cada referência que compôs esse pacote: integridade, freshness, autorização, escopo, registry, arquitetura, replay, idempotência, orçamento, capacidade, concorrência, dependências, stops, compensações. `RUNTIME_ADMITTED_SIMULATION` (Fase B) é um passo posterior e distinto: readiness nunca é marcada válida apenas porque admission foi concedida, e admission nunca roda sem uma readiness genuinamente `RUNTIME_READY_SIMULATION` já emitida. Nenhum destes conceitos implica o outro; são preservados como estados distintos em todo o código e em todo o vocabulário de status (`RUNTIME_PACKAGE_PREPARED_SIMULATION` ≠ `RUNTIME_READY_SIMULATION` ≠ `RUNTIME_ADMITTED_SIMULATION` ≠ `SCHEDULER_PACKAGE_PREPARED_SIMULATION` ≠ `RUNTIME_ENABLED` ≠ `EXECUTION_AUTHORIZED` ≠ `EXECUTION_STARTED` ≠ `STAGE_STARTED` ≠ `EXECUTED`).
+
+## Runtime Readiness Policy
+
+`runtime-readiness-policy.js` (46 campos exatos) segue a mesma forma que toda policy anterior desta linhagem já estabeleceu: 23 flags `require_*` forçados `true` (readiness revalida cada uma dessas dimensões, nunca pula uma), 9 flags `fail_on_*` forçados `true`, `allow_state_change_reference` forçado `true` (referência declarativa apenas), `allow_external_effect_reference`/`allow_irreversible_reference` permanecem forçados `false`. Apenas 6 flags `allow_*_package` permanecem genuinamente configuráveis — o mesmo formato "6 knobs reais" que `runtime-execution-simulation-policy.js` já usa para seus próprios `allow_*_stage`, reaplicado aqui para revalidar a composição do pacote de forma independente do que a policy original (PR #103) já decidiu.
+
+## Runtime Admission Policy
+
+`runtime-admission-policy.js` (29 campos exatos) força 14 flags booleanas (`allow_runtime_admission_simulation`, todo `require_*`, `fail_closed`) e deixa apenas os 9 `maximum_admitted_*` genuinamente configuráveis — limites inteiros não-negativos (zero é um bloqueio explícito válido) que `runtime-admission-boundary.js` compara contra contagens reais, nunca ajustados silenciosamente. **Nenhuma policy pode habilitar runtime.**
+
+## Runtime Capacity Snapshot Reference
+
+`runtime-capacity-snapshot-reference.js` (46 campos exatos). **RuntimeCapacitySnapshotReference descreve capacidade declarativa. Ela não representa recursos reais reservados.** Para cada uma das 8 dimensões (package/stage/parallel-stage/model-stage/tool-stage/workflow-stage/tokens/cost), `total = used + available`, `used` e `available` nunca excedem `total` — verificado tanto na construção quanto na revalidação. `capacity_available` é aceito como booleano declarado pelo chamador (o mesmo formato "caller decide, o contrato só registra" que `runtime-budget-simulation-reference.js` já estabeleceu para `stage_counts_within_limit`) — o contrato nunca o deriva isoladamente a partir de total/used/available, porque não tem campos de requisito do pacote; a adequação real entre pacote e capacidade é recalculada pelo boundary (ver "Cross-checks"). `capacity_applied` é sempre `false`; freshness lógica (`snapshot_expired_logically`) segue o mesmo padrão de `architecture-gate-evidence-reference.js`; `capacity_fingerprint`/`capacity_digest` são recomputados e comparados, nunca confiados como declarados.
+
+## Runtime Concurrency Reference
+
+`runtime-concurrency-reference.js` (36 campos exatos). **RuntimeConcurrencyReference descreve disponibilidade declarativa de slots. Nenhum slot é consumido nesta implementação.** `requested_*` são declarados pelo chamador, mas o boundary é responsável por derivá-los honestamente do Runtime Package real — nunca aceitos como "valores requested fornecidos livremente pelo caller". As 9 flags `*_slots_available` seguem o mesmo formato de `stage_counts_within_limit`: declaradas pelo chamador, recomputadas e comparadas pelo boundary. `concurrency_applied` é sempre `false`.
+
+## Freshness e Replay
+
+`runtime-readiness-freshness-reference.js` (45 campos exatos) recalcula `expired_logically` para 9 dimensões (pacote, Gateway, autorização, escopo, registry, architecture evidence, Binding Ledger, Validation Ledger, capacity snapshot), cada uma com sua própria `created_logical_sequence`/`maximum_valid_sequences`, comparada contra um único `current_logical_sequence` — o mesmo cálculo `expired = (current - created) > maximum` que `architecture-gate-evidence-reference.js` já estabeleceu. **Nunca usa `Date`, `Date.now` ou timer** — toda sequência é um contador lógico fornecido pelo chamador.
+
+`runtime-readiness-replay-reference.js` (28 campos exatos) protege tanto a tentativa de Readiness quanto a de Admission, cada uma com seu próprio par `expected_attempt`/`maximum_attempts` e suas próprias listas 1:1 de decisões prévias (ids + fingerprints, únicos). `duplicate_readiness_acceptance_blocked`/`duplicate_admission_acceptance_blocked` são recomputados a partir de `expected_attempt <= prior_decision_ids.length` — uma tentativa que já tem uma decisão prévia registrada é, por definição, uma repetição. `replay_consumed` é sempre `false`: **readiness e admission recalculam freshness, replay, capacidade e concorrência; não confiam em flags soltas fornecidas pelo caller.**
+
+## Runtime Readiness Request / Decision
+
+`runtime-readiness-request.js` (38 campos exatos) agrega toda referência que Fase A precisa: os três outputs já preparados pela PR #103 (`runtime_execution_package_reference`, `runtime_execution_simulation_decision_reference`, `runtime_execution_simulation_result_reference`), toda referência bruta que os produziu (Gateway, Execution Plan, autorização/escopo/registry, architecture evidence, Stage Manifest, Dependency Graph, ledgers, budget, stops, compensações, artifact/event plan), e as 4 novas referências desta PR (capacity, concurrency, freshness, replay). Cada uma validada contra seu validador oficial já existente — nunca uma reimplementação paralela. `context` nunca é lido para nenhuma decisão.
+
+`runtime-readiness-decision.js` define seu próprio vocabulário de 34 status (28 próprios + os 6 status de identidade já reutilizados de toda a linhagem: `TENANT_BLOCKED`/`ORGANIZATION_BLOCKED`/`PROJECT_BLOCKED`/`SESSION_BLOCKED`/`AGENT_BLOCKED`/`ACTOR_BLOCKED`), com sua própria `RUNTIME_READINESS_PRECEDENCE_ORDER` e `STATUS_OUTCOME_MAP` — separado, nunca fundido ao `validation-taxonomy.js` nem ao vocabulário de nenhuma camada anterior (ver `validation-taxonomy.js`/`validation-status-mapper.js`, comentário pr104). 25 flags `*_validated` mapeiam 1:1 nas seções de cross-check.
+
+## Runtime Admission Request / Decision / Result
+
+`runtime-admission-request.js` (17 campos exatos) referencia a Readiness Request/Decision, o mesmo Runtime Execution Package, e as 4 referências de capacity/concurrency/freshness/replay — re-submetidas para revalidação independente (Fase B nunca confia cegamente que Fase A ainda vale). `runtime-admission-decision.js` define seu próprio vocabulário de 22 status (16 próprios + os 6 de identidade), com sua própria `RUNTIME_ADMISSION_PRECEDENCE_ORDER`. `runtime-admission-result.js` (70 campos exatos) é um envelope fino sobre a decisão, carregando os 29 flags operacionais completos (o mesmo conjunto de `runtime-execution-simulation-result.js`), todos forçados `false`, mais `requested_*_slots`/`estimated_total_tokens`/`estimated_total_cost_minor_units` para auditoria.
+
+## Runtime Admission Boundary
+
+`runtime-admission-boundary.js` carrega os dois avaliadores centrais: `evaluateRuntimeReadinessRequest(request, context)` (Fase A, 27 passos reais de código, seguindo a ordem real de precedência — identidade antes de policy, a mesma distinção "ordem declarada ≠ ordem de avaliação" que toda camada anterior já documentou) e `evaluateRuntimeAdmissionRequest(request, context)` (Fase B, 11 passos reais). Nenhum arquivo `runtime-readiness-boundary.js` separado existe — a especificação lista um único arquivo, e os dois avaliadores pertencem naturalmente ao mesmo módulo que produz seus outputs finais.
+
+### Fase A — Readiness: o que é revalidado
+
+- **Runtime Package / Decision / Result** ainda mutuamente consistentes (mesmo status, mesmo fingerprint, mesmo digest) — nunca apenas "cada um individualmente válido".
+- **Gateway, Execution Plan, Autorização, Scope, Registry Snapshot, Architecture Gate Evidence**: cada um cross-checado contra o id que o Runtime Package declara. Architecture Gate Evidence é uma checagem genuinamente nova — a PR #103 nunca validou essa referência como gate bloqueante.
+- **Stage Manifest, Runtime Stage Manifest, Dependency Graph, Runtime Dependency Manifest, Binding Ledger, Validation Ledger, Execution Plan Budget, Runtime Budget, Stops, Compensações, Artifact Plan, Event Plan**: cada um cross-checado por id/fingerprint contra o Runtime Package.
+- **Package fingerprint / digest**: recomputados via `computeRuntimePackageDigest` — a mesma função exportada e reutilizada de `runtime-execution-package.js`, nunca uma reimplementação — sobre os objetos brutos, byte-exato, nunca confiado como já provado pela PR #103.
+- **Freshness, Replay, Capacity, Concurrency**: as 4 dimensões genuinamente novas desta PR, cada uma recomputada e cross-checada contra o Runtime Package real (ver "Capacity Requirements" abaixo).
+- **Invariantes de não-execução**: checagem agregada final.
+
+### Fase B — Admission: o que é revalidado
+
+Só executa quando `readiness.status === RUNTIME_READY_SIMULATION` e `runtime_ready_in_simulation === true`. Revalida identidade (incluindo que a Readiness Decision pertence à mesma tenant/organization/project/session/agent/actor do pacote — `RUNTIME_IDENTITY_BLOCKED` quando não), que o Runtime Package não foi trocado desde a readiness (fingerprint/digest), e revalida (por fingerprint, contra o que a Readiness Decision já registrou) Capacity Snapshot, Concurrency e Freshness — mais a metade de Replay específica de admission (`duplicate_admission_acceptance_blocked`, `expected_admission_attempt <= maximum_admission_attempts`). Por fim, aplica os limites da Admission Policy usando as contagens já honestamente derivadas em Fase A (`runtime_concurrency_reference.requested_*`), nunca re-confiadas de nenhuma outra fonte.
+
+### Capacity Requirements
+
+`requested_package_slots = 1`; `requested_stage_slots = runtime_stage_count`; `requested_parallel_stage_slots = parallel_stage_count`; `requested_model_stage_slots = model_stage_count`; `requested_tool_stage_slots = tool_stage_count`; `requested_workflow_stage_slots = workflow_stage_count`; tokens/custo vêm de `estimated_total_tokens`/`estimated_total_cost_minor_units` — todos derivados do Runtime Stage Manifest real, nunca aceitos como declarados livremente pelo chamador. Comparados contra `available_*` da Capacity Snapshot; `capacity_available` só é aceito quando essa comparação bate exatamente com o que o chamador declarou.
+
+## Registry
+
+`runtime-admission-registry.js` cria 10 registros privados e sintéticos (capacity snapshots, concurrency references, freshness references, replay references, readiness requests, readiness decisions, admission requests, admission decisions, admission results, audits) — reutilizando o mesmo `createEntityStore`/`resolveRegistration` que `runtime-execution-simulation-registry.js` já estabeleceu (replay → payload mismatch → conflito de versão esperada → conflito de fingerprint esperado → downgrade de versão → aceito). Sem persistência.
+
+## Auditoria
+
+`runtime-admission-audit.js` registra apenas ids, fingerprints, digest, status/decision/next_state, bindings de identidade, capacidades requisitadas/disponíveis, contagens de concorrência, estimativas de budget, flags de freshness/replay, tentativas de replay, blockers e reason codes — **nunca payload completo, StageRecords, conteúdo, prompts, memória, mensagens, argumentos de tool, respostas, secrets, tokens reais, endpoints, código ou output de provider.**
+
+## Fixture
+
+`test/fixtures/hermes-runtime-readiness-admission-boundary.json` (~36,5MB, em linha com o precedente das PRs #100-#103) contém **19 cenários curados** — os 4 caminhos `RUNTIME_READY_SIMULATION` (sem LLM, model/tool/workflow reference), os 4 caminhos `RUNTIME_ADMITTED_SIMULATION` correspondentes, mais representantes de cada categoria principal de bloqueio (pacote não preparado, Gateway, autorização, capacidade esgotada, concorrência esgotada, freshness expirada, replay duplicado, limite de admissão excedido, mismatch de tenant, side-channel hostil, ordem canônica). A cauda longa de adulterações campo-a-campo (cada referência aninhada individualmente adulterada, cada dimensão de freshness/capacidade/concorrência isoladamente) é coberta **inline** em `test/runtime-readiness-admission-boundary.test.js`, construída via `test/helpers/runtime-readiness-admission-test-data.js` — o mesmo "golden bundle" técnico já estabelecido pelas PRs #102/#103, duas camadas abaixo.
+
+## Confirmação de nenhuma execução real
+
+Em todo status producível por ambas as fases: `runtime_enabled`, `execution_authorized`, `execution_started`, `stage_started`, `stage_completed`, `job_created`, `queue_used`, `worker_started`, `scheduler_started`, `executed` (e, no Admission Result, todos os 29 flags operacionais completos: `agent_executed`, `model_called`, `provider_called`, `tool_called`, `workflow_executed`, `network_used`, `memory_read`, `memory_written`, `tokens_reserved`, `tokens_consumed`, `cost_reserved`, `cost_consumed`, `dependency_satisfied`, `dependency_applied`, `stop_condition_evaluated`, `stop_applied`, `compensation_executed`, `artifact_created`, `event_emitted`) permanecem sempre `false`; `simulation=true`; `production_blocked=true`; `rollout_percentage=0`. Nenhuma capacidade é aplicada (`capacity_applied` sempre `false`); nenhum slot é consumido (`concurrency_applied` sempre `false`); nenhum scheduler é iniciado; nenhum runtime é habilitado; nenhuma execução real ocorre em nenhum caminho desta implementação.
+
+## Limitações
+
+- **Fase B não recomputa `requested_*` a partir do Runtime Stage Manifest bruto** — a `RuntimeAdmissionRequest` não carrega esse manifest (só o Runtime Execution Package compacto, que não tem campos de contagem por tipo de stage). Em vez disso, Fase B reutiliza os valores já honestamente derivados por Fase A em `runtime_concurrency_reference.requested_*`, e prova que essa referência não foi trocada desde a readiness comparando seu fingerprint contra o que a Readiness Decision já registrou. Documentado explicitamente aqui, não inventado silenciosamente.
+- **`readiness_request_fingerprint`/`admission_request_fingerprint` na Replay Reference excluem a própria Replay Reference do cálculo do fingerprint da requisição que descrevem** — a alternativa (incluir a Replay Reference no fingerprint da requisição que a carrega como um de seus próprios campos) não tem ponto fixo matemático, a mesma razão pela qual todo outro contrato auto-fingerprintado deste codebase já exclui seu próprio campo de fingerprint/digest antes de fazer hash.
+- **`RUNTIME_VERSION_BLOCKED`/`RUNTIME_CONFLICT_BLOCKED`/`RUNTIME_UNKNOWN_STATUS_BLOCKED` não são alcançáveis a partir destes avaliadores stateless**, pela mesma razão que os status análogos nas PRs #102/#103 permanecem inertes (nenhum oráculo de versão ao vivo dentro de um avaliador stateless; conflitos de versão/fingerprint/payload são responsabilidade real do registry com estado, já testada separadamente).
+- **A cauda de cenários "-expired"/"-exhausted" individuais por dimensão** (gateway-expired, authorization-expired, scope-expired, registry-expired, architecture-evidence-expired, binding-ledger-expired, validation-ledger-expired; stage/parallel/model/tool/workflow/token/cost-capacity-exhausted; tenant/organization/agent-concurrency-exhausted) é coberta representativamente (uma por categoria) na fixture, com a cobertura campo-a-campo completa vivendo nos testes inline — o mesmo padrão de curadoria de fixture que a PR #103 já estabeleceu, não uma omissão.
+
+**A próxima etapa arquitetural, após auditoria e merge, é Runtime Scheduler Simulation Contracts, ainda sem scheduler operacional.**

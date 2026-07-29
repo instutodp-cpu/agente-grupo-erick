@@ -65,7 +65,19 @@ const AUDITED_CONTRACTS_MANIFEST = Object.freeze([
   { module: './runtime-execution-simulation-request', fieldsExport: 'RUNTIME_EXECUTION_SIMULATION_REQUEST_FIELDS', hasVersion: true, versionField: 'runtime_request_version', hasFingerprint: false },
   { module: './runtime-execution-package', fieldsExport: 'RUNTIME_EXECUTION_PACKAGE_FIELDS', safeFlagsExport: 'RUNTIME_EXECUTION_PACKAGE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_execution_package_version', hasFingerprint: true, fingerprintField: 'package_fingerprint' },
   { module: './runtime-execution-simulation-decision', fieldsExport: 'RUNTIME_EXECUTION_SIMULATION_DECISION_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
-  { module: './runtime-execution-simulation-result', fieldsExport: 'RUNTIME_EXECUTION_SIMULATION_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false }
+  { module: './runtime-execution-simulation-result', fieldsExport: 'RUNTIME_EXECUTION_SIMULATION_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
+  // pr104: Runtime Readiness and Admission Boundary's own new contracts.
+  { module: './runtime-readiness-policy', fieldsExport: 'RUNTIME_READINESS_POLICY_FIELDS', safeFlagsExport: 'RUNTIME_READINESS_POLICY_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_readiness_policy_version', hasFingerprint: false },
+  { module: './runtime-admission-policy', fieldsExport: 'RUNTIME_ADMISSION_POLICY_FIELDS', safeFlagsExport: 'RUNTIME_ADMISSION_POLICY_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_admission_policy_version', hasFingerprint: false },
+  { module: './runtime-capacity-snapshot-reference', fieldsExport: 'RUNTIME_CAPACITY_SNAPSHOT_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_CAPACITY_SNAPSHOT_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_capacity_snapshot_reference_version', hasFingerprint: true, fingerprintField: 'capacity_fingerprint' },
+  { module: './runtime-concurrency-reference', fieldsExport: 'RUNTIME_CONCURRENCY_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_CONCURRENCY_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_concurrency_reference_version', hasFingerprint: true, fingerprintField: 'concurrency_fingerprint' },
+  { module: './runtime-readiness-freshness-reference', fieldsExport: 'RUNTIME_READINESS_FRESHNESS_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_READINESS_FRESHNESS_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_readiness_freshness_reference_version', hasFingerprint: true, fingerprintField: 'freshness_fingerprint' },
+  { module: './runtime-readiness-replay-reference', fieldsExport: 'RUNTIME_READINESS_REPLAY_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_READINESS_REPLAY_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_readiness_replay_reference_version', hasFingerprint: true, fingerprintField: 'replay_fingerprint' },
+  { module: './runtime-readiness-request', fieldsExport: 'RUNTIME_READINESS_REQUEST_FIELDS', hasVersion: true, versionField: 'runtime_readiness_request_version', hasFingerprint: false },
+  { module: './runtime-readiness-decision', fieldsExport: 'RUNTIME_READINESS_DECISION_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
+  { module: './runtime-admission-request', fieldsExport: 'RUNTIME_ADMISSION_REQUEST_FIELDS', hasVersion: true, versionField: 'runtime_admission_request_version', hasFingerprint: false },
+  { module: './runtime-admission-decision', fieldsExport: 'RUNTIME_ADMISSION_DECISION_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
+  { module: './runtime-admission-result', fieldsExport: 'RUNTIME_ADMISSION_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false }
 ]);
 
 function readDirFiles(dir, extension) {
