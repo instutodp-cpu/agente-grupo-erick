@@ -43,8 +43,8 @@ const {
 const { createExecutionGatewayRegistry } = require('../src/core/execution-gateway-registry');
 const { buildAuthorizationScopeReference } = require('../src/core/execution-authorization-scope-reference');
 const { buildExecutionRegistrySnapshotReference } = require('../src/core/execution-registry-snapshot-reference');
-const { buildOrchestratorStageManifestReference } = require('../src/core/orchestrator-stage-manifest-reference');
-const { buildExecutionPlanDependencyGraphReference } = require('../src/core/execution-plan-dependency-graph-reference');
+const { buildOrchestratorStageManifestReference, buildStageRecord } = require('../src/core/orchestrator-stage-manifest-reference');
+const { buildExecutionPlanDependencyGraphReference, buildDependencyRecord } = require('../src/core/execution-plan-dependency-graph-reference');
 const { buildExecutionAuthorizationDecision } = require('../src/core/execution-authorization-decision');
 const { buildGoldenBundle, rebuildEvidence } = require('./helpers/execution-gateway-test-data');
 
@@ -680,4 +680,268 @@ test('registry: rejects a structurally invalid record as VALIDATION_FAILED', () 
   const registry = createExecutionGatewayRegistry();
   const result = registry.registerExecutionGatewayReplayReference({ not: 'valid' });
   assert.equal(result.status, 'VALIDATION_FAILED');
+});
+
+// --- pr102fix: NO_LLM classification and progressive policy_validated -------------------------
+//
+// FIX 1: NO_LLM must be defined by the absence of a model reference (no MODEL_REFERENCE_STAGE
+// record, no stage record carrying a model_selection_reference_id), never by stage count -- a
+// genuinely NO_LLM package still legitimately carries VALIDATION_STAGE/DETERMINISTIC_STAGE/
+// AUDIT_STAGE/FINALIZATION_STAGE records.
+// FIX 2: policy_validated must only be true once every semantic policy check the package actually
+// triggers has passed -- never merely because the policy's own exact-fields shape was valid.
+
+function repackageDigest(golden, overrides = {}) {
+  return computeGatewayPackageDigest({
+    plan: golden.plan, result: golden.result, authorizationDecision: golden.authorizationDecision,
+    provenanceReference: golden.provenanceReference, scopeReference: golden.scopeReference,
+    snapshotReference: golden.snapshotReference, stageManifestReference: golden.stageManifestReference,
+    dependencyGraphReference: golden.dependencyGraphReference, bindingLedger: golden.bindingLedger,
+    validationLedger: golden.validationLedger, evidenceReference: golden.evidenceReference,
+    ...overrides
+  });
+}
+
+function buildRequestWithExtraStages(golden, extraStageOverridesList, policyOverrides = {}) {
+  const template = golden.stageManifestReference.stage_records[0];
+  const { stage_fingerprint, stage_id, stage_sequence, ...templateRest } = template;
+  const baseCount = golden.stageManifestReference.stage_records.length;
+  // 'selref-N' rather than any string containing the word "model" -- AGENT_CORE_FORBIDDEN_VALUE_
+  // PATTERN treats a bare "model" word as forbidden operational material regardless of field.
+  const newRecords = extraStageOverridesList.map((overrides, index) => buildStageRecord({
+    ...templateRest, stage_id: `extra-stage-${index}`, stage_sequence: baseCount + index, ...overrides
+  }));
+  const manifest = buildOrchestratorStageManifestReference({
+    ...golden.stageManifestReference, stage_records: [...golden.stageManifestReference.stage_records, ...newRecords]
+  });
+  const policy = buildExecutionGatewayPolicy({ ...golden.policy, ...policyOverrides });
+  const packageDigest = repackageDigest(golden, { stageManifestReference: manifest });
+  const request = buildExecutionGatewayRequest({
+    ...golden.gatewayRequest,
+    stage_manifest_reference: manifest,
+    gateway_package_reference: {
+      ...golden.packageReference, stage_manifest_fingerprint: manifest.manifest_fingerprint, package_digest: packageDigest
+    },
+    gateway_policy: policy
+  });
+  return request;
+}
+
+function buildRequestWithDependencyRecord(golden, dependencyRecordOverrides, policyOverrides = {}) {
+  const record = buildDependencyRecord({
+    dependency_id: 'extra-dependency-1', from_stage_id: 'stage-1', to_stage_id: 'stage-2', required: false,
+    ...dependencyRecordOverrides
+  });
+  const graph = buildExecutionPlanDependencyGraphReference({ ...golden.dependencyGraphReference, dependency_records: [record] });
+  const policy = buildExecutionGatewayPolicy({ ...golden.policy, ...policyOverrides });
+  const packageDigest = repackageDigest(golden, { dependencyGraphReference: graph });
+  return buildExecutionGatewayRequest({
+    ...golden.gatewayRequest,
+    dependency_graph_reference: graph,
+    gateway_package_reference: {
+      ...golden.packageReference, dependency_graph_fingerprint: graph.graph_fingerprint, package_digest: packageDigest
+    },
+    gateway_policy: policy
+  });
+}
+
+test('pr102fix NO_LLM: a purely deterministic package (no model stage) is classified NO_LLM and accepted by default policy', () => {
+  const golden = buildGoldenBundle();
+  const outcome = evaluateExecutionGatewayRequest(golden.gatewayRequest, {});
+  assert.equal(outcome.decision.status, 'GATEWAY_ACCEPTED_SIMULATION');
+});
+
+test('pr102fix NO_LLM: a purely deterministic package is blocked when allow_no_llm_package=false', () => {
+  const golden = buildGoldenBundle();
+  const policy = buildExecutionGatewayPolicy({ ...golden.policy, allow_no_llm_package: false });
+  const request = buildExecutionGatewayRequest({ ...golden.gatewayRequest, gateway_policy: policy });
+  const outcome = evaluateExecutionGatewayRequest(request, {});
+  assert.equal(outcome.decision.status, 'POLICY_BLOCKED');
+  assert.deepEqual(outcome.decision.reason_codes, ['no_llm_package_not_allowed_by_policy']);
+});
+
+test('pr102fix NO_LLM: VALIDATION_STAGE/AUDIT_STAGE/FINALIZATION_STAGE records remain NO_LLM (never classified by stage count)', () => {
+  const golden = buildGoldenBundle();
+  const request = buildRequestWithExtraStages(golden, [
+    { stage_type: 'VALIDATION_STAGE' }, { stage_type: 'AUDIT_STAGE' }, { stage_type: 'FINALIZATION_STAGE' }
+  ]);
+  const outcome = evaluateExecutionGatewayRequest(request, {});
+  assert.equal(outcome.decision.status, 'GATEWAY_ACCEPTED_SIMULATION');
+});
+
+test('pr102fix NO_LLM: a tool-only package (no model stage) is classified NO_LLM and requires allow_tool_reference_package', () => {
+  const golden = buildGoldenBundle();
+  const accepted = evaluateExecutionGatewayRequest(
+    buildRequestWithExtraStages(golden, [{ stage_type: 'TOOL_REFERENCE_STAGE' }]), {}
+  );
+  assert.equal(accepted.decision.status, 'GATEWAY_ACCEPTED_SIMULATION');
+
+  const blockedAsNoLlm = evaluateExecutionGatewayRequest(
+    buildRequestWithExtraStages(golden, [{ stage_type: 'TOOL_REFERENCE_STAGE' }], { allow_no_llm_package: false }), {}
+  );
+  assert.equal(blockedAsNoLlm.decision.status, 'POLICY_BLOCKED');
+  assert.deepEqual(blockedAsNoLlm.decision.reason_codes, ['no_llm_package_not_allowed_by_policy']);
+
+  const blockedAsTool = evaluateExecutionGatewayRequest(
+    buildRequestWithExtraStages(golden, [{ stage_type: 'TOOL_REFERENCE_STAGE' }], { allow_tool_reference_package: false }), {}
+  );
+  assert.equal(blockedAsTool.decision.status, 'POLICY_BLOCKED');
+  assert.deepEqual(blockedAsTool.decision.reason_codes, ['tool_reference_package_not_allowed_by_policy']);
+});
+
+test('pr102fix NO_LLM: a workflow-only package (no model stage) is classified NO_LLM and requires allow_workflow_reference_package', () => {
+  const golden = buildGoldenBundle();
+  const accepted = evaluateExecutionGatewayRequest(
+    buildRequestWithExtraStages(golden, [{ stage_type: 'WORKFLOW_REFERENCE_STAGE' }]), {}
+  );
+  assert.equal(accepted.decision.status, 'GATEWAY_ACCEPTED_SIMULATION');
+
+  const blockedAsWorkflow = evaluateExecutionGatewayRequest(
+    buildRequestWithExtraStages(golden, [{ stage_type: 'WORKFLOW_REFERENCE_STAGE' }], { allow_workflow_reference_package: false }), {}
+  );
+  assert.equal(blockedAsWorkflow.decision.status, 'POLICY_BLOCKED');
+  assert.deepEqual(blockedAsWorkflow.decision.reason_codes, ['workflow_reference_package_not_allowed_by_policy']);
+});
+
+test('pr102fix NO_LLM: a MODEL_REFERENCE_STAGE with a real model reference is classified as a model package, not NO_LLM', () => {
+  const golden = buildGoldenBundle();
+  const accepted = evaluateExecutionGatewayRequest(
+    buildRequestWithExtraStages(golden, [{ stage_type: 'MODEL_REFERENCE_STAGE', model_selection_reference_id: 'selref-1' }]), {}
+  );
+  assert.equal(accepted.decision.status, 'GATEWAY_ACCEPTED_SIMULATION');
+
+  const blockedAsModel = evaluateExecutionGatewayRequest(
+    buildRequestWithExtraStages(
+      golden, [{ stage_type: 'MODEL_REFERENCE_STAGE', model_selection_reference_id: 'selref-1' }],
+      { allow_model_reference_package: false }
+    ), {}
+  );
+  assert.equal(blockedAsModel.decision.status, 'POLICY_BLOCKED');
+  assert.deepEqual(blockedAsModel.decision.reason_codes, ['model_reference_package_not_allowed_by_policy']);
+
+  // Not also classified NO_LLM -- allow_no_llm_package=false must have zero effect once a real
+  // model reference is present.
+  const stillAcceptedWithNoLlmDisallowed = evaluateExecutionGatewayRequest(
+    buildRequestWithExtraStages(
+      golden, [{ stage_type: 'MODEL_REFERENCE_STAGE', model_selection_reference_id: 'selref-1' }],
+      { allow_no_llm_package: false }
+    ), {}
+  );
+  assert.equal(stillAcceptedWithNoLlmDisallowed.decision.status, 'GATEWAY_ACCEPTED_SIMULATION');
+});
+
+test('pr102fix NO_LLM: a MODEL_REFERENCE_STAGE record missing its model reference blocks (fail-closed consistency)', () => {
+  const golden = buildGoldenBundle();
+  const request = buildRequestWithExtraStages(golden, [{ stage_type: 'MODEL_REFERENCE_STAGE', model_selection_reference_id: null }]);
+  const outcome = evaluateExecutionGatewayRequest(request, {});
+  assert.equal(outcome.decision.status, 'POLICY_BLOCKED');
+  assert.deepEqual(outcome.decision.reason_codes, ['model_reference_stage_missing_model_selection_reference']);
+});
+
+test('pr102fix NO_LLM: a model reference attached outside a MODEL_REFERENCE_STAGE blocks (fail-closed consistency)', () => {
+  const golden = buildGoldenBundle();
+  const request = buildRequestWithExtraStages(golden, [{ stage_type: 'DETERMINISTIC_STAGE', model_selection_reference_id: 'selref-1' }]);
+  const outcome = evaluateExecutionGatewayRequest(request, {});
+  assert.equal(outcome.decision.status, 'POLICY_BLOCKED');
+  assert.deepEqual(outcome.decision.reason_codes, ['model_selection_reference_outside_model_reference_stage']);
+});
+
+test('pr102fix NO_LLM: context cannot override classification', () => {
+  const golden = buildGoldenBundle();
+  const request = buildRequestWithExtraStages(golden, [{ stage_type: 'MODEL_REFERENCE_STAGE', model_selection_reference_id: 'selref-1' }], { allow_model_reference_package: false });
+  const withoutContext = evaluateExecutionGatewayRequest(request, {});
+  const withHostileContext = evaluateExecutionGatewayRequest(request, { isNoLlmPackage: true, allow_model_reference_package: true });
+  assert.equal(withoutContext.decision.status, 'POLICY_BLOCKED');
+  assert.equal(withHostileContext.decision.status, 'POLICY_BLOCKED');
+  assert.deepEqual(withHostileContext.decision.reason_codes, ['model_reference_package_not_allowed_by_policy']);
+});
+
+test('pr102fix NO_LLM: a parallel dependency is blocked when allow_parallel_package=false', () => {
+  const golden = buildGoldenBundle();
+  const accepted = evaluateExecutionGatewayRequest(
+    buildRequestWithDependencyRecord(golden, { dependency_type: 'PARALLEL_REFERENCE' }), {}
+  );
+  assert.equal(accepted.decision.status, 'GATEWAY_ACCEPTED_SIMULATION');
+
+  const blocked = evaluateExecutionGatewayRequest(
+    buildRequestWithDependencyRecord(golden, { dependency_type: 'PARALLEL_REFERENCE' }, { allow_parallel_package: false }), {}
+  );
+  assert.equal(blocked.decision.status, 'POLICY_BLOCKED');
+  assert.deepEqual(blocked.decision.reason_codes, ['parallel_package_not_allowed_by_policy']);
+});
+
+test('pr102fix policy_validated: true on an accepted decision', () => {
+  const golden = buildGoldenBundle();
+  const outcome = evaluateExecutionGatewayRequest(golden.gatewayRequest, {});
+  assert.equal(outcome.decision.status, 'GATEWAY_ACCEPTED_SIMULATION');
+  assert.equal(outcome.decision.policy_validated, true);
+});
+
+test('pr102fix policy_validated: false on every POLICY_BLOCKED outcome (NO_LLM, model, tool, workflow, parallel)', () => {
+  const golden = buildGoldenBundle();
+
+  const noLlmBlocked = evaluateExecutionGatewayRequest(
+    buildExecutionGatewayRequest({ ...golden.gatewayRequest, gateway_policy: buildExecutionGatewayPolicy({ ...golden.policy, allow_no_llm_package: false }) }), {}
+  );
+  assert.equal(noLlmBlocked.decision.status, 'POLICY_BLOCKED');
+  assert.equal(noLlmBlocked.decision.policy_validated, false);
+
+  const modelBlocked = evaluateExecutionGatewayRequest(
+    buildRequestWithExtraStages(golden, [{ stage_type: 'MODEL_REFERENCE_STAGE', model_selection_reference_id: 'selref-1' }], { allow_model_reference_package: false }), {}
+  );
+  assert.equal(modelBlocked.decision.status, 'POLICY_BLOCKED');
+  assert.equal(modelBlocked.decision.policy_validated, false);
+
+  const toolBlocked = evaluateExecutionGatewayRequest(
+    buildRequestWithExtraStages(golden, [{ stage_type: 'TOOL_REFERENCE_STAGE' }], { allow_tool_reference_package: false }), {}
+  );
+  assert.equal(toolBlocked.decision.status, 'POLICY_BLOCKED');
+  assert.equal(toolBlocked.decision.policy_validated, false);
+
+  const workflowBlocked = evaluateExecutionGatewayRequest(
+    buildRequestWithExtraStages(golden, [{ stage_type: 'WORKFLOW_REFERENCE_STAGE' }], { allow_workflow_reference_package: false }), {}
+  );
+  assert.equal(workflowBlocked.decision.status, 'POLICY_BLOCKED');
+  assert.equal(workflowBlocked.decision.policy_validated, false);
+
+  const parallelBlocked = evaluateExecutionGatewayRequest(
+    buildRequestWithDependencyRecord(golden, { dependency_type: 'PARALLEL_REFERENCE' }, { allow_parallel_package: false }), {}
+  );
+  assert.equal(parallelBlocked.decision.status, 'POLICY_BLOCKED');
+  assert.equal(parallelBlocked.decision.policy_validated, false);
+});
+
+test('pr102fix policy_validated: false when a blocker upstream of the policy checks fires first', () => {
+  const golden = buildGoldenBundle();
+  const request = buildExecutionGatewayRequest({
+    ...golden.gatewayRequest, execution_plan_reference: { ...golden.plan, execution_plan_status: 'BUDGET_BLOCKED', execution_plan_prepared: false }
+  });
+  const outcome = evaluateExecutionGatewayRequest(request, {});
+  assert.equal(outcome.decision.status, 'EXECUTION_PLAN_BLOCKED');
+  assert.equal(outcome.decision.policy_validated, false);
+});
+
+test('pr102fix policy_validated: false when the request itself is structurally invalid', () => {
+  const outcome = evaluateExecutionGatewayRequest({ not: 'a request' }, {});
+  assert.equal(outcome.decision.status, 'VALIDATION_FAILED');
+  assert.equal(outcome.decision.policy_validated, false);
+});
+
+test('pr102fix policy_validated: context cannot override it either way', () => {
+  const golden = buildGoldenBundle();
+  const blockedRequest = buildExecutionGatewayRequest({ ...golden.gatewayRequest, gateway_policy: buildExecutionGatewayPolicy({ ...golden.policy, allow_no_llm_package: false }) });
+  const hostile = evaluateExecutionGatewayRequest(blockedRequest, { policy_validated: true });
+  assert.equal(hostile.decision.policy_validated, false);
+
+  const acceptedHostile = evaluateExecutionGatewayRequest(golden.gatewayRequest, { policy_validated: false });
+  assert.equal(acceptedHostile.decision.status, 'GATEWAY_ACCEPTED_SIMULATION');
+  assert.equal(acceptedHostile.decision.policy_validated, true);
+});
+
+test('pr102fix regression: every fixture scenario still reproduces its expected status after the boundary fix', () => {
+  for (const key of EXPECTED_SCENARIOS) {
+    const scenario = fixture.scenarios[key];
+    const outcome = evaluateExecutionGatewayRequest(clone(scenario.request), {});
+    assert.equal(outcome.decision.status, EXPECTED_STATUS_BY_SCENARIO[key], key);
+  }
 });

@@ -140,8 +140,12 @@ function evaluateExecutionGatewayRequest(request, context = {}) {
   markValid('request_validated');
 
   // simulation_context is validated as a nested field of the same request structural check above.
-  markValid('policy_validated'); // gateway_policy itself already structurally valid (step 1); its
-  // require_*/fail_on_* semantics are enforced by the steps below that actually depend on them.
+  // policy_validated is NOT marked here -- gateway_policy's own exact-fields shape is already
+  // covered by request_validated (validateExecutionGatewayRequest calls
+  // validateExecutionGatewayPolicy), but that is structural completeness, not semantic approval.
+  // It is only marked true once every semantic policy check the package actually triggers (the
+  // policy-driven package-shape block near the end of this function) has genuinely passed -- a
+  // POLICY_BLOCKED outcome must never carry policy_validated=true.
 
   // 4. execution plan.
   if (plan.execution_plan_status !== 'EXECUTION_PLAN_PREPARED_SIMULATION' || plan.execution_plan_prepared !== true) {
@@ -369,11 +373,38 @@ function evaluateExecutionGatewayRequest(request, context = {}) {
   markValid('replay_validated');
 
   // policy-driven package-shape checks, now that every structural/cross-check has passed.
-  const stageTypes = new Set((stageManifestReference.stage_records || []).map((record) => record.stage_type));
-  if (stageTypes.size === 0 && policy.allow_no_llm_package !== true) {
+  // pr102fix: NO_LLM is defined by the *absence of a model reference*, never by the number of
+  // stage records. A genuinely NO_LLM/deterministic package still legitimately carries
+  // VALIDATION_STAGE/DETERMINISTIC_STAGE/AUDIT_STAGE/FINALIZATION_STAGE/etc. records --
+  // `stageTypes.size === 0` was never a real signal and left every real NO_LLM package
+  // unclassified (silently skipping the allow_no_llm_package check entirely).
+  const stageRecords = stageManifestReference.stage_records || [];
+  const stageTypes = new Set(stageRecords.map((record) => record.stage_type));
+
+  // Fail-closed consistency between stage_type and model_selection_reference_id: a
+  // MODEL_REFERENCE_STAGE record with no model reference, or a model reference attached to any
+  // other stage type, is an internally inconsistent package -- blocked before classification even
+  // runs, never silently reclassified either way.
+  for (const record of stageRecords) {
+    const hasModelReference = record.model_selection_reference_id !== null && record.model_selection_reference_id !== undefined;
+    if (record.stage_type === 'MODEL_REFERENCE_STAGE' && !hasModelReference) {
+      return finalize('POLICY_BLOCKED', ['model_reference_stage_missing_model_selection_reference'], {}, validatedFlags);
+    }
+    if (record.stage_type !== 'MODEL_REFERENCE_STAGE' && hasModelReference) {
+      return finalize('POLICY_BLOCKED', ['model_selection_reference_outside_model_reference_stage'], {}, validatedFlags);
+    }
+  }
+
+  const hasModelStage = stageTypes.has('MODEL_REFERENCE_STAGE');
+  const hasStageModelReference = stageRecords.some((record) => record.model_selection_reference_id !== null && record.model_selection_reference_id !== undefined);
+  // Never selects or changes a model -- purely a classification of the package the request
+  // already carries. Tool/workflow packages remain NO_LLM whenever they carry no model stage.
+  const isNoLlmPackage = !hasModelStage && !hasStageModelReference;
+
+  if (isNoLlmPackage && policy.allow_no_llm_package !== true) {
     return finalize('POLICY_BLOCKED', ['no_llm_package_not_allowed_by_policy'], {}, validatedFlags);
   }
-  if (stageTypes.has('MODEL_REFERENCE_STAGE') && policy.allow_model_reference_package !== true) {
+  if (hasModelStage && policy.allow_model_reference_package !== true) {
     return finalize('POLICY_BLOCKED', ['model_reference_package_not_allowed_by_policy'], {}, validatedFlags);
   }
   if (stageTypes.has('TOOL_REFERENCE_STAGE') && policy.allow_tool_reference_package !== true) {
@@ -386,6 +417,14 @@ function evaluateExecutionGatewayRequest(request, context = {}) {
   if (hasParallelDependency && policy.allow_parallel_package !== true) {
     return finalize('POLICY_BLOCKED', ['parallel_package_not_allowed_by_policy'], {}, validatedFlags);
   }
+  // pr102fix: policy_validated is only ever marked here, once every semantic check above that
+  // this package actually triggers has genuinely passed. allow_waiting_approval_package/
+  // allow_external_side_effect_reference/allow_irreversible_reference are forced-false SAFE_FLAGS
+  // with no corresponding "requires waiting approval / external side effect / irreversible
+  // action" signal anywhere in the package to cross-check against -- vacuously satisfied, the same
+  // honest category as the require_*/fail_on_* flags (already enforced unconditionally by the
+  // earlier steps in this pipeline that they name, never by a separate check here).
+  markValid('policy_validated');
 
   // 26. non-execution invariants -- an explicit, final aggregate re-check that nothing anywhere in
   // the accepted bundle carries a live operational flag, on top of every individual check already
