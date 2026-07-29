@@ -92,7 +92,35 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   // provenance/scope boundary the Gateway cross-checks, never a real credential.
   'require_authorization_provenance',
   'require_authorization_scope',
-  'authorization_expired_logically'
+  'authorization_expired_logically',
+  // Runtime Execution Simulation Contracts (PR #103) field names -- "runtime" here always refers
+  // to this PR's own declarative Runtime Execution Simulation package/decision/registry, never a
+  // real interpreter, VM, or execution runtime. Every field below is a compound name this PR's
+  // exact-fields lists mandate; none of them enable, start, or reference a real runtime.
+  'allow_runtime_package_preparation_simulation', 'expected_runtime_registry_version',
+  'from_runtime_stage_id', 'to_runtime_stage_id', 'ordered_runtime_stage_ids',
+  'runtime_admitted_in_simulation', 'runtime_artifact_plan_reference', 'runtime_artifact_plan_reference_id',
+  'runtime_artifact_plan_reference_version', 'runtime_artifact_plan_fingerprint', 'runtime_budget_fingerprint',
+  'runtime_budget_reference', 'runtime_budget_reference_id', 'runtime_budget_reference_version',
+  'runtime_compensation_fingerprints', 'runtime_compensation_reference_id', 'runtime_compensation_reference_version',
+  'runtime_compensation_references', 'runtime_compensation_reference_ids', 'runtime_decision_id',
+  'runtime_decision_fingerprint', 'runtime_dependency_count', 'runtime_dependency_ids',
+  'runtime_dependency_manifest_fingerprint', 'runtime_dependency_manifest_id', 'runtime_dependency_manifest_reference',
+  'runtime_dependency_manifest_version', 'runtime_dependency_reference_id', 'runtime_dependency_reference_ids',
+  'runtime_dependency_references', 'runtime_dependency_reference_version', 'runtime_event_plan_fingerprint',
+  'runtime_event_plan_reference', 'runtime_event_plan_reference_id', 'runtime_event_plan_reference_version',
+  'runtime_evaluated', 'runtime_execution_package_id', 'runtime_execution_package_version', 'runtime_package_digest',
+  'runtime_package_fingerprint', 'runtime_package_prepared_in_simulation', 'runtime_policy', 'runtime_policy_id',
+  'runtime_policy_version', 'runtime_request_fingerprint', 'runtime_request_id', 'runtime_request_version',
+  'runtime_result_id', 'runtime_stage_count', 'runtime_stage_manifest_fingerprint', 'runtime_stage_manifest_id',
+  'runtime_stage_manifest_reference', 'runtime_stage_manifest_version', 'runtime_stage_reference_id',
+  'runtime_stage_reference_ids', 'runtime_stage_references', 'runtime_stage_reference_version', 'runtime_status',
+  'runtime_stop_count', 'runtime_stop_fingerprints', 'runtime_stop_reference_id', 'runtime_stop_reference_ids',
+  'runtime_stop_references', 'runtime_stop_reference_version', 'runtime_stop_count', 'runtime_compensation_count',
+  // 'execute' (exact segment) is forbidden even though 'executed' is not (see the substring-token
+  // comment above) -- stage_would_execute is a forced-false declarative flag, never a real
+  // execution trigger; documented explicitly in runtime-stage-simulation-reference.js.
+  'stage_would_execute'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept

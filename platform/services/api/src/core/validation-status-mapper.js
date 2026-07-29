@@ -11,6 +11,10 @@ const { TAXONOMY_STATUSES, isTaxonomyStatus } = require('./validation-taxonomy')
 // pr102: the Execution Gateway's own GATEWAY_STATUSES (execution-gateway-decision.js) is a
 // separate, self-contained vocabulary with its own STATUS_OUTCOME_MAP -- not bridged through this
 // module, the same way AuthorizationDecision's own AUTHORIZATION_STATUSES never has been.
+//
+// pr103: the Runtime Execution Simulation layer's own RUNTIME_EXECUTION_SIMULATION_STATUSES
+// (runtime-execution-simulation-decision.js) is likewise a separate, self-contained vocabulary
+// with its own STATUS_OUTCOME_MAP -- not bridged through this module either.
 const UNKNOWN_STATUS_BLOCKED = 'UNKNOWN_STATUS_BLOCKED';
 
 // pr101 fix: EXECUTION_PLAN_PREPARED_SIMULATION and BINDING_BLOCKED are both genuine, already-

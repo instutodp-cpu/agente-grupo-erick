@@ -21,7 +21,7 @@ const WORKFLOWS_DIR = path.join(__dirname, '..', '..', '..', '..', '.github', 'w
 // FINGERPRINT_COVERAGE_REQUIRED/VERSION_COVERAGE_REQUIRED/EXACT_FIELDS_REQUIRED) check --
 // "Usar manifesto explícito de contratos auditados para evitar heurística frágil." Scoped to the
 // Execution Plan / Authorization Boundary / Reference Binding / Validation lineage this PR and its
-// immediate predecessors (PR #94-#102) built, not the entire 280-file codebase history.
+// immediate predecessors (PR #94-#103) built, not the entire 280-file codebase history.
 const AUDITED_CONTRACTS_MANIFEST = Object.freeze([
   { module: './execution-plan-request', fieldsExport: 'EXECUTION_PLAN_REQUEST_FIELDS', hasVersion: true, versionField: 'execution_plan_request_version', hasFingerprint: false },
   { module: './execution-plan-contract', fieldsExport: 'EXECUTION_PLAN_CONTRACT_FIELDS', safeFlagsExport: 'EXECUTION_PLAN_CONTRACT_SAFE_FLAGS', hasVersion: true, versionField: 'execution_plan_version', hasFingerprint: true, fingerprintField: 'plan_fingerprint' },
@@ -50,7 +50,22 @@ const AUDITED_CONTRACTS_MANIFEST = Object.freeze([
   { module: './execution-gateway-package-reference', fieldsExport: 'EXECUTION_GATEWAY_PACKAGE_REFERENCE_FIELDS', safeFlagsExport: 'EXECUTION_GATEWAY_PACKAGE_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'gateway_package_reference_version', hasFingerprint: false },
   { module: './execution-gateway-request', fieldsExport: 'EXECUTION_GATEWAY_REQUEST_FIELDS', hasVersion: true, versionField: 'gateway_request_version', hasFingerprint: false },
   { module: './execution-gateway-decision', fieldsExport: 'EXECUTION_GATEWAY_DECISION_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
-  { module: './execution-gateway-result', fieldsExport: 'EXECUTION_GATEWAY_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false }
+  { module: './execution-gateway-result', fieldsExport: 'EXECUTION_GATEWAY_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
+  // pr103: Runtime Execution Simulation Contracts' own new contracts.
+  { module: './runtime-execution-simulation-policy', fieldsExport: 'RUNTIME_EXECUTION_SIMULATION_POLICY_FIELDS', safeFlagsExport: 'RUNTIME_EXECUTION_SIMULATION_POLICY_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_policy_version', hasFingerprint: false },
+  { module: './runtime-stage-simulation-reference', fieldsExport: 'RUNTIME_STAGE_SIMULATION_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_STAGE_SIMULATION_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_stage_reference_version', hasFingerprint: false },
+  { module: './runtime-stage-simulation-manifest', fieldsExport: 'RUNTIME_STAGE_SIMULATION_MANIFEST_FIELDS', safeFlagsExport: 'RUNTIME_STAGE_SIMULATION_MANIFEST_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_stage_manifest_version', hasFingerprint: true, fingerprintField: 'manifest_fingerprint' },
+  { module: './runtime-dependency-simulation-reference', fieldsExport: 'RUNTIME_DEPENDENCY_SIMULATION_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_DEPENDENCY_SIMULATION_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_dependency_reference_version', hasFingerprint: true, fingerprintField: 'dependency_fingerprint' },
+  { module: './runtime-dependency-simulation-manifest', fieldsExport: 'RUNTIME_DEPENDENCY_SIMULATION_MANIFEST_FIELDS', safeFlagsExport: 'RUNTIME_DEPENDENCY_SIMULATION_MANIFEST_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_dependency_manifest_version', hasFingerprint: true, fingerprintField: 'manifest_fingerprint' },
+  { module: './runtime-budget-simulation-reference', fieldsExport: 'RUNTIME_BUDGET_SIMULATION_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_BUDGET_SIMULATION_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_budget_reference_version', hasFingerprint: true, fingerprintField: 'budget_fingerprint' },
+  { module: './runtime-stop-simulation-reference', fieldsExport: 'RUNTIME_STOP_SIMULATION_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_STOP_SIMULATION_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_stop_reference_version', hasFingerprint: true, fingerprintField: 'stop_fingerprint' },
+  { module: './runtime-compensation-simulation-reference', fieldsExport: 'RUNTIME_COMPENSATION_SIMULATION_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_COMPENSATION_SIMULATION_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_compensation_reference_version', hasFingerprint: true, fingerprintField: 'compensation_fingerprint' },
+  { module: './runtime-artifact-plan-reference', fieldsExport: 'RUNTIME_ARTIFACT_PLAN_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_ARTIFACT_PLAN_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_artifact_plan_reference_version', hasFingerprint: true, fingerprintField: 'artifact_plan_fingerprint' },
+  { module: './runtime-event-plan-reference', fieldsExport: 'RUNTIME_EVENT_PLAN_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_EVENT_PLAN_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_event_plan_reference_version', hasFingerprint: true, fingerprintField: 'event_plan_fingerprint' },
+  { module: './runtime-execution-simulation-request', fieldsExport: 'RUNTIME_EXECUTION_SIMULATION_REQUEST_FIELDS', hasVersion: true, versionField: 'runtime_request_version', hasFingerprint: false },
+  { module: './runtime-execution-package', fieldsExport: 'RUNTIME_EXECUTION_PACKAGE_FIELDS', safeFlagsExport: 'RUNTIME_EXECUTION_PACKAGE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_execution_package_version', hasFingerprint: true, fingerprintField: 'package_fingerprint' },
+  { module: './runtime-execution-simulation-decision', fieldsExport: 'RUNTIME_EXECUTION_SIMULATION_DECISION_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
+  { module: './runtime-execution-simulation-result', fieldsExport: 'RUNTIME_EXECUTION_SIMULATION_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false }
 ]);
 
 function readDirFiles(dir, extension) {
