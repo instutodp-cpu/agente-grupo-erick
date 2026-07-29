@@ -18,6 +18,7 @@ const { buildRuntimeCompensationSimulationReference } = require('../../src/core/
 const { buildRuntimeArtifactPlanReference } = require('../../src/core/runtime-artifact-plan-reference');
 const { buildRuntimeEventPlanReference } = require('../../src/core/runtime-event-plan-reference');
 const { evaluateRuntimeExecutionSimulationRequest } = require('../../src/core/runtime-execution-package');
+const { buildExecutionPlanBudget } = require('../../src/core/execution-plan-budget');
 
 const planFixture = require('../fixtures/hermes-execution-plan-contracts.json');
 
@@ -48,6 +49,10 @@ function buildGoldenRuntimeBundle(scenarioKey = 'prepared-no-llm-plan') {
   const sourceStopConditions = planRequest.stop_condition_references || [];
   const sourceCompensationReferences = planRequest.compensation_references || [];
   const executionPlanBudget = planRequest.execution_plan_budget;
+  // pr103fix: the real ExecutionPlanBudget the Runtime Budget Simulation Reference derives its
+  // limits from -- rebuilt via its own builder (never the raw fixture object passed through
+  // as-is), the same "rebuild via own builder" discipline every other reference here follows.
+  const executionBudgetReference = buildExecutionPlanBudget(executionPlanBudget);
 
   const plan = gwGolden.plan;
   const result = gwGolden.result;
@@ -234,6 +239,7 @@ function buildGoldenRuntimeBundle(scenarioKey = 'prepared-no-llm-plan') {
     runtime_stage_manifest_reference: runtimeStageManifest,
     runtime_dependency_manifest_reference: runtimeDependencyManifest,
     runtime_budget_reference: runtimeBudgetReference,
+    execution_budget_reference: executionBudgetReference,
     runtime_stop_references: runtimeStopRefs,
     runtime_compensation_references: runtimeCompensationRefs,
     runtime_artifact_plan_reference: runtimeArtifactPlan,
@@ -258,6 +264,7 @@ function buildGoldenRuntimeBundle(scenarioKey = 'prepared-no-llm-plan') {
     runtimeDependencyReferences,
     runtimeDependencyManifest,
     runtimeBudgetReference,
+    executionBudgetReference,
     runtimeStopRefs,
     runtimeCompensationRefs,
     runtimeArtifactPlan,

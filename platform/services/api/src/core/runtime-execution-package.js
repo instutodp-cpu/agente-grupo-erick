@@ -200,15 +200,103 @@ function buildRuntimeExecutionPackage(input = {}) {
 function computeRuntimePackageDigest({
   gatewayDecision, gatewayResult, gatewayPackageRef, plan, result, stageManifestRef, dependencyGraphRef,
   bindingLedger, validationLedger, runtimeStageManifest, runtimeDependencyManifest, runtimeBudgetRef,
-  runtimeStopRefs, runtimeCompensationRefs, runtimeArtifactPlan, runtimeEventPlan, orderedRuntimeStageIds,
-  runtimeDependencyIds, estimates, canonical
+  executionBudgetReference, runtimeStopRefs, runtimeCompensationRefs, runtimeArtifactPlan, runtimeEventPlan,
+  orderedRuntimeStageIds, runtimeDependencyIds, estimates, canonical
 }) {
   return computeCanonicalContentDigest({
     gatewayDecision, gatewayResult, gatewayPackageRef, plan, result, stageManifestRef, dependencyGraphRef,
     bindingLedger, validationLedger, runtimeStageManifest, runtimeDependencyManifest, runtimeBudgetRef,
-    runtimeStopRefs, runtimeCompensationRefs, runtimeArtifactPlan, runtimeEventPlan, orderedRuntimeStageIds,
-    runtimeDependencyIds, estimates, canonical
+    executionBudgetReference, runtimeStopRefs, runtimeCompensationRefs, runtimeArtifactPlan, runtimeEventPlan,
+    orderedRuntimeStageIds, runtimeDependencyIds, estimates, canonical
   });
+}
+
+// pr103fix: a comprehensive, pure 1:1 comparison between a RuntimeStageSimulationReference and
+// the real StageRecord it claims to materialize -- the original version of this check compared
+// only a subset of fields, meaning a Runtime Stage Manifest with a validly self-recomputed
+// fingerprint could still silently diverge from its source on memory/context/capabilities/
+// modalities/dependencies/total-tokens and still pass ("um self-fingerprint válido não substitui
+// o cross-check 1:1"). Returns the name of the first mismatched field, or null if every field
+// agrees. Array fields are semantically unordered sets, canonicalized (sorted) before comparison;
+// stage *order* itself (stage_sequence, and each stage's position in both manifests) remains
+// semantically significant and is never canonicalized away.
+const RUNTIME_STAGE_SCALAR_FIELDS = Object.freeze([
+  'stage_sequence', 'stage_type', 'task_reference_id', 'agent_reference_id', 'memory_selection_reference_id',
+  'context_assembly_reference_id', 'model_selection_reference_id', 'workflow_reference_id', 'priority',
+  'parallelizable', 'optional', 'approval_required', 'estimated_input_tokens', 'estimated_output_tokens',
+  'estimated_total_tokens', 'estimated_cost_minor_units'
+]);
+const RUNTIME_STAGE_ARRAY_FIELDS = Object.freeze(['tool_reference_ids', 'dependency_reference_ids', 'required_capabilities', 'required_modalities']);
+
+function canonicalArray(list) {
+  return Array.isArray(list) ? [...list].sort() : [];
+}
+
+function arraysEqual(a, b) {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function compareRuntimeStageToSourceStage(runtimeStage, sourceStage) {
+  if (!isPlainObject(runtimeStage) || !isPlainObject(sourceStage)) return 'runtime_stage_missing';
+  if (runtimeStage.source_orchestrator_stage_id !== sourceStage.stage_id) return 'source_orchestrator_stage_id';
+  for (const field of RUNTIME_STAGE_SCALAR_FIELDS) {
+    if (runtimeStage[field] !== sourceStage[field]) return field;
+  }
+  for (const field of RUNTIME_STAGE_ARRAY_FIELDS) {
+    if (!arraysEqual(canonicalArray(runtimeStage[field]), canonicalArray(sourceStage[field]))) return field;
+  }
+  return null;
+}
+
+// The derived fields a RuntimeStageSimulationReference carries that no single StageRecord field
+// maps to directly -- cross-validated against the real official sources this same request already
+// carries, never trusted merely because the reference's own self-fingerprint recomputed cleanly.
+function validateRuntimeStageDerivedFields(stage, { record, bindingLedger, runtimeStopRefs, runtimeCompensationRefs, scopeRef }) {
+  const expectedBindingIds = (bindingLedger.binding_records || [])
+    .filter((binding) => binding.execution_stage_id === record.stage_id)
+    .map((binding) => binding.binding_record_id)
+    .sort();
+  if (!arraysEqual(canonicalArray(stage.binding_reference_ids), expectedBindingIds)) return 'binding_reference_ids';
+
+  const expectedStopIds = runtimeStopRefs
+    .filter((stop) => stop.runtime_stage_reference_id === stage.runtime_stage_reference_id)
+    .map((stop) => stop.runtime_stop_reference_id)
+    .sort();
+  if (!arraysEqual(canonicalArray(stage.stop_reference_ids), expectedStopIds)) return 'stop_reference_ids';
+
+  const expectedCompensationIds = runtimeCompensationRefs
+    .filter((compensation) => compensation.runtime_stage_reference_id === stage.runtime_stage_reference_id)
+    .map((compensation) => compensation.runtime_compensation_reference_id)
+    .sort();
+  if (!arraysEqual(canonicalArray(stage.compensation_reference_ids), expectedCompensationIds)) return 'compensation_reference_ids';
+
+  // side_effect_classification: the only independently-derivable signal available at this layer
+  // (task_reference itself is never propagated past the Gateway -- see docs "Limitações") is
+  // whether a real, state-change-worthy compensation is bound to this stage, mirroring
+  // execution-plan-engine.js's own deriveSideEffectClassification for that one branch. A stage can
+  // never declare NONE while a required/real compensation contradicts it -- hiding a real state
+  // change behind a false NONE claim is exactly the class of tamper this cross-check exists to
+  // catch. The reverse (declaring STATE_CHANGE_REFERENCE ahead of its compensation) is already
+  // caught unambiguously at the dedicated compensation-coverage check below, with its own, more
+  // specific RUNTIME_COMPENSATION_BLOCKED reason -- never duplicated here.
+  const hasStateChangeEvidence = runtimeCompensationRefs.some((compensation) => (
+    compensation.runtime_stage_reference_id === stage.runtime_stage_reference_id
+    && (compensation.required === true || compensation.compensation_type !== 'NONE')
+  ));
+  if (hasStateChangeEvidence && stage.side_effect_classification === 'NONE') return 'side_effect_classification';
+
+  // risk_classification: cross-checked against the real AuthorizationScopeReference's own
+  // allowed_risk_classifications -- the one genuine source of truth for risk available at this
+  // layer (task_reference.risk_classification itself is never propagated past the Gateway either;
+  // see docs "Limitações").
+  if (
+    Array.isArray(scopeRef.allowed_risk_classifications) && scopeRef.allowed_risk_classifications.length > 0
+    && !scopeRef.allowed_risk_classifications.includes(stage.risk_classification)
+  ) {
+    return 'risk_classification';
+  }
+
+  return null;
 }
 
 // Mirrors execution-gateway-boundary.js's own checkIdentity exactly: tenant/organization always
@@ -262,6 +350,7 @@ function evaluateRuntimeExecutionSimulationRequest(request, context = {}) {
   const runtimeStageManifest = requestIsObject ? request.runtime_stage_manifest_reference : undefined;
   const runtimeDependencyManifest = requestIsObject ? request.runtime_dependency_manifest_reference : undefined;
   const runtimeBudgetRef = requestIsObject ? request.runtime_budget_reference : undefined;
+  const executionBudgetReference = requestIsObject ? request.execution_budget_reference : undefined;
   const runtimeStopRefs = requestIsObject && Array.isArray(request.runtime_stop_references) ? request.runtime_stop_references : [];
   const runtimeCompensationRefs = requestIsObject && Array.isArray(request.runtime_compensation_references) ? request.runtime_compensation_references : [];
   const runtimeArtifactPlan = requestIsObject ? request.runtime_artifact_plan_reference : undefined;
@@ -285,7 +374,7 @@ function evaluateRuntimeExecutionSimulationRequest(request, context = {}) {
     request, requestFingerprint, gatewayResultFingerprint, canonical, policy, gatewayDecision, gatewayResult,
     gatewayPackageRef, plan, result, stageManifestRef, dependencyGraphRef, bindingLedger, validationLedger,
     provenanceRef, scopeRef, snapshotRef, runtimeStageManifest, runtimeDependencyManifest, runtimeBudgetRef,
-    runtimeStopRefs, runtimeCompensationRefs, runtimeArtifactPlan, runtimeEventPlan
+    executionBudgetReference, runtimeStopRefs, runtimeCompensationRefs, runtimeArtifactPlan, runtimeEventPlan
   };
 
   function finalize(status, reasonCodes, extra, flags) {
@@ -308,7 +397,12 @@ function evaluateRuntimeExecutionSimulationRequest(request, context = {}) {
     ['dependency_graph_reference', dependencyGraphRef], ['binding_ledger_reference', bindingLedger],
     ['validation_ledger_reference', validationLedger], ['authorization_provenance_reference', provenanceRef],
     ['authorization_scope_reference', scopeRef], ['registry_snapshot_reference', snapshotRef],
-    ['gateway_decision_reference', gatewayDecision], ['gateway_result_reference', gatewayResult]
+    ['gateway_decision_reference', gatewayDecision], ['gateway_result_reference', gatewayResult],
+    // ExecutionPlanBudget carries no tenant/organization/project/session fields of its own today --
+    // checkIdentity() skips whatever a reference doesn't structurally carry, so this is a no-op
+    // now and becomes a real check automatically if that contract ever gains identity fields
+    // ("tenant/org/project/session bindings disponíveis").
+    ['execution_budget_reference', executionBudgetReference]
   ];
   for (const [label, reference] of identityChecks) {
     const mismatch = checkIdentity(reference, canonical, label);
@@ -393,20 +487,13 @@ function evaluateRuntimeExecutionSimulationRequest(request, context = {}) {
   for (let i = 0; i < sourceStageRecords.length; i += 1) {
     const record = sourceStageRecords[i];
     const stage = runtimeStages[i];
-    if (
-      !stage || stage.source_orchestrator_stage_id !== record.stage_id || stage.stage_sequence !== record.stage_sequence
-      || stage.stage_type !== record.stage_type || stage.task_reference_id !== record.task_reference_id
-      || stage.agent_reference_id !== record.agent_reference_id
-      || stage.model_selection_reference_id !== record.model_selection_reference_id
-      || stage.workflow_reference_id !== record.workflow_reference_id
-      || JSON.stringify(stage.tool_reference_ids) !== JSON.stringify([...record.tool_reference_ids].sort())
-      || stage.parallelizable !== record.parallelizable || stage.optional !== record.optional
-      || stage.approval_required !== record.approval_required
-      || stage.estimated_input_tokens !== record.estimated_input_tokens
-      || stage.estimated_output_tokens !== record.estimated_output_tokens
-      || stage.estimated_cost_minor_units !== record.estimated_cost_minor_units
-    ) {
-      return finalize('RUNTIME_STAGE_MANIFEST_BLOCKED', [`runtime_stage_not_preserved_1to1::${record.stage_id}`], {}, validatedFlags);
+    const mismatchedField = compareRuntimeStageToSourceStage(stage, record);
+    if (mismatchedField) {
+      return finalize('RUNTIME_STAGE_MANIFEST_BLOCKED', [`runtime_stage_not_preserved_1to1::${record.stage_id}::${mismatchedField}`], {}, validatedFlags);
+    }
+    const derivedMismatch = validateRuntimeStageDerivedFields(stage, { record, bindingLedger, runtimeStopRefs, runtimeCompensationRefs, scopeRef });
+    if (derivedMismatch) {
+      return finalize('RUNTIME_STAGE_MANIFEST_BLOCKED', [`runtime_stage_not_preserved_1to1::${record.stage_id}::${derivedMismatch}`], {}, validatedFlags);
     }
   }
   markValid('stage_manifest_validated');
@@ -428,15 +515,31 @@ function evaluateRuntimeExecutionSimulationRequest(request, context = {}) {
   }
   const sourceDependencyRecords = dependencyGraphRef.dependency_records;
   const runtimeDependencies = runtimeDependencyManifest.runtime_dependency_references;
-  for (let i = 0; i < sourceDependencyRecords.length; i += 1) {
-    const record = sourceDependencyRecords[i];
-    const dependency = runtimeDependencies[i];
+  // pr103fix: endpoints must resolve through a deterministic source-stage-id -> runtime-stage-id
+  // map, never assumed by array position -- the original check compared id/type/required but
+  // never proved from_runtime_stage_id/to_runtime_stage_id actually correspond to the real
+  // endpoints of the source dependency, leaving a redirect (or a reused dependency id pointed at
+  // different stages) undetected. Matching is by source_dependency_id, independent of input
+  // order, exactly as required.
+  const runtimeStageMap = new Map(sourceStageRecords.map((record, index) => [record.stage_id, runtimeStages[index].runtime_stage_reference_id]));
+  const runtimeDependencyBySourceId = new Map(runtimeDependencies.map((dependency) => [dependency.source_dependency_id, dependency]));
+  if (
+    runtimeDependencies.length !== sourceDependencyRecords.length
+    || runtimeDependencyBySourceId.size !== runtimeDependencies.length
+  ) {
+    return finalize('RUNTIME_DEPENDENCY_BLOCKED', ['runtime_dependency_cardinality_mismatch'], {}, validatedFlags);
+  }
+  for (const record of sourceDependencyRecords) {
+    const dependency = runtimeDependencyBySourceId.get(record.dependency_id);
+    const expectedFrom = runtimeStageMap.get(record.from_stage_id);
+    const expectedTo = runtimeStageMap.get(record.to_stage_id);
     if (
-      !dependency || dependency.source_dependency_id !== record.dependency_id
+      !dependency || expectedFrom === undefined || expectedTo === undefined
+      || dependency.from_runtime_stage_id !== expectedFrom || dependency.to_runtime_stage_id !== expectedTo
       || dependency.dependency_type !== record.dependency_type || dependency.required !== record.required
       || dependency.dependency_validated !== true
     ) {
-      return finalize('RUNTIME_DEPENDENCY_BLOCKED', [`runtime_dependency_not_preserved_1to1::${record.dependency_id}`], {}, validatedFlags);
+      return finalize('RUNTIME_DEPENDENCY_BLOCKED', [`runtime_dependency_endpoint_mismatch::${record.dependency_id}`], {}, validatedFlags);
     }
   }
   markValid('dependency_manifest_validated');
@@ -500,7 +603,9 @@ function evaluateRuntimeExecutionSimulationRequest(request, context = {}) {
   markValid('policy_validated');
 
   // 21. Budget -- sums the real stage estimates and compares against the Runtime Budget
-  // Simulation Reference's own declared estimates/counts. Never reserves or consumes anything.
+  // Simulation Reference's own declared estimates/counts, and cross-checks the whole thing against
+  // the real ExecutionPlanBudget (PR #98) it claims to summarize. Never reserves or consumes
+  // anything.
   if (
     runtimeBudgetRef.execution_plan_id !== plan.execution_plan_id || runtimeBudgetRef.budget_validated !== true
     || runtimeBudgetRef.estimated_input_tokens !== runtimeStageManifest.estimated_input_tokens
@@ -513,6 +618,33 @@ function evaluateRuntimeExecutionSimulationRequest(request, context = {}) {
     || runtimeBudgetRef.parallel_stage_count !== runtimeStageManifest.parallel_stage_count
   ) {
     return finalize('RUNTIME_BUDGET_BLOCKED', ['runtime_budget_not_validated_or_mismatched_with_stage_manifest'], {}, validatedFlags);
+  }
+  // pr103fix: "O Runtime Budget deriva seus limites do ExecutionPlanBudget real. Flags de limite
+  // fornecidas pelo caller não são fonte de verdade." -- every maximum_*/reserved_* field the
+  // Runtime Budget declares is compared, byte-exact, against the real ExecutionPlanBudget; and
+  // stage_counts_within_limit is *recomputed* from the real maximum_model_stages/maximum_tool_
+  // stages/maximum_workflow_stages/maximum_parallel_stages caps, never trusted as a caller-declared
+  // boolean, even though those caps have no field of their own on RuntimeBudgetSimulationReference.
+  if (
+    executionBudgetReference.execution_plan_id !== plan.execution_plan_id
+    || runtimeBudgetRef.execution_budget_id !== executionBudgetReference.execution_budget_id
+    || runtimeBudgetRef.budget_authorization_id !== executionBudgetReference.budget_authorization_id
+    || runtimeBudgetRef.maximum_total_tokens !== executionBudgetReference.maximum_total_tokens
+    || runtimeBudgetRef.maximum_input_tokens !== executionBudgetReference.maximum_input_tokens
+    || runtimeBudgetRef.maximum_output_tokens !== executionBudgetReference.maximum_output_tokens
+    || runtimeBudgetRef.maximum_total_cost_minor_units !== executionBudgetReference.maximum_total_cost_minor_units
+    || runtimeBudgetRef.reserved_memory_tokens !== executionBudgetReference.reserved_memory_tokens
+    || runtimeBudgetRef.reserved_context_tokens !== executionBudgetReference.reserved_context_tokens
+    || runtimeBudgetRef.reserved_output_tokens !== executionBudgetReference.reserved_output_tokens
+  ) {
+    return finalize('RUNTIME_BUDGET_BLOCKED', ['runtime_budget_not_linked_to_real_execution_plan_budget'], {}, validatedFlags);
+  }
+  const recomputedStageCountsWithinLimit = runtimeStageManifest.model_stage_count <= executionBudgetReference.maximum_model_stages
+    && runtimeStageManifest.tool_stage_count <= executionBudgetReference.maximum_tool_stages
+    && runtimeStageManifest.workflow_stage_count <= executionBudgetReference.maximum_workflow_stages
+    && runtimeStageManifest.parallel_stage_count <= executionBudgetReference.maximum_parallel_stages;
+  if (runtimeBudgetRef.stage_counts_within_limit !== recomputedStageCountsWithinLimit || recomputedStageCountsWithinLimit !== true) {
+    return finalize('RUNTIME_BUDGET_BLOCKED', ['runtime_budget_stage_counts_within_limit_not_honestly_derived'], {}, validatedFlags);
   }
   markValid('budget_validated');
 
@@ -618,8 +750,9 @@ function buildOutcome(status, reasonCodes, ctx, validatedFlags) {
   const {
     request, requestFingerprint, gatewayResultFingerprint, canonical, gatewayDecision, gatewayResult,
     gatewayPackageRef, plan, result, stageManifestRef, dependencyGraphRef, bindingLedger, validationLedger,
-    runtimeStageManifest, runtimeDependencyManifest, runtimeBudgetRef, runtimeStopRefs, runtimeCompensationRefs,
-    runtimeArtifactPlan, runtimeEventPlan, orderedRuntimeStageIds, runtimeDependencyIds, estimates
+    runtimeStageManifest, runtimeDependencyManifest, runtimeBudgetRef, executionBudgetReference, runtimeStopRefs,
+    runtimeCompensationRefs, runtimeArtifactPlan, runtimeEventPlan, orderedRuntimeStageIds, runtimeDependencyIds,
+    estimates
   } = ctx;
 
   const requestSafe = isPlainObject(request) ? request : {};
@@ -635,6 +768,7 @@ function buildOutcome(status, reasonCodes, ctx, validatedFlags) {
   const runtimeStageManifestSafe = isPlainObject(runtimeStageManifest) ? runtimeStageManifest : {};
   const runtimeDependencyManifestSafe = isPlainObject(runtimeDependencyManifest) ? runtimeDependencyManifest : {};
   const runtimeBudgetSafe = isPlainObject(runtimeBudgetRef) ? runtimeBudgetRef : {};
+  const executionBudgetReferenceSafe = isPlainObject(executionBudgetReference) ? executionBudgetReference : {};
   const runtimeArtifactPlanSafe = isPlainObject(runtimeArtifactPlan) ? runtimeArtifactPlan : {};
   const runtimeEventPlanSafe = isPlainObject(runtimeEventPlan) ? runtimeEventPlan : {};
   const canonicalSafe = canonical || {};
@@ -648,7 +782,8 @@ function buildOutcome(status, reasonCodes, ctx, validatedFlags) {
     plan: planSafe, result: resultSafe, stageManifestRef: stageManifestSafe, dependencyGraphRef: depGraphSafe,
     bindingLedger: bindingLedgerSafe, validationLedger: validationLedgerSafe,
     runtimeStageManifest: runtimeStageManifestSafe, runtimeDependencyManifest: runtimeDependencyManifestSafe,
-    runtimeBudgetRef: runtimeBudgetSafe, runtimeStopRefs: runtimeStopRefs || [], runtimeCompensationRefs: runtimeCompensationRefs || [],
+    runtimeBudgetRef: runtimeBudgetSafe, executionBudgetReference: executionBudgetReferenceSafe,
+    runtimeStopRefs: runtimeStopRefs || [], runtimeCompensationRefs: runtimeCompensationRefs || [],
     runtimeArtifactPlan: runtimeArtifactPlanSafe, runtimeEventPlan: runtimeEventPlanSafe,
     orderedRuntimeStageIds: orderedRuntimeStageIds || [], runtimeDependencyIds: runtimeDependencyIds || [],
     estimates: estimatesSafe, canonical: canonicalSafe

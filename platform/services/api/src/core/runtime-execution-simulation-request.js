@@ -23,6 +23,7 @@ const { validateRuntimeStopSimulationReference } = require('./runtime-stop-simul
 const { validateRuntimeCompensationSimulationReference } = require('./runtime-compensation-simulation-reference');
 const { validateRuntimeArtifactPlanReference } = require('./runtime-artifact-plan-reference');
 const { validateRuntimeEventPlanReference } = require('./runtime-event-plan-reference');
+const { validateExecutionPlanBudget } = require('./execution-plan-budget');
 
 const RUNTIME_EXECUTION_SIMULATION_REQUEST_VALIDATOR_VERSION = 'runtime_execution_simulation_request_validator_v1';
 
@@ -32,10 +33,10 @@ const RUNTIME_EXECUTION_SIMULATION_REQUEST_FIELDS = Object.freeze([
   'execution_plan_result_reference', 'stage_manifest_reference', 'dependency_graph_reference',
   'binding_ledger_reference', 'validation_ledger_reference', 'authorization_provenance_reference',
   'authorization_scope_reference', 'registry_snapshot_reference', 'runtime_stage_manifest_reference',
-  'runtime_dependency_manifest_reference', 'runtime_budget_reference', 'runtime_stop_references',
-  'runtime_compensation_references', 'runtime_artifact_plan_reference', 'runtime_event_plan_reference',
-  'correlation_id', 'causation_id', 'trace_id', 'logical_sequence', 'expected_runtime_registry_version',
-  'simulation_context', 'validator_version'
+  'runtime_dependency_manifest_reference', 'runtime_budget_reference', 'execution_budget_reference',
+  'runtime_stop_references', 'runtime_compensation_references', 'runtime_artifact_plan_reference',
+  'runtime_event_plan_reference', 'correlation_id', 'causation_id', 'trace_id', 'logical_sequence',
+  'expected_runtime_registry_version', 'simulation_context', 'validator_version'
 ]);
 
 // Every single-object nested reference this request carries, and the real validator each one is
@@ -59,6 +60,11 @@ const NESTED_REFERENCE_VALIDATORS = Object.freeze([
   ['runtime_stage_manifest_reference', validateRuntimeStageSimulationManifest],
   ['runtime_dependency_manifest_reference', validateRuntimeDependencySimulationManifest],
   ['runtime_budget_reference', validateRuntimeBudgetSimulationReference],
+  // pr103fix: the real ExecutionPlanBudget (PR #98) this Runtime Budget claims to summarize --
+  // "Usar o contrato e validator oficial já existente do Execution Plan Budget. Não criar um
+  // contrato paralelo." Cross-checked field-by-field, and used to recompute
+  // stage_counts_within_limit honestly, in evaluateRuntimeExecutionSimulationRequest.
+  ['execution_budget_reference', validateExecutionPlanBudget],
   ['runtime_artifact_plan_reference', validateRuntimeArtifactPlanReference],
   ['runtime_event_plan_reference', validateRuntimeEventPlanReference]
 ]);
@@ -136,6 +142,7 @@ function buildRuntimeExecutionSimulationRequest(input = {}) {
     runtime_stage_manifest_reference: input.runtime_stage_manifest_reference,
     runtime_dependency_manifest_reference: input.runtime_dependency_manifest_reference,
     runtime_budget_reference: input.runtime_budget_reference,
+    execution_budget_reference: input.execution_budget_reference,
     runtime_stop_references: Array.isArray(input.runtime_stop_references) ? input.runtime_stop_references : [],
     runtime_compensation_references: Array.isArray(input.runtime_compensation_references) ? input.runtime_compensation_references : [],
     runtime_artifact_plan_reference: input.runtime_artifact_plan_reference,

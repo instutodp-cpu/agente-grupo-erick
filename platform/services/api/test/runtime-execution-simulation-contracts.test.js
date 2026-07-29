@@ -56,7 +56,9 @@ const {
 } = require('../src/core/runtime-execution-package');
 const { createRuntimeExecutionSimulationRegistry } = require('../src/core/runtime-execution-simulation-registry');
 const { buildOrchestratorStageManifestReference, buildStageRecord } = require('../src/core/orchestrator-stage-manifest-reference');
-const { buildExecutionPlanDependencyGraphReference } = require('../src/core/execution-plan-dependency-graph-reference');
+const { buildAuthorizationScopeReference } = require('../src/core/execution-authorization-scope-reference');
+const { buildExecutionPlanDependencyGraphReference, buildDependencyRecord } = require('../src/core/execution-plan-dependency-graph-reference');
+const { buildExecutionPlanBudget } = require('../src/core/execution-plan-budget');
 const { computeGatewayPackageDigest } = require('../src/core/execution-gateway-boundary');
 const { buildExecutionGatewayPackageReference } = require('../src/core/execution-gateway-package-reference');
 const { buildGoldenRuntimeBundle } = require('./helpers/runtime-execution-simulation-test-data');
@@ -129,9 +131,10 @@ const EXPECTED_SCENARIOS = [
   'runtime-package-prepared-tool-reference', 'runtime-package-prepared-workflow-reference', 'gateway-not-accepted',
   'gateway-result-not-accepted', 'execution-plan-not-prepared', 'stage-manifest-mismatch',
   'dependency-graph-mismatch', 'binding-ledger-blocked', 'validation-ledger-blocked', 'budget-mismatch',
-  'input-budget-exceeded', 'output-budget-exceeded', 'cost-budget-exceeded', 'stop-plan-mismatch',
-  'state-change-without-compensation', 'artifact-plan-blocked', 'event-plan-blocked', 'package-fingerprint-mismatch',
-  'tenant-mismatch', 'context-side-channel-inert', 'operational-flag-override-blocked', 'canonical-package-order'
+  'input-budget-exceeded', 'output-budget-exceeded', 'cost-budget-exceeded', 'budget-not-linked-to-execution-plan-budget',
+  'stop-plan-mismatch', 'state-change-without-compensation', 'artifact-plan-blocked', 'event-plan-blocked',
+  'package-fingerprint-mismatch', 'tenant-mismatch', 'runtime-stage-memory-reference-tampered',
+  'context-side-channel-inert', 'operational-flag-override-blocked', 'canonical-package-order'
 ];
 
 const EXPECTED_STATUS_BY_SCENARIO = {
@@ -150,12 +153,14 @@ const EXPECTED_STATUS_BY_SCENARIO = {
   'input-budget-exceeded': 'RUNTIME_BUDGET_BLOCKED',
   'output-budget-exceeded': 'RUNTIME_BUDGET_BLOCKED',
   'cost-budget-exceeded': 'RUNTIME_BUDGET_BLOCKED',
+  'budget-not-linked-to-execution-plan-budget': 'RUNTIME_BUDGET_BLOCKED',
   'stop-plan-mismatch': 'RUNTIME_STOP_BLOCKED',
   'state-change-without-compensation': 'RUNTIME_COMPENSATION_BLOCKED',
   'artifact-plan-blocked': 'RUNTIME_ARTIFACT_PLAN_BLOCKED',
   'event-plan-blocked': 'RUNTIME_EVENT_PLAN_BLOCKED',
   'package-fingerprint-mismatch': 'RUNTIME_FINGERPRINT_BLOCKED',
   'tenant-mismatch': 'TENANT_BLOCKED',
+  'runtime-stage-memory-reference-tampered': 'RUNTIME_STAGE_MANIFEST_BLOCKED',
   'context-side-channel-inert': 'RUNTIME_PACKAGE_PREPARED_SIMULATION',
   'operational-flag-override-blocked': 'RUNTIME_PACKAGE_PREPARED_SIMULATION',
   'canonical-package-order': 'RUNTIME_PACKAGE_PREPARED_SIMULATION'
@@ -278,6 +283,134 @@ test('stage manifest: rejects a sequence mismatch (canonical order violated)', (
   assert.throws(() => buildRuntimeStageSimulationManifest({ ...golden.runtimeStageManifest, runtime_stage_references: reordered }));
 });
 
+// --- pr103fix FIX #1: comprehensive 1:1 preservation, one test per field --------------------
+//
+// "Um Runtime Stage Manifest autofingerprintado pode alterar memória, contexto, capabilities,
+// modalidades, risco, side effect, dependências, bindings, stops, compensações ou total de tokens
+// e ainda passar." -- each of these is now independently, individually tamper-tested.
+
+function buildRequestWithTamperedFirstStage(golden, stageOverrides) {
+  const stage = buildRuntimeStageSimulationReference({ ...golden.runtimeStageReferences[0], ...stageOverrides });
+  const manifest = buildRuntimeStageSimulationManifest({
+    runtime_stage_manifest_id: golden.runtimeStageManifest.runtime_stage_manifest_id,
+    runtime_request_id: golden.runtimeStageManifest.runtime_request_id,
+    runtime_execution_package_id: golden.runtimeStageManifest.runtime_execution_package_id,
+    execution_plan_id: golden.runtimeStageManifest.execution_plan_id,
+    stage_manifest_reference_id: golden.runtimeStageManifest.stage_manifest_reference_id,
+    stage_manifest_fingerprint: golden.runtimeStageManifest.stage_manifest_fingerprint,
+    runtime_stage_references: [stage, ...golden.runtimeStageReferences.slice(1)]
+  });
+  return buildRuntimeExecutionSimulationRequest({ ...golden.runtimeRequest, runtime_stage_manifest_reference: manifest });
+}
+
+const STAGE_FIELD_TAMPER_CASES = [
+  ['source_orchestrator_stage_id', { source_orchestrator_stage_id: 'other-stage-id' }],
+  ['stage_type', { stage_type: 'AUDIT_STAGE' }],
+  ['task_reference_id', { task_reference_id: 'other-taskref-1' }],
+  ['agent_reference_id', { agent_reference_id: 'selref-agent-1' }],
+  ['memory_selection_reference_id', { memory_selection_reference_id: 'selref-memory-1' }],
+  ['context_assembly_reference_id', { context_assembly_reference_id: 'selref-context-1' }],
+  ['model_selection_reference_id', { model_selection_reference_id: 'selref-modelref-1' }],
+  ['workflow_reference_id', { workflow_reference_id: 'selref-workflow-1' }],
+  ['tool_reference_ids', { tool_reference_ids: ['tool-x'] }],
+  ['dependency_reference_ids', { dependency_reference_ids: ['dep-x'] }],
+  ['required_capabilities', { required_capabilities: ['TEXT_GENERATION_REFERENCE'] }],
+  ['required_modalities', { required_modalities: ['TEXT_INPUT'] }],
+  ['priority', { priority: 5 }],
+  ['parallelizable', { parallelizable: true }],
+  ['optional', { optional: true }],
+  ['approval_required', { approval_required: true }],
+  ['estimated_cost_minor_units', { estimated_cost_minor_units: 999 }]
+];
+
+for (const [field, overrides] of STAGE_FIELD_TAMPER_CASES) {
+  test(`stage 1:1 preservation: tampering ${field} alone blocks as RUNTIME_STAGE_MANIFEST_BLOCKED::${field}`, () => {
+    const golden = buildGoldenRuntimeBundle();
+    const request = buildRequestWithTamperedFirstStage(golden, overrides);
+    const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+    assert.equal(outcome.decision.status, 'RUNTIME_STAGE_MANIFEST_BLOCKED', field);
+    assert.ok(outcome.decision.reason_codes[0].includes(`::${field}`), `expected reason to name ${field}, got ${outcome.decision.reason_codes[0]}`);
+  });
+}
+
+test('stage 1:1 preservation: estimated_input_tokens/estimated_output_tokens/estimated_total_tokens divergence from source blocks (entangled by the stage\'s own sum-consistency rule)', () => {
+  const golden = buildGoldenRuntimeBundle();
+  const request = buildRequestWithTamperedFirstStage(golden, { estimated_input_tokens: 60, estimated_output_tokens: 60, estimated_total_tokens: 120 });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_STAGE_MANIFEST_BLOCKED');
+  assert.match(outcome.decision.reason_codes[0], /estimated_(input|output|total)_tokens/);
+});
+
+test('stage 1:1 preservation: stage_sequence cannot be tampered even by construction (safety by construction -- canonical order is enforced at the manifest builder itself)', () => {
+  const golden = buildGoldenRuntimeBundle();
+  const stage = buildRuntimeStageSimulationReference({ ...golden.runtimeStageReferences[0], stage_sequence: 7 });
+  assert.throws(() => buildRuntimeStageSimulationManifest({
+    ...golden.runtimeStageManifest, runtime_stage_references: [stage, ...golden.runtimeStageReferences.slice(1)]
+  }));
+});
+
+// --- pr103fix FIX #1: derived fields (binding/stop/compensation ids, side effect, risk) ------
+
+test('stage derived fields: a binding_reference_ids claim not backed by the real binding ledger blocks', () => {
+  const golden = buildGoldenRuntimeBundle();
+  const request = buildRequestWithTamperedFirstStage(golden, { binding_reference_ids: ['fake-binding-record-1'] });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_STAGE_MANIFEST_BLOCKED');
+  assert.ok(outcome.decision.reason_codes[0].includes('::binding_reference_ids'));
+});
+
+test('stage derived fields: a stop_reference_ids claim not backed by the real runtime_stop_references blocks', () => {
+  const golden = buildGoldenRuntimeBundle();
+  const request = buildRequestWithTamperedFirstStage(golden, { stop_reference_ids: [] });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_STAGE_MANIFEST_BLOCKED');
+  assert.ok(outcome.decision.reason_codes[0].includes('::stop_reference_ids'));
+});
+
+test('stage derived fields: a compensation_reference_ids claim not backed by real compensations blocks', () => {
+  const golden = buildGoldenRuntimeBundle();
+  const request = buildRequestWithTamperedFirstStage(golden, { compensation_reference_ids: ['fake-compensation-1'] });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_STAGE_MANIFEST_BLOCKED');
+  assert.ok(outcome.decision.reason_codes[0].includes('::compensation_reference_ids'));
+});
+
+test('stage derived fields: hiding a real state-change-worthy compensation behind a false NONE classification blocks', () => {
+  const golden = buildGoldenRuntimeBundle();
+  const stage0 = golden.runtimeStageReferences[0];
+  const compensation = buildRuntimeCompensationSimulationReference({
+    runtime_compensation_reference_id: `${golden.runtimeRequestId}-compensation-hidden`,
+    runtime_execution_package_id: golden.runtimeExecutionPackageId,
+    execution_plan_id: golden.plan.execution_plan_id,
+    runtime_stage_reference_id: stage0.runtime_stage_reference_id,
+    source_compensation_reference_id: 'comp-hidden',
+    compensation_type: 'ROLLBACK_REFERENCE',
+    required: true,
+    compensation_validated: true
+  });
+  // side_effect_classification stays 'NONE' (falsely), but compensation_reference_ids is updated
+  // to point at the real compensation -- isolates the side_effect_classification mismatch alone.
+  const request = buildRequestWithTamperedFirstStage(golden, { compensation_reference_ids: [compensation.runtime_compensation_reference_id] });
+  const requestWithCompensation = buildRuntimeExecutionSimulationRequest({ ...request, runtime_compensation_references: [compensation] });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(requestWithCompensation, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_STAGE_MANIFEST_BLOCKED');
+  assert.ok(outcome.decision.reason_codes[0].includes('::side_effect_classification'));
+});
+
+test('stage derived fields: risk_classification outside the authorization scope\'s allowed_risk_classifications blocks', () => {
+  const golden = buildGoldenRuntimeBundle();
+  const restrictedScope = buildAuthorizationScopeReference({ ...golden.scopeReference, allowed_risk_classifications: ['LOW'] });
+  const requestWithRestrictedScope = buildRuntimeExecutionSimulationRequest({ ...golden.runtimeRequest, authorization_scope_reference: restrictedScope });
+  const acceptedOutcome = evaluateRuntimeExecutionSimulationRequest(requestWithRestrictedScope, {});
+  assert.equal(acceptedOutcome.decision.status, 'RUNTIME_PACKAGE_PREPARED_SIMULATION', 'LOW risk stage should still pass a LOW-only allowlist');
+
+  const tooRestrictiveScope = buildAuthorizationScopeReference({ ...golden.scopeReference, allowed_risk_classifications: ['CRITICAL'] });
+  const requestWithTooRestrictiveScope = buildRuntimeExecutionSimulationRequest({ ...golden.runtimeRequest, authorization_scope_reference: tooRestrictiveScope });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(requestWithTooRestrictiveScope, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_STAGE_MANIFEST_BLOCKED');
+  assert.ok(outcome.decision.reason_codes[0].includes('::risk_classification'));
+});
+
 // --- Runtime Dependency ---------------------------------------------------------------------
 
 test('dependency reference: exact fields, dependency_satisfied/applied/would_allow_transition all false', () => {
@@ -337,6 +470,134 @@ test('dependency manifest: cycle_free is false when the graph actually cycles', 
   assert.equal(manifest.cycle_free, false);
 });
 
+// --- pr103fix FIX #2: dependency endpoints resolve through the real source graph, never trusted
+// as caller-declared from_runtime_stage_id/to_runtime_stage_id ------------------------------
+
+// Every base plan fixture has exactly 2 stages and 0 dependency records -- this helper populates a
+// single real edge (stage-1 -> stage-2) on both the source DependencyGraphReference and the
+// Runtime Dependency Manifest that materializes it, keeping gateway_package_reference's
+// dependency_graph_fingerprint/package_digest in agreement (mirroring the exact "rebuild every
+// dependent fingerprint" technique PR #102's own test suite established).
+function buildGoldenBundleWithOneDependency(golden) {
+  const [stage0, stage1] = golden.runtimeStageReferences;
+  const dependencyRecord = buildDependencyRecord({
+    dependency_id: 'dep-1', from_stage_id: golden.stageManifestReference.stage_records[0].stage_id,
+    to_stage_id: golden.stageManifestReference.stage_records[1].stage_id, dependency_type: 'AFTER_SUCCESS_REFERENCE', required: true
+  });
+  const dependencyGraphReference = buildExecutionPlanDependencyGraphReference({
+    ...golden.dependencyGraphReference, dependency_records: [dependencyRecord]
+  });
+  const packageDigest = computeGatewayPackageDigest({
+    plan: golden.plan, result: golden.result, authorizationDecision: golden.authorizationDecision,
+    provenanceReference: golden.provenanceReference, scopeReference: golden.scopeReference,
+    snapshotReference: golden.snapshotReference, stageManifestReference: golden.stageManifestReference,
+    dependencyGraphReference, bindingLedger: golden.bindingLedger, validationLedger: golden.validationLedger,
+    evidenceReference: golden.evidenceReference
+  });
+  const gatewayPackageReference = buildExecutionGatewayPackageReference({
+    ...golden.packageReference, dependency_graph_fingerprint: dependencyGraphReference.graph_fingerprint, package_digest: packageDigest
+  });
+  const runtimeDependencyReference = buildRuntimeDependencySimulationReference({
+    runtime_dependency_reference_id: `${golden.runtimeRequestId}-dependency-real`,
+    runtime_execution_package_id: golden.runtimeExecutionPackageId, execution_plan_id: golden.plan.execution_plan_id,
+    source_dependency_id: 'dep-1', from_runtime_stage_id: stage0.runtime_stage_reference_id,
+    to_runtime_stage_id: stage1.runtime_stage_reference_id, dependency_type: 'AFTER_SUCCESS_REFERENCE', required: true,
+    dependency_validated: true
+  });
+  const runtimeDependencyManifest = buildRuntimeDependencySimulationManifest({
+    runtime_dependency_manifest_id: golden.runtimeDependencyManifest.runtime_dependency_manifest_id,
+    runtime_execution_package_id: golden.runtimeDependencyManifest.runtime_execution_package_id,
+    execution_plan_id: golden.runtimeDependencyManifest.execution_plan_id,
+    dependency_graph_reference_id: dependencyGraphReference.dependency_graph_reference_id,
+    dependency_graph_fingerprint: dependencyGraphReference.graph_fingerprint,
+    runtime_dependency_references: [runtimeDependencyReference]
+  }, { knownStageIds: new Set(golden.runtimeStageReferences.map((s) => s.runtime_stage_reference_id)) });
+  return { dependencyGraphReference, gatewayPackageReference, runtimeDependencyReference, runtimeDependencyManifest, stage0, stage1 };
+}
+
+function buildRequestWithTamperedDependency(golden, runtimeDependencyOverrides) {
+  const built = buildGoldenBundleWithOneDependency(golden);
+  const tamperedDependency = buildRuntimeDependencySimulationReference({ ...built.runtimeDependencyReference, ...runtimeDependencyOverrides });
+  const manifest = buildRuntimeDependencySimulationManifest({
+    runtime_dependency_manifest_id: built.runtimeDependencyManifest.runtime_dependency_manifest_id,
+    runtime_execution_package_id: built.runtimeDependencyManifest.runtime_execution_package_id,
+    execution_plan_id: built.runtimeDependencyManifest.execution_plan_id,
+    dependency_graph_reference_id: built.runtimeDependencyManifest.dependency_graph_reference_id,
+    dependency_graph_fingerprint: built.runtimeDependencyManifest.dependency_graph_fingerprint,
+    runtime_dependency_references: [tamperedDependency]
+  });
+  return buildRuntimeExecutionSimulationRequest({
+    ...golden.runtimeRequest, dependency_graph_reference: built.dependencyGraphReference,
+    gateway_package_reference: built.gatewayPackageReference, runtime_dependency_manifest_reference: manifest
+  });
+}
+
+test('dependency endpoints: a real, correctly-preserved single edge is accepted', () => {
+  const golden = buildGoldenRuntimeBundle();
+  const built = buildGoldenBundleWithOneDependency(golden);
+  const request = buildRuntimeExecutionSimulationRequest({
+    ...golden.runtimeRequest, dependency_graph_reference: built.dependencyGraphReference,
+    gateway_package_reference: built.gatewayPackageReference, runtime_dependency_manifest_reference: built.runtimeDependencyManifest
+  });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_PACKAGE_PREPARED_SIMULATION');
+});
+
+test('dependency endpoints: from_runtime_stage_id altered (redirected) blocks as RUNTIME_DEPENDENCY_BLOCKED', () => {
+  const golden = buildGoldenRuntimeBundle();
+  const built = buildGoldenBundleWithOneDependency(golden);
+  const request = buildRequestWithTamperedDependency(golden, { from_runtime_stage_id: built.stage1.runtime_stage_reference_id, to_runtime_stage_id: built.stage1.runtime_stage_reference_id === built.runtimeDependencyReference.to_runtime_stage_id ? built.stage0.runtime_stage_reference_id : built.runtimeDependencyReference.to_runtime_stage_id });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_DEPENDENCY_BLOCKED');
+  assert.match(outcome.decision.reason_codes[0], /runtime_dependency_endpoint_mismatch/);
+});
+
+test('dependency endpoints: to_runtime_stage_id altered (redirected) blocks as RUNTIME_DEPENDENCY_BLOCKED', () => {
+  // With only 2 stages per base fixture, redirecting "to" back onto "from" would just be a
+  // self-dependency -- already rejected as its own, separate safety-by-construction case (see
+  // dependency-reference.test's own "rejects a self-dependency"). A redirect to a plausible but
+  // wrong id is what actually isolates the endpoint cross-check this fix adds.
+  const golden = buildGoldenRuntimeBundle();
+  const request = buildRequestWithTamperedDependency(golden, { to_runtime_stage_id: 'plan-1-rt-request-stage-9' });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_DEPENDENCY_BLOCKED');
+  assert.match(outcome.decision.reason_codes[0], /runtime_dependency_endpoint_mismatch/);
+});
+
+test('dependency endpoints: both from and to altered (fully redirected) blocks as RUNTIME_DEPENDENCY_BLOCKED', () => {
+  const golden = buildGoldenRuntimeBundle();
+  const built = buildGoldenBundleWithOneDependency(golden);
+  const request = buildRequestWithTamperedDependency(golden, {
+    from_runtime_stage_id: built.stage1.runtime_stage_reference_id, to_runtime_stage_id: built.stage0.runtime_stage_reference_id
+  });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_DEPENDENCY_BLOCKED');
+  assert.match(outcome.decision.reason_codes[0], /runtime_dependency_endpoint_mismatch/);
+});
+
+test('dependency endpoints: an endpoint pointed at a nonexistent runtime stage blocks as RUNTIME_DEPENDENCY_BLOCKED', () => {
+  const golden = buildGoldenRuntimeBundle();
+  const request = buildRequestWithTamperedDependency(golden, { to_runtime_stage_id: 'plan-1-fabricated-stage-x' });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_DEPENDENCY_BLOCKED');
+});
+
+test('dependency endpoints: matching is by source_dependency_id, never by array position (order-independent lookup, not positional comparison)', () => {
+  // With only 2 stages per base fixture there is exactly one possible non-self edge to test with
+  // real data -- the order-independence guarantee itself comes from the evaluator building a Map
+  // keyed by source_dependency_id (see runtime-execution-package.js's runtimeDependencyBySourceId)
+  // rather than iterating by array index, which this single-edge case already exercises: the
+  // runtime reference is looked up by id, not by its position in runtime_dependency_references.
+  const golden = buildGoldenRuntimeBundle();
+  const built = buildGoldenBundleWithOneDependency(golden);
+  const request = buildRuntimeExecutionSimulationRequest({
+    ...golden.runtimeRequest, dependency_graph_reference: built.dependencyGraphReference,
+    gateway_package_reference: built.gatewayPackageReference, runtime_dependency_manifest_reference: built.runtimeDependencyManifest
+  });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_PACKAGE_PREPARED_SIMULATION');
+});
+
 // --- Budget -------------------------------------------------------------------------------------
 
 test('budget: totals/input/output/cost/stage-counts derive within-limit flags honestly, no reserve/consume', () => {
@@ -356,6 +617,107 @@ test('budget: exceeding a maximum blocks budget_validated', () => {
   const budget = buildRuntimeBudgetSimulationReference({ ...golden.runtimeBudgetReference, maximum_input_tokens: 1 });
   assert.equal(budget.input_within_limit, false);
   assert.equal(budget.budget_validated, false);
+});
+
+// --- pr103fix FIX #3: Runtime Budget linked to the real ExecutionPlanBudget, limits recomputed
+// from real caps, never trusted as caller-declared ------------------------------------------
+
+function buildRequestWithTamperedBudget(golden, budgetOverrides) {
+  const budget = buildRuntimeBudgetSimulationReference({ ...golden.runtimeBudgetReference, ...budgetOverrides });
+  return buildRuntimeExecutionSimulationRequest({ ...golden.runtimeRequest, runtime_budget_reference: budget });
+}
+
+const BUDGET_LINK_TAMPER_CASES = [
+  ['maximum_total_tokens', { maximum_total_tokens: 999999 }],
+  ['maximum_input_tokens', { maximum_input_tokens: 999999 }],
+  ['maximum_output_tokens', { maximum_output_tokens: 999999 }],
+  ['maximum_total_cost_minor_units', { maximum_total_cost_minor_units: 999999 }],
+  ['reserved_memory_tokens', { reserved_memory_tokens: 1 }],
+  ['reserved_context_tokens', { reserved_context_tokens: 1 }],
+  ['reserved_output_tokens', { reserved_output_tokens: 1 }],
+  ['execution_budget_id', { execution_budget_id: 'other-execution-budget-id' }],
+  ['budget_authorization_id', { budget_authorization_id: 'other_budget_authorization_id' }]
+];
+
+for (const [field, overrides] of BUDGET_LINK_TAMPER_CASES) {
+  test(`budget link: a runtime budget whose declared ${field} diverges from the real ExecutionPlanBudget blocks as RUNTIME_BUDGET_BLOCKED`, () => {
+    const golden = buildGoldenRuntimeBundle();
+    const request = buildRequestWithTamperedBudget(golden, overrides);
+    const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+    assert.equal(outcome.decision.status, 'RUNTIME_BUDGET_BLOCKED', field);
+  });
+}
+
+test('budget link: a valid runtime budget genuinely linked to the real ExecutionPlanBudget still passes', () => {
+  const golden = buildGoldenRuntimeBundle();
+  const outcome = evaluateRuntimeExecutionSimulationRequest(golden.runtimeRequest, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_PACKAGE_PREPARED_SIMULATION');
+});
+
+test('budget link: stage_counts_within_limit=true falsified by the caller is recomputed and rejected (not trusted)', () => {
+  const golden = buildGoldenRuntimeBundle();
+  // The real ExecutionPlanBudget's maximum_parallel_stages is reduced to below the real
+  // parallel_stage_count the stage manifest actually has -- the runtime budget still *declares*
+  // stage_counts_within_limit=true (a lie the contract's own builder has no way to catch locally,
+  // since it never sees the real caps), but the evaluator recomputes it honestly and blocks.
+  // parallelizable=true is set at *both* the source StageManifestReference and the Runtime Stage
+  // Manifest that materializes it (keeping FIX #1's own 1:1 preservation check satisfied, and
+  // gateway_package_reference's stage_manifest_fingerprint/package_digest in agreement) so that
+  // this test isolates the budget cross-check specifically, not the stage-preservation one.
+  const template = golden.stageManifestReference.stage_records[0];
+  const { stage_fingerprint, ...templateRest } = template;
+  const parallelRecord = buildStageRecord({ ...templateRest, parallelizable: true });
+  const stageManifestReference = buildOrchestratorStageManifestReference({
+    ...golden.stageManifestReference, stage_records: [parallelRecord, ...golden.stageManifestReference.stage_records.slice(1)]
+  });
+  const packageDigest = computeGatewayPackageDigest({
+    plan: golden.plan, result: golden.result, authorizationDecision: golden.authorizationDecision,
+    provenanceReference: golden.provenanceReference, scopeReference: golden.scopeReference,
+    snapshotReference: golden.snapshotReference, stageManifestReference, dependencyGraphReference: golden.dependencyGraphReference,
+    bindingLedger: golden.bindingLedger, validationLedger: golden.validationLedger, evidenceReference: golden.evidenceReference
+  });
+  const gatewayPackageReference = buildExecutionGatewayPackageReference({
+    ...golden.packageReference, stage_manifest_fingerprint: stageManifestReference.manifest_fingerprint, package_digest: packageDigest
+  });
+  const stage = buildRuntimeStageSimulationReference({ ...golden.runtimeStageReferences[0], parallelizable: true });
+  const manifest = buildRuntimeStageSimulationManifest({
+    runtime_stage_manifest_id: golden.runtimeStageManifest.runtime_stage_manifest_id,
+    runtime_request_id: golden.runtimeStageManifest.runtime_request_id,
+    runtime_execution_package_id: golden.runtimeStageManifest.runtime_execution_package_id,
+    execution_plan_id: golden.runtimeStageManifest.execution_plan_id,
+    stage_manifest_reference_id: stageManifestReference.stage_manifest_reference_id,
+    stage_manifest_fingerprint: stageManifestReference.manifest_fingerprint,
+    runtime_stage_references: [stage, ...golden.runtimeStageReferences.slice(1)]
+  });
+  const executionBudgetReference = buildExecutionPlanBudget({ ...golden.executionBudgetReference, maximum_parallel_stages: 0 });
+  const budget = buildRuntimeBudgetSimulationReference({
+    ...golden.runtimeBudgetReference, parallel_stage_count: 1, stage_counts_within_limit: true
+  });
+  const policy = buildRuntimeExecutionSimulationPolicy({ ...golden.runtimePolicy, allow_parallel_reference: true });
+  const request = buildRuntimeExecutionSimulationRequest({
+    ...golden.runtimeRequest, stage_manifest_reference: stageManifestReference, gateway_package_reference: gatewayPackageReference,
+    runtime_stage_manifest_reference: manifest, execution_budget_reference: executionBudgetReference,
+    runtime_budget_reference: budget, runtime_policy: policy
+  });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_BUDGET_BLOCKED');
+  assert.deepEqual(outcome.decision.reason_codes, ['runtime_budget_stage_counts_within_limit_not_honestly_derived']);
+});
+
+test('budget link: model stage cap exceeded is recomputed from the real ExecutionPlanBudget and blocks', () => {
+  const golden = buildGoldenRuntimeBundle();
+  const requestWithModel = buildRequestWithModelStage(golden);
+  const modelStageManifest = requestWithModel.runtime_stage_manifest_reference;
+  const executionBudgetReference = buildExecutionPlanBudget({ ...golden.executionBudgetReference, maximum_model_stages: 0 });
+  const budget = buildRuntimeBudgetSimulationReference({
+    ...requestWithModel.runtime_budget_reference, execution_budget_id: executionBudgetReference.execution_budget_id
+  });
+  const request = buildRuntimeExecutionSimulationRequest({
+    ...requestWithModel, execution_budget_reference: executionBudgetReference, runtime_budget_reference: budget
+  });
+  const outcome = evaluateRuntimeExecutionSimulationRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_BUDGET_BLOCKED');
+  assert.deepEqual(outcome.decision.reason_codes, ['runtime_budget_stage_counts_within_limit_not_honestly_derived']);
 });
 
 // --- Stops --------------------------------------------------------------------------------------
@@ -604,7 +966,24 @@ test('boundary: irreversible stage always blocks (allow_irreversible_reference i
 
 test('boundary: a STATE_CHANGE_REFERENCE stage covered by a valid compensation is accepted', () => {
   const golden = buildGoldenRuntimeBundle();
-  const stage = buildRuntimeStageSimulationReference({ ...golden.runtimeStageReferences[0], side_effect_classification: 'STATE_CHANGE_REFERENCE' });
+  const baseStage = golden.runtimeStageReferences[0];
+  const compensation = buildRuntimeCompensationSimulationReference({
+    runtime_compensation_reference_id: `${golden.runtimeRequestId}-compensation-extra`,
+    runtime_execution_package_id: golden.runtimeExecutionPackageId,
+    execution_plan_id: golden.plan.execution_plan_id,
+    runtime_stage_reference_id: baseStage.runtime_stage_reference_id,
+    source_compensation_reference_id: 'comp-extra',
+    compensation_type: 'ROLLBACK_REFERENCE',
+    required: true,
+    compensation_validated: true
+  });
+  // The stage's own compensation_reference_ids must also reflect the newly-attached compensation
+  // -- FIX #1 (pr103fix) cross-validates this derived field against the real
+  // runtime_compensation_references on the request, never trusting a stale/empty declaration.
+  const stage = buildRuntimeStageSimulationReference({
+    ...baseStage, side_effect_classification: 'STATE_CHANGE_REFERENCE',
+    compensation_reference_ids: [compensation.runtime_compensation_reference_id]
+  });
   const stages = [stage, ...golden.runtimeStageReferences.slice(1)];
   const manifest = buildRuntimeStageSimulationManifest({
     runtime_stage_manifest_id: golden.runtimeStageManifest.runtime_stage_manifest_id,
@@ -614,16 +993,6 @@ test('boundary: a STATE_CHANGE_REFERENCE stage covered by a valid compensation i
     stage_manifest_reference_id: golden.runtimeStageManifest.stage_manifest_reference_id,
     stage_manifest_fingerprint: golden.runtimeStageManifest.stage_manifest_fingerprint,
     runtime_stage_references: stages
-  });
-  const compensation = buildRuntimeCompensationSimulationReference({
-    runtime_compensation_reference_id: `${golden.runtimeRequestId}-compensation-extra`,
-    runtime_execution_package_id: golden.runtimeExecutionPackageId,
-    execution_plan_id: golden.plan.execution_plan_id,
-    runtime_stage_reference_id: stage.runtime_stage_reference_id,
-    source_compensation_reference_id: 'comp-extra',
-    compensation_type: 'ROLLBACK_REFERENCE',
-    required: true,
-    compensation_validated: true
   });
   const request = buildRuntimeExecutionSimulationRequest({
     ...golden.runtimeRequest, runtime_stage_manifest_reference: manifest, runtime_compensation_references: [compensation]
@@ -845,7 +1214,8 @@ test('regression: no real execution -- computeRuntimePackageDigest is order-inde
     plan: golden.plan, result: golden.result, stageManifestRef: golden.stageManifestReference,
     dependencyGraphRef: golden.dependencyGraphReference, bindingLedger: golden.bindingLedger, validationLedger: golden.validationLedger,
     runtimeStageManifest: golden.runtimeStageManifest, runtimeDependencyManifest: golden.runtimeDependencyManifest,
-    runtimeBudgetRef: golden.runtimeBudgetReference, runtimeStopRefs: golden.runtimeStopRefs, runtimeCompensationRefs: golden.runtimeCompensationRefs,
+    runtimeBudgetRef: golden.runtimeBudgetReference, executionBudgetReference: golden.executionBudgetReference,
+    runtimeStopRefs: golden.runtimeStopRefs, runtimeCompensationRefs: golden.runtimeCompensationRefs,
     runtimeArtifactPlan: golden.runtimeArtifactPlan, runtimeEventPlan: golden.runtimeEventPlan,
     orderedRuntimeStageIds: golden.runtimeStageManifest.ordered_runtime_stage_ids,
     runtimeDependencyIds: golden.runtimeDependencyManifest.runtime_dependency_reference_ids,
