@@ -15,6 +15,13 @@
 // equivalent among the 22 Execution Plan stages (POLICY, PACKAGE_REFERENCE, PACKAGE_DIGEST,
 // FRESHNESS, REPLAY, ...). Not merged into this module.
 //
+// pr103: the Runtime Execution Simulation Contracts layer has its own separate, self-contained
+// 24-status taxonomy (RUNTIME_EXECUTION_SIMULATION_STATUSES/STATUS_OUTCOME_MAP/
+// RUNTIME_PRECEDENCE_ORDER in runtime-execution-simulation-decision.js), for the identical reason
+// PR #102's own Gateway taxonomy was kept separate one layer below -- RUNTIME_STAGE_MANIFEST_
+// BLOCKED/RUNTIME_BUDGET_BLOCKED/RUNTIME_ARTIFACT_PLAN_BLOCKED/... have no equivalent among either
+// the 22 Execution Plan stages or the Gateway's own 29 statuses. Not merged into this module.
+//
 // Two distinct "orders" are captured deliberately as two distinct fields, never conflated:
 // - `declarationOrder`: the order this PR's own spec lists the 24 statuses in.
 // - `precedence`: the real order execution-plan-engine.js actually evaluates gates in, documented

@@ -41,6 +41,14 @@ jobs:
         working-directory: platform/services/api
         run: node scripts/run-architecture-gates.js
 
+      - name: Validation and taxonomy gates
+        working-directory: platform/services/api
+        run: node --test test/validation-semantics-architecture-gates.test.js test/validation-trace.test.js
+
+      - name: Runtime simulation contract tests
+        working-directory: platform/services/api
+        run: node --test test/runtime-execution-simulation-contracts.test.js
+
       - name: API tests
         working-directory: platform/services/api
         run: npm test
