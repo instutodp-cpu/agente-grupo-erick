@@ -7,6 +7,10 @@ const { TAXONOMY_STATUSES, isTaxonomyStatus } = require('./validation-taxonomy')
 // ExecutionPlanResult's own RESULT_STATUSES. "Padronizar a camada de orchestration dos validators
 // sem obrigar reescrita total dos contratos anteriores" -- neither contract's own enum is forced
 // to become byte-identical to the taxonomy; this module is the one place that reconciles them.
+//
+// pr102: the Execution Gateway's own GATEWAY_STATUSES (execution-gateway-decision.js) is a
+// separate, self-contained vocabulary with its own STATUS_OUTCOME_MAP -- not bridged through this
+// module, the same way AuthorizationDecision's own AUTHORIZATION_STATUSES never has been.
 const UNKNOWN_STATUS_BLOCKED = 'UNKNOWN_STATUS_BLOCKED';
 
 // pr101 fix: EXECUTION_PLAN_PREPARED_SIMULATION and BINDING_BLOCKED are both genuine, already-

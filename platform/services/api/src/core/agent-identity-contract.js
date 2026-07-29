@@ -86,7 +86,13 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'authorization_policy_fingerprint',
   'budget_authorization_fingerprint',
   'authorization_provenance_reference',
-  'authorization_scope_reference'
+  'authorization_scope_reference',
+  // Execution Gateway Boundary Simulation (PR #102) field names -- same rationale as PR #97/#98/
+  // #100's own entries above: "authorization" here always refers to this declarative decision/
+  // provenance/scope boundary the Gateway cross-checks, never a real credential.
+  'require_authorization_provenance',
+  'require_authorization_scope',
+  'authorization_expired_logically'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept
