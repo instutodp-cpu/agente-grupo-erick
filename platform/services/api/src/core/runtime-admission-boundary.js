@@ -26,6 +26,24 @@ function arraysEqual(a, b) {
   return Array.isArray(a) && Array.isArray(b) && a.length === b.length && [...a].sort().every((value, index) => value === [...b].sort()[index]);
 }
 
+// Returns a shallow copy of `obj` with `runtime_readiness_replay_reference` genuinely removed as an
+// own key -- never merely set to `undefined`. agent-identity-contract.js's own stableCanonicalize
+// throws `undefined_not_serializable` the moment it recurses into ANY own-enumerable key whose
+// value is `undefined` (it does not silently skip such keys the way JSON.stringify does), so
+// `{ ...obj, field: undefined }` does not "exclude" a field from a canonical digest -- it corrupts
+// the whole digest into a fixed `digest_invalid::undefined_not_serializable` sentinel, which then
+// trivially (and meaninglessly) satisfies any subsequent equality check between two independently
+// "excluded" copies. Every self-fingerprinted contract in this codebase already avoids this via
+// real destructuring (see e.g. runtime-budget-simulation-reference.js's own
+// `const { budget_fingerprint, ...rest } = reference`); this helper applies that same discipline
+// to the one nested field (`runtime_readiness_replay_reference`) that both Phase A and Phase B need
+// to exclude from their own request digests to avoid a circular self-reference.
+function omitReplayReference(obj) {
+  if (!isPlainObject(obj)) return obj;
+  const { runtime_readiness_replay_reference, ...rest } = obj;
+  return rest;
+}
+
 // --- Phase A: Readiness ----------------------------------------------------------------------
 
 function evaluateRuntimeReadinessRequest(request, context = {}) {
@@ -80,7 +98,7 @@ function evaluateRuntimeReadinessRequest(request, context = {}) {
   // it here would make the digest depend on itself (no fixed point exists, the same reason every
   // other self-fingerprinted contract in this codebase excludes its own fingerprint/digest field
   // before hashing).
-  const requestForFingerprint = requestIsObject ? { ...request, runtime_readiness_replay_reference: undefined } : request;
+  const requestForFingerprint = requestIsObject ? omitReplayReference(request) : request;
   const requestFingerprint = computeCanonicalContentDigest(requestForFingerprint);
 
   function finalize(status, reasonCodes) {
@@ -176,28 +194,56 @@ function evaluateRuntimeReadinessRequest(request, context = {}) {
   }
   markValid('execution_plan_validated');
 
-  // 10. Authorization.
-  if (provenanceRef.authorization_provenance_reference_id !== packageRef.authorization_provenance_reference_id) {
+  // 10. Authorization -- pr104fix FIX #1: a different provenance object sharing the same id (with
+  // its own, validly self-consistent content) must never silently substitute the one the Gateway
+  // actually accepted. AuthorizationProvenanceReference carries no self-fingerprint field of its
+  // own; the Execution Plan carries the authoritative copy of that fingerprint (the exact value
+  // execution-gateway-boundary.js itself already cross-checked at Gateway time -- see its own
+  // `[packageRef.authorization_provenance_fingerprint, plan.authorization_provenance_fingerprint]`
+  // comparison), so that copy is reused here rather than trusting mere id equality.
+  if (
+    provenanceRef.authorization_provenance_reference_id !== packageRef.authorization_provenance_reference_id
+    || provenanceRef.authorization_decision_id !== gatewayPackageRef.authorization_decision_id
+    || plan.authorization_provenance_fingerprint !== gatewayPackageRef.authorization_provenance_fingerprint
+  ) {
     return finalize('RUNTIME_AUTHORIZATION_BLOCKED', ['authorization_provenance_reference_mismatch']);
   }
   markValid('authorization_validated');
 
-  // 11. Scope.
-  if (scopeRef.authorization_scope_reference_id !== packageRef.authorization_scope_reference_id) {
+  // 11. Scope -- pr104fix FIX #1: bound by its own real self-fingerprint (`scope_fingerprint`)
+  // against the Gateway Package's declared copy, never by id alone.
+  if (
+    scopeRef.authorization_scope_reference_id !== packageRef.authorization_scope_reference_id
+    || scopeRef.authorization_decision_id !== gatewayPackageRef.authorization_decision_id
+    || scopeRef.scope_fingerprint !== gatewayPackageRef.authorization_scope_fingerprint
+  ) {
     return finalize('RUNTIME_SCOPE_BLOCKED', ['authorization_scope_reference_mismatch']);
   }
   markValid('authorization_scope_validated');
 
-  // 12. Registry snapshot.
-  if (snapshotRef.registry_snapshot_reference_id !== packageRef.registry_snapshot_reference_id) {
+  // 12. Registry snapshot -- pr104fix FIX #1: bound by its own real self-fingerprint
+  // (`snapshot_fingerprint`) against the Gateway Package's declared copy, plus the execution plan
+  // binding it declares and its own internal expected/observed version consistency
+  // (`snapshot_consistent`).
+  if (
+    snapshotRef.registry_snapshot_reference_id !== packageRef.registry_snapshot_reference_id
+    || snapshotRef.snapshot_fingerprint !== gatewayPackageRef.registry_snapshot_fingerprint
+    || snapshotRef.execution_plan_id !== plan.execution_plan_id
+    || snapshotRef.snapshot_consistent !== true
+  ) {
     return finalize('RUNTIME_REGISTRY_BLOCKED', ['registry_snapshot_reference_mismatch']);
   }
   markValid('registry_snapshot_validated');
 
-  // 13. Architecture gate evidence -- genuinely new: PR #103 never validated this as a blocking gate.
+  // 13. Architecture gate evidence -- genuinely new: PR #103 never validated this as a blocking
+  // gate. pr104fix FIX #1: bound by its own real self-fingerprint (`evidence_fingerprint`) against
+  // the Gateway Package's declared copy -- commit SHA/ruleset/gate-result tampering is caught
+  // transitively through this fingerprint, since each is part of what `evidence_fingerprint` itself
+  // hashes over (see architecture-gate-evidence-reference.js's own computeEvidenceFingerprint).
   if (
     evidenceRef.evidence_status !== 'ARCHITECTURE_GATES_PASSED_SIMULATION' || evidenceRef.all_required_gates_passed !== true
     || evidenceRef.expired_logically !== false || evidenceRef.evidence_validated !== true
+    || evidenceRef.evidence_fingerprint !== gatewayPackageRef.architecture_gate_evidence_fingerprint
   ) {
     return finalize('RUNTIME_ARCHITECTURE_EVIDENCE_BLOCKED', ['architecture_gate_evidence_not_passed_or_expired']);
   }
@@ -459,7 +505,21 @@ function evaluateRuntimeAdmissionRequest(request, context = {}) {
     actorId: isPlainObject(packageRef) ? packageRef.actor_id : undefined
   };
 
-  const requestFingerprint = computeCanonicalContentDigest(request);
+  // pr104fix FIX #3: excludes runtime_readiness_replay_reference from its own input -- that
+  // reference's own admission_request_fingerprint field exists specifically to describe this
+  // request, so including it here would make the digest depend on itself (no fixed point exists,
+  // the identical reason Phase A's own requestForFingerprint already excludes its own replay
+  // reference). The same replay reference is *also* reachable through the nested
+  // runtime_readiness_request_reference (a RuntimeReadinessRequest carries its own copy of this
+  // field) -- excluded there too, for the identical reason; otherwise the cycle would simply
+  // reopen one level down. This is the one fingerprint used everywhere below: the Admission
+  // Decision, the Admission Result, the audit, and the replay cross-check all reuse this exact
+  // value.
+  const requestForFingerprint = requestIsObject ? {
+    ...omitReplayReference(request),
+    runtime_readiness_request_reference: omitReplayReference(request.runtime_readiness_request_reference)
+  } : request;
+  const requestFingerprint = computeCanonicalContentDigest(requestForFingerprint);
 
   function finalize(status, reasonCodes) {
     return buildAdmissionOutcome(status, reasonCodes, {
@@ -535,20 +595,59 @@ function evaluateRuntimeAdmissionRequest(request, context = {}) {
   }
   markValid('concurrency_validated');
 
-  // 8. Revalidate Freshness.
-  if (freshnessRef.freshness_fingerprint !== readinessDecisionRef.runtime_freshness_fingerprint || freshnessRef.freshness_validated !== true) {
-    return finalize('RUNTIME_FRESHNESS_BLOCKED', ['runtime_freshness_not_still_valid']);
+  // 8. Revalidate Freshness -- pr104fix FIX #2: recomputed using the Admission Request's own
+  // logical_sequence, never just re-confirming the same reference readiness already accepted (a
+  // package can age logically -- and expire -- between readiness and admission, using an unchanged
+  // freshness reference that was genuinely still valid at readiness time).
+  if (freshnessRef.freshness_fingerprint !== readinessDecisionRef.runtime_freshness_fingerprint) {
+    return finalize('RUNTIME_FRESHNESS_BLOCKED', ['runtime_freshness_reference_swapped_since_readiness']);
+  }
+  if (!Number.isInteger(request.logical_sequence) || request.logical_sequence < freshnessRef.current_logical_sequence) {
+    return finalize('RUNTIME_FRESHNESS_BLOCKED', ['admission_logical_sequence_regressive']);
+  }
+  const admissionExpired = FRESHNESS_DIMENSIONS.some(([, createdField, maximumField]) => (
+    (request.logical_sequence - freshnessRef[createdField]) > freshnessRef[maximumField]
+  ));
+  if (admissionExpired || freshnessRef.freshness_validated !== true) {
+    return finalize('RUNTIME_FRESHNESS_BLOCKED', ['runtime_freshness_expired_at_admission_logical_sequence']);
   }
   markValid('freshness_validated');
 
   // 9. Revalidate Replay -- including the admission-specific half (readiness's own half was already
   // proven during Phase A; Phase B additionally proves this admission attempt is not a duplicate).
+  // pr104fix FIX #3: the replay reference is now genuinely bound to *this* Admission Request --
+  // its own id and the request's real (self-excluding) fingerprint -- and to the exact Runtime
+  // Execution Package being admitted, never merely re-confirmed as "the same object readiness
+  // already used". idempotency_reference_id/idempotency_fingerprint are cross-checked against the
+  // real upstream replay reference the Runtime Readiness Request itself already carried -- never
+  // accepted as an unsourced claim.
+  //
+  // The readiness-half and admission-half of this one replay reference are proven independently,
+  // each against its own real, self-excluding fingerprint (readiness_request_fingerprint against a
+  // freshly recomputed digest of the embedded readiness request; admission_request_fingerprint
+  // against `requestFingerprint`, already computed above) -- deliberately never cross-referencing
+  // readinessDecisionRef's own runtime_replay_fingerprint copy, since that value was captured by
+  // Phase A from this same replay reference and would otherwise make admission_request_fingerprint
+  // depend on its own value once bound (no fixed point exists for that composition, the identical
+  // class of self-reference this fix's own exclusion already solves one layer up).
+  const readinessRequestForFingerprint = omitReplayReference(readinessRequestRef);
+  const readinessRequestFingerprint = computeCanonicalContentDigest(readinessRequestForFingerprint);
+  const readinessReplayRef = isPlainObject(readinessRequestRef) ? readinessRequestRef.runtime_readiness_replay_reference : undefined;
   if (
-    replayRef.replay_fingerprint !== readinessDecisionRef.runtime_replay_fingerprint || replayRef.replay_validated !== true
+    replayRef.readiness_request_id !== (isPlainObject(readinessRequestRef) ? readinessRequestRef.runtime_readiness_request_id : undefined)
+    || replayRef.readiness_request_fingerprint !== readinessRequestFingerprint
+    || replayRef.replay_validated !== true || replayRef.replay_allowed !== true || replayRef.replay_consumed !== false
     || replayRef.duplicate_admission_acceptance_blocked !== false
     || replayRef.expected_admission_attempt > replayRef.maximum_admission_attempts
+    || replayRef.admission_request_id !== request.runtime_admission_request_id
+    || replayRef.admission_request_fingerprint !== requestFingerprint
+    || replayRef.runtime_execution_package_id !== packageRef.runtime_execution_package_id
+    || replayRef.runtime_package_fingerprint !== packageRef.package_fingerprint
+    || replayRef.runtime_package_digest !== packageRef.package_digest
+    || !isPlainObject(readinessReplayRef) || replayRef.idempotency_reference_id !== readinessReplayRef.idempotency_reference_id
+    || replayRef.idempotency_fingerprint !== readinessReplayRef.idempotency_fingerprint
   ) {
-    return finalize('RUNTIME_REPLAY_BLOCKED', ['runtime_replay_not_still_valid_or_duplicate_admission']);
+    return finalize('RUNTIME_REPLAY_BLOCKED', ['runtime_replay_not_bound_to_admission_request']);
   }
   markValid('replay_validated');
 

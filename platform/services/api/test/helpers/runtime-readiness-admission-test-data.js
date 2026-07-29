@@ -20,6 +20,16 @@ const {
 
 const PLACEHOLDER_FINGERPRINT = `sha256:${'0'.repeat(64)}`;
 
+// Mirrors runtime-admission-boundary.js's own omitReplayReference exactly: stableCanonicalize
+// throws `undefined_not_serializable` the moment it recurses into ANY own key whose value is
+// `undefined` (it does not skip such keys the way JSON.stringify does), so the replay reference
+// must be genuinely removed as an own key -- never merely set to `undefined` -- before hashing.
+function omitReplayReference(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  const { runtime_readiness_replay_reference, ...rest } = obj;
+  return rest;
+}
+
 function buildGoldenReadinessBundle(scenarioKey = 'prepared-no-llm-plan') {
   const rtGolden = buildGoldenRuntimeBundle(scenarioKey);
   const rtOutcome = evaluateRuntimeExecutionSimulationRequest(rtGolden.runtimeRequest, {});
@@ -163,7 +173,7 @@ function buildGoldenReadinessBundle(scenarioKey = 'prepared-no-llm-plan') {
   // replay reference already yields the real, final digest on the first pass.
   const placeholderReplayRef = buildReplayReference(PLACEHOLDER_FINGERPRINT);
   const placeholderRequest = buildReadinessRequest(placeholderReplayRef);
-  const readinessRequestFingerprint = computeCanonicalContentDigest({ ...placeholderRequest, runtime_readiness_replay_reference: undefined });
+  const readinessRequestFingerprint = computeCanonicalContentDigest(omitReplayReference(placeholderRequest));
   const replayRef = buildReplayReference(readinessRequestFingerprint);
   const readinessRequest = buildReadinessRequest(replayRef);
 
@@ -175,7 +185,7 @@ function buildGoldenReadinessBundle(scenarioKey = 'prepared-no-llm-plan') {
   };
 }
 
-function buildGoldenAdmissionBundle(scenarioKey = 'prepared-no-llm-plan') {
+function buildGoldenAdmissionBundle(scenarioKey = 'prepared-no-llm-plan', overrides = {}) {
   const readinessGolden = buildGoldenReadinessBundle(scenarioKey);
   const readinessOutcome = evaluateRuntimeReadinessRequest(readinessGolden.readinessRequest, {});
   if (readinessOutcome.decision.status !== 'RUNTIME_READY_SIMULATION') {
@@ -184,7 +194,10 @@ function buildGoldenAdmissionBundle(scenarioKey = 'prepared-no-llm-plan') {
   const readinessDecision = readinessOutcome.decision;
 
   const baseId = `${readinessGolden.runtimeRequestId}-admission`;
-  const admissionRequestId = `${baseId}-request`;
+  // Reuses the admission_request_id already baked into the readiness-side replay reference (see
+  // buildGoldenReadinessBundle's own buildReplayReference) -- never independently invented here,
+  // so the two can never silently disagree.
+  const admissionRequestId = readinessGolden.replayRef.admission_request_id;
 
   const admissionPolicy = buildRuntimeAdmissionPolicy({
     runtime_admission_policy_id: `${baseId}-policy`,
@@ -194,27 +207,47 @@ function buildGoldenAdmissionBundle(scenarioKey = 'prepared-no-llm-plan') {
     maximum_admitted_estimated_tokens: 100000000, maximum_admitted_estimated_cost_minor_units: 100000000
   });
 
-  const admissionRequest = buildRuntimeAdmissionRequest({
-    runtime_admission_request_id: admissionRequestId,
-    runtime_admission_policy: admissionPolicy,
-    runtime_readiness_request_reference: readinessGolden.readinessRequest,
-    runtime_readiness_decision_reference: readinessDecision,
-    runtime_execution_package_reference: readinessGolden.runtimePackage,
-    runtime_capacity_snapshot_reference: readinessGolden.capacitySnapshotRef,
-    runtime_concurrency_reference: readinessGolden.concurrencyRef,
-    runtime_readiness_freshness_reference: readinessGolden.freshnessRef,
-    runtime_readiness_replay_reference: readinessGolden.replayRef,
-    correlation_id: 'corr-admission-1',
-    causation_id: 'cause-admission-1',
-    trace_id: 'trace-admission-1',
-    logical_sequence: 0,
-    expected_admission_registry_version: 1,
-    simulation_context: readinessGolden.gatewayRequest.simulation_context
+  // `overrides` (e.g. a different logical_sequence) are folded in *before* the two-pass fingerprint
+  // computation below, so a caller wanting a genuinely self-consistent -- not just field-patched --
+  // bundle with a different logical_sequence can get one without hand-rolling the same two-pass
+  // dance a second time.
+  function buildAdmissionRequestWith(replayRef) {
+    return buildRuntimeAdmissionRequest({
+      runtime_admission_request_id: admissionRequestId,
+      runtime_admission_policy: admissionPolicy,
+      runtime_readiness_request_reference: readinessGolden.readinessRequest,
+      runtime_readiness_decision_reference: readinessDecision,
+      runtime_execution_package_reference: readinessGolden.runtimePackage,
+      runtime_capacity_snapshot_reference: readinessGolden.capacitySnapshotRef,
+      runtime_concurrency_reference: readinessGolden.concurrencyRef,
+      runtime_readiness_freshness_reference: readinessGolden.freshnessRef,
+      runtime_readiness_replay_reference: replayRef,
+      correlation_id: 'corr-admission-1',
+      causation_id: 'cause-admission-1',
+      trace_id: 'trace-admission-1',
+      logical_sequence: 0,
+      expected_admission_registry_version: 1,
+      simulation_context: readinessGolden.gatewayRequest.simulation_context,
+      ...overrides
+    });
+  }
+
+  // Two-pass build, mirroring readiness's own pattern (pr104fix FIX #3): admission_request_
+  // fingerprint is excluded from its own digest by the boundary -- both directly and via the
+  // nested runtime_readiness_request_reference's own copy of this same replay reference -- so a
+  // placeholder-admission-fingerprint replay reference already yields the real, final digest on
+  // the first pass; no iteration is needed.
+  const placeholderAdmissionRequest = buildAdmissionRequestWith(readinessGolden.replayRef);
+  const admissionRequestFingerprint = computeCanonicalContentDigest({
+    ...omitReplayReference(placeholderAdmissionRequest),
+    runtime_readiness_request_reference: omitReplayReference(placeholderAdmissionRequest.runtime_readiness_request_reference)
   });
+  const replayRef = buildRuntimeReadinessReplayReference({ ...readinessGolden.replayRef, admission_request_fingerprint: admissionRequestFingerprint });
+  const admissionRequest = buildAdmissionRequestWith(replayRef);
 
   return {
     ...readinessGolden,
-    readinessDecision, admissionRequestId, admissionPolicy, admissionRequest
+    readinessDecision, admissionRequestId, admissionPolicy, replayRef, admissionRequest
   };
 }
 

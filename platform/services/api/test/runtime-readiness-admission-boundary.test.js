@@ -36,6 +36,8 @@ const { buildRuntimeArtifactPlanReference } = require('../src/core/runtime-artif
 const { buildRuntimeEventPlanReference } = require('../src/core/runtime-event-plan-reference');
 const { buildArchitectureGateEvidenceReference, buildGateResult } = require('../src/core/architecture-gate-evidence-reference');
 const { buildRuntimeExecutionPackage } = require('../src/core/runtime-execution-package');
+const { buildExecutionGatewayPackageReference } = require('../src/core/execution-gateway-package-reference');
+const { computeCanonicalContentDigest } = require('../src/core/canonical-content-digest');
 
 const {
   buildGoldenReadinessBundle, buildGoldenAdmissionBundle
@@ -450,7 +452,7 @@ test('readiness: capacity availability falsified by the caller is recomputed and
   const badCapacity = buildRuntimeCapacitySnapshotReference({
     ...golden.capacitySnapshotRef, total_stage_capacity: 1, used_stage_capacity: 0, available_stage_capacity: 1, capacity_available: true
   });
-  const request = { ...golden.readinessRequest, runtime_capacity_snapshot_reference: badCapacity };
+  const request = resyncReadinessRequest({ ...golden.readinessRequest, runtime_capacity_snapshot_reference: badCapacity }, golden.replayRef);
   const outcome = evaluateRuntimeReadinessRequest(request, {});
   assert.equal(outcome.decision.status, 'RUNTIME_CAPACITY_BLOCKED');
 });
@@ -458,7 +460,7 @@ test('readiness: capacity availability falsified by the caller is recomputed and
 test('readiness: concurrency requested_* values falsified by the caller are recomputed and rejected', () => {
   const golden = buildGoldenReadinessBundle();
   const badConcurrency = buildRuntimeConcurrencyReference({ ...golden.concurrencyRef, requested_stage_slots: 999999 });
-  const request = { ...golden.readinessRequest, runtime_concurrency_reference: badConcurrency };
+  const request = resyncReadinessRequest({ ...golden.readinessRequest, runtime_concurrency_reference: badConcurrency }, golden.replayRef);
   const outcome = evaluateRuntimeReadinessRequest(request, {});
   assert.equal(outcome.decision.status, 'RUNTIME_CONCURRENCY_BLOCKED');
 });
@@ -468,7 +470,7 @@ test('readiness: tenant pool exhausted blocks as RUNTIME_CONCURRENCY_BLOCKED', (
   const badConcurrency = buildRuntimeConcurrencyReference({
     ...golden.concurrencyRef, maximum_tenant_package_slots: 1, current_tenant_package_slots: 1, tenant_slots_available: true
   });
-  const request = { ...golden.readinessRequest, runtime_concurrency_reference: badConcurrency };
+  const request = resyncReadinessRequest({ ...golden.readinessRequest, runtime_concurrency_reference: badConcurrency }, golden.replayRef);
   const outcome = evaluateRuntimeReadinessRequest(request, {});
   assert.equal(outcome.decision.status, 'RUNTIME_CONCURRENCY_BLOCKED');
 });
@@ -596,7 +598,7 @@ test('admission: duplicate admission attempt blocks as RUNTIME_REPLAY_BLOCKED', 
 test('admission: maximum_admitted_parallel_stages=0 blocks as RUNTIME_LIMIT_BLOCKED', () => {
   const golden = buildGoldenAdmissionBundle('parallel-plan');
   const tightPolicy = buildRuntimeAdmissionPolicy({ ...golden.admissionPolicy, maximum_admitted_parallel_stages: 0 });
-  const request = { ...golden.admissionRequest, runtime_admission_policy: tightPolicy };
+  const request = resyncAdmissionRequest({ ...golden.admissionRequest, runtime_admission_policy: tightPolicy }, golden.replayRef);
   const outcome = evaluateRuntimeAdmissionRequest(request, {});
   assert.equal(outcome.decision.status, 'RUNTIME_LIMIT_BLOCKED');
 });
@@ -622,12 +624,12 @@ for (const [policyField, requestedField] of ADMISSION_FABRICATED_LIMIT_CASES) {
     const fabricatedConcurrency = buildRuntimeConcurrencyReference({ ...golden.concurrencyRef, [requestedField]: 1 });
     const patchedReadinessDecision = { ...golden.readinessDecision, runtime_concurrency_fingerprint: fabricatedConcurrency.concurrency_fingerprint };
     const tightPolicy = buildRuntimeAdmissionPolicy({ ...golden.admissionPolicy, [policyField]: 0 });
-    const request = {
+    const request = resyncAdmissionRequest({
       ...golden.admissionRequest,
       runtime_readiness_decision_reference: patchedReadinessDecision,
       runtime_concurrency_reference: fabricatedConcurrency,
       runtime_admission_policy: tightPolicy
-    };
+    }, golden.replayRef);
     const outcome = evaluateRuntimeAdmissionRequest(request, {});
     assert.equal(outcome.decision.status, 'RUNTIME_LIMIT_BLOCKED', policyField);
   });
@@ -636,7 +638,7 @@ for (const [policyField, requestedField] of ADMISSION_FABRICATED_LIMIT_CASES) {
 test('admission: token/cost limit exceeded blocks as RUNTIME_LIMIT_BLOCKED', () => {
   const golden = buildGoldenAdmissionBundle();
   const tightPolicy = buildRuntimeAdmissionPolicy({ ...golden.admissionPolicy, maximum_admitted_estimated_tokens: 0 });
-  const request = { ...golden.admissionRequest, runtime_admission_policy: tightPolicy };
+  const request = resyncAdmissionRequest({ ...golden.admissionRequest, runtime_admission_policy: tightPolicy }, golden.replayRef);
   const outcome = evaluateRuntimeAdmissionRequest(request, {});
   assert.equal(outcome.decision.status, 'RUNTIME_LIMIT_BLOCKED');
 });
@@ -644,7 +646,7 @@ test('admission: token/cost limit exceeded blocks as RUNTIME_LIMIT_BLOCKED', () 
 test('admission: package-per-tenant limit exceeded blocks as RUNTIME_LIMIT_BLOCKED', () => {
   const golden = buildGoldenAdmissionBundle();
   const tightPolicy = buildRuntimeAdmissionPolicy({ ...golden.admissionPolicy, maximum_admitted_packages_per_tenant: 0 });
-  const request = { ...golden.admissionRequest, runtime_admission_policy: tightPolicy };
+  const request = resyncAdmissionRequest({ ...golden.admissionRequest, runtime_admission_policy: tightPolicy }, golden.replayRef);
   const outcome = evaluateRuntimeAdmissionRequest(request, {});
   assert.equal(outcome.decision.status, 'RUNTIME_LIMIT_BLOCKED');
 });
@@ -805,6 +807,279 @@ test('registry: rejects a structurally invalid record as VALIDATION_FAILED', () 
   const registry = createRuntimeAdmissionRegistry();
   const result = registry.registerRuntimeReadinessFreshnessReference({ not: 'valid' });
   assert.equal(result.status, 'VALIDATION_FAILED');
+});
+
+// --- pr104fix FIX #1: provenance/scope/registry/architecture evidence bound by fingerprint --------
+
+const FIX1_FINGERPRINT_TAMPER_CASES = [
+  ['authorization_provenance_fingerprint', 'RUNTIME_AUTHORIZATION_BLOCKED'],
+  ['authorization_scope_fingerprint', 'RUNTIME_SCOPE_BLOCKED'],
+  ['registry_snapshot_fingerprint', 'RUNTIME_REGISTRY_BLOCKED'],
+  ['architecture_gate_evidence_fingerprint', 'RUNTIME_ARCHITECTURE_EVIDENCE_BLOCKED']
+];
+
+for (const [field, expectedStatus] of FIX1_FINGERPRINT_TAMPER_CASES) {
+  test(`FIX1: same id but ${field} diverges from what the Gateway Package declared blocks as ${expectedStatus}`, () => {
+    const golden = buildGoldenReadinessBundle();
+    const badGatewayPackageRef = buildExecutionGatewayPackageReference({ ...golden.packageReference, [field]: 'sha256:' + 'f'.repeat(64) });
+    const request = { ...golden.readinessRequest, gateway_package_reference: badGatewayPackageRef };
+    const outcome = evaluateRuntimeReadinessRequest(request, {});
+    assert.equal(outcome.decision.status, expectedStatus, field);
+  });
+}
+
+test('FIX1: architecture evidence digest diverging (evidence_fingerprint kept in step with it) blocks as RUNTIME_ARCHITECTURE_EVIDENCE_BLOCKED', () => {
+  const golden = buildGoldenReadinessBundle();
+  // evidence_digest is derived from the same evidence object evidence_fingerprint already covers,
+  // so genuinely diverging it means rebuilding the evidence with different real content (a second,
+  // otherwise-passing gate result added) -- which changes evidence_fingerprint too, exactly the
+  // signal this fix's own cross-check is built to catch.
+  const badEvidence = buildArchitectureGateEvidenceReference({
+    architecture_gate_evidence_reference_id: golden.evidenceReference.architecture_gate_evidence_reference_id,
+    repository_reference: golden.evidenceReference.repository_reference,
+    commit_sha: golden.evidenceReference.commit_sha, base_commit_sha: golden.evidenceReference.base_commit_sha,
+    workflow_reference: golden.evidenceReference.workflow_reference,
+    workflow_run_reference: golden.evidenceReference.workflow_run_reference,
+    ruleset_id: golden.evidenceReference.ruleset_id, ruleset_version: golden.evidenceReference.ruleset_version,
+    gate_results: [...golden.evidenceReference.gate_results, buildGateResult({
+      gate_result_id: 'gr-extra', gate_id: 'FORBIDDEN_TIMER', gate_version: 'v1', gate_status: 'PASSED',
+      severity: 'CRITICAL', required: true, finding_code_references: []
+    })],
+    evidence_created_logical_sequence: golden.evidenceReference.evidence_created_logical_sequence,
+    maximum_valid_sequences: golden.evidenceReference.maximum_valid_sequences,
+    current_logical_sequence: golden.evidenceReference.current_logical_sequence
+  });
+  assert.notEqual(badEvidence.evidence_fingerprint, golden.evidenceReference.evidence_fingerprint);
+  assert.notEqual(badEvidence.evidence_digest, golden.evidenceReference.evidence_digest);
+  const request = { ...golden.readinessRequest, architecture_gate_evidence_reference: badEvidence };
+  const outcome = evaluateRuntimeReadinessRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_ARCHITECTURE_EVIDENCE_BLOCKED');
+});
+
+test('FIX1: architecture evidence commit SHA diverging (caught transitively through evidence_fingerprint) blocks as RUNTIME_ARCHITECTURE_EVIDENCE_BLOCKED', () => {
+  const golden = buildGoldenReadinessBundle();
+  const badEvidence = buildArchitectureGateEvidenceReference({
+    architecture_gate_evidence_reference_id: golden.evidenceReference.architecture_gate_evidence_reference_id,
+    repository_reference: golden.evidenceReference.repository_reference,
+    commit_sha: 'c'.repeat(40), base_commit_sha: golden.evidenceReference.base_commit_sha,
+    workflow_reference: golden.evidenceReference.workflow_reference,
+    workflow_run_reference: golden.evidenceReference.workflow_run_reference,
+    ruleset_id: golden.evidenceReference.ruleset_id, ruleset_version: golden.evidenceReference.ruleset_version,
+    gate_results: golden.evidenceReference.gate_results,
+    evidence_created_logical_sequence: golden.evidenceReference.evidence_created_logical_sequence,
+    maximum_valid_sequences: golden.evidenceReference.maximum_valid_sequences,
+    current_logical_sequence: golden.evidenceReference.current_logical_sequence
+  });
+  const request = { ...golden.readinessRequest, architecture_gate_evidence_reference: badEvidence };
+  const outcome = evaluateRuntimeReadinessRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_ARCHITECTURE_EVIDENCE_BLOCKED');
+});
+
+test('FIX1: architecture evidence ruleset diverging (caught transitively through evidence_fingerprint) blocks as RUNTIME_ARCHITECTURE_EVIDENCE_BLOCKED', () => {
+  const golden = buildGoldenReadinessBundle();
+  const badEvidence = buildArchitectureGateEvidenceReference({
+    architecture_gate_evidence_reference_id: golden.evidenceReference.architecture_gate_evidence_reference_id,
+    repository_reference: golden.evidenceReference.repository_reference,
+    commit_sha: golden.evidenceReference.commit_sha, base_commit_sha: golden.evidenceReference.base_commit_sha,
+    workflow_reference: golden.evidenceReference.workflow_reference,
+    workflow_run_reference: golden.evidenceReference.workflow_run_reference,
+    ruleset_id: golden.evidenceReference.ruleset_id, ruleset_version: 'other-ruleset-version',
+    gate_results: golden.evidenceReference.gate_results,
+    evidence_created_logical_sequence: golden.evidenceReference.evidence_created_logical_sequence,
+    maximum_valid_sequences: golden.evidenceReference.maximum_valid_sequences,
+    current_logical_sequence: golden.evidenceReference.current_logical_sequence
+  });
+  const request = { ...golden.readinessRequest, architecture_gate_evidence_reference: badEvidence };
+  const outcome = evaluateRuntimeReadinessRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_ARCHITECTURE_EVIDENCE_BLOCKED');
+});
+
+test('FIX1: the original, untampered provenance/scope/registry/architecture-evidence bundle still reaches RUNTIME_READY_SIMULATION', () => {
+  const golden = buildGoldenReadinessBundle();
+  const outcome = evaluateRuntimeReadinessRequest(golden.readinessRequest, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_READY_SIMULATION');
+  assert.equal(outcome.decision.authorization_validated, true);
+  assert.equal(outcome.decision.authorization_scope_validated, true);
+  assert.equal(outcome.decision.registry_snapshot_validated, true);
+  assert.equal(outcome.decision.architecture_gate_evidence_validated, true);
+});
+
+// --- pr104fix FIX #2: Admission recomputes freshness at its own logical_sequence ------------------
+
+test('FIX2: admission at the same logical_sequence readiness used passes', () => {
+  const golden = buildGoldenAdmissionBundle('prepared-no-llm-plan', { logical_sequence: 0 });
+  const outcome = evaluateRuntimeAdmissionRequest(golden.admissionRequest, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_ADMITTED_SIMULATION');
+});
+
+test('FIX2: admission at a later logical_sequence still within every maximum passes', () => {
+  const golden = buildGoldenAdmissionBundle('prepared-no-llm-plan', { logical_sequence: 500 });
+  const outcome = evaluateRuntimeAdmissionRequest(golden.admissionRequest, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_ADMITTED_SIMULATION');
+});
+
+test('FIX2: a regressive logical_sequence (below what the freshness reference already recorded) blocks as RUNTIME_FRESHNESS_BLOCKED', () => {
+  const golden = buildGoldenAdmissionBundle('prepared-no-llm-plan', { logical_sequence: 0 });
+  const advancedFreshness = buildRuntimeReadinessFreshnessReference({ ...golden.freshnessRef, current_logical_sequence: 50 });
+  const patchedReadinessDecision = { ...golden.readinessDecision, runtime_freshness_fingerprint: advancedFreshness.freshness_fingerprint };
+  const request = {
+    ...golden.admissionRequest, runtime_readiness_decision_reference: patchedReadinessDecision,
+    runtime_readiness_freshness_reference: advancedFreshness, logical_sequence: 0
+  };
+  const outcome = evaluateRuntimeAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_FRESHNESS_BLOCKED');
+});
+
+const FIX2_DIMENSION_MAXIMUM_FIELDS = [
+  'maximum_package_valid_sequences', 'maximum_gateway_valid_sequences', 'maximum_authorization_valid_sequences',
+  'maximum_scope_valid_sequences', 'maximum_registry_valid_sequences', 'maximum_architecture_evidence_valid_sequences',
+  'maximum_binding_ledger_valid_sequences', 'maximum_validation_ledger_valid_sequences', 'maximum_capacity_valid_sequences'
+];
+
+for (const maximumField of FIX2_DIMENSION_MAXIMUM_FIELDS) {
+  test(`FIX2: ${maximumField} dimension expiring only at the admission logical_sequence (still fresh at readiness time) blocks as RUNTIME_FRESHNESS_BLOCKED`, () => {
+    const golden = buildGoldenAdmissionBundle();
+    const tightFreshness = buildRuntimeReadinessFreshnessReference({ ...golden.freshnessRef, [maximumField]: 5 });
+    const patchedReadinessDecision = { ...golden.readinessDecision, runtime_freshness_fingerprint: tightFreshness.freshness_fingerprint };
+    const request = {
+      ...golden.admissionRequest, runtime_readiness_decision_reference: patchedReadinessDecision,
+      runtime_readiness_freshness_reference: tightFreshness, logical_sequence: 10
+    };
+    const outcome = evaluateRuntimeAdmissionRequest(request, {});
+    assert.equal(outcome.decision.status, 'RUNTIME_FRESHNESS_BLOCKED', maximumField);
+  });
+}
+
+test('FIX2: a hostile context never alters the logical_sequence actually used to recompute freshness', () => {
+  const golden = buildGoldenAdmissionBundle('prepared-no-llm-plan', { logical_sequence: 0 });
+  const withContext = evaluateRuntimeAdmissionRequest(golden.admissionRequest, { logicalSequence: 999999, currentLogicalSequence: 0 });
+  const withoutContext = evaluateRuntimeAdmissionRequest(golden.admissionRequest, {});
+  assert.deepEqual(withContext.decision, withoutContext.decision);
+  assert.equal(withContext.decision.status, 'RUNTIME_ADMITTED_SIMULATION');
+});
+
+// --- pr104fix FIX #3: Replay Reference bound to the actual Admission Request ----------------------
+
+test('FIX3: replay reference bound to a different admission_request_id blocks as RUNTIME_REPLAY_BLOCKED', () => {
+  const golden = buildGoldenAdmissionBundle();
+  const badReplay = buildRuntimeReadinessReplayReference({ ...golden.replayRef, admission_request_id: 'other-admission-request-id' });
+  const request = { ...golden.admissionRequest, runtime_readiness_replay_reference: badReplay };
+  const outcome = evaluateRuntimeAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_REPLAY_BLOCKED');
+});
+
+test('FIX3: replay reference bound to a different admission_request_fingerprint (as if replaying another admission request) blocks as RUNTIME_REPLAY_BLOCKED', () => {
+  const golden = buildGoldenAdmissionBundle();
+  const badReplay = buildRuntimeReadinessReplayReference({ ...golden.replayRef, admission_request_fingerprint: 'sha256:' + 'f'.repeat(64) });
+  const request = { ...golden.admissionRequest, runtime_readiness_replay_reference: badReplay };
+  const outcome = evaluateRuntimeAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_REPLAY_BLOCKED');
+});
+
+test('FIX3: replay reference bound to a different runtime_execution_package_id blocks as RUNTIME_REPLAY_BLOCKED', () => {
+  const golden = buildGoldenAdmissionBundle();
+  const badReplay = buildRuntimeReadinessReplayReference({ ...golden.replayRef, runtime_execution_package_id: 'other-package-id' });
+  const request = { ...golden.admissionRequest, runtime_readiness_replay_reference: badReplay };
+  const outcome = evaluateRuntimeAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_REPLAY_BLOCKED');
+});
+
+test('FIX3: replay reference bound to a different runtime_package_fingerprint blocks as RUNTIME_REPLAY_BLOCKED', () => {
+  const golden = buildGoldenAdmissionBundle();
+  const badReplay = buildRuntimeReadinessReplayReference({ ...golden.replayRef, runtime_package_fingerprint: 'sha256:' + 'e'.repeat(64) });
+  const request = { ...golden.admissionRequest, runtime_readiness_replay_reference: badReplay };
+  const outcome = evaluateRuntimeAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_REPLAY_BLOCKED');
+});
+
+test('FIX3: replay reference bound to a different runtime_package_digest blocks as RUNTIME_REPLAY_BLOCKED', () => {
+  const golden = buildGoldenAdmissionBundle();
+  const badReplay = buildRuntimeReadinessReplayReference({ ...golden.replayRef, runtime_package_digest: 'sha256:' + 'd'.repeat(64) });
+  const request = { ...golden.admissionRequest, runtime_readiness_replay_reference: badReplay };
+  const outcome = evaluateRuntimeAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_REPLAY_BLOCKED');
+});
+
+test('FIX3: replay reference bound to a different idempotency_reference_id (unsourced claim) blocks as RUNTIME_REPLAY_BLOCKED', () => {
+  const golden = buildGoldenAdmissionBundle();
+  const badReplay = buildRuntimeReadinessReplayReference({ ...golden.replayRef, idempotency_reference_id: 'other-idempotency-id' });
+  const request = { ...golden.admissionRequest, runtime_readiness_replay_reference: badReplay };
+  const outcome = evaluateRuntimeAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_REPLAY_BLOCKED');
+});
+
+test('FIX3: replay reference bound to a different idempotency_fingerprint (unsourced claim) blocks as RUNTIME_REPLAY_BLOCKED', () => {
+  const golden = buildGoldenAdmissionBundle();
+  const badReplay = buildRuntimeReadinessReplayReference({ ...golden.replayRef, idempotency_fingerprint: 'sha256:' + 'c'.repeat(64) });
+  const request = { ...golden.admissionRequest, runtime_readiness_replay_reference: badReplay };
+  const outcome = evaluateRuntimeAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_REPLAY_BLOCKED');
+});
+
+// Mirrors runtime-admission-boundary.js's own omitReplayReference exactly: stableCanonicalize
+// throws `undefined_not_serializable` the instant it recurses into ANY own key whose value is
+// `undefined` (it does not skip such keys the way JSON.stringify does) -- so the replay reference
+// must be genuinely removed as an own key, never merely set to `undefined`, both directly and via
+// the nested runtime_readiness_request_reference's own copy of the same field.
+function omitReplayReference(obj) {
+  if (!obj || typeof obj !== 'object') return obj;
+  const { runtime_readiness_replay_reference, ...rest } = obj;
+  return rest;
+}
+
+function computeAdmissionRequestFingerprint(request) {
+  return computeCanonicalContentDigest({
+    ...omitReplayReference(request),
+    runtime_readiness_request_reference: omitReplayReference(request.runtime_readiness_request_reference)
+  });
+}
+
+// After tampering any field of a readiness/admission request directly (any test that wants to
+// isolate a *different* check further down the precedence order than replay), the replay
+// reference's own readiness_request_fingerprint/admission_request_fingerprint copy goes stale --
+// pr104fix FIX #3 now genuinely cross-checks it, so a stale copy blocks with RUNTIME_REPLAY_BLOCKED
+// before the intended check is ever reached. Resync via the same two-pass technique the golden
+// bundle builder itself uses.
+function resyncReadinessRequest(request, baseReplayRef) {
+  const fingerprint = computeCanonicalContentDigest(omitReplayReference(request));
+  const replayRef = buildRuntimeReadinessReplayReference({ ...baseReplayRef, readiness_request_fingerprint: fingerprint });
+  return buildRuntimeReadinessRequest({ ...request, runtime_readiness_replay_reference: replayRef });
+}
+
+function resyncAdmissionRequest(request, baseReplayRef) {
+  const fingerprint = computeAdmissionRequestFingerprint(request);
+  const replayRef = buildRuntimeReadinessReplayReference({ ...baseReplayRef, admission_request_fingerprint: fingerprint });
+  return buildRuntimeAdmissionRequest({ ...request, runtime_readiness_replay_reference: replayRef });
+}
+
+test('FIX3: the admission request fingerprint (self-excluding its own replay reference) is deterministic across repeated computation, with no recursion', () => {
+  const golden = buildGoldenAdmissionBundle();
+  const first = computeAdmissionRequestFingerprint(golden.admissionRequest);
+  const second = computeAdmissionRequestFingerprint(golden.admissionRequest);
+  assert.equal(first, second);
+  assert.equal(first, golden.replayRef.admission_request_fingerprint);
+  assert.doesNotMatch(first, /^digest_invalid::/);
+});
+
+test('FIX3: a real content change to the admission request changes its (self-excluding) fingerprint', () => {
+  const golden = buildGoldenAdmissionBundle();
+  const changedRequest = { ...golden.admissionRequest, logical_sequence: 777 };
+  assert.notEqual(computeAdmissionRequestFingerprint(changedRequest), computeAdmissionRequestFingerprint(golden.admissionRequest));
+});
+
+test('FIX3: changing only the replay reference itself never changes the admission request fingerprint (no cycle)', () => {
+  const golden = buildGoldenAdmissionBundle();
+  const differentReplay = buildRuntimeReadinessReplayReference({ ...golden.replayRef, expected_admission_attempt: 1, maximum_admission_attempts: 99 });
+  const original = computeAdmissionRequestFingerprint(golden.admissionRequest);
+  const withDifferentReplay = computeAdmissionRequestFingerprint({ ...golden.admissionRequest, runtime_readiness_replay_reference: differentReplay });
+  assert.equal(original, withDifferentReplay);
+});
+
+test('FIX3: the original, untampered replay reference still reaches RUNTIME_ADMITTED_SIMULATION', () => {
+  const golden = buildGoldenAdmissionBundle();
+  const outcome = evaluateRuntimeAdmissionRequest(golden.admissionRequest, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_ADMITTED_SIMULATION');
+  assert.equal(outcome.decision.replay_validated, true);
 });
 
 // --- Regression -----------------------------------------------------------------------------------
