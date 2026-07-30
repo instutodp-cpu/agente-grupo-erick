@@ -15,6 +15,11 @@ const { TAXONOMY_STATUSES, isTaxonomyStatus } = require('./validation-taxonomy')
 // pr103: the Runtime Execution Simulation layer's own RUNTIME_EXECUTION_SIMULATION_STATUSES
 // (runtime-execution-simulation-decision.js) is likewise a separate, self-contained vocabulary
 // with its own STATUS_OUTCOME_MAP -- not bridged through this module either.
+//
+// pr104: the Runtime Readiness and Admission Boundary's own RUNTIME_READINESS_STATUSES
+// (runtime-readiness-decision.js) and RUNTIME_ADMISSION_STATUSES (runtime-admission-decision.js)
+// are, likewise, two further separate, self-contained vocabularies, each with its own
+// STATUS_OUTCOME_MAP -- not bridged through this module either.
 const UNKNOWN_STATUS_BLOCKED = 'UNKNOWN_STATUS_BLOCKED';
 
 // pr101 fix: EXECUTION_PLAN_PREPARED_SIMULATION and BINDING_BLOCKED are both genuine, already-

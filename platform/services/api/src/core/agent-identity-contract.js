@@ -120,7 +120,36 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   // 'execute' (exact segment) is forbidden even though 'executed' is not (see the substring-token
   // comment above) -- stage_would_execute is a forced-false declarative flag, never a real
   // execution trigger; documented explicitly in runtime-stage-simulation-reference.js.
-  'stage_would_execute'
+  'stage_would_execute',
+  // Runtime Readiness and Admission Boundary (PR #104) field names -- "runtime"/"authorization"
+  // here always refer to this PR's own declarative Readiness/Admission policy, request, decision,
+  // capacity/concurrency/freshness/replay reference, and audit contracts, exactly the same
+  // "declarative reference, never a real interpreter/credential" rationale as every PR #97-#103
+  // entry above. Every field below is a compound name this PR's exact-fields lists mandate; none
+  // of them enable, start, or reference a real runtime or credential.
+  'runtime_readiness_policy_id', 'runtime_readiness_policy_version', 'require_runtime_package_prepared',
+  'require_authorization_valid', 'require_authorization_scope_valid',
+  'runtime_admission_policy_id', 'runtime_admission_policy_version', 'allow_runtime_admission_simulation',
+  'require_runtime_ready_simulation',
+  'runtime_capacity_snapshot_reference_id', 'runtime_capacity_snapshot_reference_version',
+  'runtime_environment_reference_id', 'runtime_registry_snapshot_reference_id',
+  'runtime_concurrency_reference_id', 'runtime_concurrency_reference_version',
+  'runtime_readiness_freshness_reference_id', 'runtime_readiness_freshness_reference_version',
+  'authorization_decision_id', 'authorization_created_logical_sequence', 'maximum_authorization_valid_sequences',
+  'runtime_readiness_replay_reference_id', 'runtime_readiness_replay_reference_version',
+  'runtime_readiness_request_id', 'runtime_readiness_request_version', 'runtime_readiness_policy',
+  'runtime_execution_package_reference', 'runtime_execution_simulation_decision_reference',
+  'runtime_execution_simulation_result_reference', 'runtime_capacity_snapshot_reference',
+  'runtime_concurrency_reference', 'runtime_readiness_freshness_reference', 'runtime_readiness_replay_reference',
+  'runtime_readiness_decision_id', 'runtime_readiness_request_fingerprint', 'runtime_execution_package_fingerprint',
+  'runtime_execution_package_digest', 'runtime_capacity_snapshot_fingerprint', 'runtime_concurrency_fingerprint',
+  'runtime_freshness_fingerprint', 'runtime_replay_fingerprint', 'runtime_package_validated',
+  'authorization_validated', 'runtime_readiness_evaluated', 'runtime_ready_in_simulation',
+  'runtime_admission_request_id', 'runtime_admission_request_version', 'runtime_admission_policy',
+  'runtime_readiness_request_reference', 'runtime_readiness_decision_reference',
+  'runtime_admission_decision_id', 'runtime_admission_request_fingerprint', 'runtime_readiness_decision_fingerprint',
+  'readiness_validated', 'runtime_admission_evaluated',
+  'runtime_admission_result_id', 'runtime_admission_decision_fingerprint'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept

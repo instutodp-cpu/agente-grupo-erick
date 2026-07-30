@@ -15,6 +15,13 @@ const { buildRuntimeExecutionSimulationAudit } = require('./runtime-execution-si
 // the referenced objects' own full content. Mirrors execution-gateway-package-reference.js's own
 // role one layer up: never trusted on its own, always recomputed/cross-checked by
 // evaluateRuntimeExecutionSimulationRequest before being accepted.
+//
+// pr104: RUNTIME_PACKAGE_PREPARED_SIMULATION (this module's own terminal status) is a distinct,
+// separate concept from RUNTIME_READY_SIMULATION and RUNTIME_ADMITTED_SIMULATION -- see
+// runtime-admission-boundary.js's own two-phase evaluator, which independently re-derives every
+// cross-check this module performs (never trusting a previously-prepared package's own self-
+// fingerprint) before ever considering readiness or admission. `checkIdentity` and
+// `computeRuntimePackageDigest` are reused verbatim by that boundary, not reimplemented.
 const RUNTIME_EXECUTION_PACKAGE_VALIDATOR_VERSION = 'runtime_execution_package_validator_v1';
 
 const RUNTIME_EXECUTION_PACKAGE_FIELDS = Object.freeze([

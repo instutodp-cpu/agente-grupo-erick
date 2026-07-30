@@ -22,6 +22,15 @@
 // BLOCKED/RUNTIME_BUDGET_BLOCKED/RUNTIME_ARTIFACT_PLAN_BLOCKED/... have no equivalent among either
 // the 22 Execution Plan stages or the Gateway's own 29 statuses. Not merged into this module.
 //
+// pr104: the Runtime Readiness and Admission Boundary has TWO further separate, self-contained
+// taxonomies of its own -- RUNTIME_READINESS_STATUSES/STATUS_OUTCOME_MAP/RUNTIME_READINESS_
+// PRECEDENCE_ORDER (34 statuses, runtime-readiness-decision.js) and RUNTIME_ADMISSION_STATUSES/
+// STATUS_OUTCOME_MAP/RUNTIME_ADMISSION_PRECEDENCE_ORDER (22 statuses, runtime-admission-decision.js)
+// -- for the identical reason every prior layer's own taxonomy stayed separate: RUNTIME_CAPACITY_
+// BLOCKED/RUNTIME_CONCURRENCY_BLOCKED/RUNTIME_NOT_READY_BLOCKED/... have no equivalent among the 22
+// Execution Plan stages, the Gateway's 29 statuses, or the Runtime Execution Simulation layer's own
+// 24 statuses. Not merged into this module.
+//
 // Two distinct "orders" are captured deliberately as two distinct fields, never conflated:
 // - `declarationOrder`: the order this PR's own spec lists the 24 statuses in.
 // - `precedence`: the real order execution-plan-engine.js actually evaluates gates in, documented
