@@ -77,7 +77,19 @@ const AUDITED_CONTRACTS_MANIFEST = Object.freeze([
   { module: './runtime-readiness-decision', fieldsExport: 'RUNTIME_READINESS_DECISION_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
   { module: './runtime-admission-request', fieldsExport: 'RUNTIME_ADMISSION_REQUEST_FIELDS', hasVersion: true, versionField: 'runtime_admission_request_version', hasFingerprint: false },
   { module: './runtime-admission-decision', fieldsExport: 'RUNTIME_ADMISSION_DECISION_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
-  { module: './runtime-admission-result', fieldsExport: 'RUNTIME_ADMISSION_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false }
+  { module: './runtime-admission-result', fieldsExport: 'RUNTIME_ADMISSION_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
+  // pr105: Runtime Scheduler Simulation Contracts' own new contracts.
+  { module: './runtime-scheduler-policy', fieldsExport: 'RUNTIME_SCHEDULER_POLICY_FIELDS', safeFlagsExport: 'RUNTIME_SCHEDULER_POLICY_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_scheduler_policy_version', hasFingerprint: false },
+  { module: './runtime-scheduler-request', fieldsExport: 'RUNTIME_SCHEDULER_REQUEST_FIELDS', hasVersion: true, versionField: 'runtime_scheduler_request_version', hasFingerprint: false },
+  { module: './runtime-scheduler-stage-reference', fieldsExport: 'RUNTIME_SCHEDULER_STAGE_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_SCHEDULER_STAGE_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'scheduler_stage_reference_version', hasFingerprint: true, fingerprintField: 'stage_fingerprint' },
+  { module: './runtime-scheduler-dependency-reference', fieldsExport: 'RUNTIME_SCHEDULER_DEPENDENCY_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_SCHEDULER_DEPENDENCY_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'scheduler_dependency_reference_version', hasFingerprint: true, fingerprintField: 'dependency_fingerprint' },
+  { module: './runtime-scheduler-parallel-group-reference', fieldsExport: 'RUNTIME_SCHEDULER_PARALLEL_GROUP_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_SCHEDULER_PARALLEL_GROUP_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'parallel_group_reference_version', hasFingerprint: true, fingerprintField: 'parallel_group_fingerprint' },
+  { module: './runtime-scheduler-approval-wait-reference', fieldsExport: 'RUNTIME_SCHEDULER_APPROVAL_WAIT_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_SCHEDULER_APPROVAL_WAIT_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'approval_wait_reference_version', hasFingerprint: true, fingerprintField: 'approval_wait_fingerprint' },
+  { module: './runtime-scheduler-capacity-plan-reference', fieldsExport: 'RUNTIME_SCHEDULER_CAPACITY_PLAN_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_SCHEDULER_CAPACITY_PLAN_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'scheduler_capacity_plan_reference_version', hasFingerprint: true, fingerprintField: 'capacity_plan_fingerprint' },
+  { module: './runtime-scheduler-queue-plan-reference', fieldsExport: 'RUNTIME_SCHEDULER_QUEUE_PLAN_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_SCHEDULER_QUEUE_PLAN_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'scheduler_queue_plan_reference_version', hasFingerprint: true, fingerprintField: 'queue_plan_fingerprint' },
+  { module: './runtime-scheduler-package', fieldsExport: 'RUNTIME_SCHEDULER_PACKAGE_FIELDS', safeFlagsExport: 'RUNTIME_SCHEDULER_PACKAGE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_scheduler_package_version', hasFingerprint: true, fingerprintField: 'scheduler_package_fingerprint' },
+  { module: './runtime-scheduler-decision', fieldsExport: 'RUNTIME_SCHEDULER_DECISION_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
+  { module: './runtime-scheduler-result', fieldsExport: 'RUNTIME_SCHEDULER_RESULT_FIELDS', hasVersion: false, hasFingerprint: false }
 ]);
 
 function readDirFiles(dir, extension) {

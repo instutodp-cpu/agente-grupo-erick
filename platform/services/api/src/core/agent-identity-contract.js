@@ -149,7 +149,27 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'runtime_readiness_request_reference', 'runtime_readiness_decision_reference',
   'runtime_admission_decision_id', 'runtime_admission_request_fingerprint', 'runtime_readiness_decision_fingerprint',
   'readiness_validated', 'runtime_admission_evaluated',
-  'runtime_admission_result_id', 'runtime_admission_decision_fingerprint'
+  'runtime_admission_result_id', 'runtime_admission_decision_fingerprint',
+  // Runtime Scheduler Simulation Contracts (PR #105) field names -- "runtime"/"scheduler" here
+  // always refer to this PR's own declarative scheduling plan (policy, request, stage/dependency/
+  // parallel-group/approval-wait references, capacity/queue plan, package, decision, result), never
+  // a real interpreter or an operational job/queue/worker scheduler. Every field below is a
+  // compound name this PR's exact-fields lists mandate; none of them enable, start, or reference a
+  // real runtime or scheduler ("scheduler"/"queue"/"job"/"worker"/"dispatch" are not forbidden
+  // tokens on their own -- only "runtime" segments need this allowlist).
+  'runtime_scheduler_policy_id', 'runtime_scheduler_policy_version', 'require_runtime_admitted_simulation',
+  'runtime_scheduler_request_id', 'runtime_scheduler_request_version', 'runtime_scheduler_policy',
+  'runtime_admission_request_reference', 'runtime_admission_decision_reference', 'runtime_admission_result_reference',
+  'runtime_freshness_reference', 'runtime_replay_reference',
+  'runtime_scheduler_package_id', 'runtime_scheduler_package_version',
+  'source_runtime_dependency_reference_id', 'source_runtime_stage_reference_ids',
+  'runtime_freshness_reference_id', 'runtime_replay_reference_id', 'runtime_admission_result_fingerprint',
+  'runtime_scheduler_decision_id', 'runtime_scheduler_request_fingerprint', 'runtime_scheduler_package_fingerprint',
+  'runtime_scheduler_package_digest', 'runtime_scheduler_result_id', 'runtime_scheduler_decision_fingerprint',
+  // 'token' (exact segment, singular) is forbidden even though 'tokens' (plural) is not -- the
+  // Scheduler Capacity Plan's own spec-mandated field name uses the singular form for this one
+  // declarative within-limit flag; it never holds or references a credential.
+  'token_capacity_within_limit'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept
