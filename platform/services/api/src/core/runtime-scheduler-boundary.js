@@ -69,12 +69,14 @@ const SCHEDULER_STAGE_STATUSES_ORDER = Object.freeze({
   ELIGIBLE: 'SCHEDULER_STAGE_ELIGIBLE_SIMULATION'
 });
 
-// Derives one status per source stage. Nothing is ever satisfied/approved in this PR, so any stage
-// that is the `to` side of any dependency edge (required or not -- see "Preservar a semântica do
-// grafo") is WAITING_DEPENDENCY_REFERENCE; `approval_required=true` always yields
-// WAITING_APPROVAL_REFERENCE; `optional=true` (once neither of the above applies) yields
-// OPTIONAL_REFERENCE; anything else that clears policy/type checks is ELIGIBLE_REFERENCE_SIMULATION.
-function deriveStageStatus(stage, hasIncomingDependency, policy) {
+// Derives one status per source stage. Nothing is ever satisfied/approved in this PR. pr105fix
+// FIX #1: only a `required=true` dependency edge can block a target's eligibility -- an optional
+// edge is preserved as a reference (see `dependency_reference_ids` in
+// runtime-scheduler-stage-reference.js) but never changes eligibility by itself. `approval_required=
+// true` always yields WAITING_APPROVAL_REFERENCE; `optional=true` (once neither of the above
+// applies) yields OPTIONAL_REFERENCE; anything else that clears policy/type checks is
+// ELIGIBLE_REFERENCE_SIMULATION.
+function deriveStageStatus(stage, hasIncomingRequiredDependency, policy) {
   const hasModel = stage.model_selection_reference_id !== null;
   const hasTool = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0;
   const hasWorkflow = stage.workflow_reference_id !== null;
@@ -86,28 +88,10 @@ function deriveStageStatus(stage, hasIncomingDependency, policy) {
     || (hasWorkflow && policy.allow_workflow_stage_reference !== true)
   );
   if (blocked) return SCHEDULER_STAGE_STATUSES_ORDER.BLOCKED;
-  if (hasIncomingDependency) return SCHEDULER_STAGE_STATUSES_ORDER.WAITING_DEPENDENCY;
+  if (hasIncomingRequiredDependency) return SCHEDULER_STAGE_STATUSES_ORDER.WAITING_DEPENDENCY;
   if (stage.approval_required === true) return SCHEDULER_STAGE_STATUSES_ORDER.WAITING_APPROVAL;
   if (stage.optional === true) return SCHEDULER_STAGE_STATUSES_ORDER.OPTIONAL;
   return SCHEDULER_STAGE_STATUSES_ORDER.ELIGIBLE;
-}
-
-// The spec's own 6-tier deterministic comparator, applied as a sort key tuple. Blocked stages are
-// placed in their own, most-significant tier (not described by the spec's own 6 rules, since a
-// blocked stage participates in none of "waiting for dependency"/"waiting for approval"/"required
-// vs optional" in any meaningful sense) -- everything after that follows the spec's literal order:
-// dependency-wait before approval-wait before optional-vs-required, then priority (descending),
-// stage_sequence (ascending), and finally runtime_stage_reference_id lexicographically.
-function schedulerSortKey(stage, status) {
-  return [
-    status === SCHEDULER_STAGE_STATUSES_ORDER.BLOCKED ? 1 : 0,
-    status === SCHEDULER_STAGE_STATUSES_ORDER.WAITING_DEPENDENCY ? 1 : 0,
-    status === SCHEDULER_STAGE_STATUSES_ORDER.WAITING_APPROVAL ? 1 : 0,
-    stage.optional === true ? 1 : 0,
-    -stage.priority,
-    stage.stage_sequence,
-    stage.runtime_stage_reference_id
-  ];
 }
 
 function compareSortKeys(a, b) {
@@ -116,6 +100,56 @@ function compareSortKeys(a, b) {
     if (a[i] > b[i]) return 1;
   }
   return 0;
+}
+
+// pr105fix FIX #2: a deterministic Kahn's-algorithm topological sort restricted to `required=true`
+// edges -- guarantees, by construction, that every required predecessor's position precedes its
+// target's, something the prior single-pass comparator sort (tie-broken only by status tier/
+// priority/stage_sequence/id, with no actual graph-order constraint) could not guarantee whenever
+// two stages both landed in the same status tier (e.g. two WAITING_DEPENDENCY_REFERENCE stages
+// chained A->B could be reordered by priority alone). Optional edges impose no ordering constraint.
+// No recursion, no I/O -- a plain iterative queue drained by the same 6-key deterministic tie-break
+// the spec's own algorithm mandates whenever more than one stage is simultaneously available
+// (indegree zero): (a) structurally blocked last; (b) approval_required after non-approval;
+// (c) optional after required; (d) higher priority first; (e) lower stage_sequence first; (f) lower
+// runtime_stage_reference_id lexicographically.
+function topologicalOrderStages(stages, requiredEdges, stageStatusById) {
+  const ids = stages.map((s) => s.runtime_stage_reference_id);
+  const stageById = new Map(stages.map((s) => [s.runtime_stage_reference_id, s]));
+  const indegree = new Map(ids.map((id) => [id, 0]));
+  const adjacency = new Map(ids.map((id) => [id, []]));
+  for (const edge of requiredEdges) {
+    if (!indegree.has(edge.to_runtime_stage_id) || !adjacency.has(edge.from_runtime_stage_id)) continue;
+    indegree.set(edge.to_runtime_stage_id, indegree.get(edge.to_runtime_stage_id) + 1);
+    adjacency.get(edge.from_runtime_stage_id).push(edge.to_runtime_stage_id);
+  }
+
+  function tieBreakKey(id) {
+    const stage = stageById.get(id);
+    return [
+      stageStatusById.get(id) === SCHEDULER_STAGE_STATUSES_ORDER.BLOCKED ? 1 : 0,
+      stage.approval_required === true ? 1 : 0,
+      stage.optional === true ? 1 : 0,
+      -stage.priority,
+      stage.stage_sequence,
+      id
+    ];
+  }
+
+  const available = new Set(ids.filter((id) => indegree.get(id) === 0));
+  const ordered = [];
+  while (available.size > 0) {
+    const chosen = [...available].sort((a, b) => compareSortKeys(tieBreakKey(a), tieBreakKey(b)))[0];
+    available.delete(chosen);
+    ordered.push(chosen);
+    for (const next of adjacency.get(chosen)) {
+      const remaining = indegree.get(next) - 1;
+      indegree.set(next, remaining);
+      if (remaining === 0) available.add(next);
+    }
+  }
+
+  return { ordered: ordered.map((id) => stageById.get(id)), complete: ordered.length === ids.length };
 }
 
 // Topological depth (longest path from any root, 0-based) over the full dependency edge set --
@@ -397,24 +431,38 @@ function evaluateRuntimeSchedulerRequest(request, context = {}) {
   }
   markValid('idempotency_validated');
 
-  // 20. Derive Scheduler Stage References.
-  const hasIncomingDependencyByStageId = new Map(stages.map((s) => [s.runtime_stage_reference_id, false]));
-  for (const dep of dependencies) {
-    if (hasIncomingDependencyByStageId.has(dep.to_runtime_stage_id)) hasIncomingDependencyByStageId.set(dep.to_runtime_stage_id, true);
+  // 20. Derive Scheduler Stage References. pr105fix FIX #1: only a required=true dependency edge
+  // can block a target's eligibility -- an optional edge never changes eligibility by itself.
+  const requiredDependencies = dependencies.filter((d) => d.required === true);
+  const hasIncomingRequiredDependencyByStageId = new Map(stages.map((s) => [s.runtime_stage_reference_id, false]));
+  for (const dep of requiredDependencies) {
+    if (hasIncomingRequiredDependencyByStageId.has(dep.to_runtime_stage_id)) hasIncomingRequiredDependencyByStageId.set(dep.to_runtime_stage_id, true);
   }
   const stageStatusById = new Map();
   for (const stage of stages) {
-    stageStatusById.set(stage.runtime_stage_reference_id, deriveStageStatus(stage, hasIncomingDependencyByStageId.get(stage.runtime_stage_reference_id), policy));
+    stageStatusById.set(stage.runtime_stage_reference_id, deriveStageStatus(stage, hasIncomingRequiredDependencyByStageId.get(stage.runtime_stage_reference_id), policy));
   }
   const waitingApprovalCount = [...stageStatusById.values()].filter((s) => s === SCHEDULER_STAGE_STATUSES_ORDER.WAITING_APPROVAL).length;
   if (waitingApprovalCount > policy.maximum_waiting_approval_stage_count) {
     return finalize('SCHEDULER_POLICY_BLOCKED', ['waiting_approval_stage_count_exceeds_policy_limit']);
   }
 
-  const sortedStages = [...stages].sort((a, b) => compareSortKeys(
-    schedulerSortKey(a, stageStatusById.get(a.runtime_stage_reference_id)),
-    schedulerSortKey(b, stageStatusById.get(b.runtime_stage_reference_id))
-  ));
+  // pr105fix FIX #2: a genuine deterministic topological sort restricted to required edges --
+  // "index(required predecessor) < index(required target)" is now a structural guarantee of the
+  // algorithm itself, never merely a side effect of tie-breaking by status/priority/sequence/id.
+  // cycle_free is already proven true upstream (step 11), but the scheduler never trusts that flag
+  // alone -- if the topological sort itself cannot order every stage, it fails closed here too.
+  const topoResult = topologicalOrderStages(stages, requiredDependencies, stageStatusById);
+  if (!topoResult.complete) {
+    return finalize('SCHEDULER_DEPENDENCY_BLOCKED', ['scheduler_required_dependency_cycle_detected']);
+  }
+  const sortedStages = topoResult.ordered;
+  const positionByStageId = new Map(sortedStages.map((s, index) => [s.runtime_stage_reference_id, index]));
+  for (const dep of requiredDependencies) {
+    if (positionByStageId.get(dep.from_runtime_stage_id) >= positionByStageId.get(dep.to_runtime_stage_id)) {
+      return finalize('SCHEDULER_DEPENDENCY_BLOCKED', [`scheduler_required_predecessor_order_violation::${dep.runtime_dependency_reference_id}`]);
+    }
+  }
 
   const schedulerStageRefs = sortedStages.map((stage, index) => buildRuntimeSchedulerStageReference({
     scheduler_stage_reference_id: `${packageRef.runtime_execution_package_id}-scheduler-stage-${stage.runtime_stage_reference_id}`,
@@ -804,7 +852,10 @@ function buildSchedulerOutcome(status, reasonCodes, ctx, validatedFlags) {
 }
 
 module.exports = {
+  SCHEDULER_STAGE_STATUSES_ORDER,
   computeAdmissionRequestFingerprint,
+  deriveStageStatus,
   evaluateRuntimeSchedulerRequest,
-  omitReplayReference
+  omitReplayReference,
+  topologicalOrderStages
 };

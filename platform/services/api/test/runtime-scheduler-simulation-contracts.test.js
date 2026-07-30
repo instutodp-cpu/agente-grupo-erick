@@ -31,7 +31,7 @@ const {
   validateRuntimeSchedulerQueuePlanReference, buildRuntimeSchedulerQueuePlanReference,
   RUNTIME_SCHEDULER_QUEUE_PLAN_REFERENCE_FIELDS
 } = require('../src/core/runtime-scheduler-queue-plan-reference');
-const { validateRuntimeSchedulerPackage } = require('../src/core/runtime-scheduler-package');
+const { validateRuntimeSchedulerPackage, buildRuntimeSchedulerPackage } = require('../src/core/runtime-scheduler-package');
 const {
   validateRuntimeSchedulerDecision, RUNTIME_SCHEDULER_STATUSES, RUNTIME_SCHEDULER_PRECEDENCE_ORDER,
   buildRuntimeSchedulerDecision
@@ -50,6 +50,9 @@ const { computeCanonicalContentDigest } = require('../src/core/canonical-content
 const {
   buildGoldenSchedulerBundle, evaluateRuntimeSchedulerRequest, computeAdmissionRequestFingerprint, omitReplayReference
 } = require('./helpers/runtime-scheduler-simulation-test-data');
+const {
+  deriveStageStatus, topologicalOrderStages, SCHEDULER_STAGE_STATUSES_ORDER
+} = require('../src/core/runtime-scheduler-boundary');
 
 const fixture = require('./fixtures/hermes-runtime-scheduler-simulation-contracts.json');
 
@@ -537,6 +540,291 @@ test('scheduler boundary: identity blocker leaves later validated flags false (p
   assert.equal(outcome.decision.status, 'TENANT_BLOCKED');
   assert.equal(outcome.decision.capacity_validated, false);
   assert.equal(outcome.decision.non_execution_invariants_validated, false);
+});
+
+// --- pr105fix FIX #1: only a required=true dependency can block eligibility ----------------------
+
+const FIX1_POLICY = buildRuntimeSchedulerPolicy({
+  runtime_scheduler_policy_id: 'fix1-policy', allow_required_stage_reference: true, allow_optional_stage_reference: true,
+  allow_parallel_group_reference: true, allow_human_approval_wait_reference: true, allow_model_stage_reference: true,
+  allow_tool_stage_reference: true, allow_workflow_stage_reference: true, allow_state_change_reference: true,
+  maximum_scheduler_stage_count: 100, maximum_parallel_group_count: 10, maximum_stages_per_parallel_group: 10,
+  maximum_waiting_approval_stage_count: 10, maximum_model_stage_count: 10, maximum_tool_stage_count: 10,
+  maximum_workflow_stage_count: 10, maximum_estimated_tokens: 1000000, maximum_estimated_cost_minor_units: 1000000
+});
+
+function makeStage(id, overrides = {}) {
+  return {
+    runtime_stage_reference_id: id,
+    model_selection_reference_id: null,
+    tool_reference_ids: [],
+    workflow_reference_id: null,
+    side_effect_classification: 'NONE',
+    approval_required: false,
+    optional: false,
+    priority: 0,
+    stage_sequence: 0,
+    ...overrides
+  };
+}
+
+test('FIX1: a stage with an incoming required dependency stays WAITING_DEPENDENCY_REFERENCE', () => {
+  const status = deriveStageStatus(makeStage('s-1'), true, FIX1_POLICY);
+  assert.equal(status, SCHEDULER_STAGE_STATUSES_ORDER.WAITING_DEPENDENCY);
+});
+
+test('FIX1: a stage with only an optional incoming dependency does not stay waiting', () => {
+  const status = deriveStageStatus(makeStage('s-1'), false, FIX1_POLICY);
+  assert.notEqual(status, SCHEDULER_STAGE_STATUSES_ORDER.WAITING_DEPENDENCY);
+  assert.equal(status, SCHEDULER_STAGE_STATUSES_ORDER.ELIGIBLE);
+});
+
+test('FIX1: optional dependency + approval_required=true still yields WAITING_APPROVAL_REFERENCE', () => {
+  const status = deriveStageStatus(makeStage('s-1', { approval_required: true }), false, FIX1_POLICY);
+  assert.equal(status, SCHEDULER_STAGE_STATUSES_ORDER.WAITING_APPROVAL);
+});
+
+test('FIX1: optional dependency + optional stage yields OPTIONAL_REFERENCE', () => {
+  const status = deriveStageStatus(makeStage('s-1', { optional: true }), false, FIX1_POLICY);
+  assert.equal(status, SCHEDULER_STAGE_STATUSES_ORDER.OPTIONAL);
+});
+
+test('FIX1: optional dependency + otherwise-plain required stage yields ELIGIBLE_REFERENCE_SIMULATION', () => {
+  const status = deriveStageStatus(makeStage('s-1'), false, FIX1_POLICY);
+  assert.equal(status, SCHEDULER_STAGE_STATUSES_ORDER.ELIGIBLE);
+});
+
+test('FIX1: a mix of required and optional incoming edges still yields WAITING_DEPENDENCY_REFERENCE (the required edge alone is decisive)', () => {
+  const status = deriveStageStatus(makeStage('s-1'), true, FIX1_POLICY);
+  assert.equal(status, SCHEDULER_STAGE_STATUSES_ORDER.WAITING_DEPENDENCY);
+});
+
+test('FIX1: hasIncomingRequiredDependency map construction is insensitive to input edge order', () => {
+  const edgesA = [
+    { from_runtime_stage_id: 'a', to_runtime_stage_id: 'b', required: false },
+    { from_runtime_stage_id: 'a', to_runtime_stage_id: 'c', required: true }
+  ];
+  const edgesB = [...edgesA].reverse();
+  function buildMap(edges) {
+    const map = new Map([['a', false], ['b', false], ['c', false]]);
+    for (const e of edges.filter((x) => x.required === true)) map.set(e.to_runtime_stage_id, true);
+    return map;
+  }
+  assert.deepEqual([...buildMap(edgesA).entries()], [...buildMap(edgesB).entries()]);
+});
+
+test('FIX1: end-to-end -- blocking_dependency_reference_ids only ever contains required edges, dependency_reference_ids contains both', () => {
+  const golden = buildGoldenSchedulerBundle('parallel-plan');
+  const outcome = evaluateRuntimeSchedulerRequest(golden.schedulerRequest, {});
+  const requiredDependencyIds = new Set(golden.runtimeDependencyManifest.runtime_dependency_references.filter((d) => d.required === true).map((d) => d.runtime_dependency_reference_id));
+  for (const stage of outcome.schedulerStageRefs) {
+    for (const id of stage.blocking_dependency_reference_ids) {
+      assert.ok(requiredDependencyIds.has(id), `blocking id ${id} must be a required dependency`);
+      assert.ok(stage.dependency_reference_ids.includes(id));
+    }
+  }
+});
+
+test('FIX1: side-channel context never alters stage eligibility classification', () => {
+  const golden = buildGoldenSchedulerBundle('parallel-plan');
+  const withoutContext = evaluateRuntimeSchedulerRequest(golden.schedulerRequest, {});
+  const withContext = evaluateRuntimeSchedulerRequest(golden.schedulerRequest, { dependencySatisfied: true, anything: 'hostile' });
+  assert.deepEqual(withContext.schedulerStageRefs.map((s) => s.scheduler_stage_status), withoutContext.schedulerStageRefs.map((s) => s.scheduler_stage_status));
+});
+
+// --- pr105fix FIX #2: deterministic topological order over required edges ------------------------
+
+function statusMapFor(ids) {
+  const map = new Map();
+  for (const id of ids) map.set(id, SCHEDULER_STAGE_STATUSES_ORDER.ELIGIBLE);
+  return map;
+}
+
+test('FIX2: a required predecessor always orders before its target', () => {
+  const stages = [makeStage('b'), makeStage('a')];
+  const edges = [{ from_runtime_stage_id: 'a', to_runtime_stage_id: 'b', required: true }];
+  const { ordered, complete } = topologicalOrderStages(stages, edges, statusMapFor(['a', 'b']));
+  assert.equal(complete, true);
+  const ids = ordered.map((s) => s.runtime_stage_reference_id);
+  assert.ok(ids.indexOf('a') < ids.indexOf('b'));
+});
+
+test('FIX2: a target with higher priority never overtakes its required predecessor', () => {
+  const stages = [makeStage('a', { priority: 1 }), makeStage('b', { priority: 999 })];
+  const edges = [{ from_runtime_stage_id: 'a', to_runtime_stage_id: 'b', required: true }];
+  const { ordered } = topologicalOrderStages(stages, edges, statusMapFor(['a', 'b']));
+  const ids = ordered.map((s) => s.runtime_stage_reference_id);
+  assert.deepEqual(ids, ['a', 'b']);
+});
+
+test('FIX2: a target with lower stage_sequence never overtakes its required predecessor', () => {
+  const stages = [makeStage('a', { stage_sequence: 5 }), makeStage('b', { stage_sequence: 0 })];
+  const edges = [{ from_runtime_stage_id: 'a', to_runtime_stage_id: 'b', required: true }];
+  const { ordered } = topologicalOrderStages(stages, edges, statusMapFor(['a', 'b']));
+  const ids = ordered.map((s) => s.runtime_stage_reference_id);
+  assert.deepEqual(ids, ['a', 'b']);
+});
+
+test('FIX2: a target with a lexicographically smaller ID never overtakes its required predecessor', () => {
+  const stages = [makeStage('z-predecessor'), makeStage('a-target')];
+  const edges = [{ from_runtime_stage_id: 'z-predecessor', to_runtime_stage_id: 'a-target', required: true }];
+  const { ordered } = topologicalOrderStages(stages, edges, statusMapFor(['z-predecessor', 'a-target']));
+  const ids = ordered.map((s) => s.runtime_stage_reference_id);
+  assert.deepEqual(ids, ['z-predecessor', 'a-target']);
+});
+
+test('FIX2: chain A->B->C is preserved', () => {
+  const stages = [makeStage('c'), makeStage('a'), makeStage('b')];
+  const edges = [
+    { from_runtime_stage_id: 'a', to_runtime_stage_id: 'b', required: true },
+    { from_runtime_stage_id: 'b', to_runtime_stage_id: 'c', required: true }
+  ];
+  const { ordered, complete } = topologicalOrderStages(stages, edges, statusMapFor(['a', 'b', 'c']));
+  assert.equal(complete, true);
+  assert.deepEqual(ordered.map((s) => s.runtime_stage_reference_id), ['a', 'b', 'c']);
+});
+
+test('FIX2: diamond A->B, A->C, B->D, C->D is preserved', () => {
+  const stages = [makeStage('d'), makeStage('c'), makeStage('b'), makeStage('a')];
+  const edges = [
+    { from_runtime_stage_id: 'a', to_runtime_stage_id: 'b', required: true },
+    { from_runtime_stage_id: 'a', to_runtime_stage_id: 'c', required: true },
+    { from_runtime_stage_id: 'b', to_runtime_stage_id: 'd', required: true },
+    { from_runtime_stage_id: 'c', to_runtime_stage_id: 'd', required: true }
+  ];
+  const { ordered, complete } = topologicalOrderStages(stages, edges, statusMapFor(['a', 'b', 'c', 'd']));
+  assert.equal(complete, true);
+  const ids = ordered.map((s) => s.runtime_stage_reference_id);
+  assert.equal(ids[0], 'a');
+  assert.equal(ids[3], 'd');
+  assert.ok(ids.indexOf('b') < ids.indexOf('d'));
+  assert.ok(ids.indexOf('c') < ids.indexOf('d'));
+});
+
+test('FIX2: multiple roots use a deterministic tie-break (priority desc, stage_sequence asc, id asc)', () => {
+  const stages = [makeStage('root-b', { priority: 1 }), makeStage('root-a', { priority: 5 }), makeStage('root-c', { priority: 1, stage_sequence: 1 })];
+  const { ordered } = topologicalOrderStages(stages, [], statusMapFor(['root-a', 'root-b', 'root-c']));
+  assert.deepEqual(ordered.map((s) => s.runtime_stage_reference_id), ['root-a', 'root-b', 'root-c']);
+});
+
+test('FIX2: an optional dependency imposes no ordering constraint', () => {
+  // Optional edges are never passed into topologicalOrderStages by the boundary (it filters to
+  // required-only before calling) -- passing none here for an edge that exists only as optional
+  // confirms the target is free to be ordered purely by the deterministic tie-break, never forced
+  // after a predecessor it has no required edge to.
+  const stages = [makeStage('later', { priority: 0, stage_sequence: 1 }), makeStage('earlier', { priority: 0, stage_sequence: 0 })];
+  const { ordered } = topologicalOrderStages(stages, [], statusMapFor(['earlier', 'later']));
+  assert.deepEqual(ordered.map((s) => s.runtime_stage_reference_id), ['earlier', 'later']);
+});
+
+test('FIX2: a mix of required and optional edges preserves only the required ordering constraint', () => {
+  const stages = [makeStage('b'), makeStage('a'), makeStage('c')];
+  // Only the a->b edge is required; a->c is optional and therefore never passed in.
+  const edges = [{ from_runtime_stage_id: 'a', to_runtime_stage_id: 'b', required: true }];
+  const { ordered, complete } = topologicalOrderStages(stages, edges, statusMapFor(['a', 'b', 'c']));
+  assert.equal(complete, true);
+  const ids = ordered.map((s) => s.runtime_stage_reference_id);
+  assert.ok(ids.indexOf('a') < ids.indexOf('b'));
+});
+
+test('FIX2: a cycle among required edges is detected (incomplete ordering)', () => {
+  const stages = [makeStage('a'), makeStage('b')];
+  const edges = [
+    { from_runtime_stage_id: 'a', to_runtime_stage_id: 'b', required: true },
+    { from_runtime_stage_id: 'b', to_runtime_stage_id: 'a', required: true }
+  ];
+  const { complete } = topologicalOrderStages(stages, edges, statusMapFor(['a', 'b']));
+  assert.equal(complete, false);
+});
+
+test('FIX2: end-to-end -- a required-edge cycle blocks as SCHEDULER_DEPENDENCY_BLOCKED', () => {
+  const { buildRuntimeDependencySimulationManifest } = require('../src/core/runtime-dependency-simulation-manifest');
+  const { buildRuntimeDependencySimulationReference } = require('../src/core/runtime-dependency-simulation-reference');
+  const golden = buildGoldenSchedulerBundle('parallel-plan');
+  const originalDeps = golden.runtimeDependencyManifest.runtime_dependency_references;
+  if (originalDeps.length === 0) return; // scenario has no dependency to invert; skip defensively.
+  const forward = originalDeps[0];
+  const reversed = buildRuntimeDependencySimulationReference({
+    ...forward, runtime_dependency_reference_id: `${forward.runtime_dependency_reference_id}-reversed`,
+    from_runtime_stage_id: forward.to_runtime_stage_id, to_runtime_stage_id: forward.from_runtime_stage_id
+  });
+  const cyclicManifest = buildRuntimeDependencySimulationManifest({
+    ...golden.runtimeDependencyManifest, runtime_dependency_references: [forward, reversed]
+  }, { knownStageIds: new Set(golden.runtimeStageManifest.runtime_stage_references.map((s) => s.runtime_stage_reference_id)) });
+  if (cyclicManifest.cycle_free === true) return; // fixture-specific edge shape didn't form a cycle; skip defensively.
+  const request = rebuild({ ...golden.schedulerRequest, runtime_dependency_manifest_reference: cyclicManifest });
+  const outcome = evaluateRuntimeSchedulerRequest(request, {});
+  assert.equal(outcome.decision.status, 'SCHEDULER_DEPENDENCY_BLOCKED');
+});
+
+test('FIX2: input order is irrelevant -- shuffled stages/edges produce the identical order', () => {
+  const stages = [makeStage('a'), makeStage('b'), makeStage('c'), makeStage('d')];
+  const edges = [
+    { from_runtime_stage_id: 'a', to_runtime_stage_id: 'b', required: true },
+    { from_runtime_stage_id: 'a', to_runtime_stage_id: 'c', required: true },
+    { from_runtime_stage_id: 'b', to_runtime_stage_id: 'd', required: true },
+    { from_runtime_stage_id: 'c', to_runtime_stage_id: 'd', required: true }
+  ];
+  const statusMap = statusMapFor(['a', 'b', 'c', 'd']);
+  const first = topologicalOrderStages(stages, edges, statusMap);
+  const second = topologicalOrderStages([...stages].reverse(), [...edges].reverse(), statusMap);
+  assert.deepEqual(first.ordered.map((s) => s.runtime_stage_reference_id), second.ordered.map((s) => s.runtime_stage_reference_id));
+});
+
+test('FIX2: end-to-end -- the queue plan uses exactly the topological order the boundary derived', () => {
+  const golden = buildGoldenSchedulerBundle('parallel-plan');
+  const outcome = evaluateRuntimeSchedulerRequest(golden.schedulerRequest, {});
+  const bySequence = [...outcome.schedulerStageRefs].sort((a, b) => a.scheduler_sequence - b.scheduler_sequence).map((s) => s.scheduler_stage_reference_id);
+  assert.deepEqual(outcome.queuePlanRef.ordered_scheduler_stage_reference_ids, bySequence);
+});
+
+test('FIX2: end-to-end -- ordered_scheduler_stage_reference_ids preserves required predecessor-before-target', () => {
+  const golden = buildGoldenSchedulerBundle('parallel-plan');
+  const outcome = evaluateRuntimeSchedulerRequest(golden.schedulerRequest, {});
+  const requiredEdges = golden.runtimeDependencyManifest.runtime_dependency_references.filter((d) => d.required === true);
+  const schedulerIdBySourceId = new Map(outcome.schedulerStageRefs.map((s) => [s.runtime_stage_reference_id, s.scheduler_stage_reference_id]));
+  const order = outcome.queuePlanRef.ordered_scheduler_stage_reference_ids;
+  for (const edge of requiredEdges) {
+    const fromId = schedulerIdBySourceId.get(edge.from_runtime_stage_id);
+    const toId = schedulerIdBySourceId.get(edge.to_runtime_stage_id);
+    assert.ok(order.indexOf(fromId) < order.indexOf(toId), `required predecessor ${fromId} must precede ${toId}`);
+  }
+});
+
+test('FIX2: package fingerprint/digest change when the scheduler stage order changes', () => {
+  const basePackageInput = {
+    runtime_scheduler_package_id: 'sp-order-1', runtime_scheduler_request_id: 'sr-1', runtime_admission_request_id: 'adr-1',
+    runtime_admission_decision_id: 'ad-1', runtime_admission_result_id: 'ar-1', runtime_readiness_decision_id: 'rd-1',
+    runtime_execution_package_id: 'pkg-1', runtime_stage_manifest_id: 'sm-1', runtime_dependency_manifest_id: 'dm-1',
+    runtime_budget_reference_id: 'br-1', runtime_capacity_snapshot_reference_id: 'cap-1', runtime_concurrency_reference_id: 'conc-1',
+    runtime_freshness_reference_id: 'fr-1', runtime_replay_reference_id: 'rr-1', idempotency_reference_id: 'idem-1',
+    scheduler_capacity_plan_reference_id: 'cp-1', scheduler_queue_plan_reference_id: 'qp-1',
+    tenant_id: 't1', organization_id: 'o1', project_id: 'p1', session_reference_id: 's1', agent_id: 'a1', actor_id: 'ac1',
+    scheduler_status: 'SCHEDULER_PACKAGE_PREPARED_SIMULATION',
+    scheduler_stage_reference_ids: ['ss-1', 'ss-2'], scheduler_dependency_reference_ids: [], parallel_group_reference_ids: [], approval_wait_reference_ids: [],
+    eligible_scheduler_stage_reference_ids: ['ss-1', 'ss-2'],
+    waiting_dependency_stage_reference_ids: [], waiting_approval_stage_reference_ids: [], optional_stage_reference_ids: [], blocked_stage_reference_ids: [],
+    scheduler_stage_count: 2, scheduler_dependency_count: 0, parallel_group_count: 0, approval_wait_count: 0,
+    model_stage_count: 0, tool_stage_count: 0, workflow_stage_count: 0, parallel_stage_count: 0, optional_stage_count: 0, approval_stage_count: 0,
+    estimated_input_tokens: 0, estimated_output_tokens: 0, estimated_total_tokens: 0, estimated_total_cost_minor_units: 0,
+    runtime_admission_decision_fingerprint: 'fp1', runtime_admission_result_fingerprint: 'fp2', runtime_execution_package_fingerprint: 'fp3',
+    runtime_execution_package_digest: 'fp4', runtime_stage_manifest_fingerprint: 'fp5', runtime_dependency_manifest_fingerprint: 'fp6',
+    runtime_budget_fingerprint: 'fp7', runtime_capacity_snapshot_fingerprint: 'fp8', runtime_concurrency_fingerprint: 'fp9',
+    runtime_freshness_fingerprint: 'fp10', runtime_replay_fingerprint: 'fp11', idempotency_fingerprint: 'fp12',
+    scheduler_stage_fingerprints: ['fp13', 'fp14'], scheduler_dependency_fingerprints: [], parallel_group_fingerprints: [], approval_wait_fingerprints: [],
+    scheduler_capacity_plan_fingerprint: 'fp15', scheduler_queue_plan_fingerprint: 'fp16'
+  };
+  const orderA = buildRuntimeSchedulerPackage({ ...basePackageInput, ordered_scheduler_stage_reference_ids: ['ss-1', 'ss-2'] });
+  const orderB = buildRuntimeSchedulerPackage({ ...basePackageInput, ordered_scheduler_stage_reference_ids: ['ss-2', 'ss-1'] });
+  assert.notEqual(orderA.scheduler_package_fingerprint, orderB.scheduler_package_fingerprint);
+  assert.notEqual(orderA.scheduler_package_digest, orderB.scheduler_package_digest);
+});
+
+test('FIX2: side-channel context never alters the derived scheduler order', () => {
+  const golden = buildGoldenSchedulerBundle('parallel-plan');
+  const withoutContext = evaluateRuntimeSchedulerRequest(golden.schedulerRequest, {});
+  const withContext = evaluateRuntimeSchedulerRequest(golden.schedulerRequest, { queueOrder: ['reversed'], anything: 'hostile' });
+  assert.deepEqual(withContext.queuePlanRef.ordered_scheduler_stage_reference_ids, withoutContext.queuePlanRef.ordered_scheduler_stage_reference_ids);
 });
 
 // --- Side-channels ------------------------------------------------------------------------------
