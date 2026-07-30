@@ -38,6 +38,13 @@
 // WAIT_BLOCKED/SCHEDULER_QUEUE_PLAN_BLOCKED/... have no equivalent among any earlier layer's own
 // vocabulary. Not merged into this module.
 //
+// pr106: the Runtime Worker Assignment Simulation Contracts layer has its own further separate,
+// self-contained taxonomy -- WORKER_ASSIGNMENT_STATUSES/STATUS_OUTCOME_MAP/WORKER_ASSIGNMENT_
+// PRECEDENCE_ORDER (25 statuses, runtime-worker-assignment-decision.js) -- for the identical reason
+// every prior layer's own taxonomy stayed separate: WORKER_ASSIGNMENT_CAPABILITY_BLOCKED/WORKER_
+// ASSIGNMENT_HEALTH_BLOCKED/WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED/... have no equivalent among any
+// earlier layer's own vocabulary. Not merged into this module.
+//
 // Two distinct "orders" are captured deliberately as two distinct fields, never conflated:
 // - `declarationOrder`: the order this PR's own spec lists the 24 statuses in.
 // - `precedence`: the real order execution-plan-engine.js actually evaluates gates in, documented

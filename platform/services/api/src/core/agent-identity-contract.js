@@ -169,7 +169,36 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   // 'token' (exact segment, singular) is forbidden even though 'tokens' (plural) is not -- the
   // Scheduler Capacity Plan's own spec-mandated field name uses the singular form for this one
   // declarative within-limit flag; it never holds or references a credential.
-  'token_capacity_within_limit'
+  'token_capacity_within_limit',
+  // Runtime Worker Assignment Simulation Contracts (PR #106) field names -- "runtime"/"worker"/
+  // "secret" here always refer to this PR's own declarative worker reference/policy/compatibility/
+  // candidate-set/assignment contracts, never a real interpreter, executor, or credential. This PR
+  // never resolves a secret or starts a worker; "secret_policy" fields only ever compare two
+  // declarative policy identifiers against each other.
+  'runtime_worker_assignment_policy_id', 'runtime_worker_assignment_policy_version',
+  'require_secret_policy_match', 'fail_on_secret_policy_mismatch',
+  'runtime_worker_reference_id', 'runtime_worker_reference_version', 'runtime_environment_reference_id',
+  'runtime_registry_snapshot_reference_id',
+  // 'token' (exact segment, singular) again -- Runtime Worker Capacity Reference's own
+  // spec-mandated field names use the singular form for this one declarative capacity dimension.
+  'maximum_token_capacity', 'used_token_capacity', 'available_token_capacity',
+  // Runtime Worker Reference's own declarative policy-reference-ID field -- "secret" here is a
+  // pointer to a declarative secret policy identity, never a real secret; this PR never resolves
+  // one (see "Não implementar" -- secret resolution).
+  'secret_policy_reference_id', 'secret_policy_match', 'secret_policy_mismatch',
+  // Runtime Worker Assignment Request/Package/Decision/Result (PR #106) field names -- "runtime"
+  // here always refers to this PR's own declarative worker-assignment request/package/decision/
+  // result contracts, never a real interpreter or executor.
+  'runtime_worker_assignment_request_id', 'runtime_worker_assignment_request_version',
+  'runtime_worker_assignment_policy', 'runtime_worker_assignment_package_id',
+  'runtime_worker_assignment_package_version', 'runtime_worker_assignment_decision_id',
+  'runtime_worker_assignment_result_id', 'runtime_worker_assignment_request_fingerprint',
+  'runtime_worker_assignment_package_fingerprint', 'runtime_worker_assignment_package_digest',
+  'runtime_worker_assignment_decision_fingerprint',
+  'runtime_scheduler_decision_reference', 'runtime_scheduler_package_reference', 'runtime_scheduler_request_reference',
+  'runtime_scheduler_result_reference',
+  'runtime_worker_capability_references', 'runtime_worker_capacity_references', 'runtime_worker_health_references',
+  'runtime_worker_references'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept
