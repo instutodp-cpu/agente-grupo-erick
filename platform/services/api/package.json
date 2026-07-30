@@ -10,6 +10,7 @@
     "test": "node scripts/discover-tests.js",
     "test:audit": "node scripts/discover-tests.js --audit",
     "test:runtime-readiness-admission": "node --test test/runtime-readiness-admission-boundary.test.js",
+    "test:runtime-scheduler": "node --test test/runtime-scheduler-simulation-contracts.test.js",
     "gates": "node scripts/run-architecture-gates.js"
   }
 }

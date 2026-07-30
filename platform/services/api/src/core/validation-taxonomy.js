@@ -31,6 +31,13 @@
 // Execution Plan stages, the Gateway's 29 statuses, or the Runtime Execution Simulation layer's own
 // 24 statuses. Not merged into this module.
 //
+// pr105: the Runtime Scheduler Simulation Contracts layer has its own further separate,
+// self-contained taxonomy -- RUNTIME_SCHEDULER_STATUSES/STATUS_OUTCOME_MAP/RUNTIME_SCHEDULER_
+// PRECEDENCE_ORDER (27 statuses, runtime-scheduler-decision.js) -- for the identical reason every
+// prior layer's own taxonomy stayed separate: SCHEDULER_PARALLEL_GROUP_BLOCKED/SCHEDULER_APPROVAL_
+// WAIT_BLOCKED/SCHEDULER_QUEUE_PLAN_BLOCKED/... have no equivalent among any earlier layer's own
+// vocabulary. Not merged into this module.
+//
 // Two distinct "orders" are captured deliberately as two distinct fields, never conflated:
 // - `declarationOrder`: the order this PR's own spec lists the 24 statuses in.
 // - `precedence`: the real order execution-plan-engine.js actually evaluates gates in, documented

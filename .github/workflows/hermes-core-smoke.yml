@@ -53,6 +53,10 @@ jobs:
         working-directory: platform/services/api
         run: npm run test:runtime-readiness-admission
 
+      - name: Runtime scheduler contract tests
+        working-directory: platform/services/api
+        run: npm run test:runtime-scheduler
+
       - name: API tests
         working-directory: platform/services/api
         run: npm test
