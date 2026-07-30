@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { findAgentCoreOperationalMaterial } = require('../src/core/agent-identity-contract');
+const { findAgentCoreOperationalMaterial, stablePayload } = require('../src/core/agent-identity-contract');
 const { validateRuntimeReadinessPolicy, buildRuntimeReadinessPolicy, RUNTIME_READINESS_POLICY_FIELDS } = require('../src/core/runtime-readiness-policy');
 const { validateRuntimeAdmissionPolicy, buildRuntimeAdmissionPolicy, RUNTIME_ADMISSION_POLICY_FIELDS } = require('../src/core/runtime-admission-policy');
 const {
@@ -1080,6 +1080,144 @@ test('FIX3: the original, untampered replay reference still reaches RUNTIME_ADMI
   const outcome = evaluateRuntimeAdmissionRequest(golden.admissionRequest, {});
   assert.equal(outcome.decision.status, 'RUNTIME_ADMITTED_SIMULATION');
   assert.equal(outcome.decision.replay_validated, true);
+});
+
+// --- pr104fix2 FIX #1: AuthorizationProvenanceReference fingerprint recomputed from the object -----
+
+test('pr104fix2 FIX1: the original, untampered provenance reference still reaches RUNTIME_READY_SIMULATION', () => {
+  const golden = buildGoldenReadinessBundle();
+  const outcome = evaluateRuntimeReadinessRequest(golden.readinessRequest, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_READY_SIMULATION');
+  assert.equal(outcome.decision.authorization_validated, true);
+});
+
+const FIX1_PROVENANCE_TAMPER_FIELDS = [
+  'actor_role', 'approval_fingerprint', 'budget_authorization_fingerprint', 'derived_from_reference_ids', 'logical_sequence'
+];
+
+for (const field of FIX1_PROVENANCE_TAMPER_FIELDS) {
+  test(`pr104fix2 FIX1: same provenance id with ${field} altered blocks as RUNTIME_AUTHORIZATION_BLOCKED`, () => {
+    const golden = buildGoldenReadinessBundle();
+    const tamperedValue = field === 'derived_from_reference_ids' ? ['extra-reference-id']
+      : field === 'logical_sequence' ? golden.provenanceReference[field] + 1
+      : `other-${field}`;
+    const badProvenance = { ...golden.provenanceReference, [field]: tamperedValue };
+    const request = { ...golden.readinessRequest, authorization_provenance_reference: badProvenance };
+    const outcome = evaluateRuntimeReadinessRequest(request, {});
+    assert.equal(outcome.decision.status, 'RUNTIME_AUTHORIZATION_BLOCKED', field);
+  });
+}
+
+test('pr104fix2 FIX1: an old plan authorization_provenance_fingerprint does not mask an altered provenance object', () => {
+  const golden = buildGoldenReadinessBundle();
+  const badProvenance = { ...golden.provenanceReference, actor_role: 'other_actor_role_value' };
+  // The plan's own carried copy is left completely untouched (the "old", still-honest fingerprint)
+  // -- only the received provenanceRef itself changed. If the check merely compared two upstream
+  // fingerprint copies to each other (the pre-pr104fix2 design), this would still pass, since
+  // neither upstream copy moved. The recompute-and-compare over the *received* object must catch it
+  // regardless.
+  assert.equal(golden.plan.authorization_provenance_fingerprint, stablePayload(golden.provenanceReference));
+  assert.notEqual(golden.plan.authorization_provenance_fingerprint, stablePayload(badProvenance));
+  const request = { ...golden.readinessRequest, authorization_provenance_reference: badProvenance };
+  const outcome = evaluateRuntimeReadinessRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_AUTHORIZATION_BLOCKED');
+});
+
+test('pr104fix2 FIX1: an old gateway package authorization_provenance_fingerprint does not mask an altered provenance object', () => {
+  const golden = buildGoldenReadinessBundle();
+  const badProvenance = { ...golden.provenanceReference, actor_role: 'other_actor_role_value' };
+  assert.equal(golden.packageReference.authorization_provenance_fingerprint, stablePayload(golden.provenanceReference));
+  assert.notEqual(golden.packageReference.authorization_provenance_fingerprint, stablePayload(badProvenance));
+  const request = { ...golden.readinessRequest, authorization_provenance_reference: badProvenance };
+  const outcome = evaluateRuntimeReadinessRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_AUTHORIZATION_BLOCKED');
+});
+
+// --- pr104fix2 FIX #2: Replay bound to the official ExecutionPlanIdempotencyReference --------------
+
+test('pr104fix2 FIX2: the original, untampered official idempotency reference still reaches RUNTIME_READY_SIMULATION / RUNTIME_ADMITTED_SIMULATION', () => {
+  const readinessGolden = buildGoldenReadinessBundle();
+  const readinessOutcome = evaluateRuntimeReadinessRequest(readinessGolden.readinessRequest, {});
+  assert.equal(readinessOutcome.decision.status, 'RUNTIME_READY_SIMULATION');
+  const admissionGolden = buildGoldenAdmissionBundle();
+  const admissionOutcome = evaluateRuntimeAdmissionRequest(admissionGolden.admissionRequest, {});
+  assert.equal(admissionOutcome.decision.status, 'RUNTIME_ADMITTED_SIMULATION');
+});
+
+const FIX2_IDEMPOTENCY_TAMPER_CASES = [
+  ['idempotency_reference_id', 'other-idempotency-reference-id', 'RUNTIME_REPLAY_BLOCKED'],
+  ['idempotency_fingerprint', 'sha256:' + 'a'.repeat(64), 'RUNTIME_REPLAY_BLOCKED'],
+  ['idempotency_reference_version', 2, 'RUNTIME_REPLAY_BLOCKED'],
+  ['execution_plan_id', 'other-execution-plan-id', 'RUNTIME_REPLAY_BLOCKED'],
+  // Hyphens are non-word characters, so a hyphen-joined "other-authorization-decision-id" would trip
+  // the forbidden-word scanner's \bauthorization\b boundary match (structural VALIDATION_FAILED,
+  // not the intended RUNTIME_REPLAY_BLOCKED) -- underscore-joined avoids the false positive, the
+  // same pattern every other compound placeholder value in this suite already follows.
+  ['authorization_decision_id', 'other_authorization_decision_id', 'RUNTIME_REPLAY_BLOCKED'],
+  // tenant/organization/project/session are cross-checked earlier, by the same identity pass every
+  // other nested reference already goes through (step 9 -- see checkIdentity in
+  // runtime-execution-package.js), so a divergence there surfaces as the identity-specific status,
+  // not RUNTIME_REPLAY_BLOCKED -- the same "specific status wins" pattern the pre-existing
+  // "readiness: tenant/organization/project/session/agent mismatch" test already covers for every
+  // other nested reference.
+  ['tenant_id', 'other-tenant-id', 'TENANT_BLOCKED'],
+  ['organization_id', 'other-organization-id', 'ORGANIZATION_BLOCKED'],
+  ['project_id', 'other-project-id', 'PROJECT_BLOCKED'],
+  ['session_reference_id', 'other-session-reference-id', 'SESSION_BLOCKED']
+];
+
+for (const [field, tamperedValue, expectedStatus] of FIX2_IDEMPOTENCY_TAMPER_CASES) {
+  test(`pr104fix2 FIX2: idempotency reference ${field} divergente blocks readiness as ${expectedStatus}`, () => {
+    const golden = buildGoldenReadinessBundle();
+    const badIdempotency = { ...golden.idempotencyReference, [field]: tamperedValue };
+    const request = { ...golden.readinessRequest, idempotency_reference: badIdempotency };
+    const outcome = evaluateRuntimeReadinessRequest(request, {});
+    assert.equal(outcome.decision.status, expectedStatus, field);
+  });
+}
+
+test('pr104fix2 FIX2: idempotency reference self-fingerprint adulterado blocks readiness as RUNTIME_REPLAY_BLOCKED', () => {
+  const golden = buildGoldenReadinessBundle();
+  // idempotency_fingerprint itself is left honest (equal to plan.idempotency_fingerprint), but
+  // idempotency_validated is force-flipped after the fact -- this changes the object's real content
+  // without touching the field the naive claim-against-claim check alone would compare, isolating
+  // the self-fingerprint recompute-and-compare (computeIdempotencyFingerprint) specifically.
+  const badIdempotency = { ...golden.idempotencyReference, maximum_execution_attempts: golden.idempotencyReference.maximum_execution_attempts + 1 };
+  const request = { ...golden.readinessRequest, idempotency_reference: badIdempotency };
+  const outcome = evaluateRuntimeReadinessRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_REPLAY_BLOCKED');
+});
+
+// buildExecutionPlanIdempotency force-applies its own safe-flag defaults (idempotency_consumed:
+// false, duplicate_execution_blocked: true) regardless of what's passed in -- the same deny-by-
+// default pattern every other *_applied/*_consumed flag in this codebase already uses -- so these
+// two values can only be forced adversarially by bypassing the builder with a plain object. Doing
+// so trips EXECUTION_PLAN_IDEMPOTENCY_SAFE_FLAGS in the nested validator itself (invoked as part of
+// the Readiness Request's own structural validation), which is a stronger, earlier guarantee than
+// the boundary's own explicit flag check further down: the request is never structurally valid to
+// begin with.
+test('pr104fix2 FIX2: idempotency_consumed=true is structurally invalid, blocks readiness as RUNTIME_READINESS_VALIDATION_FAILED', () => {
+  const golden = buildGoldenReadinessBundle();
+  const badIdempotency = { ...golden.idempotencyReference, idempotency_consumed: true };
+  const request = { ...golden.readinessRequest, idempotency_reference: badIdempotency };
+  const outcome = evaluateRuntimeReadinessRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_READINESS_VALIDATION_FAILED');
+});
+
+test('pr104fix2 FIX2: duplicate_execution_blocked=false is structurally invalid, blocks readiness as RUNTIME_READINESS_VALIDATION_FAILED', () => {
+  const golden = buildGoldenReadinessBundle();
+  const badIdempotency = { ...golden.idempotencyReference, duplicate_execution_blocked: false };
+  const request = { ...golden.readinessRequest, idempotency_reference: badIdempotency };
+  const outcome = evaluateRuntimeReadinessRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_READINESS_VALIDATION_FAILED');
+});
+
+test('pr104fix2 FIX2: Admission sources idempotency from the official reference carried by the Readiness Request, not the nested Replay Reference claim', () => {
+  const golden = buildGoldenAdmissionBundle();
+  const badReadinessRequestRef = { ...golden.admissionRequest.runtime_readiness_request_reference, idempotency_reference: { ...golden.idempotencyReference, idempotency_reference_id: 'other-idempotency-id' } };
+  const request = resyncAdmissionRequest({ ...golden.admissionRequest, runtime_readiness_request_reference: badReadinessRequestRef }, golden.replayRef);
+  const outcome = evaluateRuntimeAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'RUNTIME_REPLAY_BLOCKED');
 });
 
 // --- Regression -----------------------------------------------------------------------------------

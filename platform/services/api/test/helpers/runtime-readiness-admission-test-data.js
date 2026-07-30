@@ -13,10 +13,13 @@ const { buildRuntimeReadinessFreshnessReference } = require('../../src/core/runt
 const { buildRuntimeReadinessReplayReference } = require('../../src/core/runtime-readiness-replay-reference');
 const { buildRuntimeReadinessRequest } = require('../../src/core/runtime-readiness-request');
 const { buildRuntimeAdmissionRequest } = require('../../src/core/runtime-admission-request');
+const { buildExecutionPlanIdempotency } = require('../../src/core/execution-plan-idempotency');
 const { computeCanonicalContentDigest } = require('../../src/core/canonical-content-digest');
 const {
   evaluateRuntimeReadinessRequest, evaluateRuntimeAdmissionRequest
 } = require('../../src/core/runtime-admission-boundary');
+
+const planFixture = require('../fixtures/hermes-execution-plan-contracts.json');
 
 const PLACEHOLDER_FINGERPRINT = `sha256:${'0'.repeat(64)}`;
 
@@ -49,6 +52,15 @@ function buildGoldenReadinessBundle(scenarioKey = 'prepared-no-llm-plan') {
   };
 
   const readinessPolicy = buildRuntimeReadinessPolicy({ runtime_readiness_policy_id: `${baseId}-policy` });
+
+  // pr104fix2 FIX #2: the real, official ExecutionPlanIdempotencyReference (PR #98) -- rebuilt via
+  // its own real builder (never a raw fixture object passed through as-is) from the exact same raw
+  // fields the plan fixture's own request already carried under `idempotency_policy_reference`,
+  // which is what `plan.idempotency_reference_id`/`plan.idempotency_fingerprint` were themselves
+  // copied from by execution-plan-engine.js at plan-build time -- reproducing the identical
+  // fingerprint so the readiness boundary's own cross-check against those two plan fields holds.
+  const rawIdempotencyReference = planFixture.scenarios[scenarioKey].request.idempotency_policy_reference;
+  const idempotencyReference = buildExecutionPlanIdempotency(rawIdempotencyReference);
 
   const capacitySnapshotRef = buildRuntimeCapacitySnapshotReference({
     runtime_capacity_snapshot_reference_id: `${baseId}-capacity`,
@@ -118,8 +130,8 @@ function buildGoldenReadinessBundle(scenarioKey = 'prepared-no-llm-plan') {
       readiness_request_fingerprint: readinessRequestFingerprint,
       admission_request_id: `${baseId}-admission-request`,
       admission_request_fingerprint: PLACEHOLDER_FINGERPRINT,
-      idempotency_reference_id: `${baseId}-idempotency`,
-      idempotency_fingerprint: PLACEHOLDER_FINGERPRINT,
+      idempotency_reference_id: idempotencyReference.idempotency_reference_id,
+      idempotency_fingerprint: idempotencyReference.idempotency_fingerprint,
       expected_readiness_attempt: 1, maximum_readiness_attempts: 5,
       expected_admission_attempt: 1, maximum_admission_attempts: 5,
       prior_readiness_decision_ids: [], prior_readiness_decision_fingerprints: [],
@@ -148,6 +160,7 @@ function buildGoldenReadinessBundle(scenarioKey = 'prepared-no-llm-plan') {
       binding_ledger_reference: rtGolden.bindingLedger,
       validation_ledger_reference: rtGolden.validationLedger,
       execution_budget_reference: rtGolden.executionBudgetReference,
+      idempotency_reference: idempotencyReference,
       runtime_stage_manifest_reference: rtGolden.runtimeStageManifest,
       runtime_dependency_manifest_reference: rtGolden.runtimeDependencyManifest,
       runtime_budget_reference: rtGolden.runtimeBudgetReference,
@@ -180,7 +193,7 @@ function buildGoldenReadinessBundle(scenarioKey = 'prepared-no-llm-plan') {
   return {
     ...rtGolden,
     rtDecision, rtResult, runtimePackage,
-    readinessRequestId, readinessPolicy, capacitySnapshotRef, concurrencyRef, freshnessRef, replayRef,
+    readinessRequestId, readinessPolicy, idempotencyReference, capacitySnapshotRef, concurrencyRef, freshnessRef, replayRef,
     readinessRequest
   };
 }

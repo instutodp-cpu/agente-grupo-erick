@@ -1,6 +1,7 @@
 'use strict';
 
 const { isPlainObject } = require('./read-only-adapter-contract');
+const { stablePayload } = require('./agent-identity-contract');
 const { computeCanonicalContentDigest } = require('./canonical-content-digest');
 const { checkIdentity, computeRuntimePackageDigest } = require('./runtime-execution-package');
 const { validateRuntimeReadinessRequest } = require('./runtime-readiness-request');
@@ -11,6 +12,7 @@ const { buildRuntimeAdmissionResult } = require('./runtime-admission-result');
 const { buildRuntimeAdmissionAudit } = require('./runtime-admission-audit');
 const { CAPACITY_DIMENSIONS } = require('./runtime-capacity-snapshot-reference');
 const { FRESHNESS_DIMENSIONS } = require('./runtime-readiness-freshness-reference');
+const { computeIdempotencyFingerprint } = require('./execution-plan-idempotency');
 
 // pr104: the two-phase boundary this PR exists to build. Phase A (Readiness) independently
 // re-derives everything the PR #103 Runtime Execution Package already claimed, plus the 4 genuinely
@@ -72,6 +74,7 @@ function evaluateRuntimeReadinessRequest(request, context = {}) {
   const bindingLedger = requestIsObject ? request.binding_ledger_reference : undefined;
   const validationLedger = requestIsObject ? request.validation_ledger_reference : undefined;
   const executionBudgetReference = requestIsObject ? request.execution_budget_reference : undefined;
+  const idempotencyReference = requestIsObject ? request.idempotency_reference : undefined;
   const runtimeStageManifest = requestIsObject ? request.runtime_stage_manifest_reference : undefined;
   const runtimeDependencyManifest = requestIsObject ? request.runtime_dependency_manifest_reference : undefined;
   const runtimeBudgetRef = requestIsObject ? request.runtime_budget_reference : undefined;
@@ -125,7 +128,8 @@ function evaluateRuntimeReadinessRequest(request, context = {}) {
     ['authorization_provenance_reference', provenanceRef], ['authorization_scope_reference', scopeRef],
     ['registry_snapshot_reference', snapshotRef], ['gateway_decision_reference', gatewayDecision],
     ['gateway_result_reference', gatewayResult], ['execution_budget_reference', executionBudgetReference],
-    ['runtime_capacity_snapshot_reference', capacitySnapshotRef], ['runtime_concurrency_reference', concurrencyRef]
+    ['runtime_capacity_snapshot_reference', capacitySnapshotRef], ['runtime_concurrency_reference', concurrencyRef],
+    ['idempotency_reference', idempotencyReference]
   ];
   for (const [label, reference] of identityChecks) {
     const mismatch = checkIdentity(reference, canonical, label);
@@ -197,16 +201,22 @@ function evaluateRuntimeReadinessRequest(request, context = {}) {
   // 10. Authorization -- pr104fix FIX #1: a different provenance object sharing the same id (with
   // its own, validly self-consistent content) must never silently substitute the one the Gateway
   // actually accepted. AuthorizationProvenanceReference carries no self-fingerprint field of its
-  // own; the Execution Plan carries the authoritative copy of that fingerprint (the exact value
-  // execution-gateway-boundary.js itself already cross-checked at Gateway time -- see its own
-  // `[packageRef.authorization_provenance_fingerprint, plan.authorization_provenance_fingerprint]`
-  // comparison), so that copy is reused here rather than trusting mere id equality.
+  // own, so pr104fix (round 2) recomputes one directly over the *received* object the same way
+  // the Execution Plan Engine originally canonicalized it (`stablePayload`, never a parallel
+  // self-fingerprint field added to the provenance contract itself) and requires it to agree with
+  // BOTH upstream copies -- the Execution Plan's own carried copy (`plan.authorization_provenance_
+  // fingerprint`) AND the Gateway Package's declared copy (the exact value execution-gateway-
+  // boundary.js itself already cross-checked once, at Gateway time). Two old upstream fingerprints
+  // agreeing with each other proves nothing about the object actually received in *this* request;
+  // only recomputing from the real, received provenanceRef does.
+  const recomputedProvenanceFingerprint = stablePayload(provenanceRef);
   if (
     provenanceRef.authorization_provenance_reference_id !== packageRef.authorization_provenance_reference_id
     || provenanceRef.authorization_decision_id !== gatewayPackageRef.authorization_decision_id
-    || plan.authorization_provenance_fingerprint !== gatewayPackageRef.authorization_provenance_fingerprint
+    || recomputedProvenanceFingerprint !== plan.authorization_provenance_fingerprint
+    || recomputedProvenanceFingerprint !== gatewayPackageRef.authorization_provenance_fingerprint
   ) {
-    return finalize('RUNTIME_AUTHORIZATION_BLOCKED', ['authorization_provenance_reference_mismatch']);
+    return finalize('RUNTIME_AUTHORIZATION_BLOCKED', ['authorization_provenance_fingerprint_mismatch']);
   }
   markValid('authorization_validated');
 
@@ -364,7 +374,25 @@ function evaluateRuntimeReadinessRequest(request, context = {}) {
   }
   markValid('freshness_validated');
 
-  // 29. Replay.
+  // 29. Replay -- pr104fix2 FIX #2: the Replay Reference's idempotency_reference_id/
+  // idempotency_fingerprint are now cross-checked against the real, official
+  // ExecutionPlanIdempotencyReference (PR #98, reused verbatim -- never a parallel contract) this
+  // Readiness Request itself carries, never trusted as claim-against-claim with no real anchor.
+  // idempotencyReference is, in turn, proven to genuinely describe this exact package/plan/
+  // authorization (id + its own recomputed self-fingerprint, since the contract's own validator
+  // does not recompute-and-compare one), never merely structurally well-formed.
+  if (
+    idempotencyReference.idempotency_reference_id !== plan.idempotency_reference_id
+    || idempotencyReference.idempotency_fingerprint !== plan.idempotency_fingerprint
+    || idempotencyReference.execution_plan_id !== packageRef.execution_plan_id
+    || idempotencyReference.authorization_decision_id !== gatewayPackageRef.authorization_decision_id
+    || computeIdempotencyFingerprint(idempotencyReference) !== idempotencyReference.idempotency_fingerprint
+    || idempotencyReference.idempotency_validated !== true
+    || idempotencyReference.idempotency_consumed !== false
+    || idempotencyReference.duplicate_execution_blocked !== true
+  ) {
+    return finalize('RUNTIME_REPLAY_BLOCKED', ['runtime_replay_idempotency_reference_mismatch']);
+  }
   if (
     replayRef.runtime_execution_package_id !== packageRef.runtime_execution_package_id
     || replayRef.runtime_package_fingerprint !== recomputedDigest || replayRef.runtime_package_digest !== recomputedDigest
@@ -372,6 +400,8 @@ function evaluateRuntimeReadinessRequest(request, context = {}) {
     || replayRef.readiness_request_fingerprint !== requestFingerprint
     || replayRef.replay_allowed !== true || replayRef.replay_validated !== true
     || replayRef.duplicate_readiness_acceptance_blocked !== false
+    || replayRef.idempotency_reference_id !== idempotencyReference.idempotency_reference_id
+    || replayRef.idempotency_fingerprint !== idempotencyReference.idempotency_fingerprint
   ) {
     return finalize('RUNTIME_REPLAY_BLOCKED', ['runtime_readiness_replay_reference_not_valid']);
   }
@@ -632,7 +662,11 @@ function evaluateRuntimeAdmissionRequest(request, context = {}) {
   // class of self-reference this fix's own exclusion already solves one layer up).
   const readinessRequestForFingerprint = omitReplayReference(readinessRequestRef);
   const readinessRequestFingerprint = computeCanonicalContentDigest(readinessRequestForFingerprint);
-  const readinessReplayRef = isPlainObject(readinessRequestRef) ? readinessRequestRef.runtime_readiness_replay_reference : undefined;
+  // pr104fix2 FIX #2: idempotency is sourced from the real, official ExecutionPlanIdempotencyReference
+  // the Readiness Request itself carries (request.runtime_readiness_request_reference.
+  // idempotency_reference) -- never from the nested Replay Reference's own claim, which only ever
+  // proved claim-against-claim, never a genuine anchor to the real PR #98 idempotency contract.
+  const officialIdempotencyReference = isPlainObject(readinessRequestRef) ? readinessRequestRef.idempotency_reference : undefined;
   if (
     replayRef.readiness_request_id !== (isPlainObject(readinessRequestRef) ? readinessRequestRef.runtime_readiness_request_id : undefined)
     || replayRef.readiness_request_fingerprint !== readinessRequestFingerprint
@@ -644,8 +678,9 @@ function evaluateRuntimeAdmissionRequest(request, context = {}) {
     || replayRef.runtime_execution_package_id !== packageRef.runtime_execution_package_id
     || replayRef.runtime_package_fingerprint !== packageRef.package_fingerprint
     || replayRef.runtime_package_digest !== packageRef.package_digest
-    || !isPlainObject(readinessReplayRef) || replayRef.idempotency_reference_id !== readinessReplayRef.idempotency_reference_id
-    || replayRef.idempotency_fingerprint !== readinessReplayRef.idempotency_fingerprint
+    || !isPlainObject(officialIdempotencyReference)
+    || replayRef.idempotency_reference_id !== officialIdempotencyReference.idempotency_reference_id
+    || replayRef.idempotency_fingerprint !== officialIdempotencyReference.idempotency_fingerprint
   ) {
     return finalize('RUNTIME_REPLAY_BLOCKED', ['runtime_replay_not_bound_to_admission_request']);
   }

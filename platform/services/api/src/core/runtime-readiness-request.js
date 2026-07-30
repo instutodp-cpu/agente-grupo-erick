@@ -21,6 +21,7 @@ const { validateExecutionPlanDependencyGraphReference } = require('./execution-p
 const { validateExecutionReferenceBindingLedger } = require('./execution-reference-binding-ledger');
 const { validateValidationLedger } = require('./validation-ledger');
 const { validateExecutionPlanBudget } = require('./execution-plan-budget');
+const { validateExecutionPlanIdempotency } = require('./execution-plan-idempotency');
 const { validateRuntimeStageSimulationManifest } = require('./runtime-stage-simulation-manifest');
 const { validateRuntimeDependencySimulationManifest } = require('./runtime-dependency-simulation-manifest');
 const { validateRuntimeBudgetSimulationReference } = require('./runtime-budget-simulation-reference');
@@ -52,7 +53,7 @@ const RUNTIME_READINESS_REQUEST_FIELDS = Object.freeze([
   'authorization_provenance_reference', 'authorization_scope_reference', 'registry_snapshot_reference',
   'architecture_gate_evidence_reference',
   'stage_manifest_reference', 'dependency_graph_reference', 'binding_ledger_reference', 'validation_ledger_reference',
-  'execution_budget_reference',
+  'execution_budget_reference', 'idempotency_reference',
   'runtime_stage_manifest_reference', 'runtime_dependency_manifest_reference', 'runtime_budget_reference',
   'runtime_stop_references', 'runtime_compensation_references', 'runtime_artifact_plan_reference',
   'runtime_event_plan_reference',
@@ -81,6 +82,11 @@ const NESTED_REFERENCE_VALIDATORS = Object.freeze([
   ['binding_ledger_reference', validateExecutionReferenceBindingLedger],
   ['validation_ledger_reference', validateValidationLedger],
   ['execution_budget_reference', validateExecutionPlanBudget],
+  // pr104fix2 FIX #2: the real, official ExecutionPlanIdempotencyReference (PR #98) -- reused
+  // verbatim, never a parallel contract -- that the Replay Reference's idempotency_reference_id/
+  // idempotency_fingerprint fields must genuinely bind to (see runtime-admission-boundary.js's own
+  // replay cross-check), rather than trusting the Replay Reference's own claim in isolation.
+  ['idempotency_reference', validateExecutionPlanIdempotency],
   ['runtime_stage_manifest_reference', validateRuntimeStageSimulationManifest],
   ['runtime_dependency_manifest_reference', validateRuntimeDependencySimulationManifest],
   ['runtime_budget_reference', validateRuntimeBudgetSimulationReference],
@@ -168,6 +174,7 @@ function buildRuntimeReadinessRequest(input = {}) {
     binding_ledger_reference: input.binding_ledger_reference,
     validation_ledger_reference: input.validation_ledger_reference,
     execution_budget_reference: input.execution_budget_reference,
+    idempotency_reference: input.idempotency_reference,
     runtime_stage_manifest_reference: input.runtime_stage_manifest_reference,
     runtime_dependency_manifest_reference: input.runtime_dependency_manifest_reference,
     runtime_budget_reference: input.runtime_budget_reference,
