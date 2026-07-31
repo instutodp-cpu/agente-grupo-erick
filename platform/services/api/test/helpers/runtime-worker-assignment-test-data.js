@@ -15,6 +15,7 @@ const { buildRuntimeWorkerNetworkPolicyReference } = require('../../src/core/run
 const { buildRuntimeWorkerSecretPolicyReference } = require('../../src/core/runtime-worker-secret-policy-reference');
 const { buildRuntimeWorkerAssignmentRequest } = require('../../src/core/runtime-worker-assignment-request');
 const { evaluateRuntimeWorkerAssignmentRequest } = require('../../src/core/runtime-worker-assignment-boundary');
+const { buildRuntimeWorkerStagePolicyRequirementReference } = require('../../src/core/runtime-worker-stage-policy-requirement-reference');
 // pr106fix2: the official, pre-existing Network Permission Boundary / Secret Resolution Boundary
 // declarative policy contracts (PR #75/#76) -- reused verbatim, never duplicated.
 const { validateDestinationReference } = require('../../src/core/transcription-network-permission-boundary');
@@ -33,7 +34,11 @@ function buildOfficialNetworkPolicy(baseId, overrides = {}) {
     transport_id: `${baseId}-official-transport`,
     protocol: 'INTERNAL_REFERENCE',
     environment: 'DEVELOPMENT',
-    scope: 'INTERNAL_SERVICE',
+    // pr106fix3: TRANSCRIPTION_PROVIDER matches the destination_class deriveStagePolicyRequirement
+    // structurally assigns to a MODEL-element requirement -- the only element the official policies
+    // this PR reuses can ever authorize (see OFFICIAL_POLICY_DOMAIN in runtime-worker-assignment-
+    // boundary.js). All of this test helper's own test data models model-stage requirements.
+    scope: 'TRANSCRIPTION_PROVIDER',
     region_class: 'SYNTHETIC_LOCAL',
     endpoint_present: false, hostname_present: false, ip_present: false, port_present: false, url_present: false,
     dns_required: false, tls_required: false, streaming_requested: false,
@@ -56,7 +61,7 @@ function buildOfficialSecretPolicy(baseId, tenantId, overrides = {}) {
     provider_slug: 'mock-provider-a',
     tenant_id: tenantId,
     environment: 'DEVELOPMENT',
-    scope: 'INTERNAL_SERVICE',
+    scope: 'TRANSCRIPTION_PROVIDER',
     rotation_version: 1,
     active: false, revoked: false,
     simulation: true, production_blocked: true, network_enabled: false, runtime_enabled: false,
@@ -66,6 +71,20 @@ function buildOfficialSecretPolicy(baseId, tenantId, overrides = {}) {
   const validation = validateSecretReference(official);
   if (!validation.valid) throw new Error(`official_secret_policy_construction_invalid::${JSON.stringify(validation.errors)}`);
   return official;
+}
+
+// pr106fix3: the genuinely-external per-stage hint (stage_domain/provider_slug) this codebase's
+// upstream chain does not resolve today -- defaults to a resolvable, transcription-domain,
+// mock-provider-a hint so existing/new tests can exercise the "compatible" path explicitly, never
+// implicitly.
+function buildStagePolicyRequirementHint(schedulerStageReferenceId, overrides = {}) {
+  return buildRuntimeWorkerStagePolicyRequirementReference({
+    stage_policy_requirement_reference_id: `${schedulerStageReferenceId}-requirement`,
+    scheduler_stage_reference_id: schedulerStageReferenceId,
+    stage_domain: 'TRANSCRIPTION_DOMAIN',
+    provider_slug: 'mock-provider-a',
+    ...overrides
+  });
 }
 
 function buildWorkerPool(baseId, overrides = {}) {
@@ -200,6 +219,10 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
     || (overrides.workerRefs ? [] : (pool.officialNetworkPolicy ? [pool.officialNetworkPolicy] : []));
   const secretResolutionPolicyRefs = overrides.secretResolutionPolicyRefs
     || (overrides.workerRefs ? [] : (pool.officialSecretPolicy ? [pool.officialSecretPolicy] : []));
+  // pr106fix3: no default hints -- the golden bundle's own stages are deterministic/no-llm
+  // (NOT_APPLICABLE), so no stage ever needs a policy requirement hint unless a test explicitly
+  // provides one.
+  const stagePolicyRequirementRefs = overrides.stagePolicyRequirementRefs || [];
 
   const request = buildRuntimeWorkerAssignmentRequest({
     runtime_worker_assignment_request_id: requestId,
@@ -223,6 +246,7 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
     runtime_worker_secret_policy_references: workerSecretPolicyRefs,
     network_permission_policy_references: networkPermissionPolicyRefs,
     secret_resolution_policy_references: secretResolutionPolicyRefs,
+    stage_policy_requirement_references: stagePolicyRequirementRefs,
     correlation_id: 'corr-worker-assignment-1',
     causation_id: 'cause-worker-assignment-1',
     trace_id: 'trace-worker-assignment-1',
@@ -235,7 +259,7 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
   return {
     ...schedulerGolden, schedulerOutcome, baseId, requestId, assignmentPolicy, pool, workerRefs,
     workerCapabilityRefs, workerCapacityRefs, workerHealthRefs, workerNetworkPolicyRefs, workerSecretPolicyRefs,
-    networkPermissionPolicyRefs, secretResolutionPolicyRefs,
+    networkPermissionPolicyRefs, secretResolutionPolicyRefs, stagePolicyRequirementRefs,
     workerAssignmentRequest: request
   };
 }
@@ -244,6 +268,7 @@ module.exports = {
   buildGoldenWorkerAssignmentBundle,
   buildOfficialNetworkPolicy,
   buildOfficialSecretPolicy,
+  buildStagePolicyRequirementHint,
   buildWorkerPool,
   computeOfficialPolicyFingerprint,
   evaluateRuntimeSchedulerRequest,

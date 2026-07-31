@@ -242,7 +242,18 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   // invariant is already enforced by the official contract's own validator before it ever reaches
   // this scan.
   'endpoint_present', 'hostname_present', 'ip_present', 'port_present', 'url_present',
-  'secret_alias', 'secret_ref_id', 'secret_ref_version', 'secret_type'
+  'secret_alias', 'secret_ref_id', 'secret_ref_version', 'secret_type',
+  // pr106fix3: RuntimeWorkerStagePolicyRequirementReference field names plus the new cross-check
+  // reason codes -- "the official policy's own content genuinely authorizes this stage's
+  // requirement," never inferred from mere existence/version/fingerprint match.
+  'stage_policy_requirement_references',
+  'stage_policy_requirement_reference_id', 'stage_policy_requirement_reference_version',
+  'stage_domain', 'provider_slug', 'requirement_reference_fingerprint',
+  'stage_policy_requirement_registry_duplicate',
+  'worker_network_official_policy_provider_mismatch', 'worker_network_official_policy_destination_mismatch',
+  'worker_network_official_policy_domain_mismatch', 'worker_network_policy_requirement_unresolvable',
+  'worker_secret_official_policy_provider_mismatch', 'worker_secret_official_policy_purpose_mismatch',
+  'worker_secret_official_policy_domain_mismatch', 'worker_secret_policy_requirement_unresolvable'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept

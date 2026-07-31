@@ -1,6 +1,6 @@
 'use strict';
 
-const { isPlainObject } = require('./read-only-adapter-contract');
+const { isNonEmptyString, isPlainObject } = require('./read-only-adapter-contract');
 const { computeCanonicalContentDigest } = require('./canonical-content-digest');
 const { checkIdentity } = require('./runtime-execution-package');
 // pr106fix2: the exact canonicalizer the official Network Permission Boundary/Secret Resolution
@@ -65,15 +65,56 @@ const OFFICIAL_POLICY_KEYS = Object.freeze({
   secret: { idKey: 'secret_ref_id', versionKey: 'secret_ref_version' }
 });
 
-// pr106fix FIX 1 / pr106fix2: genuine 1:1 policy reference comparison -- ID, version, fingerprint,
-// and tenant/organization/project/environment binding, never a string-presence pass-through.
-// `policyRef` is the (at most one) RuntimeWorkerNetworkPolicyReference/RuntimeWorkerSecretPolicyReference
-// bound to this worker, looked up by runtime_worker_reference_id. pr106fix2 additionally requires
-// `policyRef` itself to genuinely bind (by ID/version/fingerprint recomputed with the official
-// module's own canonicalizer) to an official policy object supplied in `officialPolicyById` --
-// `policyRef`'s own `*_policy_reference_valid` flag is a derived convenience, never the source of
-// truth for whether the official policy actually exists and matches.
-function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical, officialPolicyById) {
+// pr106fix3: the only domain the official policies this PR has access to (transcription-network-
+// permission-boundary.js / transcription-secret-resolution-boundary.js) can ever legitimately
+// authorize. "Uma policy de transcription só pode autorizar automaticamente um stage do domínio de
+// transcription."
+const OFFICIAL_POLICY_DOMAIN = 'TRANSCRIPTION_DOMAIN';
+
+// pr106fix3: a pure, deterministic classification of what a stage's network/secret requirement
+// structurally *is* -- which element triggered it (model/tool/workflow), and the destination class/
+// secret purpose that element implies (both drawn from the same DESTINATION_SCOPES/SECRET_SCOPES
+// enum the official contracts themselves already use, never invented). `stage_domain`/`provider_slug`
+// are the two genuinely-external pieces this codebase's upstream chain does not resolve today (see
+// runtime-worker-stage-policy-requirement-reference.js's own header comment) -- read only from the
+// caller-supplied `upstreamHint`, never inferred, never defaulted to a truthy value. Never reads
+// `context`.
+function deriveStagePolicyRequirement(stage, upstreamHint) {
+  const hasModel = stage.model_selection_reference_id !== null;
+  const hasTools = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0;
+  const hasWorkflow = stage.workflow_reference_id !== null;
+  let element = null;
+  if (hasModel) element = 'MODEL';
+  else if (hasTools) element = 'TOOL';
+  else if (hasWorkflow) element = 'WORKFLOW';
+  if (!element) return { element: null };
+  const destinationClass = element === 'MODEL' ? 'TRANSCRIPTION_PROVIDER' : element === 'TOOL' ? 'TRANSPORT' : 'INTERNAL_SERVICE';
+  const secretPurpose = element === 'MODEL' ? 'MODEL_PROVIDER_ACCESS' : element === 'TOOL' ? 'TOOL_ACCESS' : 'WORKFLOW_ACCESS';
+  return {
+    element,
+    stage_domain: isPlainObject(upstreamHint) ? upstreamHint.stage_domain : null,
+    provider_slug: isPlainObject(upstreamHint) ? upstreamHint.provider_slug : null,
+    model_id: stage.model_selection_reference_id,
+    tool_ids: stage.tool_reference_ids,
+    workflow_id: stage.workflow_reference_id,
+    destination_class: destinationClass,
+    secret_purpose: secretPurpose,
+    required_capabilities: stage.required_capabilities,
+    required_modalities: stage.required_modalities
+  };
+}
+
+// pr106fix FIX 1 / pr106fix2 / pr106fix3: genuine 1:1 policy reference comparison -- ID, version,
+// fingerprint, and tenant/organization/project/environment binding, never a string-presence pass-
+// through. `policyRef` is the (at most one) RuntimeWorkerNetworkPolicyReference/
+// RuntimeWorkerSecretPolicyReference bound to this worker, looked up by runtime_worker_reference_id.
+// The official policy pointed to must genuinely exist, match by version/fingerprint, and (pr106fix3)
+// its own content -- domain, provider, destination class/secret purpose -- must genuinely authorize
+// this specific stage's requirement. `official_policy_valid` (existence+version+fingerprint+scope/
+// environment), `official_policy_applicable_to_stage` (domain+element), and
+// `official_policy_authorizes_stage_requirement` (provider+destination/purpose) are evaluated as
+// three explicit, ordered gates -- all three must hold for a match.
+function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical, officialPolicyById, stagePolicyRequirementById) {
   const idField = `${kind}_policy_reference_id`;
   const validField = `${kind}_policy_reference_valid`;
   const officialIdField = `official_${kind}_policy_reference_id`;
@@ -89,6 +130,7 @@ function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical,
   if (policyRef.project_id !== null && policyRef.project_id !== canonical.projectId) return { match: false, reason: `worker_${kind}_policy_project_mismatch` };
   if (policyRef.runtime_environment_reference_id !== worker.runtime_environment_reference_id) return { match: false, reason: `worker_${kind}_policy_environment_mismatch` };
 
+  // Gate 1: official_policy_valid.
   const official = officialPolicyById.get(policyRef[officialIdField]);
   if (!official) return { match: false, reason: `worker_${kind}_official_policy_missing` };
   if (official[versionKey] !== policyRef[officialVersionField]) return { match: false, reason: `worker_${kind}_official_policy_version_mismatch` };
@@ -97,6 +139,24 @@ function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical,
   }
   if (kind === 'secret' && official.tenant_id !== canonical.tenantId) return { match: false, reason: 'worker_secret_official_policy_scope_mismatch' };
   if (official.environment === 'PRODUCTION') return { match: false, reason: `worker_${kind}_official_policy_not_allowed` };
+
+  // Gate 2: official_policy_applicable_to_stage. The transcription-domain official policies this PR
+  // reuses can only ever apply to a MODEL requirement in the transcription domain -- a tool/workflow
+  // requirement, or a model requirement declared outside the transcription domain, is a domain
+  // mismatch regardless of how well-formed the official policy itself is.
+  const requirement = deriveStagePolicyRequirement(stage, stagePolicyRequirementById.get(stage.scheduler_stage_reference_id));
+  if (requirement.element !== 'MODEL') return { match: false, reason: `worker_${kind}_official_policy_domain_mismatch` };
+  if (!isNonEmptyString(requirement.provider_slug) || !isNonEmptyString(requirement.stage_domain)) {
+    return { match: false, reason: `worker_${kind}_policy_requirement_unresolvable` };
+  }
+  if (requirement.stage_domain !== OFFICIAL_POLICY_DOMAIN) return { match: false, reason: `worker_${kind}_official_policy_domain_mismatch` };
+
+  // Gate 3: official_policy_authorizes_stage_requirement.
+  if (official.provider_slug !== requirement.provider_slug) return { match: false, reason: `worker_${kind}_official_policy_provider_mismatch` };
+  if (official.scope !== requirement.destination_class) {
+    return { match: false, reason: kind === 'network' ? 'worker_network_official_policy_destination_mismatch' : 'worker_secret_official_policy_purpose_mismatch' };
+  }
+
   void idKey;
   return { match: true, reason: null };
 }
@@ -122,13 +182,13 @@ function evaluateHealthAtAssignment(health, requestLogicalSequence) {
 // health/policy data -- "Não aceitar worker_compatible=true como fonte de verdade."
 function deriveMatches(
   stage, worker, capability, capacity, health, canonical, freshnessValid, requestLogicalSequence,
-  networkPolicyRef, secretPolicyRef, officialNetworkPolicyById, officialSecretPolicyById
+  networkPolicyRef, secretPolicyRef, officialNetworkPolicyById, officialSecretPolicyById, stagePolicyRequirementById
 ) {
   const hasModel = stage.model_selection_reference_id !== null;
   const hasTools = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0;
   const hasWorkflow = stage.workflow_reference_id !== null;
-  const networkEvaluation = evaluatePolicyReferenceMatch('network', stage, worker, networkPolicyRef, canonical, officialNetworkPolicyById);
-  const secretEvaluation = evaluatePolicyReferenceMatch('secret', stage, worker, secretPolicyRef, canonical, officialSecretPolicyById);
+  const networkEvaluation = evaluatePolicyReferenceMatch('network', stage, worker, networkPolicyRef, canonical, officialNetworkPolicyById, stagePolicyRequirementById);
+  const secretEvaluation = evaluatePolicyReferenceMatch('secret', stage, worker, secretPolicyRef, canonical, officialSecretPolicyById, stagePolicyRequirementById);
   const healthEvaluation = evaluateHealthAtAssignment(health, requestLogicalSequence);
   return {
     matches: {
@@ -239,6 +299,7 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
   const workerSecretPolicyRefs = requestIsObject && Array.isArray(request.runtime_worker_secret_policy_references) ? request.runtime_worker_secret_policy_references : [];
   const networkPermissionPolicyRefs = requestIsObject && Array.isArray(request.network_permission_policy_references) ? request.network_permission_policy_references : [];
   const secretResolutionPolicyRefs = requestIsObject && Array.isArray(request.secret_resolution_policy_references) ? request.secret_resolution_policy_references : [];
+  const stagePolicyRequirementRefs = requestIsObject && Array.isArray(request.stage_policy_requirement_references) ? request.stage_policy_requirement_references : [];
 
   const canonical = {
     tenantId: isPlainObject(packageRef) ? packageRef.tenant_id : undefined,
@@ -426,6 +487,15 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
     }
     officialSecretPolicyById.set(official.secret_ref_id, official);
   }
+  // pr106fix3: at most one declared policy requirement hint per stage -- two conflicting hints for
+  // the same stage is the same class of "binding global incoerente" as a duplicate official policy.
+  const stagePolicyRequirementById = new Map();
+  for (const hint of stagePolicyRequirementRefs) {
+    if (stagePolicyRequirementById.has(hint.scheduler_stage_reference_id)) {
+      return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['stage_policy_requirement_registry_duplicate']);
+    }
+    stagePolicyRequirementById.set(hint.scheduler_stage_reference_id, hint);
+  }
   markValid('official_policy_registry_validated');
 
   // 15 (capacity portion).
@@ -491,7 +561,8 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
       const secretPolicyRef = secretPolicyByWorkerId.get(worker.runtime_worker_reference_id);
       const { matches, reasons } = deriveMatches(
         stage, worker, capability, capacity, health, canonical, freshnessRef.freshness_validated,
-        request.logical_sequence, networkPolicyRef, secretPolicyRef, officialNetworkPolicyById, officialSecretPolicyById
+        request.logical_sequence, networkPolicyRef, secretPolicyRef, officialNetworkPolicyById, officialSecretPolicyById,
+        stagePolicyRequirementById
       );
       const ref = buildRuntimeWorkerCompatibilityReference({
         worker_compatibility_reference_id: `${stage.scheduler_stage_reference_id}-${worker.runtime_worker_reference_id}-compatibility`,
@@ -788,6 +859,7 @@ function buildWorkerAssignmentOutcome(status, reasonCodes, ctx, validatedFlags) 
 }
 
 module.exports = {
+  deriveStagePolicyRequirement,
   deriveStageRequiresNetworkOrSecret,
   evaluateHealthAtAssignment,
   evaluatePolicyReferenceMatch,
