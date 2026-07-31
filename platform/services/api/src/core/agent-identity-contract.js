@@ -253,7 +253,18 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'worker_network_official_policy_provider_mismatch', 'worker_network_official_policy_destination_mismatch',
   'worker_network_official_policy_domain_mismatch', 'worker_network_policy_requirement_unresolvable',
   'worker_secret_official_policy_provider_mismatch', 'worker_secret_official_policy_purpose_mismatch',
-  'worker_secret_official_policy_domain_mismatch', 'worker_secret_policy_requirement_unresolvable'
+  'worker_secret_official_policy_domain_mismatch', 'worker_secret_policy_requirement_unresolvable',
+  // pr106fix4: provenance fields on RuntimeWorkerStagePolicyRequirementReference -- "Stage Policy
+  // Requirement não é um hint confiável isoladamente. Um requisito RESOLVED deve estar vinculado a
+  // uma fonte upstream oficial por ID/versão/fingerprint." Plus the 3 new official-source request
+  // collections and the package's own integrity fingerprint lists.
+  'requirement_element', 'source_reference_id', 'source_reference_type', 'source_reference_version',
+  'source_reference_fingerprint', 'source_registry_snapshot_reference_id', 'source_resolution_status',
+  'source_provider_slug', 'source_stage_domain',
+  'model_selection_decision_references', 'tool_contract_references', 'workflow_contract_references',
+  'stage_policy_requirement_source_registry_duplicate',
+  'official_network_policy_fingerprints', 'official_secret_policy_fingerprints',
+  'stage_policy_requirement_fingerprints', 'stage_policy_requirement_source_fingerprints'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept
@@ -275,7 +286,11 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
 // same way 'AUTHORIZATION' already needed to be.
 const AGENT_CORE_ALLOWLISTED_VALUE_NAMES = Object.freeze(new Set([
   'AUTHORIZATION',
-  'mock-provider-a', 'mock-provider-b', 'mock-provider-c'
+  'mock-provider-a', 'mock-provider-b', 'mock-provider-c',
+  // pr106fix4: 'MODEL' is one of the 3 closed-enum RUNTIME_WORKER_STAGE_POLICY_REQUIREMENT_ELEMENTS
+  // values (runtime-worker-stage-policy-requirement-reference.js) -- a legitimate declarative
+  // classification of which stage element a requirement is about, never an LLM model identifier.
+  'MODEL'
 ]));
 const AGENT_CORE_FORBIDDEN_VALUE_PATTERN = /\b(api[_-]?key|private[_-]?key|access[_-]?key|secret|token|password|authorization|bearer|jwt|oauth|cookie|filesystem|endpoint|hostname|callback|handler|execute|invoke|runtime|bootstrap|startup|plugin|tool_call|system_prompt|prompt|model|provider|sdk|eval)\b/i;
 const AGENT_CORE_FORBIDDEN_VALUE_SHAPES = Object.freeze([

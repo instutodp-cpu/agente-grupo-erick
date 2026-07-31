@@ -40,6 +40,10 @@ const UPSTREAM_FINGERPRINT_FIELDS = Object.freeze([
 const DERIVED_FINGERPRINT_LIST_FIELDS = Object.freeze([
   'worker_fingerprints', 'worker_capability_fingerprints', 'worker_capacity_fingerprints',
   'worker_health_fingerprints', 'worker_network_policy_fingerprints', 'worker_secret_policy_fingerprints',
+  // pr106fix4: package integrity -- official policy/requirement/source fingerprints now participate
+  // in the package fingerprint/digest, never just the minimized worker-level bindings.
+  'official_network_policy_fingerprints', 'official_secret_policy_fingerprints',
+  'stage_policy_requirement_fingerprints', 'stage_policy_requirement_source_fingerprints',
   'compatibility_fingerprints', 'candidate_set_fingerprints', 'assignment_fingerprints'
 ]);
 

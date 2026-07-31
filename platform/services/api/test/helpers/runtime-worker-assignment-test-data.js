@@ -21,6 +21,10 @@ const { buildRuntimeWorkerStagePolicyRequirementReference } = require('../../src
 const { validateDestinationReference } = require('../../src/core/transcription-network-permission-boundary');
 const { validateSecretReference } = require('../../src/core/transcription-secret-resolution-boundary');
 const { stablePayload: computeOfficialPolicyFingerprint } = require('../../src/core/transcription-provider-contract-registry');
+// pr106fix4: the genuine upstream official contracts a Stage Policy Requirement's provenance must
+// bind to -- reused verbatim via their own real validators/builders, never a second self-declared
+// source.
+const { buildModelSelectionDecision } = require('../../src/core/model-selection-decision');
 
 const OFFICIAL_NETWORK_VALIDATOR_VERSION = 'transcription_network_permission_boundary_validator_v1';
 const OFFICIAL_SECRET_VALIDATOR_VERSION = 'transcription_secret_resolution_boundary_validator_v1';
@@ -73,16 +77,58 @@ function buildOfficialSecretPolicy(baseId, tenantId, overrides = {}) {
   return official;
 }
 
-// pr106fix3: the genuinely-external per-stage hint (stage_domain/provider_slug) this codebase's
-// upstream chain does not resolve today -- defaults to a resolvable, transcription-domain,
-// mock-provider-a hint so existing/new tests can exercise the "compatible" path explicitly, never
-// implicitly.
-function buildStagePolicyRequirementHint(schedulerStageReferenceId, overrides = {}) {
+// pr106fix4: a genuine official Model Selection Decision -- the only source type this PR can ever
+// derive a provider_slug/stage_domain from (Tool/Workflow Contracts carry neither).
+function buildOfficialModelSelectionDecision(baseId, overrides = {}) {
+  return buildModelSelectionDecision({
+    decision_id: `${baseId}-official-genselect`,
+    selection_request_id: `${baseId}-official-genselect-request`,
+    agent_id: 'agent-1',
+    tenant_id: 'tenant-a',
+    organization_id: 'tenant-a:org-1',
+    status: 'MODEL_SELECTED_SIMULATION',
+    selected_candidate_id: `${baseId}-official-genselect-candidate`,
+    selected_provider_id: 'mock-provider-a',
+    selected_model_id: 'gen-a',
+    ...overrides
+  });
+}
+
+const REQUIREMENT_SOURCE_TYPES = Object.freeze({
+  MODEL: 'MODEL_SELECTION_REFERENCE', TOOL: 'TOOL_CONTRACT_REFERENCE', WORKFLOW: 'WORKFLOW_CONTRACT_REFERENCE'
+});
+
+// pr106fix4: a Stage Policy Requirement hint genuinely bound (ID/version/fingerprint) to
+// `officialSource` -- never a free-form caller claim. Defaults to a resolvable MODEL requirement.
+function buildResolvedRequirementHint(schedulerStageReferenceId, requirementElement, sourceReferenceId, officialSource, overrides = {}) {
+  const sourceType = REQUIREMENT_SOURCE_TYPES[requirementElement];
+  const versionKey = sourceType === 'TOOL_CONTRACT_REFERENCE' ? 'tool_version' : sourceType === 'WORKFLOW_CONTRACT_REFERENCE' ? 'workflow_version' : null;
   return buildRuntimeWorkerStagePolicyRequirementReference({
-    stage_policy_requirement_reference_id: `${schedulerStageReferenceId}-requirement`,
+    stage_policy_requirement_reference_id: `${schedulerStageReferenceId}-${sourceReferenceId}-${requirementElement.toLowerCase()}req`,
     scheduler_stage_reference_id: schedulerStageReferenceId,
-    stage_domain: 'TRANSCRIPTION_DOMAIN',
-    provider_slug: 'mock-provider-a',
+    requirement_element: requirementElement,
+    source_reference_id: sourceReferenceId,
+    source_reference_type: sourceType,
+    source_reference_version: versionKey ? officialSource[versionKey] : 1,
+    source_reference_fingerprint: computeOfficialPolicyFingerprint(officialSource),
+    source_registry_snapshot_reference_id: `${schedulerStageReferenceId}-registry-snapshot`,
+    source_resolution_status: 'RESOLVED_FROM_OFFICIAL_REFERENCE',
+    source_provider_slug: requirementElement === 'MODEL' ? officialSource.selected_provider_id : 'mock-provider-a',
+    source_stage_domain: 'TRANSCRIPTION_DOMAIN',
+    ...overrides
+  });
+}
+
+// pr106fix4: "UNRESOLVED nunca produz match" -- the pragmatic default for TOOL/WORKFLOW requirements,
+// since neither ToolContract nor WorkflowContract carries provider/domain data in this codebase.
+function buildUnresolvedRequirementHint(schedulerStageReferenceId, requirementElement, sourceReferenceId, overrides = {}) {
+  return buildRuntimeWorkerStagePolicyRequirementReference({
+    stage_policy_requirement_reference_id: `${schedulerStageReferenceId}-${sourceReferenceId}-${requirementElement.toLowerCase()}req`,
+    scheduler_stage_reference_id: schedulerStageReferenceId,
+    requirement_element: requirementElement,
+    source_reference_id: sourceReferenceId,
+    source_reference_type: REQUIREMENT_SOURCE_TYPES[requirementElement],
+    source_resolution_status: 'UNRESOLVED_REFERENCE',
     ...overrides
   });
 }
@@ -223,6 +269,9 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
   // (NOT_APPLICABLE), so no stage ever needs a policy requirement hint unless a test explicitly
   // provides one.
   const stagePolicyRequirementRefs = overrides.stagePolicyRequirementRefs || [];
+  const modelSelectionDecisionRefs = overrides.modelSelectionDecisionRefs || [];
+  const toolContractRefs = overrides.toolContractRefs || [];
+  const workflowContractRefs = overrides.workflowContractRefs || [];
 
   const request = buildRuntimeWorkerAssignmentRequest({
     runtime_worker_assignment_request_id: requestId,
@@ -247,6 +296,9 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
     network_permission_policy_references: networkPermissionPolicyRefs,
     secret_resolution_policy_references: secretResolutionPolicyRefs,
     stage_policy_requirement_references: stagePolicyRequirementRefs,
+    model_selection_decision_references: modelSelectionDecisionRefs,
+    tool_contract_references: toolContractRefs,
+    workflow_contract_references: workflowContractRefs,
     correlation_id: 'corr-worker-assignment-1',
     causation_id: 'cause-worker-assignment-1',
     trace_id: 'trace-worker-assignment-1',
@@ -260,15 +312,18 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
     ...schedulerGolden, schedulerOutcome, baseId, requestId, assignmentPolicy, pool, workerRefs,
     workerCapabilityRefs, workerCapacityRefs, workerHealthRefs, workerNetworkPolicyRefs, workerSecretPolicyRefs,
     networkPermissionPolicyRefs, secretResolutionPolicyRefs, stagePolicyRequirementRefs,
+    modelSelectionDecisionRefs, toolContractRefs, workflowContractRefs,
     workerAssignmentRequest: request
   };
 }
 
 module.exports = {
   buildGoldenWorkerAssignmentBundle,
+  buildOfficialModelSelectionDecision,
   buildOfficialNetworkPolicy,
   buildOfficialSecretPolicy,
-  buildStagePolicyRequirementHint,
+  buildResolvedRequirementHint,
+  buildUnresolvedRequirementHint,
   buildWorkerPool,
   computeOfficialPolicyFingerprint,
   evaluateRuntimeSchedulerRequest,

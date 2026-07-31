@@ -9,6 +9,9 @@ const { checkIdentity } = require('./runtime-execution-package');
 // `JSON.stringify(stableCanonicalize(...))`) -- reused verbatim so a recomputed official fingerprint
 // here is byte-identical to what the official module itself would compute.
 const { stablePayload: computeOfficialPolicyFingerprint } = require('./transcription-provider-contract-registry');
+// pr106fix4: the genuine upstream official contracts a Stage Policy Requirement's provenance must
+// bind to -- reused verbatim via their own real validators, never a second self-declared source.
+const { ALLOWED_CAPABILITY_PROVIDER_SLUGS } = require('./transcription-provider-capability-matrix');
 const { FRESHNESS_DIMENSIONS } = require('./runtime-readiness-freshness-reference');
 const { computeIdempotencyFingerprint } = require('./execution-plan-idempotency');
 const { validateRuntimeWorkerAssignmentRequest } = require('./runtime-worker-assignment-request');
@@ -71,57 +74,127 @@ const OFFICIAL_POLICY_KEYS = Object.freeze({
 // transcription."
 const OFFICIAL_POLICY_DOMAIN = 'TRANSCRIPTION_DOMAIN';
 
-// pr106fix3: a pure, deterministic classification of what a stage's network/secret requirement
-// structurally *is* -- which element triggered it (model/tool/workflow), and the destination class/
-// secret purpose that element implies (both drawn from the same DESTINATION_SCOPES/SECRET_SCOPES
-// enum the official contracts themselves already use, never invented). `stage_domain`/`provider_slug`
-// are the two genuinely-external pieces this codebase's upstream chain does not resolve today (see
-// runtime-worker-stage-policy-requirement-reference.js's own header comment) -- read only from the
-// caller-supplied `upstreamHint`, never inferred, never defaulted to a truthy value. Never reads
-// `context`.
-function deriveStagePolicyRequirement(stage, upstreamHint) {
-  const hasModel = stage.model_selection_reference_id !== null;
-  const hasTools = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0;
-  const hasWorkflow = stage.workflow_reference_id !== null;
-  let element = null;
-  if (hasModel) element = 'MODEL';
-  else if (hasTools) element = 'TOOL';
-  else if (hasWorkflow) element = 'WORKFLOW';
-  if (!element) return { element: null };
-  const destinationClass = element === 'MODEL' ? 'TRANSCRIPTION_PROVIDER' : element === 'TOOL' ? 'TRANSPORT' : 'INTERNAL_SERVICE';
-  const secretPurpose = element === 'MODEL' ? 'MODEL_PROVIDER_ACCESS' : element === 'TOOL' ? 'TOOL_ACCESS' : 'WORKFLOW_ACCESS';
-  return {
-    element,
-    stage_domain: isPlainObject(upstreamHint) ? upstreamHint.stage_domain : null,
-    provider_slug: isPlainObject(upstreamHint) ? upstreamHint.provider_slug : null,
-    model_id: stage.model_selection_reference_id,
-    tool_ids: stage.tool_reference_ids,
-    workflow_id: stage.workflow_reference_id,
-    destination_class: destinationClass,
-    secret_purpose: secretPurpose,
-    required_capabilities: stage.required_capabilities,
-    required_modalities: stage.required_modalities
-  };
+// pr106fix4: an element's structural source type -- the only official contract kind whose upstream
+// object could ever genuinely stand behind a claim about that element.
+const SOURCE_TYPE_BY_ELEMENT = Object.freeze({
+  MODEL: 'MODEL_SELECTION_REFERENCE',
+  TOOL: 'TOOL_CONTRACT_REFERENCE',
+  WORKFLOW: 'WORKFLOW_CONTRACT_REFERENCE'
+});
+
+// The official source object's own version field, keyed by source type -- ModelSelectionDecision
+// carries no version field of its own (nothing to cross-check beyond ID+fingerprint).
+const SOURCE_VERSION_KEY_BY_TYPE = Object.freeze({
+  TOOL_CONTRACT_REFERENCE: 'tool_version',
+  WORKFLOW_CONTRACT_REFERENCE: 'workflow_version'
+});
+
+// pr106fix3/pr106fix4: a pure, deterministic classification of what a stage's network/secret
+// requirement structurally *is* -- one entry per element that genuinely needs one (MODEL, one per
+// TOOL by its own ID, WORKFLOW), never collapsed by precedence into a single requirement. Fixing
+// only the MODEL component of a mixed MODEL+TOOL/MODEL+WORKFLOW stage would silently let a
+// transcription policy authorize a tool/workflow requirement it was never meant to cover.
+// `destination_class`/`secret_purpose` are drawn from the same DESTINATION_SCOPES/SECRET_SCOPES enum
+// the official contracts themselves already use, never invented. Ordered deterministically: MODEL,
+// then TOOL by source_reference_id, then WORKFLOW. Never reads `context`.
+function deriveStagePolicyRequirements(stage) {
+  const requirements = [];
+  if (stage.model_selection_reference_id !== null) {
+    requirements.push({
+      requirement_element: 'MODEL',
+      source_reference_id: stage.model_selection_reference_id,
+      destination_class: 'TRANSCRIPTION_PROVIDER',
+      secret_purpose: 'MODEL_PROVIDER_ACCESS',
+      required_capabilities: stage.required_capabilities,
+      required_modalities: stage.required_modalities
+    });
+  }
+  const toolIds = Array.isArray(stage.tool_reference_ids) ? [...stage.tool_reference_ids].sort() : [];
+  for (const toolId of toolIds) {
+    requirements.push({
+      requirement_element: 'TOOL',
+      source_reference_id: toolId,
+      destination_class: 'TRANSPORT',
+      secret_purpose: 'TOOL_ACCESS',
+      required_capabilities: stage.required_capabilities,
+      required_modalities: stage.required_modalities
+    });
+  }
+  if (stage.workflow_reference_id !== null) {
+    requirements.push({
+      requirement_element: 'WORKFLOW',
+      source_reference_id: stage.workflow_reference_id,
+      destination_class: 'INTERNAL_SERVICE',
+      secret_purpose: 'WORKFLOW_ACCESS',
+      required_capabilities: stage.required_capabilities,
+      required_modalities: stage.required_modalities
+    });
+  }
+  return requirements;
 }
 
-// pr106fix FIX 1 / pr106fix2 / pr106fix3: genuine 1:1 policy reference comparison -- ID, version,
-// fingerprint, and tenant/organization/project/environment binding, never a string-presence pass-
-// through. `policyRef` is the (at most one) RuntimeWorkerNetworkPolicyReference/
-// RuntimeWorkerSecretPolicyReference bound to this worker, looked up by runtime_worker_reference_id.
-// The official policy pointed to must genuinely exist, match by version/fingerprint, and (pr106fix3)
-// its own content -- domain, provider, destination class/secret purpose -- must genuinely authorize
-// this specific stage's requirement. `official_policy_valid` (existence+version+fingerprint+scope/
-// environment), `official_policy_applicable_to_stage` (domain+element), and
-// `official_policy_authorizes_stage_requirement` (provider+destination/purpose) are evaluated as
-// three explicit, ordered gates -- all three must hold for a match.
-function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical, officialPolicyById, stagePolicyRequirementById) {
+// pr106fix4: "Stage Policy Requirement não é um hint confiável isoladamente. Um requisito RESOLVED
+// deve estar vinculado a uma fonte upstream oficial por ID/versão/fingerprint." Never trusts the
+// hint's own `source_provider_slug`/`source_stage_domain` claims directly -- both are recomputed from
+// the genuine official source object (`model_selection_decision_references`/`tool_contract_references`/
+// `workflow_contract_references`) and compared against what the hint declared. "Quando nenhuma fonte
+// oficial consegue resolver provider ou domínio, o requisito permanece UNRESOLVED e falha de forma
+// fechada" -- Tool/Workflow Contracts carry no provider/domain data in this codebase, so a TOOL/
+// WORKFLOW requirement can never structurally resolve, regardless of how well-formed its official
+// source is.
+function resolveRequirementProvenance(requirement, hint, officialSourcesByTypeAndId) {
+  const tag = `${requirement.requirement_element}::${requirement.source_reference_id}`;
+  const expectedSourceType = SOURCE_TYPE_BY_ELEMENT[requirement.requirement_element];
+  if (!isPlainObject(hint)) return { authorized: false, tag, reason: 'unresolvable' };
+  if (hint.requirement_element !== requirement.requirement_element) return { authorized: false, tag, reason: 'unresolvable' };
+  if (hint.source_reference_id !== requirement.source_reference_id) return { authorized: false, tag, reason: 'unresolvable' };
+  if (hint.source_reference_type !== expectedSourceType) return { authorized: false, tag, reason: 'unresolvable' };
+  if (hint.source_resolution_status !== 'RESOLVED_FROM_OFFICIAL_REFERENCE') return { authorized: false, tag, reason: 'unresolvable' };
+
+  const official = officialSourcesByTypeAndId.get(`${hint.source_reference_type}::${hint.source_reference_id}`);
+  if (!official) return { authorized: false, tag, reason: 'unresolvable' };
+
+  const versionKey = SOURCE_VERSION_KEY_BY_TYPE[hint.source_reference_type];
+  if (versionKey && official[versionKey] !== hint.source_reference_version) return { authorized: false, tag, reason: 'unresolvable' };
+  if (computeOfficialPolicyFingerprint(official) !== hint.source_reference_fingerprint) return { authorized: false, tag, reason: 'unresolvable' };
+
+  // Provider/domain are recomputed FROM the official source, never trusted from the hint. Only
+  // MODEL_SELECTION_REFERENCE carries a genuinely derivable provider (selected_provider_id); Tool/
+  // Workflow Contracts carry neither provider nor domain data anywhere in this codebase.
+  let derivedProviderSlug = null;
+  let derivedStageDomain = null;
+  if (hint.source_reference_type === 'MODEL_SELECTION_REFERENCE') {
+    derivedProviderSlug = isNonEmptyString(official.selected_provider_id) ? official.selected_provider_id : null;
+    derivedStageDomain = derivedProviderSlug ? (ALLOWED_CAPABILITY_PROVIDER_SLUGS.includes(derivedProviderSlug) ? OFFICIAL_POLICY_DOMAIN : 'GENERIC_DOMAIN') : null;
+  }
+  if (!isNonEmptyString(derivedProviderSlug) || !derivedStageDomain) return { authorized: false, tag, reason: 'unresolvable' };
+  if (hint.source_provider_slug !== derivedProviderSlug) return { authorized: false, tag, reason: 'unresolvable' };
+  if (hint.source_stage_domain !== derivedStageDomain) return { authorized: false, tag, reason: 'unresolvable' };
+
+  if (derivedStageDomain !== OFFICIAL_POLICY_DOMAIN) return { authorized: false, tag, reason: 'domain_mismatch' };
+
+  return { authorized: true, tag, provider_slug: derivedProviderSlug, stage_domain: derivedStageDomain };
+}
+
+// pr106fix FIX 1 / pr106fix2 / pr106fix3 / pr106fix4: genuine 1:1 policy reference comparison -- ID,
+// version, fingerprint, and tenant/organization/project/environment binding, never a string-presence
+// pass-through. `policyRef` is the (at most one) RuntimeWorkerNetworkPolicyReference/
+// RuntimeWorkerSecretPolicyReference bound to this worker. `official_policy_valid` (existence+
+// version+fingerprint+scope/environment) is checked once per worker; then EVERY requirement the
+// stage actually has (pr106fix4: plural, never collapsed by MODEL>TOOL>WORKFLOW precedence) must
+// independently pass `official_policy_applicable_to_stage` (domain+element, backed by genuine
+// upstream provenance) and `official_policy_authorizes_stage_requirement` (provider+destination/
+// purpose) -- `every(requirement is authorized)`, so a well-authorized MODEL component never masks
+// an unauthorized TOOL/WORKFLOW component of the same stage.
+function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical, officialPolicyById, stagePolicyRequirementByKey, officialSourcesByTypeAndId) {
   const idField = `${kind}_policy_reference_id`;
   const validField = `${kind}_policy_reference_valid`;
   const officialIdField = `official_${kind}_policy_reference_id`;
   const officialVersionField = `official_${kind}_policy_version`;
   const officialFingerprintField = `official_${kind}_policy_fingerprint`;
   const { idKey, versionKey } = OFFICIAL_POLICY_KEYS[kind];
-  if (!deriveStageRequiresNetworkOrSecret(stage)) return { match: true, reason: null };
+  const requirements = deriveStagePolicyRequirements(stage);
+  if (requirements.length === 0) return { match: true, reason: null };
   if (!isPlainObject(policyRef)) return { match: false, reason: `worker_${kind}_policy_reference_missing` };
   if (policyRef[idField] !== worker[idField]) return { match: false, reason: `worker_${kind}_policy_id_mismatch` };
   if (policyRef[validField] !== true) return { match: false, reason: `worker_${kind}_policy_reference_invalid` };
@@ -130,7 +203,7 @@ function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical,
   if (policyRef.project_id !== null && policyRef.project_id !== canonical.projectId) return { match: false, reason: `worker_${kind}_policy_project_mismatch` };
   if (policyRef.runtime_environment_reference_id !== worker.runtime_environment_reference_id) return { match: false, reason: `worker_${kind}_policy_environment_mismatch` };
 
-  // Gate 1: official_policy_valid.
+  // Gate 1: official_policy_valid (once per worker, shared across every requirement the stage has).
   const official = officialPolicyById.get(policyRef[officialIdField]);
   if (!official) return { match: false, reason: `worker_${kind}_official_policy_missing` };
   if (official[versionKey] !== policyRef[officialVersionField]) return { match: false, reason: `worker_${kind}_official_policy_version_mismatch` };
@@ -140,21 +213,21 @@ function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical,
   if (kind === 'secret' && official.tenant_id !== canonical.tenantId) return { match: false, reason: 'worker_secret_official_policy_scope_mismatch' };
   if (official.environment === 'PRODUCTION') return { match: false, reason: `worker_${kind}_official_policy_not_allowed` };
 
-  // Gate 2: official_policy_applicable_to_stage. The transcription-domain official policies this PR
-  // reuses can only ever apply to a MODEL requirement in the transcription domain -- a tool/workflow
-  // requirement, or a model requirement declared outside the transcription domain, is a domain
-  // mismatch regardless of how well-formed the official policy itself is.
-  const requirement = deriveStagePolicyRequirement(stage, stagePolicyRequirementById.get(stage.scheduler_stage_reference_id));
-  if (requirement.element !== 'MODEL') return { match: false, reason: `worker_${kind}_official_policy_domain_mismatch` };
-  if (!isNonEmptyString(requirement.provider_slug) || !isNonEmptyString(requirement.stage_domain)) {
-    return { match: false, reason: `worker_${kind}_policy_requirement_unresolvable` };
-  }
-  if (requirement.stage_domain !== OFFICIAL_POLICY_DOMAIN) return { match: false, reason: `worker_${kind}_official_policy_domain_mismatch` };
-
-  // Gate 3: official_policy_authorizes_stage_requirement.
-  if (official.provider_slug !== requirement.provider_slug) return { match: false, reason: `worker_${kind}_official_policy_provider_mismatch` };
-  if (official.scope !== requirement.destination_class) {
-    return { match: false, reason: kind === 'network' ? 'worker_network_official_policy_destination_mismatch' : 'worker_secret_official_policy_purpose_mismatch' };
+  // Gates 2+3, independently, for every requirement the stage has.
+  for (const requirement of requirements) {
+    const hint = stagePolicyRequirementByKey.get(`${stage.scheduler_stage_reference_id}::${requirement.requirement_element}::${requirement.source_reference_id}`);
+    const provenance = resolveRequirementProvenance(requirement, hint, officialSourcesByTypeAndId);
+    if (!provenance.authorized) {
+      const reasonKind = provenance.reason === 'domain_mismatch' ? 'official_policy_domain_mismatch' : 'policy_requirement_unresolvable';
+      return { match: false, reason: `worker_${kind}_${reasonKind}::${provenance.tag}` };
+    }
+    if (official.provider_slug !== provenance.provider_slug) {
+      return { match: false, reason: `worker_${kind}_official_policy_provider_mismatch::${provenance.tag}` };
+    }
+    if (official.scope !== requirement.destination_class) {
+      const mismatchKind = kind === 'network' ? 'destination_mismatch' : 'purpose_mismatch';
+      return { match: false, reason: `worker_${kind}_official_policy_${mismatchKind}::${provenance.tag}` };
+    }
   }
 
   void idKey;
@@ -182,13 +255,14 @@ function evaluateHealthAtAssignment(health, requestLogicalSequence) {
 // health/policy data -- "Não aceitar worker_compatible=true como fonte de verdade."
 function deriveMatches(
   stage, worker, capability, capacity, health, canonical, freshnessValid, requestLogicalSequence,
-  networkPolicyRef, secretPolicyRef, officialNetworkPolicyById, officialSecretPolicyById, stagePolicyRequirementById
+  networkPolicyRef, secretPolicyRef, officialNetworkPolicyById, officialSecretPolicyById, stagePolicyRequirementByKey,
+  officialSourcesByTypeAndId
 ) {
   const hasModel = stage.model_selection_reference_id !== null;
   const hasTools = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0;
   const hasWorkflow = stage.workflow_reference_id !== null;
-  const networkEvaluation = evaluatePolicyReferenceMatch('network', stage, worker, networkPolicyRef, canonical, officialNetworkPolicyById, stagePolicyRequirementById);
-  const secretEvaluation = evaluatePolicyReferenceMatch('secret', stage, worker, secretPolicyRef, canonical, officialSecretPolicyById, stagePolicyRequirementById);
+  const networkEvaluation = evaluatePolicyReferenceMatch('network', stage, worker, networkPolicyRef, canonical, officialNetworkPolicyById, stagePolicyRequirementByKey, officialSourcesByTypeAndId);
+  const secretEvaluation = evaluatePolicyReferenceMatch('secret', stage, worker, secretPolicyRef, canonical, officialSecretPolicyById, stagePolicyRequirementByKey, officialSourcesByTypeAndId);
   const healthEvaluation = evaluateHealthAtAssignment(health, requestLogicalSequence);
   return {
     matches: {
@@ -300,6 +374,9 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
   const networkPermissionPolicyRefs = requestIsObject && Array.isArray(request.network_permission_policy_references) ? request.network_permission_policy_references : [];
   const secretResolutionPolicyRefs = requestIsObject && Array.isArray(request.secret_resolution_policy_references) ? request.secret_resolution_policy_references : [];
   const stagePolicyRequirementRefs = requestIsObject && Array.isArray(request.stage_policy_requirement_references) ? request.stage_policy_requirement_references : [];
+  const modelSelectionDecisionRefs = requestIsObject && Array.isArray(request.model_selection_decision_references) ? request.model_selection_decision_references : [];
+  const toolContractRefs = requestIsObject && Array.isArray(request.tool_contract_references) ? request.tool_contract_references : [];
+  const workflowContractRefs = requestIsObject && Array.isArray(request.workflow_contract_references) ? request.workflow_contract_references : [];
 
   const canonical = {
     tenantId: isPlainObject(packageRef) ? packageRef.tenant_id : undefined,
@@ -316,7 +393,15 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
   function finalize(status, reasonCodes, derived = {}) {
     return buildWorkerAssignmentOutcome(status, reasonCodes, {
       request, requestFingerprint, canonical, schedulerDecisionRef, schedulerResultRef, schedulerPackageRef,
-      packageRef, capacitySnapshotRef, concurrencyRef, freshnessRef, idempotencyReference, ...derived
+      packageRef, capacitySnapshotRef, concurrencyRef, freshnessRef, idempotencyReference, replayRef,
+      // pr106fix4: every one of these is a raw request-level collection, already in scope regardless
+      // of how early the evaluation is blocked -- included unconditionally so the package's own
+      // integrity fingerprint lists (see buildWorkerAssignmentOutcome) are always derived from the
+      // real objects the request carried, "inclusive listas vazias quando legitimamente não
+      // aplicáveis," never a caller-supplied list substituted in.
+      networkPermissionPolicyRefs, secretResolutionPolicyRefs, stagePolicyRequirementRefs,
+      modelSelectionDecisionRefs, toolContractRefs, workflowContractRefs,
+      ...derived
     }, validatedFlags);
   }
 
@@ -487,14 +572,37 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
     }
     officialSecretPolicyById.set(official.secret_ref_id, official);
   }
-  // pr106fix3: at most one declared policy requirement hint per stage -- two conflicting hints for
-  // the same stage is the same class of "binding global incoerente" as a duplicate official policy.
-  const stagePolicyRequirementById = new Map();
+  // pr106fix3/pr106fix4: at most one declared policy requirement hint per (stage, element, source) --
+  // pr106fix4 keys by the full composite so a stage with MODEL+TOOL+WORKFLOW (or several TOOLs) can
+  // carry one hint per genuinely distinct requirement, never collapsed onto a single stage-level key.
+  const stagePolicyRequirementByKey = new Map();
   for (const hint of stagePolicyRequirementRefs) {
-    if (stagePolicyRequirementById.has(hint.scheduler_stage_reference_id)) {
+    const key = `${hint.scheduler_stage_reference_id}::${hint.requirement_element}::${hint.source_reference_id}`;
+    if (stagePolicyRequirementByKey.has(key)) {
       return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['stage_policy_requirement_registry_duplicate']);
     }
-    stagePolicyRequirementById.set(hint.scheduler_stage_reference_id, hint);
+    stagePolicyRequirementByKey.set(key, hint);
+  }
+  // pr106fix4: the genuine upstream official sources (Model Selection Decision / Tool Contract /
+  // Workflow Contract) a RESOLVED_FROM_OFFICIAL_REFERENCE requirement hint must bind to -- already
+  // structurally validated by their own real validators via the request's nested-reference
+  // validation. Keyed by (source type, source id); a duplicate is the same "binding global
+  // incoerente" class as a duplicate official network/secret policy.
+  const officialSourcesByTypeAndId = new Map();
+  for (const source of modelSelectionDecisionRefs) {
+    const key = `MODEL_SELECTION_REFERENCE::${source.decision_id}`;
+    if (officialSourcesByTypeAndId.has(key)) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['stage_policy_requirement_source_registry_duplicate']);
+    officialSourcesByTypeAndId.set(key, source);
+  }
+  for (const source of toolContractRefs) {
+    const key = `TOOL_CONTRACT_REFERENCE::${source.tool_id}`;
+    if (officialSourcesByTypeAndId.has(key)) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['stage_policy_requirement_source_registry_duplicate']);
+    officialSourcesByTypeAndId.set(key, source);
+  }
+  for (const source of workflowContractRefs) {
+    const key = `WORKFLOW_CONTRACT_REFERENCE::${source.workflow_id}`;
+    if (officialSourcesByTypeAndId.has(key)) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['stage_policy_requirement_source_registry_duplicate']);
+    officialSourcesByTypeAndId.set(key, source);
   }
   markValid('official_policy_registry_validated');
 
@@ -562,7 +670,7 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
       const { matches, reasons } = deriveMatches(
         stage, worker, capability, capacity, health, canonical, freshnessRef.freshness_validated,
         request.logical_sequence, networkPolicyRef, secretPolicyRef, officialNetworkPolicyById, officialSecretPolicyById,
-        stagePolicyRequirementById
+        stagePolicyRequirementByKey, officialSourcesByTypeAndId
       );
       const ref = buildRuntimeWorkerCompatibilityReference({
         worker_compatibility_reference_id: `${stage.scheduler_stage_reference_id}-${worker.runtime_worker_reference_id}-compatibility`,
@@ -717,8 +825,10 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
 function buildWorkerAssignmentOutcome(status, reasonCodes, ctx, validatedFlags) {
   const {
     request, requestFingerprint, canonical, schedulerDecisionRef, schedulerResultRef, schedulerPackageRef,
-    packageRef, capacitySnapshotRef, concurrencyRef, freshnessRef, idempotencyReference,
+    packageRef, capacitySnapshotRef, concurrencyRef, freshnessRef, idempotencyReference, replayRef,
     workerNetworkPolicyRefs = [], workerSecretPolicyRefs = [],
+    networkPermissionPolicyRefs = [], secretResolutionPolicyRefs = [], stagePolicyRequirementRefs = [],
+    modelSelectionDecisionRefs = [], toolContractRefs = [], workflowContractRefs = [],
     stages = [], workerRefs = [], workerCapabilityRefs = [], workerCapacityRefs = [], workerHealthRefs = [],
     compatibilityRefs = [], candidateSetByStageId = new Map(), assignmentRefs = []
   } = ctx;
@@ -731,6 +841,7 @@ function buildWorkerAssignmentOutcome(status, reasonCodes, ctx, validatedFlags) 
   const concurrencySafe = isPlainObject(concurrencyRef) ? concurrencyRef : {};
   const freshnessSafe = isPlainObject(freshnessRef) ? freshnessRef : {};
   const idempotencySafe = isPlainObject(idempotencyReference) ? idempotencyReference : {};
+  const replaySafe = isPlainObject(replayRef) ? replayRef : {};
   const canonicalSafe = canonical || {};
 
   const requestId = requestSafe.runtime_worker_assignment_request_id || 'runtime_worker_assignment_request_not_available';
@@ -772,7 +883,12 @@ function buildWorkerAssignmentOutcome(status, reasonCodes, ctx, validatedFlags) 
     capacity_snapshot_fingerprint: capacitySafe.capacity_fingerprint || 'fingerprint_not_available',
     concurrency_fingerprint: concurrencySafe.concurrency_fingerprint || 'fingerprint_not_available',
     freshness_fingerprint: freshnessSafe.freshness_fingerprint || 'fingerprint_not_available',
-    replay_fingerprint: 'fingerprint_not_available',
+    // pr106fix4: never the 'fingerprint_not_available' placeholder in a prepared outcome -- replayRef
+    // is validated (step 11) before any WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION outcome is ever
+    // reached, so its own real replay_fingerprint is always genuinely available by then; the
+    // placeholder only ever surfaces for the early-blocked paths where replayRef itself may still be
+    // absent or malformed.
+    replay_fingerprint: replaySafe.replay_fingerprint || 'fingerprint_not_available',
     idempotency_fingerprint: idempotencySafe.idempotency_fingerprint || 'fingerprint_not_available',
     worker_fingerprints: workerRefs.map((w) => w.worker_fingerprint),
     worker_capability_fingerprints: workerCapabilityRefs.map((c) => c.capability_fingerprint),
@@ -780,6 +896,16 @@ function buildWorkerAssignmentOutcome(status, reasonCodes, ctx, validatedFlags) 
     worker_health_fingerprints: workerHealthRefs.map((h) => h.health_fingerprint),
     worker_network_policy_fingerprints: workerNetworkPolicyRefs.map((n) => n.network_policy_fingerprint),
     worker_secret_policy_fingerprints: workerSecretPolicyRefs.map((s) => s.secret_policy_fingerprint),
+    // pr106fix4: package integrity -- derived strictly from the request's own real objects, never a
+    // caller-supplied list, so tampering any official policy/requirement/source changes the package
+    // fingerprint/digest (both computed over these lists via the established two-field-exclusion
+    // pattern in runtime-worker-assignment-package.js).
+    official_network_policy_fingerprints: networkPermissionPolicyRefs.map((o) => computeOfficialPolicyFingerprint(o)),
+    official_secret_policy_fingerprints: secretResolutionPolicyRefs.map((o) => computeOfficialPolicyFingerprint(o)),
+    stage_policy_requirement_fingerprints: stagePolicyRequirementRefs.map((h) => h.requirement_reference_fingerprint),
+    stage_policy_requirement_source_fingerprints: [
+      ...modelSelectionDecisionRefs, ...toolContractRefs, ...workflowContractRefs
+    ].map((s) => computeOfficialPolicyFingerprint(s)),
     compatibility_fingerprints: compatibilityRefs.map((c) => c.compatibility_fingerprint),
     candidate_set_fingerprints: candidateSets.map((c) => c.candidate_set_fingerprint),
     assignment_fingerprints: assignmentRefs.map((a) => a.assignment_fingerprint),
@@ -859,10 +985,11 @@ function buildWorkerAssignmentOutcome(status, reasonCodes, ctx, validatedFlags) 
 }
 
 module.exports = {
-  deriveStagePolicyRequirement,
+  deriveStagePolicyRequirements,
   deriveStageRequiresNetworkOrSecret,
   evaluateHealthAtAssignment,
   evaluatePolicyReferenceMatch,
   evaluateRuntimeWorkerAssignmentRequest,
-  omitReplayReference
+  omitReplayReference,
+  resolveRequirementProvenance
 };

@@ -26,6 +26,11 @@ const { validateRuntimeWorkerSecretPolicyReference } = require('./runtime-worker
 const { validateDestinationReference } = require('./transcription-network-permission-boundary');
 const { validateSecretReference } = require('./transcription-secret-resolution-boundary');
 const { validateRuntimeWorkerStagePolicyRequirementReference } = require('./runtime-worker-stage-policy-requirement-reference');
+// pr106fix4: the genuine upstream official contracts a Stage Policy Requirement's provenance must
+// bind to -- reused verbatim via their own real validators, never a second self-declared source.
+const { validateModelSelectionDecision } = require('./model-selection-decision');
+const { validateToolContract } = require('./tool-contract');
+const { validateWorkflowContract } = require('./workflow-contract');
 
 // pr106: aggregates every reference runtime-worker-assignment-boundary.js needs -- the already-
 // SCHEDULER_PACKAGE_PREPARED_SIMULATION chain (Scheduler Request/Decision/Result/Package), the real
@@ -47,6 +52,7 @@ const RUNTIME_WORKER_ASSIGNMENT_REQUEST_FIELDS = Object.freeze([
   'runtime_worker_health_references', 'runtime_worker_network_policy_references', 'runtime_worker_secret_policy_references',
   'network_permission_policy_references', 'secret_resolution_policy_references',
   'stage_policy_requirement_references',
+  'model_selection_decision_references', 'tool_contract_references', 'workflow_contract_references',
   'correlation_id', 'causation_id', 'trace_id', 'logical_sequence', 'expected_worker_assignment_registry_version',
   'simulation_context', 'validator_version'
 ]);
@@ -75,7 +81,10 @@ const LIST_NESTED_REFERENCE_VALIDATORS = Object.freeze([
   ['runtime_worker_secret_policy_references', validateRuntimeWorkerSecretPolicyReference],
   ['network_permission_policy_references', validateDestinationReference],
   ['secret_resolution_policy_references', validateSecretReference],
-  ['stage_policy_requirement_references', validateRuntimeWorkerStagePolicyRequirementReference]
+  ['stage_policy_requirement_references', validateRuntimeWorkerStagePolicyRequirementReference],
+  ['model_selection_decision_references', validateModelSelectionDecision],
+  ['tool_contract_references', validateToolContract],
+  ['workflow_contract_references', validateWorkflowContract]
 ]);
 
 const MAX_LIST_ITEMS = 200;
@@ -147,6 +156,9 @@ function buildRuntimeWorkerAssignmentRequest(input = {}) {
     network_permission_policy_references: Array.isArray(input.network_permission_policy_references) ? input.network_permission_policy_references : [],
     secret_resolution_policy_references: Array.isArray(input.secret_resolution_policy_references) ? input.secret_resolution_policy_references : [],
     stage_policy_requirement_references: Array.isArray(input.stage_policy_requirement_references) ? input.stage_policy_requirement_references : [],
+    model_selection_decision_references: Array.isArray(input.model_selection_decision_references) ? input.model_selection_decision_references : [],
+    tool_contract_references: Array.isArray(input.tool_contract_references) ? input.tool_contract_references : [],
+    workflow_contract_references: Array.isArray(input.workflow_contract_references) ? input.workflow_contract_references : [],
     correlation_id: input.correlation_id,
     causation_id: input.causation_id,
     trace_id: input.trace_id,

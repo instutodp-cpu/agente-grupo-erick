@@ -48,7 +48,7 @@ const {
 } = require('../src/core/runtime-worker-secret-policy-reference');
 const {
   deriveStageRequiresNetworkOrSecret, evaluatePolicyReferenceMatch, evaluateHealthAtAssignment,
-  deriveStagePolicyRequirement
+  deriveStagePolicyRequirements, resolveRequirementProvenance
 } = require('../src/core/runtime-worker-assignment-boundary');
 const {
   validateRuntimeWorkerStagePolicyRequirementReference, RUNTIME_WORKER_STAGE_POLICY_REQUIREMENT_REFERENCE_FIELDS
@@ -57,7 +57,7 @@ const {
 const {
   buildGoldenWorkerAssignmentBundle, buildWorkerPool, evaluateRuntimeWorkerAssignmentRequest,
   buildOfficialNetworkPolicy, buildOfficialSecretPolicy, computeOfficialPolicyFingerprint,
-  buildStagePolicyRequirementHint
+  buildResolvedRequirementHint, buildUnresolvedRequirementHint, buildOfficialModelSelectionDecision
 } = require('./helpers/runtime-worker-assignment-test-data');
 const { validateDestinationReference } = require('../src/core/transcription-network-permission-boundary');
 const { validateSecretReference } = require('../src/core/transcription-secret-resolution-boundary');
@@ -582,17 +582,28 @@ function officialMap(kind, official) {
   return m;
 }
 
-// pr106fix3: a resolvable, transcription-domain, mock-provider-a hint for `schedulerStageReferenceId`
-// -- the default "this stage's requirement is genuinely known and matches the official policy"
-// scenario. Tests exercising unresolvable/domain-mismatch pass `new Map()` or an explicit override.
-function hintMap(schedulerStageReferenceId, overrides = {}) {
-  const hint = buildStagePolicyRequirementHint(schedulerStageReferenceId, overrides);
-  return new Map([[hint.scheduler_stage_reference_id, hint]]);
+function sourcesMap(...sources) {
+  const m = new Map();
+  for (const source of sources) {
+    if ('decision_id' in source) m.set(`MODEL_SELECTION_REFERENCE::${source.decision_id}`, source);
+    else if ('tool_id' in source) m.set(`TOOL_CONTRACT_REFERENCE::${source.tool_id}`, source);
+    else if ('workflow_id' in source) m.set(`WORKFLOW_CONTRACT_REFERENCE::${source.workflow_id}`, source);
+  }
+  return m;
 }
 
-const MODEL_STAGE = Object.freeze({ scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'model-ref-1', tool_reference_ids: [], workflow_reference_id: null });
-const TOOL_STAGE = Object.freeze({ scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: ['tool-a'], workflow_reference_id: null });
-const WORKFLOW_STAGE = Object.freeze({ scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: 'flow-a' });
+// pr106fix4: a resolvable MODEL requirement hint for `schedulerStageReferenceId`, genuinely bound to
+// `officialModelSelection` -- the default "this stage's requirement is genuinely known and matches
+// the official policy" scenario. Tests exercising unresolvable/domain-mismatch pass `new Map()` or an
+// explicit override.
+function modelHintMap(schedulerStageReferenceId, sourceReferenceId, officialModelSelection, overrides = {}) {
+  const hint = buildResolvedRequirementHint(schedulerStageReferenceId, 'MODEL', sourceReferenceId, officialModelSelection, overrides);
+  return new Map([[`${hint.scheduler_stage_reference_id}::${hint.requirement_element}::${hint.source_reference_id}`, hint]]);
+}
+
+const MODEL_STAGE = Object.freeze({ scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: [], workflow_reference_id: null, required_capabilities: [], required_modalities: [] });
+const TOOL_STAGE = Object.freeze({ scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: ['tool-a'], workflow_reference_id: null, required_capabilities: [], required_modalities: [] });
+const WORKFLOW_STAGE = Object.freeze({ scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: 'flow-a', required_capabilities: [], required_modalities: [] });
 
 function validNetworkBinding(officialNetworkPolicy) {
   return {
@@ -669,14 +680,14 @@ test('deriveStageRequiresNetworkOrSecret: only stages reaching model/tool/workfl
 
 test('evaluatePolicyReferenceMatch: stage with no requirement is NOT_APPLICABLE (match true) regardless of policy state', () => {
   const stage = { model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null };
-  const result = evaluatePolicyReferenceMatch('network', stage, { network_policy_reference_id: 'w1-network-policy' }, undefined, { tenantId: 't', organizationId: 'o', projectId: 'p' }, new Map());
+  const result = evaluatePolicyReferenceMatch('network', stage, { network_policy_reference_id: 'w1-network-policy' }, undefined, { tenantId: 't', organizationId: 'o', projectId: 'p' }, new Map(), new Map(), new Map());
   assert.equal(result.match, true);
   assert.equal(result.reason, null);
 });
 
 test('evaluatePolicyReferenceMatch: required stage with no policy reference bound blocks with missing reason', () => {
-  const stage = { model_selection_reference_id: 'model-ref-1', tool_reference_ids: [], workflow_reference_id: null };
-  const result = evaluatePolicyReferenceMatch('network', stage, { network_policy_reference_id: 'w1-network-policy' }, undefined, { tenantId: 't', organizationId: 'o', projectId: 'p' }, new Map());
+  const stage = { model_selection_reference_id: 'genref-1', tool_reference_ids: [], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
+  const result = evaluatePolicyReferenceMatch('network', stage, { network_policy_reference_id: 'w1-network-policy' }, undefined, { tenantId: 't', organizationId: 'o', projectId: 'p' }, new Map(), new Map(), new Map());
   assert.equal(result.match, false);
   assert.equal(result.reason, 'worker_network_policy_reference_missing');
 });
@@ -684,32 +695,39 @@ test('evaluatePolicyReferenceMatch: required stage with no policy reference boun
 test('evaluatePolicyReferenceMatch: own-binding ID/version/tenant/organization/project/environment mismatch each block with a distinct reason', () => {
   const officialNetwork = buildOfficialNetworkPolicy('unit-net');
   const officialSecret = buildOfficialSecretPolicy('unit-sec', 'tenant-a');
+  const officialModel = buildOfficialModelSelectionDecision('unitgen', { decision_id: 'genref-1' });
   const worker = { network_policy_reference_id: 'w1-network-policy', secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
   const validPolicyRef = validNetworkBinding(officialNetwork);
   const netMap = officialMap('network', officialNetwork);
-  const hints = hintMap(MODEL_STAGE.scheduler_stage_reference_id);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validPolicyRef, canonical, netMap, hints).match, true);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, network_policy_reference_id: 'other-id' }, canonical, netMap, hints).reason, 'worker_network_policy_id_mismatch');
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, network_policy_reference_valid: false }, canonical, netMap, hints).reason, 'worker_network_policy_reference_invalid');
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, tenant_id: 'other-tenant' }, canonical, netMap, hints).reason, 'worker_network_policy_tenant_mismatch');
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, organization_id: 'other-org' }, canonical, netMap, hints).reason, 'worker_network_policy_organization_mismatch');
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, project_id: 'other-project' }, canonical, netMap, hints).reason, 'worker_network_policy_project_mismatch');
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, runtime_environment_reference_id: 'other-env' }, canonical, netMap, hints).reason, 'worker_network_policy_environment_mismatch');
+  const hints = modelHintMap(MODEL_STAGE.scheduler_stage_reference_id, 'genref-1', officialModel);
+  const sources = sourcesMap(officialModel);
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validPolicyRef, canonical, netMap, hints, sources).match, true);
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, network_policy_reference_id: 'other-id' }, canonical, netMap, hints, sources).reason, 'worker_network_policy_id_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, network_policy_reference_valid: false }, canonical, netMap, hints, sources).reason, 'worker_network_policy_reference_invalid');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, tenant_id: 'other-tenant' }, canonical, netMap, hints, sources).reason, 'worker_network_policy_tenant_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, organization_id: 'other-org' }, canonical, netMap, hints, sources).reason, 'worker_network_policy_organization_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, project_id: 'other-project' }, canonical, netMap, hints, sources).reason, 'worker_network_policy_project_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, runtime_environment_reference_id: 'other-env' }, canonical, netMap, hints, sources).reason, 'worker_network_policy_environment_mismatch');
   const secretMap = officialMap('secret', officialSecret);
-  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, { ...validSecretBinding(officialSecret), secret_policy_reference_id: 'other-id' }, canonical, secretMap, hints).reason, 'worker_secret_policy_id_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, { ...validSecretBinding(officialSecret), secret_policy_reference_id: 'other-id' }, canonical, secretMap, hints, sources).reason, 'worker_secret_policy_id_mismatch');
 });
 
 // --- Official policy binding (pr106fix2) ----------------------------------------------------------
+
+function modelProvenance(baseId) {
+  const officialModel = buildOfficialModelSelectionDecision(baseId, { decision_id: 'genref-1' });
+  return { officialModel, hints: modelHintMap(MODEL_STAGE.scheduler_stage_reference_id, 'genref-1', officialModel), sources: sourcesMap(officialModel) };
+}
 
 test('official policy binding: valid Network/Secret binding against a genuine official policy matches', () => {
   const officialNetwork = buildOfficialNetworkPolicy('official-valid-net');
   const officialSecret = buildOfficialSecretPolicy('official-valid-sec', 'tenant-a');
   const worker = { network_policy_reference_id: 'w1-network-policy', secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const hints = hintMap(MODEL_STAGE.scheduler_stage_reference_id);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetwork), canonical, officialMap('network', officialNetwork), hints).match, true);
-  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, validSecretBinding(officialSecret), canonical, officialMap('secret', officialSecret), hints).match, true);
+  const { hints, sources } = modelProvenance('official-valid');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetwork), canonical, officialMap('network', officialNetwork), hints, sources).match, true);
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, validSecretBinding(officialSecret), canonical, officialMap('secret', officialSecret), hints, sources).match, true);
 });
 
 test('official policy binding: official policy missing from the registry blocks with a distinct reason', () => {
@@ -717,9 +735,9 @@ test('official policy binding: official policy missing from the registry blocks 
   const officialSecret = buildOfficialSecretPolicy('official-missing-sec', 'tenant-a');
   const worker = { network_policy_reference_id: 'w1-network-policy', secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const hints = hintMap(MODEL_STAGE.scheduler_stage_reference_id);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetwork), canonical, new Map(), hints).reason, 'worker_network_official_policy_missing');
-  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, validSecretBinding(officialSecret), canonical, new Map(), hints).reason, 'worker_secret_official_policy_missing');
+  const { hints, sources } = modelProvenance('official-missing');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetwork), canonical, new Map(), hints, sources).reason, 'worker_network_official_policy_missing');
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, validSecretBinding(officialSecret), canonical, new Map(), hints, sources).reason, 'worker_secret_official_policy_missing');
 });
 
 test('official policy binding: official ID divergente blocks as missing (lookup by ID fails)', () => {
@@ -727,8 +745,8 @@ test('official policy binding: official ID divergente blocks as missing (lookup 
   const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
   const binding = { ...validNetworkBinding(officialNetwork), official_network_policy_reference_id: 'a-different-official-id' };
-  const hints = hintMap(MODEL_STAGE.scheduler_stage_reference_id);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, officialMap('network', officialNetwork), hints).reason, 'worker_network_official_policy_missing');
+  const { hints, sources } = modelProvenance('official-idmismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, officialMap('network', officialNetwork), hints, sources).reason, 'worker_network_official_policy_missing');
 });
 
 test('official policy binding: official version divergente blocks with a distinct reason', () => {
@@ -738,9 +756,9 @@ test('official policy binding: official version divergente blocks with a distinc
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
   const netBinding = { ...validNetworkBinding(officialNetwork), official_network_policy_version: 2 };
   const secBinding = { ...validSecretBinding(officialSecret), official_secret_policy_version: 2 };
-  const hints = hintMap(MODEL_STAGE.scheduler_stage_reference_id);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, netBinding, canonical, officialMap('network', officialNetwork), hints).reason, 'worker_network_official_policy_version_mismatch');
-  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secBinding, canonical, officialMap('secret', officialSecret), hints).reason, 'worker_secret_official_policy_version_mismatch');
+  const { hints, sources } = modelProvenance('official-version');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, netBinding, canonical, officialMap('network', officialNetwork), hints, sources).reason, 'worker_network_official_policy_version_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secBinding, canonical, officialMap('secret', officialSecret), hints, sources).reason, 'worker_secret_official_policy_version_mismatch');
 });
 
 test('official policy binding: official fingerprint divergente blocks with a distinct reason', () => {
@@ -750,9 +768,9 @@ test('official policy binding: official fingerprint divergente blocks with a dis
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
   const netBinding = { ...validNetworkBinding(officialNetwork), official_network_policy_fingerprint: 'stale-fingerprint-value' };
   const secBinding = { ...validSecretBinding(officialSecret), official_secret_policy_fingerprint: 'stale-fingerprint-value' };
-  const hints = hintMap(MODEL_STAGE.scheduler_stage_reference_id);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, netBinding, canonical, officialMap('network', officialNetwork), hints).reason, 'worker_network_official_policy_fingerprint_mismatch');
-  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secBinding, canonical, officialMap('secret', officialSecret), hints).reason, 'worker_secret_official_policy_fingerprint_mismatch');
+  const { hints, sources } = modelProvenance('official-fp');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, netBinding, canonical, officialMap('network', officialNetwork), hints, sources).reason, 'worker_network_official_policy_fingerprint_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secBinding, canonical, officialMap('secret', officialSecret), hints, sources).reason, 'worker_secret_official_policy_fingerprint_mismatch');
 });
 
 test('official policy binding: conteúdo oficial adulterado com fingerprint antigo (binding) is caught, not masked', () => {
@@ -765,8 +783,8 @@ test('official policy binding: conteúdo oficial adulterado com fingerprint anti
   const tamperedOfficial = { ...officialNetwork, destination_alias: 'a-completely-different-alias' };
   const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const hints = hintMap(MODEL_STAGE.scheduler_stage_reference_id);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, officialMap('network', tamperedOfficial), hints).reason, 'worker_network_official_policy_fingerprint_mismatch');
+  const { hints, sources } = modelProvenance('official-tamper');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, officialMap('network', tamperedOfficial), hints, sources).reason, 'worker_network_official_policy_fingerprint_mismatch');
 });
 
 test('official policy binding: secret tenant/organization/project divergente blocks appropriately', () => {
@@ -774,8 +792,8 @@ test('official policy binding: secret tenant/organization/project divergente blo
   const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
   const binding = validSecretBinding(officialSecretOtherTenant);
-  const hints = hintMap(MODEL_STAGE.scheduler_stage_reference_id);
-  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, officialMap('secret', officialSecretOtherTenant), hints).reason, 'worker_secret_official_policy_scope_mismatch');
+  const { hints, sources } = modelProvenance('official-tenant');
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, officialMap('secret', officialSecretOtherTenant), hints, sources).reason, 'worker_secret_official_policy_scope_mismatch');
 });
 
 test('official policy binding: official environment PRODUCTION is never allowed', () => {
@@ -783,16 +801,16 @@ test('official policy binding: official environment PRODUCTION is never allowed'
   const officialSecretProd = buildOfficialSecretPolicy('official-prod-sec', 'tenant-a', { environment: 'PRODUCTION' });
   const worker = { network_policy_reference_id: 'w1-network-policy', secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const hints = hintMap(MODEL_STAGE.scheduler_stage_reference_id);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetworkProd), canonical, officialMap('network', officialNetworkProd), hints).reason, 'worker_network_official_policy_not_allowed');
-  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, validSecretBinding(officialSecretProd), canonical, officialMap('secret', officialSecretProd), hints).reason, 'worker_secret_official_policy_not_allowed');
+  const { hints, sources } = modelProvenance('official-prod');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetworkProd), canonical, officialMap('network', officialNetworkProd), hints, sources).reason, 'worker_network_official_policy_not_allowed');
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, validSecretBinding(officialSecretProd), canonical, officialMap('secret', officialSecretProd), hints, sources).reason, 'worker_secret_official_policy_not_allowed');
 });
 
 test('official policy binding: deterministic stage without requirement remains explicitly NOT_APPLICABLE', () => {
-  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null };
+  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
   const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const result = evaluatePolicyReferenceMatch('network', stage, worker, undefined, canonical, new Map(), new Map());
+  const result = evaluatePolicyReferenceMatch('network', stage, worker, undefined, canonical, new Map(), new Map(), new Map());
   assert.equal(result.match, true);
   assert.equal(result.reason, null);
 });
@@ -805,9 +823,9 @@ test('official policy binding: input order of official policies in the map never
   const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
   const binding = validNetworkBinding(officialA);
-  const hints = hintMap(MODEL_STAGE.scheduler_stage_reference_id);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, mapAB, hints).match, true);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, mapBA, hints).match, true);
+  const { hints, sources } = modelProvenance('order');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, mapAB, hints, sources).match, true);
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, mapBA, hints, sources).match, true);
 });
 
 test('official policy binding: structurally invalid official policy is rejected by its own real validator', () => {
@@ -819,213 +837,363 @@ test('official policy binding: structurally invalid official policy is rejected 
   assertInvalid('official secret policy revoked=true rejected (policy revogada)', validateSecretReference({ ...officialSecret, revoked: true }));
 });
 
-test('worker assignment boundary: model stage with a compatible network/secret policy bound to a genuine official policy reaches WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION', () => {
+test('worker assignment boundary: model stage with a compatible network/secret policy bound to a genuine official policy and genuine provenance reaches match true', () => {
   const golden = buildGoldenWorkerAssignmentBundle();
-  const modelStage = golden.schedulerOutcome.schedulerStageRefs[0];
+  const modelStage = { ...golden.schedulerOutcome.schedulerStageRefs[0], model_selection_reference_id: 'genref-1' };
+  const officialModel = buildOfficialModelSelectionDecision('goldengenstage', { decision_id: 'genref-1' });
   const netMap = officialMap('network', golden.pool.officialNetworkPolicy);
-  const hints = hintMap(modelStage.scheduler_stage_reference_id);
-  assert.equal(evaluatePolicyReferenceMatch('network', { ...modelStage, model_selection_reference_id: 'model-ref-1' }, golden.pool.worker, golden.pool.networkPolicy, {
+  const hints = modelHintMap(modelStage.scheduler_stage_reference_id, 'genref-1', officialModel);
+  const sources = sourcesMap(officialModel);
+  assert.equal(evaluatePolicyReferenceMatch('network', modelStage, golden.pool.worker, golden.pool.networkPolicy, {
     tenantId: golden.runtimePackage.tenant_id, organizationId: golden.runtimePackage.organization_id, projectId: golden.runtimePackage.project_id
-  }, netMap, hints).match, true);
+  }, netMap, hints, sources).match, true);
 });
 
-// --- Stage policy requirement cross-check (pr106fix3) -----------------------------------------------
+// --- Stage Policy Requirement derivation (pr106fix4 FIX 1) -----------------------------------------
+// "Stages com múltiplos elementos produzem múltiplos requisitos. A autorização de MODEL não autoriza
+// implicitamente TOOL ou WORKFLOW."
 
-test('runtime-worker-stage-policy-requirement-reference: valid contract, exact fields, genuine fingerprint', () => {
-  const ref = buildStagePolicyRequirementHint('stage-1');
+test('runtime-worker-stage-policy-requirement-reference: valid RESOLVED contract, exact fields, genuine fingerprint', () => {
+  const official = buildOfficialModelSelectionDecision('contract-valid');
+  const ref = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
   assertValid('stage policy requirement reference', validateRuntimeWorkerStagePolicyRequirementReference(ref));
   assert.deepEqual(Object.keys(ref).sort(), [...RUNTIME_WORKER_STAGE_POLICY_REQUIREMENT_REFERENCE_FIELDS].sort());
-  assertInvalid('unknown stage_domain rejected', validateRuntimeWorkerStagePolicyRequirementReference({ ...ref, stage_domain: 'OTHER_DOMAIN' }));
+  assertInvalid('unknown source_stage_domain rejected', validateRuntimeWorkerStagePolicyRequirementReference({ ...ref, source_stage_domain: 'OTHER_DOMAIN' }));
   assertInvalid('tampered fingerprint', validateRuntimeWorkerStagePolicyRequirementReference({ ...ref, requirement_reference_fingerprint: 'sha256:' + 'f'.repeat(64) }));
 });
 
-test('deriveStagePolicyRequirement: deterministic stage has no element and no requirement', () => {
-  const stage = { model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null };
-  assert.equal(deriveStagePolicyRequirement(stage, undefined).element, null);
+test('runtime-worker-stage-policy-requirement-reference: valid UNRESOLVED contract uses only placeholder values', () => {
+  const ref = buildUnresolvedRequirementHint('stage-1', 'TOOL', 'tool-a');
+  assertValid('unresolved stage policy requirement reference', validateRuntimeWorkerStagePolicyRequirementReference(ref));
+  assert.equal(ref.source_reference_fingerprint, 'fingerprint_not_available');
+  assert.equal(ref.source_registry_snapshot_reference_id, 'registry_snapshot_not_available');
+  assert.equal(ref.source_provider_slug, null);
+  assert.equal(ref.source_stage_domain, null);
 });
 
-test('deriveStagePolicyRequirement: absence of a hint on a stage that needs one is unresolvable, never NOT_APPLICABLE', () => {
-  const requirement = deriveStagePolicyRequirement(MODEL_STAGE, undefined);
-  assert.equal(requirement.element, 'MODEL');
-  assert.equal(requirement.provider_slug, null);
-  assert.equal(requirement.stage_domain, null);
+test('deriveStagePolicyRequirements: deterministic stage has no elements and no requirements', () => {
+  const stage = { model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
+  assert.deepEqual(deriveStagePolicyRequirements(stage), []);
 });
 
-test('deriveStagePolicyRequirement: model/tool/workflow each derive a distinct destination_class/secret_purpose, never invented per-instance data', () => {
-  const hint = buildStagePolicyRequirementHint('stage-1');
-  const modelReq = deriveStagePolicyRequirement(MODEL_STAGE, hint);
-  const toolReq = deriveStagePolicyRequirement(TOOL_STAGE, hint);
-  const workflowReq = deriveStagePolicyRequirement(WORKFLOW_STAGE, hint);
-  assert.equal(modelReq.destination_class, 'TRANSCRIPTION_PROVIDER');
-  assert.equal(modelReq.secret_purpose, 'MODEL_PROVIDER_ACCESS');
-  assert.equal(toolReq.destination_class, 'TRANSPORT');
-  assert.equal(toolReq.secret_purpose, 'TOOL_ACCESS');
-  assert.equal(workflowReq.destination_class, 'INTERNAL_SERVICE');
-  assert.equal(workflowReq.secret_purpose, 'WORKFLOW_ACCESS');
+test('deriveStagePolicyRequirements: model isolado produces exactly one MODEL requirement', () => {
+  const requirements = deriveStagePolicyRequirements(MODEL_STAGE);
+  assert.equal(requirements.length, 1);
+  assert.equal(requirements[0].requirement_element, 'MODEL');
+  assert.equal(requirements[0].source_reference_id, 'genref-1');
+  assert.equal(requirements[0].destination_class, 'TRANSCRIPTION_PROVIDER');
+  assert.equal(requirements[0].secret_purpose, 'MODEL_PROVIDER_ACCESS');
 });
 
-test('stage policy requirement: network official provider igual matches, provider diferente blocks', () => {
-  const official = buildOfficialNetworkPolicy('provider-net');
-  const binding = validNetworkBinding(official);
+test('deriveStagePolicyRequirements: tool isolada produces exactly one TOOL requirement', () => {
+  const requirements = deriveStagePolicyRequirements(TOOL_STAGE);
+  assert.equal(requirements.length, 1);
+  assert.equal(requirements[0].requirement_element, 'TOOL');
+  assert.equal(requirements[0].source_reference_id, 'tool-a');
+  assert.equal(requirements[0].destination_class, 'TRANSPORT');
+  assert.equal(requirements[0].secret_purpose, 'TOOL_ACCESS');
+});
+
+test('deriveStagePolicyRequirements: workflow isolado produces exactly one WORKFLOW requirement', () => {
+  const requirements = deriveStagePolicyRequirements(WORKFLOW_STAGE);
+  assert.equal(requirements.length, 1);
+  assert.equal(requirements[0].requirement_element, 'WORKFLOW');
+  assert.equal(requirements[0].source_reference_id, 'flow-a');
+  assert.equal(requirements[0].destination_class, 'INTERNAL_SERVICE');
+  assert.equal(requirements[0].secret_purpose, 'WORKFLOW_ACCESS');
+});
+
+test('deriveStagePolicyRequirements: model+tool never collapses to a single requirement', () => {
+  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: ['tool-a'], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
+  assert.deepEqual(deriveStagePolicyRequirements(stage).map((r) => r.requirement_element), ['MODEL', 'TOOL']);
+});
+
+test('deriveStagePolicyRequirements: model+workflow never collapses to a single requirement', () => {
+  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: [], workflow_reference_id: 'flow-a', required_capabilities: [], required_modalities: [] };
+  assert.deepEqual(deriveStagePolicyRequirements(stage).map((r) => r.requirement_element), ['MODEL', 'WORKFLOW']);
+});
+
+test('deriveStagePolicyRequirements: tool+workflow produces both, ordered TOOL then WORKFLOW', () => {
+  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: ['tool-a'], workflow_reference_id: 'flow-a', required_capabilities: [], required_modalities: [] };
+  assert.deepEqual(deriveStagePolicyRequirements(stage).map((r) => r.requirement_element), ['TOOL', 'WORKFLOW']);
+});
+
+test('deriveStagePolicyRequirements: model+tool+workflow produces all three, ordered MODEL, TOOL, WORKFLOW', () => {
+  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: ['tool-a'], workflow_reference_id: 'flow-a', required_capabilities: [], required_modalities: [] };
+  assert.deepEqual(deriveStagePolicyRequirements(stage).map((r) => r.requirement_element), ['MODEL', 'TOOL', 'WORKFLOW']);
+});
+
+test('deriveStagePolicyRequirements: dois tools produce two TOOL requirements ordered by source_reference_id', () => {
+  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: ['tool-b', 'tool-a'], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
+  assert.deepEqual(deriveStagePolicyRequirements(stage).map((r) => r.source_reference_id), ['tool-a', 'tool-b']);
+});
+
+test('deriveStagePolicyRequirements: input order of tool_reference_ids never alters the derived order', () => {
+  const stageAB = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: ['tool-a', 'tool-b'], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
+  const stageBA = { ...stageAB, tool_reference_ids: ['tool-b', 'tool-a'] };
+  assert.deepEqual(deriveStagePolicyRequirements(stageAB), deriveStagePolicyRequirements(stageBA));
+});
+
+test('evaluatePolicyReferenceMatch: MODEL authorized never masks an unresolvable TOOL component of the same mixed stage', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('mixed-model-tool-net');
+  const officialModel = buildOfficialModelSelectionDecision('mixedgentool', { decision_id: 'genref-1' });
+  const binding = validNetworkBinding(officialNetwork);
   const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const netMap = officialMap('network', official);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, netMap, hintMap('stage-1', { provider_slug: 'mock-provider-a' })).match, true);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, netMap, hintMap('stage-1', { provider_slug: 'mock-provider-b' })).reason, 'worker_network_official_policy_provider_mismatch');
-});
-
-test('stage policy requirement: network destination class igual matches, incompatível blocks', () => {
-  const officialTransport = buildOfficialNetworkPolicy('destclass-net', { scope: 'TRANSPORT' });
-  const binding = validNetworkBinding(officialTransport);
-  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
-  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  // TOOL_STAGE's own destination_class is TRANSPORT -- but TOOL is never an authorizable element for
-  // the transcription-domain official policies, so this must be a domain mismatch, never a false match.
-  assert.equal(evaluatePolicyReferenceMatch('network', TOOL_STAGE, worker, binding, canonical, officialMap('network', officialTransport), hintMap('stage-1')).reason, 'worker_network_official_policy_domain_mismatch');
-  // A MODEL requirement always derives TRANSCRIPTION_PROVIDER -- a TRANSPORT-scoped official policy
-  // therefore destination-mismatches it explicitly.
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, officialMap('network', officialTransport), hintMap('stage-1')).reason, 'worker_network_official_policy_destination_mismatch');
-});
-
-test('stage policy requirement: domain transcription compatível reaches match for a model stage', () => {
-  const official = buildOfficialNetworkPolicy('domain-ok-net');
-  const binding = validNetworkBinding(official);
-  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
-  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const result = evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, officialMap('network', official), hintMap('stage-1', { stage_domain: 'TRANSCRIPTION_DOMAIN' }));
-  assert.equal(result.match, true);
-});
-
-test('stage policy requirement: domain transcription usado em generic model bloqueia', () => {
-  const official = buildOfficialNetworkPolicy('domain-generic-net');
-  const binding = validNetworkBinding(official);
-  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
-  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const result = evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, officialMap('network', official), hintMap('stage-1', { stage_domain: 'GENERIC_DOMAIN' }));
+  const mixedStage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: ['tool-a'], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
+  const hints = modelHintMap('stage-1', 'genref-1', officialModel);
+  const sources = sourcesMap(officialModel);
+  const result = evaluatePolicyReferenceMatch('network', mixedStage, worker, binding, canonical, officialMap('network', officialNetwork), hints, sources);
   assert.equal(result.match, false);
-  assert.equal(result.reason, 'worker_network_official_policy_domain_mismatch');
+  assert.equal(result.reason, 'worker_network_policy_requirement_unresolvable::TOOL::tool-a');
 });
 
-test('stage policy requirement: domain transcription usado em tool bloqueia', () => {
-  const official = buildOfficialNetworkPolicy('domain-tool-net');
-  const binding = validNetworkBinding(official);
+test('evaluatePolicyReferenceMatch: MODEL authorized never masks an unresolvable WORKFLOW component of the same mixed stage', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('mixed-model-workflow-net');
+  const officialModel = buildOfficialModelSelectionDecision('mixedgenworkflow', { decision_id: 'genref-1' });
+  const binding = validNetworkBinding(officialNetwork);
   const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const result = evaluatePolicyReferenceMatch('network', TOOL_STAGE, worker, binding, canonical, officialMap('network', official), hintMap('stage-1'));
+  const mixedStage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: [], workflow_reference_id: 'flow-a', required_capabilities: [], required_modalities: [] };
+  const hints = modelHintMap('stage-1', 'genref-1', officialModel);
+  const sources = sourcesMap(officialModel);
+  const result = evaluatePolicyReferenceMatch('network', mixedStage, worker, binding, canonical, officialMap('network', officialNetwork), hints, sources);
   assert.equal(result.match, false);
-  assert.equal(result.reason, 'worker_network_official_policy_domain_mismatch');
+  assert.equal(result.reason, 'worker_network_policy_requirement_unresolvable::WORKFLOW::flow-a');
 });
 
-test('stage policy requirement: domain transcription usado em workflow bloqueia', () => {
-  const official = buildOfficialNetworkPolicy('domain-workflow-net');
-  const binding = validNetworkBinding(official);
-  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
-  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const result = evaluatePolicyReferenceMatch('network', WORKFLOW_STAGE, worker, binding, canonical, officialMap('network', official), hintMap('stage-1'));
-  assert.equal(result.match, false);
-  assert.equal(result.reason, 'worker_network_official_policy_domain_mismatch');
+// --- Stage Policy Requirement provenance (pr106fix4 FIX 2) -----------------------------------------
+// "Stage Policy Requirement não é um hint confiável isoladamente. Um requisito RESOLVED deve estar
+// vinculado a uma fonte upstream oficial por ID/versão/fingerprint." "Quando nenhuma fonte oficial
+// consegue resolver provider ou domínio, o requisito permanece UNRESOLVED e falha de forma fechada."
+
+function modelRequirement(sourceReferenceId) {
+  return { requirement_element: 'MODEL', source_reference_id: sourceReferenceId, destination_class: 'TRANSCRIPTION_PROVIDER', secret_purpose: 'MODEL_PROVIDER_ACCESS', required_capabilities: [], required_modalities: [] };
+}
+
+test('resolveRequirementProvenance: source oficial válida resolves and authorizes', () => {
+  const official = buildOfficialModelSelectionDecision('prov-valid');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official));
+  assert.equal(result.authorized, true);
+  assert.equal(result.provider_slug, 'mock-provider-a');
+  assert.equal(result.stage_domain, 'TRANSCRIPTION_DOMAIN');
 });
 
-test('stage policy requirement: secret provider igual matches, provider divergente blocks', () => {
-  const official = buildOfficialSecretPolicy('sec-provider', 'tenant-a');
-  const binding = validSecretBinding(official);
-  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
-  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const secretMap = officialMap('secret', official);
-  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, secretMap, hintMap('stage-1', { provider_slug: 'mock-provider-a' })).match, true);
-  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, secretMap, hintMap('stage-1', { provider_slug: 'mock-provider-c' })).reason, 'worker_secret_official_policy_provider_mismatch');
+test('resolveRequirementProvenance: source ausente (nenhum hint) is unresolvable', () => {
+  const result = resolveRequirementProvenance(modelRequirement('genref-1'), undefined, new Map());
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
 });
 
-test('stage policy requirement: secret purpose compatível matches, divergente blocks', () => {
-  const officialWrongPurpose = buildOfficialSecretPolicy('sec-purpose', 'tenant-a', { scope: 'WEBHOOK' });
-  const binding = validSecretBinding(officialWrongPurpose);
-  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
-  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const result = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, officialMap('secret', officialWrongPurpose), hintMap('stage-1'));
-  assert.equal(result.match, false);
-  assert.equal(result.reason, 'worker_secret_official_policy_purpose_mismatch');
+test('resolveRequirementProvenance: source ID divergente entre hint e requirement is unresolvable', () => {
+  const official = buildOfficialModelSelectionDecision('prov-idmismatch');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', 'a-different-source-id', official);
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
 });
 
-test('stage policy requirement: requirement não resolvível (missing hint) blocks distinctly for network and secret', () => {
-  const officialNetwork = buildOfficialNetworkPolicy('unresolvable-net');
-  const officialSecret = buildOfficialSecretPolicy('unresolvable-sec', 'tenant-a');
-  const worker = { network_policy_reference_id: 'w1-network-policy', secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
-  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetwork), canonical, officialMap('network', officialNetwork), new Map()).reason, 'worker_network_policy_requirement_unresolvable');
-  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, validSecretBinding(officialSecret), canonical, officialMap('secret', officialSecret), new Map()).reason, 'worker_secret_policy_requirement_unresolvable');
+test('resolveRequirementProvenance: source version divergente is unresolvable', () => {
+  const officialToolV1 = { tool_id: 'tool-a', tool_version: 1, note: 'synthetic-tool-source-for-provenance-unit-test' };
+  const officialToolV2 = { tool_id: 'tool-a', tool_version: 2, note: 'synthetic-tool-source-for-provenance-unit-test' };
+  const hint = buildResolvedRequirementHint('stage-1', 'TOOL', 'tool-a', officialToolV1);
+  const toolRequirement = { requirement_element: 'TOOL', source_reference_id: 'tool-a', destination_class: 'TRANSPORT', secret_purpose: 'TOOL_ACCESS', required_capabilities: [], required_modalities: [] };
+  const result = resolveRequirementProvenance(toolRequirement, hint, sourcesMap(officialToolV2));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
 });
 
-test('stage policy requirement: a hint declaring only stage_domain but no resolvable provider_slug is still unresolvable', () => {
-  const official = buildOfficialNetworkPolicy('partial-hint-net');
-  const binding = validNetworkBinding(official);
-  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
-  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  // deriveStagePolicyRequirement never invents a provider_slug -- an absent hint or a hint whose own
-  // provider_slug the caller could not determine leaves the requirement unresolvable, never
-  // NOT_APPLICABLE, never a silent match.
-  const result = evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, officialMap('network', official), new Map());
-  assert.equal(result.match, false);
-  assert.equal(result.reason, 'worker_network_policy_requirement_unresolvable');
+test('resolveRequirementProvenance: source fingerprint divergente (hint claims a fingerprint the official object does not have) is unresolvable', () => {
+  const official = buildOfficialModelSelectionDecision('prov-fpmismatch');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official, { source_reference_fingerprint: 'sha256:' + 'a'.repeat(64) });
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
 });
 
-test('stage policy requirement: deterministic stage continues NOT_APPLICABLE regardless of hint presence or absence', () => {
-  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null };
-  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
-  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  assert.equal(evaluatePolicyReferenceMatch('network', stage, worker, undefined, canonical, new Map(), new Map()).match, true);
-  assert.equal(evaluatePolicyReferenceMatch('network', stage, worker, undefined, canonical, new Map(), hintMap('stage-1')).match, true);
+test('resolveRequirementProvenance: conteúdo oficial adulterado (fingerprint agora stale) is caught, never silently accepted', () => {
+  const official = buildOfficialModelSelectionDecision('prov-contenttamper');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const tamperedOfficial = { ...official, selected_model_id: 'a-completely-different-model' };
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(tamperedOfficial));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
 });
 
-test('stage policy requirement: policy fingerprint válido não mascara provider mismatch', () => {
-  const official = buildOfficialNetworkPolicy('fp-valid-provider-mismatch-net');
-  const binding = validNetworkBinding(official);
-  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
-  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  // The binding's own fingerprint is genuinely valid against the official policy -- but the stage's
-  // own requirement declares a different provider, so the fingerprint's validity never masks it.
-  const result = evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, officialMap('network', official), hintMap('stage-1', { provider_slug: 'mock-provider-b' }));
-  assert.equal(result.match, false);
-  assert.equal(result.reason, 'worker_network_official_policy_provider_mismatch');
+test('resolveRequirementProvenance: provider declarado divergente da source recomputada is unresolvable, never trusted from the hint', () => {
+  const official = buildOfficialModelSelectionDecision('prov-providermismatch');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official, { source_provider_slug: 'mock-provider-b' });
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
 });
 
-test('stage policy requirement: binding valid=true não mascara domain mismatch', () => {
-  const official = buildOfficialNetworkPolicy('valid-flag-domain-mismatch-net');
-  const binding = { ...validNetworkBinding(official), network_policy_reference_valid: true };
-  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
-  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const result = evaluatePolicyReferenceMatch('network', TOOL_STAGE, worker, binding, canonical, officialMap('network', official), hintMap('stage-1'));
-  assert.equal(result.match, false);
-  assert.equal(result.reason, 'worker_network_official_policy_domain_mismatch');
+test('resolveRequirementProvenance: domain declarado divergente da source recomputada is unresolvable, never trusted from the hint', () => {
+  const official = buildOfficialModelSelectionDecision('prov-domainmismatch');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official, { source_stage_domain: 'GENERIC_DOMAIN' });
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
 });
 
-test('stage policy requirement: input order of stage policy requirement hints never alters the result', () => {
-  const official = buildOfficialNetworkPolicy('hint-order-net');
-  const binding = validNetworkBinding(official);
-  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
-  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const hintA = buildStagePolicyRequirementHint('stage-1');
-  const hintB = buildStagePolicyRequirementHint('stage-2', { provider_slug: 'mock-provider-b' });
-  const mapAB = new Map([[hintA.scheduler_stage_reference_id, hintA], [hintB.scheduler_stage_reference_id, hintB]]);
-  const mapBA = new Map([[hintB.scheduler_stage_reference_id, hintB], [hintA.scheduler_stage_reference_id, hintA]]);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, officialMap('network', official), mapAB).match, true);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, officialMap('network', official), mapBA).match, true);
+test('resolveRequirementProvenance: model source usada para tool bloqueia (source_reference_type mismatch)', () => {
+  const officialModel = buildOfficialModelSelectionDecision('provgenfortool');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', officialModel.decision_id, officialModel, { requirement_element: 'TOOL' });
+  const toolRequirement = { requirement_element: 'TOOL', source_reference_id: officialModel.decision_id, destination_class: 'TRANSPORT', secret_purpose: 'TOOL_ACCESS', required_capabilities: [], required_modalities: [] };
+  const result = resolveRequirementProvenance(toolRequirement, hint, sourcesMap(officialModel));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
 });
 
-test('stage policy requirement: context never alters the derived requirement or its match outcome', () => {
-  const official = buildOfficialNetworkPolicy('context-inert-net');
-  const binding = validNetworkBinding(official);
-  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
-  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
-  const netMap = officialMap('network', official);
-  const hints = hintMap('stage-1');
-  const result1 = evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, netMap, hints);
-  const result2 = evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, netMap, hints);
-  assert.deepEqual(result1, result2);
+test('resolveRequirementProvenance: tool source usada para workflow bloqueia (source_reference_type mismatch)', () => {
+  const officialModel = buildOfficialModelSelectionDecision('prov-toolforworkflow');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', officialModel.decision_id, officialModel, { requirement_element: 'WORKFLOW', source_reference_type: 'TOOL_CONTRACT_REFERENCE' });
+  const workflowRequirement = { requirement_element: 'WORKFLOW', source_reference_id: officialModel.decision_id, destination_class: 'INTERNAL_SERVICE', secret_purpose: 'WORKFLOW_ACCESS', required_capabilities: [], required_modalities: [] };
+  const result = resolveRequirementProvenance(workflowRequirement, hint, sourcesMap(officialModel));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
 });
 
-test('stage policy requirement: no network access and no secret resolution ever occurs while deriving or cross-checking a requirement', () => {
-  const hint = buildStagePolicyRequirementHint('stage-1');
+test('resolveRequirementProvenance: RESOLVED sem objeto oficial correspondente no registry bloqueia', () => {
+  const official = buildOfficialModelSelectionDecision('prov-noregistry');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, new Map());
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('resolveRequirementProvenance: UNRESOLVED nunca produz match, mesmo com um objeto oficial genuíno disponível', () => {
+  const official = buildOfficialModelSelectionDecision('prov-unresolved');
+  const hint = buildUnresolvedRequirementHint('stage-1', 'MODEL', official.decision_id);
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('resolveRequirementProvenance: self-fingerprint válido do hint não mascara provenance inválida', () => {
+  const official = buildOfficialModelSelectionDecision('prov-selfvalid');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  assertValid('hint self-fingerprint is genuinely valid', validateRuntimeWorkerStagePolicyRequirementReference(hint));
+  const tamperedOfficial = { ...official, selected_model_id: 'a-different-model-entirely' };
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(tamperedOfficial));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('stage policy requirement provenance: no network access and no secret resolution ever occurs while resolving provenance', () => {
+  const official = buildOfficialModelSelectionDecision('no-network-check');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
   assert.deepEqual(findAgentCoreOperationalMaterial(hint), []);
+  assert.deepEqual(findAgentCoreOperationalMaterial(official), []);
+});
+
+// --- Worker Assignment Package integrity (pr106fix4 FIX 3) -----------------------------------------
+// "O Worker Assignment Package inclui Replay, policies oficiais, requirements e suas fontes no
+// próprio fingerprint e digest."
+
+test('package integrity: replay_fingerprint in a prepared package is the genuine replay fingerprint, never the placeholder', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcome.package.replay_fingerprint, 'fingerprint_not_available');
+  assert.equal(outcome.package.replay_fingerprint, golden.workerAssignmentRequest.runtime_replay_reference.replay_fingerprint);
+});
+
+test('package integrity: altering an official network policy changes the package fingerprint', () => {
+  const goldenA = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { networkPermissionPolicyRefs: [buildOfficialNetworkPolicy('net-fp-a')] });
+  const goldenB = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { networkPermissionPolicyRefs: [buildOfficialNetworkPolicy('net-fp-b')] });
+  const outcomeA = evaluateRuntimeWorkerAssignmentRequest(goldenA.workerAssignmentRequest, {});
+  const outcomeB = evaluateRuntimeWorkerAssignmentRequest(goldenB.workerAssignmentRequest, {});
+  assert.equal(outcomeA.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeB.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcomeA.package.official_network_policy_fingerprints[0], outcomeB.package.official_network_policy_fingerprints[0]);
+  assert.notEqual(outcomeA.package.worker_assignment_package_fingerprint, outcomeB.package.worker_assignment_package_fingerprint);
+  assert.notEqual(outcomeA.package.worker_assignment_package_digest, outcomeB.package.worker_assignment_package_digest);
+});
+
+test('package integrity: altering an official secret policy changes the package fingerprint', () => {
+  const goldenA = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { secretResolutionPolicyRefs: [buildOfficialSecretPolicy('sec-fp-a', 'tenant-a')] });
+  const goldenB = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { secretResolutionPolicyRefs: [buildOfficialSecretPolicy('sec-fp-b', 'tenant-a')] });
+  const outcomeA = evaluateRuntimeWorkerAssignmentRequest(goldenA.workerAssignmentRequest, {});
+  const outcomeB = evaluateRuntimeWorkerAssignmentRequest(goldenB.workerAssignmentRequest, {});
+  assert.equal(outcomeA.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeB.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcomeA.package.official_secret_policy_fingerprints[0], outcomeB.package.official_secret_policy_fingerprints[0]);
+  assert.notEqual(outcomeA.package.worker_assignment_package_fingerprint, outcomeB.package.worker_assignment_package_fingerprint);
+});
+
+test('package integrity: altering a stage policy requirement changes the package fingerprint', () => {
+  const hintA = buildUnresolvedRequirementHint('any-stage', 'TOOL', 'tool-x');
+  const hintB = buildUnresolvedRequirementHint('any-stage', 'TOOL', 'tool-y');
+  const goldenA = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { stagePolicyRequirementRefs: [hintA] });
+  const goldenB = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { stagePolicyRequirementRefs: [hintB] });
+  const outcomeA = evaluateRuntimeWorkerAssignmentRequest(goldenA.workerAssignmentRequest, {});
+  const outcomeB = evaluateRuntimeWorkerAssignmentRequest(goldenB.workerAssignmentRequest, {});
+  assert.equal(outcomeA.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeB.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcomeA.package.stage_policy_requirement_fingerprints[0], outcomeB.package.stage_policy_requirement_fingerprints[0]);
+  assert.notEqual(outcomeA.package.worker_assignment_package_fingerprint, outcomeB.package.worker_assignment_package_fingerprint);
+});
+
+test('package integrity: altering a stage policy requirement source changes the package fingerprint', () => {
+  const sourceA = buildOfficialModelSelectionDecision('source-fp-a');
+  const sourceB = buildOfficialModelSelectionDecision('source-fp-b');
+  const goldenA = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { modelSelectionDecisionRefs: [sourceA] });
+  const goldenB = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { modelSelectionDecisionRefs: [sourceB] });
+  const outcomeA = evaluateRuntimeWorkerAssignmentRequest(goldenA.workerAssignmentRequest, {});
+  const outcomeB = evaluateRuntimeWorkerAssignmentRequest(goldenB.workerAssignmentRequest, {});
+  assert.equal(outcomeA.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeB.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcomeA.package.stage_policy_requirement_source_fingerprints[0], outcomeB.package.stage_policy_requirement_source_fingerprints[0]);
+  assert.notEqual(outcomeA.package.worker_assignment_package_fingerprint, outcomeB.package.worker_assignment_package_fingerprint);
+});
+
+test('package integrity: input order of official policies never alters the package fingerprint', () => {
+  const netA = buildOfficialNetworkPolicy('order-net-a');
+  const netB = buildOfficialNetworkPolicy('order-net-b');
+  const goldenAB = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { networkPermissionPolicyRefs: [netA, netB] });
+  const goldenBA = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { networkPermissionPolicyRefs: [netB, netA] });
+  const outcomeAB = evaluateRuntimeWorkerAssignmentRequest(goldenAB.workerAssignmentRequest, {});
+  const outcomeBA = evaluateRuntimeWorkerAssignmentRequest(goldenBA.workerAssignmentRequest, {});
+  assert.equal(outcomeAB.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeBA.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.deepEqual(outcomeAB.package.official_network_policy_fingerprints, outcomeBA.package.official_network_policy_fingerprints);
+  assert.equal(outcomeAB.package.worker_assignment_package_fingerprint, outcomeBA.package.worker_assignment_package_fingerprint);
+});
+
+test('package integrity: duplicate stage policy requirement (same stage+element+source) blocks as WORKER_ASSIGNMENT_POLICY_BLOCKED', () => {
+  const hint = buildUnresolvedRequirementHint('dup-stage', 'TOOL', 'tool-dup');
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { stagePolicyRequirementRefs: [hint, hint] });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_POLICY_BLOCKED');
+});
+
+test('package integrity: duplicate stage policy requirement source (same type+id) blocks as WORKER_ASSIGNMENT_POLICY_BLOCKED', () => {
+  const source = buildOfficialModelSelectionDecision('dup-source');
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { modelSelectionDecisionRefs: [source, source] });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_POLICY_BLOCKED');
+});
+
+test('package integrity: duplicate entries within a fingerprint list diverge from expected cardinality and are rejected', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  const tampered = { ...outcome.package, official_network_policy_fingerprints: ['sha256:' + 'a'.repeat(64), 'sha256:' + 'a'.repeat(64)] };
+  assertInvalid('duplicate fingerprint entries diverge from expected cardinality', validateRuntimeWorkerAssignmentPackage(tampered));
+});
+
+test('package integrity: package digest covers replay, official policies, requirements, and their sources', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { networkPermissionPolicyRefs: [buildOfficialNetworkPolicy('digest-cover-net')] });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  for (const field of ['official_network_policy_fingerprints', 'official_secret_policy_fingerprints', 'stage_policy_requirement_fingerprints', 'stage_policy_requirement_source_fingerprints', 'replay_fingerprint']) {
+    const original = outcome.package[field];
+    const tamperedValue = Array.isArray(original) ? [...original, 'sha256:' + 'b'.repeat(64)].sort() : 'sha256:' + 'b'.repeat(64);
+    const tampered = { ...outcome.package, [field]: tamperedValue };
+    assertInvalid(`tampering ${field} invalidates the stored digest`, validateRuntimeWorkerAssignmentPackage(tampered));
+  }
 });
 
 test('worker assignment boundary: secret policy fingerprint tamper is rejected at the contract level, never silently accepted', () => {
