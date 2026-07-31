@@ -39,7 +39,8 @@ const UPSTREAM_FINGERPRINT_FIELDS = Object.freeze([
 
 const DERIVED_FINGERPRINT_LIST_FIELDS = Object.freeze([
   'worker_fingerprints', 'worker_capability_fingerprints', 'worker_capacity_fingerprints',
-  'worker_health_fingerprints', 'compatibility_fingerprints', 'candidate_set_fingerprints', 'assignment_fingerprints'
+  'worker_health_fingerprints', 'worker_network_policy_fingerprints', 'worker_secret_policy_fingerprints',
+  'compatibility_fingerprints', 'candidate_set_fingerprints', 'assignment_fingerprints'
 ]);
 
 const RUNTIME_WORKER_ASSIGNMENT_PACKAGE_FIELDS = Object.freeze([

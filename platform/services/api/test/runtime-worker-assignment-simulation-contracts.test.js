@@ -40,6 +40,15 @@ const { validateRuntimeWorkerAssignmentResult } = require('../src/core/runtime-w
 const { validateRuntimeWorkerAssignmentAudit } = require('../src/core/runtime-worker-assignment-audit');
 const { createRuntimeWorkerAssignmentRegistry } = require('../src/core/runtime-worker-assignment-registry');
 const { runAllGates } = require('../src/core/architecture-gate-runner');
+const {
+  validateRuntimeWorkerNetworkPolicyReference, buildRuntimeWorkerNetworkPolicyReference, RUNTIME_WORKER_NETWORK_POLICY_REFERENCE_FIELDS
+} = require('../src/core/runtime-worker-network-policy-reference');
+const {
+  validateRuntimeWorkerSecretPolicyReference, buildRuntimeWorkerSecretPolicyReference, RUNTIME_WORKER_SECRET_POLICY_REFERENCE_FIELDS
+} = require('../src/core/runtime-worker-secret-policy-reference');
+const {
+  deriveStageRequiresNetworkOrSecret, evaluatePolicyReferenceMatch, evaluateHealthAtAssignment
+} = require('../src/core/runtime-worker-assignment-boundary');
 
 const {
   buildGoldenWorkerAssignmentBundle, buildWorkerPool, evaluateRuntimeWorkerAssignmentRequest
@@ -437,6 +446,8 @@ test('worker assignment boundary: candidate-order-deterministic -- input order o
   });
   const outcome1 = evaluateRuntimeWorkerAssignmentRequest(golden1.workerAssignmentRequest, {});
   const outcome2 = evaluateRuntimeWorkerAssignmentRequest(golden2.workerAssignmentRequest, {});
+  assert.equal(outcome1.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcome2.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
   assert.deepEqual(
     outcome1.assignmentRefs.map((a) => a.recommended_worker_reference_id).sort(),
     outcome2.assignmentRefs.map((a) => a.recommended_worker_reference_id).sort()
@@ -459,10 +470,92 @@ test('worker assignment boundary: unhealthy worker blocks as WORKER_ASSIGNMENT_N
   assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
 });
 
-test('worker assignment boundary: expired worker health blocks as WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED', () => {
-  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { health: { current_logical_sequence: 5000 } } });
+test('worker assignment boundary: health expired between creation and assignment blocks as WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED', () => {
+  // pr106fix FIX 2: health_created_logical_sequence/current_logical_sequence stay at 0 (no
+  // regression relative to the request), but maximum_valid_sequences is small and the request's own
+  // logical_sequence has moved forward past it -- a genuine "aged since creation" expiration,
+  // recomputed on request.logical_sequence, never on the health reference's own frozen sequence.
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerPool: { health: { maximum_valid_sequences: 10 } },
+    request: { logical_sequence: 50 }
+  });
   const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
   assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+});
+
+test('worker assignment boundary: health current_logical_sequence ahead of the assignment request blocks as WORKER_ASSIGNMENT_HEALTH_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { health: { current_logical_sequence: 5000 } } });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_HEALTH_BLOCKED');
+});
+
+test('worker assignment boundary: health_created_logical_sequence ahead of the assignment request blocks as WORKER_ASSIGNMENT_HEALTH_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { health: { health_created_logical_sequence: 5000, current_logical_sequence: 5000 } } });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_HEALTH_BLOCKED');
+});
+
+test('worker assignment boundary: health valid at the same sequence as the request stays selectable', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { health: { current_logical_sequence: 0 } }, request: { logical_sequence: 0 } });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+});
+
+test('worker assignment boundary: health valid at a later sequence within the limit stays selectable', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerPool: { health: { maximum_valid_sequences: 1000 } }, request: { logical_sequence: 50 }
+  });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+});
+
+for (const status of ['DEGRADED_REFERENCE', 'UNHEALTHY_REFERENCE', 'UNKNOWN_REFERENCE', 'EXPIRED_REFERENCE']) {
+  test(`worker assignment boundary: health status ${status} blocks as WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED`, () => {
+    const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { health: { health_status: status } } });
+    const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+    assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+  });
+}
+
+test('worker assignment boundary: invalid health binding flag blocks as WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { health: { capability_reference_valid: false } } });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+});
+
+test('worker assignment boundary: a caller-supplied health_validated=true never masks expiration recomputed at the assignment sequence', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerPool: { health: { maximum_valid_sequences: 10 } },
+    request: { logical_sequence: 50 }
+  });
+  assert.equal(golden.pool.health.health_validated, true);
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+});
+
+test('worker assignment boundary: a caller-supplied health_expired_logically=false never masks expiration recomputed at the assignment sequence', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerPool: { health: { maximum_valid_sequences: 10 } },
+    request: { logical_sequence: 50 }
+  });
+  assert.equal(golden.pool.health.health_expired_logically, false);
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+});
+
+test('evaluateHealthAtAssignment: unit coverage of every branch', () => {
+  const healthyBase = {
+    current_logical_sequence: 0, health_created_logical_sequence: 0, maximum_valid_sequences: 1000,
+    health_status: 'HEALTHY_REFERENCE_SIMULATION', configuration_valid: true, registration_valid: true,
+    capability_reference_valid: true, capacity_reference_valid: true, policy_references_valid: true
+  };
+  assert.equal(evaluateHealthAtAssignment(healthyBase, 0).match, true);
+  assert.equal(evaluateHealthAtAssignment(healthyBase, 500).match, true);
+  assert.equal(evaluateHealthAtAssignment({ ...healthyBase, current_logical_sequence: 10 }, 5).reason, 'worker_health_sequence_regressive');
+  assert.equal(evaluateHealthAtAssignment({ ...healthyBase, health_created_logical_sequence: 10 }, 5).reason, 'worker_health_sequence_regressive');
+  assert.equal(evaluateHealthAtAssignment(healthyBase, 1500).reason, 'worker_health_expired_at_assignment_sequence');
+  assert.equal(evaluateHealthAtAssignment({ ...healthyBase, health_status: 'DEGRADED_REFERENCE' }, 0).reason, 'worker_health_status_not_healthy');
+  assert.equal(evaluateHealthAtAssignment({ ...healthyBase, registration_valid: false }, 0).reason, 'worker_health_binding_invalid');
 });
 
 test('worker assignment boundary: exhausted worker capacity blocks as WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED', () => {
@@ -471,6 +564,141 @@ test('worker assignment boundary: exhausted worker capacity blocks as WORKER_ASS
   });
   const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
   assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+});
+
+// --- Network / Secret Policy Reference (pr106fix FIX 1) ------------------------------------------
+
+test('network policy reference: valid contract, exact fields, genuine fingerprint', () => {
+  const ref = buildRuntimeWorkerNetworkPolicyReference({
+    worker_network_policy_reference_id: 'w1-netpolicy', runtime_worker_reference_id: 'w1',
+    runtime_environment_reference_id: 'w1-env', network_policy_reference_id: 'w1-network-policy',
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1'
+  });
+  assertValid('network policy reference', validateRuntimeWorkerNetworkPolicyReference(ref));
+  assert.deepEqual(Object.keys(ref).sort(), [...RUNTIME_WORKER_NETWORK_POLICY_REFERENCE_FIELDS].sort());
+  assert.equal(ref.project_id, 'proj-1');
+  assertInvalid('tampered fingerprint', validateRuntimeWorkerNetworkPolicyReference({ ...ref, network_policy_fingerprint: 'sha256:' + 'f'.repeat(64) }));
+});
+
+test('network policy reference: project_id may be null (shared / non-project-scoped policy)', () => {
+  const ref = buildRuntimeWorkerNetworkPolicyReference({
+    worker_network_policy_reference_id: 'w2-netpolicy', runtime_worker_reference_id: 'w2',
+    runtime_environment_reference_id: 'w2-env', network_policy_reference_id: 'w2-network-policy',
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1'
+  });
+  assert.equal(ref.project_id, null);
+  assertValid('nullable project', validateRuntimeWorkerNetworkPolicyReference(ref));
+});
+
+test('secret policy reference: valid contract, exact fields, genuine fingerprint', () => {
+  const ref = buildRuntimeWorkerSecretPolicyReference({
+    worker_secret_policy_reference_id: 'w1-secpolicy-ref', runtime_worker_reference_id: 'w1',
+    runtime_environment_reference_id: 'w1-env', secret_policy_reference_id: 'w1-secpolicy-reference',
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1'
+  });
+  assertValid('secret policy reference', validateRuntimeWorkerSecretPolicyReference(ref));
+  assert.deepEqual(Object.keys(ref).sort(), [...RUNTIME_WORKER_SECRET_POLICY_REFERENCE_FIELDS].sort());
+  assertInvalid('tampered fingerprint', validateRuntimeWorkerSecretPolicyReference({ ...ref, secret_policy_fingerprint: 'sha256:' + 'f'.repeat(64) }));
+});
+
+test('deriveStageRequiresNetworkOrSecret: only stages reaching model/tool/workflow require network or secret access', () => {
+  const base = { model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null };
+  assert.equal(deriveStageRequiresNetworkOrSecret(base), false);
+  assert.equal(deriveStageRequiresNetworkOrSecret({ ...base, model_selection_reference_id: 'model-ref-1' }), true);
+  assert.equal(deriveStageRequiresNetworkOrSecret({ ...base, tool_reference_ids: ['tool-a'] }), true);
+  assert.equal(deriveStageRequiresNetworkOrSecret({ ...base, workflow_reference_id: 'flow-a' }), true);
+});
+
+test('evaluatePolicyReferenceMatch: stage with no requirement is NOT_APPLICABLE (match true) regardless of policy state', () => {
+  const stage = { model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null };
+  const result = evaluatePolicyReferenceMatch('network', stage, { network_policy_reference_id: 'w1-network-policy' }, undefined, { tenantId: 't', organizationId: 'o', projectId: 'p' });
+  assert.equal(result.match, true);
+  assert.equal(result.reason, null);
+});
+
+test('evaluatePolicyReferenceMatch: required stage with no policy reference bound blocks with missing reason', () => {
+  const stage = { model_selection_reference_id: 'model-ref-1', tool_reference_ids: [], workflow_reference_id: null };
+  const result = evaluatePolicyReferenceMatch('network', stage, { network_policy_reference_id: 'w1-network-policy' }, undefined, { tenantId: 't', organizationId: 'o', projectId: 'p' });
+  assert.equal(result.match, false);
+  assert.equal(result.reason, 'worker_network_policy_reference_missing');
+});
+
+test('evaluatePolicyReferenceMatch: ID/version/tenant/organization/project/environment mismatch each block with a distinct reason', () => {
+  const stage = { model_selection_reference_id: 'model-ref-1', tool_reference_ids: [], workflow_reference_id: null };
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const validPolicyRef = {
+    network_policy_reference_id: 'w1-network-policy', network_policy_reference_valid: true,
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1', runtime_environment_reference_id: 'w1-env'
+  };
+  assert.equal(evaluatePolicyReferenceMatch('network', stage, worker, validPolicyRef, canonical).match, true);
+  assert.equal(evaluatePolicyReferenceMatch('network', stage, worker, { ...validPolicyRef, network_policy_reference_id: 'other-id' }, canonical).reason, 'worker_network_policy_id_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', stage, worker, { ...validPolicyRef, network_policy_reference_valid: false }, canonical).reason, 'worker_network_policy_reference_invalid');
+  assert.equal(evaluatePolicyReferenceMatch('network', stage, worker, { ...validPolicyRef, tenant_id: 'other-tenant' }, canonical).reason, 'worker_network_policy_tenant_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', stage, worker, { ...validPolicyRef, organization_id: 'other-org' }, canonical).reason, 'worker_network_policy_organization_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', stage, worker, { ...validPolicyRef, project_id: 'other-project' }, canonical).reason, 'worker_network_policy_project_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', stage, worker, { ...validPolicyRef, runtime_environment_reference_id: 'other-env' }, canonical).reason, 'worker_network_policy_environment_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('secret', stage, { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' }, {
+    secret_policy_reference_id: 'other-id', secret_policy_reference_valid: true, tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1', runtime_environment_reference_id: 'w1-env'
+  }, canonical).reason, 'worker_secret_policy_id_mismatch');
+});
+
+test('worker assignment boundary: model stage with a compatible network/secret policy reaches WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const modelStage = golden.schedulerOutcome.schedulerStageRefs[0];
+  assert.equal(evaluatePolicyReferenceMatch('network', { ...modelStage, model_selection_reference_id: 'model-ref-1' }, golden.pool.worker, golden.pool.networkPolicy, {
+    tenantId: golden.runtimePackage.tenant_id, organizationId: golden.runtimePackage.organization_id, projectId: golden.runtimePackage.project_id
+  }).match, true);
+});
+
+test('worker assignment boundary: network policy ID mismatch on the only worker blocks as WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED when the stage requires it', () => {
+  const stage = { model_selection_reference_id: 'model-ref-1', tool_reference_ids: [], workflow_reference_id: null, side_effect_classification: 'NONE' };
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const mismatched = { network_policy_reference_id: 'other-id', network_policy_reference_valid: true, tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1', runtime_environment_reference_id: 'w1-env' };
+  assert.equal(evaluatePolicyReferenceMatch('network', stage, worker, mismatched, canonical).match, false);
+});
+
+test('worker assignment boundary: secret policy fingerprint tamper is rejected at the contract level, never silently accepted', () => {
+  const ref = buildRuntimeWorkerSecretPolicyReference({
+    worker_secret_policy_reference_id: 'w1-secpolicy-ref', runtime_worker_reference_id: 'w1',
+    runtime_environment_reference_id: 'w1-env', secret_policy_reference_id: 'w1-secpolicy-reference',
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1'
+  });
+  const tampered = { ...ref, secret_policy_reference_id: 'tampered-id' };
+  assertInvalid('tampered secret policy id without fingerprint recompute', validateRuntimeWorkerSecretPolicyReference(tampered));
+});
+
+test('worker assignment boundary: duplicate network policy reference for the same worker blocks as WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const request = rebuild({ ...golden.workerAssignmentRequest, runtime_worker_network_policy_references: [golden.pool.networkPolicy, golden.pool.networkPolicy] });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED');
+});
+
+test('worker assignment boundary: network/secret policy reference orphaned to a nonexistent worker blocks as WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const orphan = buildRuntimeWorkerNetworkPolicyReference({
+    worker_network_policy_reference_id: 'orphan-netpolicy', runtime_worker_reference_id: 'nonexistent-worker-id',
+    runtime_environment_reference_id: 'nonexistent-env', network_policy_reference_id: 'nonexistent-network-policy',
+    tenant_id: golden.runtimePackage.tenant_id, organization_id: golden.runtimePackage.organization_id, project_id: golden.runtimePackage.project_id
+  });
+  const request = rebuild({ ...golden.workerAssignmentRequest, runtime_worker_network_policy_references: [golden.pool.networkPolicy, orphan] });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED');
+});
+
+test('worker assignment boundary: context never alters network/secret policy evaluation', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const withContext = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, { networkAllowed: true, secretResolved: true });
+  const withoutContext = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.deepEqual(withContext.decision, withoutContext.decision);
+});
+
+test('worker assignment boundary: no network access and no secret resolution ever occurs while evaluating policy references', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  assert.deepEqual(findAgentCoreOperationalMaterial(golden.pool.networkPolicy), []);
+  assert.deepEqual(findAgentCoreOperationalMaterial(golden.pool.secretPolicy), []);
 });
 
 test('worker assignment boundary: scheduler not prepared blocks as WORKER_ASSIGNMENT_SCHEDULER_BLOCKED', () => {

@@ -38,47 +38,102 @@ function omitReplayReference(obj) {
 
 // --- Compatibility derivation ---------------------------------------------------------------------
 
-// Every one of the 17 match dimensions, recomputed from the real stage/worker/capability/capacity/
-// health data -- "Não aceitar worker_compatible=true como fonte de verdade."
-function deriveMatches(stage, worker, capability, capacity, health, canonical, freshnessValid) {
+// pr106fix FIX 1: a stage only requires network/secret access when it actually reaches an external
+// capability (model provider call, tool invocation, workflow orchestration) -- a pure no-LLM/
+// deterministic stage genuinely has no requirement, represented explicitly as NOT_APPLICABLE (match
+// true via this named rule), never inferred from string presence.
+function deriveStageRequiresNetworkOrSecret(stage) {
   const hasModel = stage.model_selection_reference_id !== null;
   const hasTools = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0;
   const hasWorkflow = stage.workflow_reference_id !== null;
+  return hasModel || hasTools || hasWorkflow;
+}
+
+// pr106fix FIX 1: genuine 1:1 policy reference comparison -- ID, version, fingerprint, and tenant/
+// organization/project/environment binding, never a string-presence pass-through. `policyRef` is the
+// (at most one) RuntimeWorkerNetworkPolicyReference/RuntimeWorkerSecretPolicyReference bound to this
+// worker, looked up by runtime_worker_reference_id.
+function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical) {
+  const idField = `${kind}_policy_reference_id`;
+  const versionField = `${kind}_policy_version`;
+  const fingerprintField = `${kind}_policy_fingerprint`;
+  const validField = `${kind}_policy_reference_valid`;
+  if (!deriveStageRequiresNetworkOrSecret(stage)) return { match: true, reason: null };
+  if (!isPlainObject(policyRef)) return { match: false, reason: `worker_${kind}_policy_reference_missing` };
+  if (policyRef[idField] !== worker[idField]) return { match: false, reason: `worker_${kind}_policy_id_mismatch` };
+  if (policyRef[validField] !== true) return { match: false, reason: `worker_${kind}_policy_reference_invalid` };
+  if (policyRef.tenant_id !== canonical.tenantId) return { match: false, reason: `worker_${kind}_policy_tenant_mismatch` };
+  if (policyRef.organization_id !== canonical.organizationId) return { match: false, reason: `worker_${kind}_policy_organization_mismatch` };
+  if (policyRef.project_id !== null && policyRef.project_id !== canonical.projectId) return { match: false, reason: `worker_${kind}_policy_project_mismatch` };
+  if (policyRef.runtime_environment_reference_id !== worker.runtime_environment_reference_id) return { match: false, reason: `worker_${kind}_policy_environment_mismatch` };
+  void versionField;
+  void fingerprintField;
+  return { match: true, reason: null };
+}
+
+// pr106fix FIX 2: worker health is reavaliated on the Worker Assignment Request's own
+// logical_sequence -- a health reference valid at an earlier sequence can have expired by the time
+// assignment is evaluated; the contract's own `health_validated`/`health_expired_logically` (computed
+// against the health reference's own frozen current_logical_sequence) are never trusted alone.
+function evaluateHealthAtAssignment(health, requestLogicalSequence) {
+  if (requestLogicalSequence < health.current_logical_sequence || requestLogicalSequence < health.health_created_logical_sequence) {
+    return { match: false, reason: 'worker_health_sequence_regressive', structural: true };
+  }
+  const healthExpiredAtAssignment = (requestLogicalSequence - health.health_created_logical_sequence) > health.maximum_valid_sequences;
+  if (healthExpiredAtAssignment) return { match: false, reason: 'worker_health_expired_at_assignment_sequence', structural: false };
+  if (health.health_status !== 'HEALTHY_REFERENCE_SIMULATION') return { match: false, reason: 'worker_health_status_not_healthy', structural: false };
+  const bindingsValid = health.configuration_valid === true && health.registration_valid === true
+    && health.capability_reference_valid === true && health.capacity_reference_valid === true && health.policy_references_valid === true;
+  if (!bindingsValid) return { match: false, reason: 'worker_health_binding_invalid', structural: false };
+  return { match: true, reason: null, structural: false };
+}
+
+// Every one of the 17 match dimensions, recomputed from the real stage/worker/capability/capacity/
+// health/policy data -- "Não aceitar worker_compatible=true como fonte de verdade."
+function deriveMatches(stage, worker, capability, capacity, health, canonical, freshnessValid, requestLogicalSequence, networkPolicyRef, secretPolicyRef) {
+  const hasModel = stage.model_selection_reference_id !== null;
+  const hasTools = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0;
+  const hasWorkflow = stage.workflow_reference_id !== null;
+  const networkEvaluation = evaluatePolicyReferenceMatch('network', stage, worker, networkPolicyRef, canonical);
+  const secretEvaluation = evaluatePolicyReferenceMatch('secret', stage, worker, secretPolicyRef, canonical);
+  const healthEvaluation = evaluateHealthAtAssignment(health, requestLogicalSequence);
   return {
-    tenant_match: worker.tenant_scope_id === null || worker.tenant_scope_id === canonical.tenantId,
-    organization_match: worker.organization_scope_id === null || worker.organization_scope_id === canonical.organizationId,
-    project_match: worker.project_scope_id === null || worker.project_scope_id === canonical.projectId,
-    agent_scope_match: worker.agent_scope_ids.length === 0 || worker.agent_scope_ids.includes(canonical.agentId),
-    stage_type_match: capability.stage_type_ids.includes(stage.stage_type),
-    capability_match: stage.required_capabilities.every((id) => capability.capability_ids.includes(id)),
-    modality_match: stage.required_modalities.every((id) => capability.modality_ids.includes(id)),
-    model_support_match: !hasModel || capability.supports_model_reference === true,
-    tool_support_match: !hasTools || stage.tool_reference_ids.every((id) => capability.tool_ids.includes(id)),
-    workflow_support_match: !hasWorkflow || capability.workflow_ids.includes(stage.workflow_reference_id),
-    // No per-stage network/secret policy requirement is carried by this request (see
-    // HERMES_RUNTIME_WORKER_ASSIGNMENT_SIMULATION_CONTRACTS.md's own "Limitações") -- every worker's
-    // own declarative network/secret policy reference is already structurally required to be
-    // present (see runtime-worker-reference.js); with no per-stage constraint to compare it against,
-    // this dimension is a declarative pass-through, never silently assumed incompatible.
-    network_policy_match: isPlainObject(worker) && typeof worker.network_policy_reference_id === 'string',
-    secret_policy_match: isPlainObject(worker) && typeof worker.secret_policy_reference_id === 'string',
-    // External/irreversible effects are already forced false on every worker capability
-    // (supports_external_effect_reference/supports_irreversible_reference) and already blocked at
-    // the Scheduler layer for any stage that carries one -- this dimension is true whenever the
-    // stage reaches this boundary at all.
-    effect_policy_match: stage.side_effect_classification !== 'EXTERNAL_EFFECT_REFERENCE' && stage.side_effect_classification !== 'IRREVERSIBLE_REFERENCE',
-    health_match: health.health_status === 'HEALTHY_REFERENCE_SIMULATION' && health.health_validated === true,
-    capacity_match: (
-      capacity.available_stage_assignments >= 1
-      && (!stage.parallelizable || capacity.available_parallel_assignments >= 1)
-      && (!hasModel || capacity.available_model_assignments >= 1)
-      && (!hasTools || capacity.available_tool_assignments >= 1)
-      && (!hasWorkflow || capacity.available_workflow_assignments >= 1)
-      && capacity.available_token_capacity >= stage.estimated_total_tokens
-      && capacity.available_cost_capacity_minor_units >= stage.estimated_cost_minor_units
-    ),
-    concurrency_match: worker.available_parallel_assignments >= 1,
-    freshness_match: freshnessValid === true
+    matches: {
+      tenant_match: worker.tenant_scope_id === null || worker.tenant_scope_id === canonical.tenantId,
+      organization_match: worker.organization_scope_id === null || worker.organization_scope_id === canonical.organizationId,
+      project_match: worker.project_scope_id === null || worker.project_scope_id === canonical.projectId,
+      agent_scope_match: worker.agent_scope_ids.length === 0 || worker.agent_scope_ids.includes(canonical.agentId),
+      stage_type_match: capability.stage_type_ids.includes(stage.stage_type),
+      capability_match: stage.required_capabilities.every((id) => capability.capability_ids.includes(id)),
+      modality_match: stage.required_modalities.every((id) => capability.modality_ids.includes(id)),
+      model_support_match: !hasModel || capability.supports_model_reference === true,
+      tool_support_match: !hasTools || stage.tool_reference_ids.every((id) => capability.tool_ids.includes(id)),
+      workflow_support_match: !hasWorkflow || capability.workflow_ids.includes(stage.workflow_reference_id),
+      network_policy_match: networkEvaluation.match,
+      secret_policy_match: secretEvaluation.match,
+      // External/irreversible effects are already forced false on every worker capability
+      // (supports_external_effect_reference/supports_irreversible_reference) and already blocked at
+      // the Scheduler layer for any stage that carries one -- this dimension is true whenever the
+      // stage reaches this boundary at all.
+      effect_policy_match: stage.side_effect_classification !== 'EXTERNAL_EFFECT_REFERENCE' && stage.side_effect_classification !== 'IRREVERSIBLE_REFERENCE',
+      health_match: healthEvaluation.match,
+      capacity_match: (
+        capacity.available_stage_assignments >= 1
+        && (!stage.parallelizable || capacity.available_parallel_assignments >= 1)
+        && (!hasModel || capacity.available_model_assignments >= 1)
+        && (!hasTools || capacity.available_tool_assignments >= 1)
+        && (!hasWorkflow || capacity.available_workflow_assignments >= 1)
+        && capacity.available_token_capacity >= stage.estimated_total_tokens
+        && capacity.available_cost_capacity_minor_units >= stage.estimated_cost_minor_units
+      ),
+      concurrency_match: worker.available_parallel_assignments >= 1,
+      freshness_match: freshnessValid === true
+    },
+    reasons: {
+      network_policy_match: networkEvaluation.reason,
+      secret_policy_match: secretEvaluation.reason,
+      health_match: healthEvaluation.reason
+    }
   };
 }
 
@@ -147,6 +202,8 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
   const workerCapabilityRefs = requestIsObject && Array.isArray(request.runtime_worker_capability_references) ? request.runtime_worker_capability_references : [];
   const workerCapacityRefs = requestIsObject && Array.isArray(request.runtime_worker_capacity_references) ? request.runtime_worker_capacity_references : [];
   const workerHealthRefs = requestIsObject && Array.isArray(request.runtime_worker_health_references) ? request.runtime_worker_health_references : [];
+  const workerNetworkPolicyRefs = requestIsObject && Array.isArray(request.runtime_worker_network_policy_references) ? request.runtime_worker_network_policy_references : [];
+  const workerSecretPolicyRefs = requestIsObject && Array.isArray(request.runtime_worker_secret_policy_references) ? request.runtime_worker_secret_policy_references : [];
 
   const canonical = {
     tenantId: isPlainObject(packageRef) ? packageRef.tenant_id : undefined,
@@ -275,14 +332,45 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
   }
   markValid('capabilities_validated');
 
-  // 16 (health portion).
+  // 16 (health portion). pr106fix FIX 2: beyond the 1:1 binding, every health reference's own
+  // sequence fields must not be ahead of this Worker Assignment Request's own logical_sequence --
+  // a health reference describing a "later" sequence than the request itself is a structural
+  // inconsistency, never just "this worker happens to be unhealthy for this stage".
   for (const worker of workerRefs) {
     const health = healthById.get(worker.worker_health_reference_id);
     if (!health || health.runtime_worker_reference_id !== worker.runtime_worker_reference_id) {
       return finalize('WORKER_ASSIGNMENT_HEALTH_BLOCKED', ['worker_health_reference_binding_mismatch']);
     }
+    if (request.logical_sequence < health.current_logical_sequence || request.logical_sequence < health.health_created_logical_sequence) {
+      return finalize('WORKER_ASSIGNMENT_HEALTH_BLOCKED', ['worker_health_sequence_regressive']);
+    }
   }
   markValid('health_validated');
+
+  // pr106fix FIX 1: network/secret policy references are optional per worker (only required when
+  // the worker is actually recommended for a stage that needs one -- see deriveMatches), but when
+  // present must be genuinely 1:1 -- never duplicated, never bound to a worker that does not exist.
+  const networkPolicyByWorkerId = new Map();
+  for (const ref of workerNetworkPolicyRefs) {
+    if (networkPolicyByWorkerId.has(ref.runtime_worker_reference_id)) {
+      return finalize('WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', ['duplicate_worker_network_policy_reference']);
+    }
+    if (!workerIds.includes(ref.runtime_worker_reference_id)) {
+      return finalize('WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', ['worker_network_policy_reference_orphaned']);
+    }
+    networkPolicyByWorkerId.set(ref.runtime_worker_reference_id, ref);
+  }
+  const secretPolicyByWorkerId = new Map();
+  for (const ref of workerSecretPolicyRefs) {
+    if (secretPolicyByWorkerId.has(ref.runtime_worker_reference_id)) {
+      return finalize('WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', ['duplicate_worker_secret_policy_reference']);
+    }
+    if (!workerIds.includes(ref.runtime_worker_reference_id)) {
+      return finalize('WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', ['worker_secret_policy_reference_orphaned']);
+    }
+    secretPolicyByWorkerId.set(ref.runtime_worker_reference_id, ref);
+  }
+  markValid('network_secret_policy_registry_validated');
 
   // 15 (capacity portion).
   for (const worker of workerRefs) {
@@ -343,7 +431,12 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
       const capability = capabilityById.get(worker.worker_capability_reference_id);
       const capacity = capacityById.get(worker.worker_capacity_reference_id);
       const health = healthById.get(worker.worker_health_reference_id);
-      const matches = deriveMatches(stage, worker, capability, capacity, health, canonical, freshnessRef.freshness_validated);
+      const networkPolicyRef = networkPolicyByWorkerId.get(worker.runtime_worker_reference_id);
+      const secretPolicyRef = secretPolicyByWorkerId.get(worker.runtime_worker_reference_id);
+      const { matches, reasons } = deriveMatches(
+        stage, worker, capability, capacity, health, canonical, freshnessRef.freshness_validated,
+        request.logical_sequence, networkPolicyRef, secretPolicyRef
+      );
       const ref = buildRuntimeWorkerCompatibilityReference({
         worker_compatibility_reference_id: `${stage.scheduler_stage_reference_id}-${worker.runtime_worker_reference_id}-compatibility`,
         runtime_worker_assignment_request_id: request.runtime_worker_assignment_request_id,
@@ -352,7 +445,7 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
         runtime_stage_reference_id: stage.runtime_stage_reference_id,
         runtime_worker_reference_id: worker.runtime_worker_reference_id,
         ...matches,
-        mismatch_reason_codes: Object.entries(matches).filter(([, v]) => v !== true).map(([k]) => k)
+        mismatch_reason_codes: Object.entries(matches).filter(([, v]) => v !== true).map(([k]) => reasons[k] || k)
       });
       compatibilityRefs.push(ref);
       compatibilityByStageAndWorker.set(`${stage.scheduler_stage_reference_id}::${worker.runtime_worker_reference_id}`, ref);
@@ -489,6 +582,7 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
   // buildWorkerAssignmentOutcome, over the exact derived data this evaluation produced.
   return finalize('WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION', ['worker_assignment_package_prepared_in_simulation_only'], {
     stages: schedulerStages, workerRefs, workerCapabilityRefs, workerCapacityRefs, workerHealthRefs,
+    workerNetworkPolicyRefs, workerSecretPolicyRefs,
     compatibilityRefs, candidateSetByStageId, assignmentRefs
   });
 }
@@ -497,6 +591,7 @@ function buildWorkerAssignmentOutcome(status, reasonCodes, ctx, validatedFlags) 
   const {
     request, requestFingerprint, canonical, schedulerDecisionRef, schedulerResultRef, schedulerPackageRef,
     packageRef, capacitySnapshotRef, concurrencyRef, freshnessRef, idempotencyReference,
+    workerNetworkPolicyRefs = [], workerSecretPolicyRefs = [],
     stages = [], workerRefs = [], workerCapabilityRefs = [], workerCapacityRefs = [], workerHealthRefs = [],
     compatibilityRefs = [], candidateSetByStageId = new Map(), assignmentRefs = []
   } = ctx;
@@ -556,6 +651,8 @@ function buildWorkerAssignmentOutcome(status, reasonCodes, ctx, validatedFlags) 
     worker_capability_fingerprints: workerCapabilityRefs.map((c) => c.capability_fingerprint),
     worker_capacity_fingerprints: workerCapacityRefs.map((c) => c.capacity_fingerprint),
     worker_health_fingerprints: workerHealthRefs.map((h) => h.health_fingerprint),
+    worker_network_policy_fingerprints: workerNetworkPolicyRefs.map((n) => n.network_policy_fingerprint),
+    worker_secret_policy_fingerprints: workerSecretPolicyRefs.map((s) => s.secret_policy_fingerprint),
     compatibility_fingerprints: compatibilityRefs.map((c) => c.compatibility_fingerprint),
     candidate_set_fingerprints: candidateSets.map((c) => c.candidate_set_fingerprint),
     assignment_fingerprints: assignmentRefs.map((a) => a.assignment_fingerprint),
@@ -635,6 +732,9 @@ function buildWorkerAssignmentOutcome(status, reasonCodes, ctx, validatedFlags) 
 }
 
 module.exports = {
+  deriveStageRequiresNetworkOrSecret,
+  evaluateHealthAtAssignment,
+  evaluatePolicyReferenceMatch,
   evaluateRuntimeWorkerAssignmentRequest,
   omitReplayReference
 };

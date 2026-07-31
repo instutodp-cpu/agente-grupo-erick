@@ -11,6 +11,8 @@ const { buildRuntimeWorkerReference } = require('../../src/core/runtime-worker-r
 const { buildRuntimeWorkerCapabilityReference } = require('../../src/core/runtime-worker-capability-reference');
 const { buildRuntimeWorkerCapacityReference } = require('../../src/core/runtime-worker-capacity-reference');
 const { buildRuntimeWorkerHealthReference } = require('../../src/core/runtime-worker-health-reference');
+const { buildRuntimeWorkerNetworkPolicyReference } = require('../../src/core/runtime-worker-network-policy-reference');
+const { buildRuntimeWorkerSecretPolicyReference } = require('../../src/core/runtime-worker-secret-policy-reference');
 const { buildRuntimeWorkerAssignmentRequest } = require('../../src/core/runtime-worker-assignment-request');
 const { evaluateRuntimeWorkerAssignmentRequest } = require('../../src/core/runtime-worker-assignment-boundary');
 
@@ -66,7 +68,31 @@ function buildWorkerPool(baseId, overrides = {}) {
     maximum_parallel_assignments: 50, current_parallel_assignments: 0,
     ...overrides.worker
   });
-  return { worker, capability, capacity, health };
+  // pr106fix FIX 1: genuine, 1:1-bound declarative network/secret policy references -- IDs match
+  // worker.network_policy_reference_id/secret_policy_reference_id exactly by default so the golden
+  // pool remains compatible for any stage that would require network/secret access; overrides can
+  // target any single field (id/version/fingerprint/tenant/organization/project/environment) to
+  // exercise a specific mismatch.
+  const tenantId = overrides.tenantId || 'tenant-a';
+  const organizationId = overrides.organizationId || 'tenant-a:org-1';
+  const projectId = overrides.projectId || 'proj-1';
+  const networkPolicy = buildRuntimeWorkerNetworkPolicyReference({
+    worker_network_policy_reference_id: `${baseId}-worker-network-policy-ref`,
+    runtime_worker_reference_id: worker.runtime_worker_reference_id,
+    runtime_environment_reference_id: worker.runtime_environment_reference_id,
+    network_policy_reference_id: worker.network_policy_reference_id,
+    tenant_id: tenantId, organization_id: organizationId, project_id: projectId,
+    ...overrides.networkPolicy
+  });
+  const secretPolicy = buildRuntimeWorkerSecretPolicyReference({
+    worker_secret_policy_reference_id: `${baseId}-worker-secpolicy-ref`,
+    runtime_worker_reference_id: worker.runtime_worker_reference_id,
+    runtime_environment_reference_id: worker.runtime_environment_reference_id,
+    secret_policy_reference_id: worker.secret_policy_reference_id,
+    tenant_id: tenantId, organization_id: organizationId, project_id: projectId,
+    ...overrides.secretPolicy
+  });
+  return { worker, capability, capacity, health, networkPolicy, secretPolicy };
 }
 
 function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan', overrides = {}) {
@@ -90,11 +116,23 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
     maximum_estimated_tokens_per_worker_reference: 100000000, maximum_estimated_cost_minor_units_per_worker_reference: 100000000
   });
 
-  const pool = buildWorkerPool(baseId, overrides.workerPool);
+  const pool = buildWorkerPool(baseId, {
+    tenantId: schedulerGolden.runtimePackage.tenant_id,
+    organizationId: schedulerGolden.runtimePackage.organization_id,
+    projectId: schedulerGolden.runtimePackage.project_id,
+    ...overrides.workerPool
+  });
   const workerRefs = overrides.workerRefs || [pool.worker];
   const workerCapabilityRefs = overrides.workerCapabilityRefs || [pool.capability];
   const workerCapacityRefs = overrides.workerCapacityRefs || [pool.capacity];
   const workerHealthRefs = overrides.workerHealthRefs || [pool.health];
+  // pr106fix: the default pool's own network/secret policy references are only valid alongside the
+  // default pool's own worker -- if the caller substitutes a custom workerRefs list without also
+  // supplying matching policy references, defaulting to the unrelated pool.networkPolicy/secretPolicy
+  // would silently attach an orphaned reference (bound to a worker that isn't even present) rather
+  // than the empty, NOT_APPLICABLE-safe list a no-llm-only custom worker set actually needs.
+  const workerNetworkPolicyRefs = overrides.workerNetworkPolicyRefs || (overrides.workerRefs ? [] : [pool.networkPolicy]);
+  const workerSecretPolicyRefs = overrides.workerSecretPolicyRefs || (overrides.workerRefs ? [] : [pool.secretPolicy]);
 
   const request = buildRuntimeWorkerAssignmentRequest({
     runtime_worker_assignment_request_id: requestId,
@@ -114,6 +152,8 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
     runtime_worker_capability_references: workerCapabilityRefs,
     runtime_worker_capacity_references: workerCapacityRefs,
     runtime_worker_health_references: workerHealthRefs,
+    runtime_worker_network_policy_references: workerNetworkPolicyRefs,
+    runtime_worker_secret_policy_references: workerSecretPolicyRefs,
     correlation_id: 'corr-worker-assignment-1',
     causation_id: 'cause-worker-assignment-1',
     trace_id: 'trace-worker-assignment-1',
@@ -125,7 +165,8 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
 
   return {
     ...schedulerGolden, schedulerOutcome, baseId, requestId, assignmentPolicy, pool, workerRefs,
-    workerCapabilityRefs, workerCapacityRefs, workerHealthRefs, workerAssignmentRequest: request
+    workerCapabilityRefs, workerCapacityRefs, workerHealthRefs, workerNetworkPolicyRefs, workerSecretPolicyRefs,
+    workerAssignmentRequest: request
   };
 }
 

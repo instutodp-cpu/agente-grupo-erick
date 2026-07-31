@@ -198,7 +198,25 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'runtime_scheduler_decision_reference', 'runtime_scheduler_package_reference', 'runtime_scheduler_request_reference',
   'runtime_scheduler_result_reference',
   'runtime_worker_capability_references', 'runtime_worker_capacity_references', 'runtime_worker_health_references',
-  'runtime_worker_references'
+  'runtime_worker_references',
+  // pr106fix: RuntimeWorkerNetworkPolicyReference/RuntimeWorkerSecretPolicyReference field names --
+  // "secret"/"token" here always refer to this PR's own declarative, 1:1-bound policy identity
+  // reference contract, never a real credential or resolved secret material. Replaces the previous
+  // string-presence pass-through with genuine ID/version/fingerprint/tenant/org/project comparison.
+  'runtime_worker_network_policy_references', 'runtime_worker_secret_policy_references',
+  'worker_network_policy_fingerprints', 'worker_secret_policy_fingerprints',
+  'worker_network_policy_reference_id', 'worker_network_policy_reference_version',
+  'network_policy_reference_id', 'network_policy_version', 'network_policy_reference_valid', 'network_policy_fingerprint',
+  'worker_secret_policy_reference_id', 'worker_secret_policy_reference_version',
+  'secret_policy_version', 'secret_policy_reference_valid', 'secret_policy_fingerprint',
+  'worker_health_expired_at_assignment_sequence', 'worker_health_sequence_regressive',
+  'worker_health_status_not_healthy', 'worker_health_binding_invalid',
+  'worker_network_policy_id_mismatch', 'worker_network_policy_version_mismatch', 'worker_network_policy_fingerprint_mismatch',
+  'worker_network_policy_tenant_mismatch', 'worker_network_policy_organization_mismatch', 'worker_network_policy_project_mismatch',
+  'worker_network_policy_environment_mismatch', 'worker_network_policy_reference_missing', 'worker_network_policy_reference_invalid',
+  'worker_secret_policy_id_mismatch', 'worker_secret_policy_version_mismatch', 'worker_secret_policy_fingerprint_mismatch',
+  'worker_secret_policy_tenant_mismatch', 'worker_secret_policy_organization_mismatch', 'worker_secret_policy_project_mismatch',
+  'worker_secret_policy_environment_mismatch', 'worker_secret_policy_reference_missing', 'worker_secret_policy_reference_invalid'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept
