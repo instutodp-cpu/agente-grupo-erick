@@ -216,7 +216,33 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'worker_network_policy_environment_mismatch', 'worker_network_policy_reference_missing', 'worker_network_policy_reference_invalid',
   'worker_secret_policy_id_mismatch', 'worker_secret_policy_version_mismatch', 'worker_secret_policy_fingerprint_mismatch',
   'worker_secret_policy_tenant_mismatch', 'worker_secret_policy_organization_mismatch', 'worker_secret_policy_project_mismatch',
-  'worker_secret_policy_environment_mismatch', 'worker_secret_policy_reference_missing', 'worker_secret_policy_reference_invalid'
+  'worker_secret_policy_environment_mismatch', 'worker_secret_policy_reference_missing', 'worker_secret_policy_reference_invalid',
+  // pr106fix2: the RuntimeWorkerNetworkPolicyReference/RuntimeWorkerSecretPolicyReference bindings
+  // above now must themselves bind to the official, pre-existing Network Permission Boundary
+  // (`transcription-network-permission-boundary.js`) and Secret Resolution Boundary
+  // (`transcription-secret-resolution-boundary.js`) declarative policy objects -- "official" here
+  // always means those two already-audited PR #75/#76 contracts, reused verbatim via their own real
+  // validators, never a second self-declared policy and never a real credential.
+  'network_permission_policy_references', 'secret_resolution_policy_references',
+  'official_network_policy_reference_id', 'official_network_policy_version', 'official_network_policy_fingerprint',
+  'official_secret_policy_reference_id', 'official_secret_policy_version', 'official_secret_policy_fingerprint',
+  'worker_network_official_policy_missing', 'worker_network_official_policy_version_mismatch',
+  'worker_network_official_policy_fingerprint_mismatch', 'worker_network_official_policy_scope_mismatch',
+  'worker_network_official_policy_not_allowed',
+  'worker_secret_official_policy_missing', 'worker_secret_official_policy_version_mismatch',
+  'worker_secret_official_policy_fingerprint_mismatch', 'worker_secret_official_policy_scope_mismatch',
+  'worker_secret_official_policy_not_allowed',
+  'network_official_policy_registry_duplicate', 'secret_official_policy_registry_duplicate',
+  // pr106fix2: field names belonging to the official, pre-existing
+  // `TranscriptionNetworkDestinationReference`/`TranscriptionSecretReference` contracts
+  // (`transcription-network-permission-boundary.js`/`transcription-secret-resolution-boundary.js`,
+  // PR #75/#76) -- reused verbatim as-is inside `network_permission_policy_references`/
+  // `secret_resolution_policy_references`. Every one of these is a forced-false presence flag or a
+  // declarative reference identifier, never a real endpoint/host/port/url/secret value; that
+  // invariant is already enforced by the official contract's own validator before it ever reaches
+  // this scan.
+  'endpoint_present', 'hostname_present', 'ip_present', 'port_present', 'url_present',
+  'secret_alias', 'secret_ref_id', 'secret_ref_version', 'secret_type'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept
@@ -229,8 +255,16 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
 // 'AUTHORIZATION' is an exact whole-string match for the forbidden word pattern's own
 // \bauthorization\b and needs an explicit exemption the same way several field *names* already
 // needed one in PR #97-#100.
+// pr106fix2: 'mock-provider-a'/'mock-provider-b'/'mock-provider-c' are the closed-enum
+// `ALLOWED_CAPABILITY_PROVIDER_SLUGS` from the official, pre-existing transcription provider
+// capability matrix -- legitimate declarative identifiers a `TranscriptionNetworkDestinationReference`/
+// `TranscriptionSecretReference` (reused verbatim by this PR's Worker Assignment policy binding) is
+// structurally required to carry, never a real credential. The hyphen boundaries around "provider"
+// inside these exact strings are what trip the generic forbidden-word-value pattern; exempted the
+// same way 'AUTHORIZATION' already needed to be.
 const AGENT_CORE_ALLOWLISTED_VALUE_NAMES = Object.freeze(new Set([
-  'AUTHORIZATION'
+  'AUTHORIZATION',
+  'mock-provider-a', 'mock-provider-b', 'mock-provider-c'
 ]));
 const AGENT_CORE_FORBIDDEN_VALUE_PATTERN = /\b(api[_-]?key|private[_-]?key|access[_-]?key|secret|token|password|authorization|bearer|jwt|oauth|cookie|filesystem|endpoint|hostname|callback|handler|execute|invoke|runtime|bootstrap|startup|plugin|tool_call|system_prompt|prompt|model|provider|sdk|eval)\b/i;
 const AGENT_CORE_FORBIDDEN_VALUE_SHAPES = Object.freeze([

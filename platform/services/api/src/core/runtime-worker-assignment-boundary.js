@@ -3,6 +3,12 @@
 const { isPlainObject } = require('./read-only-adapter-contract');
 const { computeCanonicalContentDigest } = require('./canonical-content-digest');
 const { checkIdentity } = require('./runtime-execution-package');
+// pr106fix2: the exact canonicalizer the official Network Permission Boundary/Secret Resolution
+// Boundary modules use internally to compute their own reference fingerprints (see
+// `createTranscriptionNetworkDestinationRegistry`/`createTranscriptionSecretReferenceRegistry`'s own
+// `JSON.stringify(stableCanonicalize(...))`) -- reused verbatim so a recomputed official fingerprint
+// here is byte-identical to what the official module itself would compute.
+const { stablePayload: computeOfficialPolicyFingerprint } = require('./transcription-provider-contract-registry');
 const { FRESHNESS_DIMENSIONS } = require('./runtime-readiness-freshness-reference');
 const { computeIdempotencyFingerprint } = require('./execution-plan-idempotency');
 const { validateRuntimeWorkerAssignmentRequest } = require('./runtime-worker-assignment-request');
@@ -49,15 +55,31 @@ function deriveStageRequiresNetworkOrSecret(stage) {
   return hasModel || hasTools || hasWorkflow;
 }
 
-// pr106fix FIX 1: genuine 1:1 policy reference comparison -- ID, version, fingerprint, and tenant/
-// organization/project/environment binding, never a string-presence pass-through. `policyRef` is the
-// (at most one) RuntimeWorkerNetworkPolicyReference/RuntimeWorkerSecretPolicyReference bound to this
-// worker, looked up by runtime_worker_reference_id.
-function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical) {
+// pr106fix2: field-name lookup for the official Network Permission Boundary/Secret Resolution
+// Boundary contracts this binding must genuinely point to -- `transcription-network-permission-
+// boundary.js`'s own `TranscriptionNetworkDestinationReference` (destination_ref_id/_version) and
+// `transcription-secret-resolution-boundary.js`'s own `TranscriptionSecretReference` (secret_ref_id/
+// _version). Never a parallel, self-declared policy shape.
+const OFFICIAL_POLICY_KEYS = Object.freeze({
+  network: { idKey: 'destination_ref_id', versionKey: 'destination_ref_version' },
+  secret: { idKey: 'secret_ref_id', versionKey: 'secret_ref_version' }
+});
+
+// pr106fix FIX 1 / pr106fix2: genuine 1:1 policy reference comparison -- ID, version, fingerprint,
+// and tenant/organization/project/environment binding, never a string-presence pass-through.
+// `policyRef` is the (at most one) RuntimeWorkerNetworkPolicyReference/RuntimeWorkerSecretPolicyReference
+// bound to this worker, looked up by runtime_worker_reference_id. pr106fix2 additionally requires
+// `policyRef` itself to genuinely bind (by ID/version/fingerprint recomputed with the official
+// module's own canonicalizer) to an official policy object supplied in `officialPolicyById` --
+// `policyRef`'s own `*_policy_reference_valid` flag is a derived convenience, never the source of
+// truth for whether the official policy actually exists and matches.
+function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical, officialPolicyById) {
   const idField = `${kind}_policy_reference_id`;
-  const versionField = `${kind}_policy_version`;
-  const fingerprintField = `${kind}_policy_fingerprint`;
   const validField = `${kind}_policy_reference_valid`;
+  const officialIdField = `official_${kind}_policy_reference_id`;
+  const officialVersionField = `official_${kind}_policy_version`;
+  const officialFingerprintField = `official_${kind}_policy_fingerprint`;
+  const { idKey, versionKey } = OFFICIAL_POLICY_KEYS[kind];
   if (!deriveStageRequiresNetworkOrSecret(stage)) return { match: true, reason: null };
   if (!isPlainObject(policyRef)) return { match: false, reason: `worker_${kind}_policy_reference_missing` };
   if (policyRef[idField] !== worker[idField]) return { match: false, reason: `worker_${kind}_policy_id_mismatch` };
@@ -66,8 +88,16 @@ function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical)
   if (policyRef.organization_id !== canonical.organizationId) return { match: false, reason: `worker_${kind}_policy_organization_mismatch` };
   if (policyRef.project_id !== null && policyRef.project_id !== canonical.projectId) return { match: false, reason: `worker_${kind}_policy_project_mismatch` };
   if (policyRef.runtime_environment_reference_id !== worker.runtime_environment_reference_id) return { match: false, reason: `worker_${kind}_policy_environment_mismatch` };
-  void versionField;
-  void fingerprintField;
+
+  const official = officialPolicyById.get(policyRef[officialIdField]);
+  if (!official) return { match: false, reason: `worker_${kind}_official_policy_missing` };
+  if (official[versionKey] !== policyRef[officialVersionField]) return { match: false, reason: `worker_${kind}_official_policy_version_mismatch` };
+  if (computeOfficialPolicyFingerprint(official) !== policyRef[officialFingerprintField]) {
+    return { match: false, reason: `worker_${kind}_official_policy_fingerprint_mismatch` };
+  }
+  if (kind === 'secret' && official.tenant_id !== canonical.tenantId) return { match: false, reason: 'worker_secret_official_policy_scope_mismatch' };
+  if (official.environment === 'PRODUCTION') return { match: false, reason: `worker_${kind}_official_policy_not_allowed` };
+  void idKey;
   return { match: true, reason: null };
 }
 
@@ -90,12 +120,15 @@ function evaluateHealthAtAssignment(health, requestLogicalSequence) {
 
 // Every one of the 17 match dimensions, recomputed from the real stage/worker/capability/capacity/
 // health/policy data -- "Não aceitar worker_compatible=true como fonte de verdade."
-function deriveMatches(stage, worker, capability, capacity, health, canonical, freshnessValid, requestLogicalSequence, networkPolicyRef, secretPolicyRef) {
+function deriveMatches(
+  stage, worker, capability, capacity, health, canonical, freshnessValid, requestLogicalSequence,
+  networkPolicyRef, secretPolicyRef, officialNetworkPolicyById, officialSecretPolicyById
+) {
   const hasModel = stage.model_selection_reference_id !== null;
   const hasTools = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0;
   const hasWorkflow = stage.workflow_reference_id !== null;
-  const networkEvaluation = evaluatePolicyReferenceMatch('network', stage, worker, networkPolicyRef, canonical);
-  const secretEvaluation = evaluatePolicyReferenceMatch('secret', stage, worker, secretPolicyRef, canonical);
+  const networkEvaluation = evaluatePolicyReferenceMatch('network', stage, worker, networkPolicyRef, canonical, officialNetworkPolicyById);
+  const secretEvaluation = evaluatePolicyReferenceMatch('secret', stage, worker, secretPolicyRef, canonical, officialSecretPolicyById);
   const healthEvaluation = evaluateHealthAtAssignment(health, requestLogicalSequence);
   return {
     matches: {
@@ -204,6 +237,8 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
   const workerHealthRefs = requestIsObject && Array.isArray(request.runtime_worker_health_references) ? request.runtime_worker_health_references : [];
   const workerNetworkPolicyRefs = requestIsObject && Array.isArray(request.runtime_worker_network_policy_references) ? request.runtime_worker_network_policy_references : [];
   const workerSecretPolicyRefs = requestIsObject && Array.isArray(request.runtime_worker_secret_policy_references) ? request.runtime_worker_secret_policy_references : [];
+  const networkPermissionPolicyRefs = requestIsObject && Array.isArray(request.network_permission_policy_references) ? request.network_permission_policy_references : [];
+  const secretResolutionPolicyRefs = requestIsObject && Array.isArray(request.secret_resolution_policy_references) ? request.secret_resolution_policy_references : [];
 
   const canonical = {
     tenantId: isPlainObject(packageRef) ? packageRef.tenant_id : undefined,
@@ -372,6 +407,27 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
   }
   markValid('network_secret_policy_registry_validated');
 
+  // pr106fix2: the official Network Permission Boundary / Secret Resolution Boundary policy objects
+  // this request supplies -- already structurally validated by their own real validators via the
+  // request's nested-reference validation (step 1). A duplicate official policy ID is a genuine
+  // "binding global incoerente" (two objects claiming the same official identity), never a per-worker
+  // compatibility concern -- blocks the whole request as WORKER_ASSIGNMENT_POLICY_BLOCKED.
+  const officialNetworkPolicyById = new Map();
+  for (const official of networkPermissionPolicyRefs) {
+    if (officialNetworkPolicyById.has(official.destination_ref_id)) {
+      return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['network_official_policy_registry_duplicate']);
+    }
+    officialNetworkPolicyById.set(official.destination_ref_id, official);
+  }
+  const officialSecretPolicyById = new Map();
+  for (const official of secretResolutionPolicyRefs) {
+    if (officialSecretPolicyById.has(official.secret_ref_id)) {
+      return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['secret_official_policy_registry_duplicate']);
+    }
+    officialSecretPolicyById.set(official.secret_ref_id, official);
+  }
+  markValid('official_policy_registry_validated');
+
   // 15 (capacity portion).
   for (const worker of workerRefs) {
     const capacity = capacityById.get(worker.worker_capacity_reference_id);
@@ -435,7 +491,7 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
       const secretPolicyRef = secretPolicyByWorkerId.get(worker.runtime_worker_reference_id);
       const { matches, reasons } = deriveMatches(
         stage, worker, capability, capacity, health, canonical, freshnessRef.freshness_validated,
-        request.logical_sequence, networkPolicyRef, secretPolicyRef
+        request.logical_sequence, networkPolicyRef, secretPolicyRef, officialNetworkPolicyById, officialSecretPolicyById
       );
       const ref = buildRuntimeWorkerCompatibilityReference({
         worker_compatibility_reference_id: `${stage.scheduler_stage_reference_id}-${worker.runtime_worker_reference_id}-compatibility`,

@@ -21,6 +21,10 @@ const { validateRuntimeWorkerCapacityReference } = require('./runtime-worker-cap
 const { validateRuntimeWorkerHealthReference } = require('./runtime-worker-health-reference');
 const { validateRuntimeWorkerNetworkPolicyReference } = require('./runtime-worker-network-policy-reference');
 const { validateRuntimeWorkerSecretPolicyReference } = require('./runtime-worker-secret-policy-reference');
+// pr106fix2: the official, pre-existing Network Permission Boundary / Secret Resolution Boundary
+// declarative policy contracts (PR #75/#76) -- reused verbatim, never duplicated.
+const { validateDestinationReference } = require('./transcription-network-permission-boundary');
+const { validateSecretReference } = require('./transcription-secret-resolution-boundary');
 
 // pr106: aggregates every reference runtime-worker-assignment-boundary.js needs -- the already-
 // SCHEDULER_PACKAGE_PREPARED_SIMULATION chain (Scheduler Request/Decision/Result/Package), the real
@@ -40,6 +44,7 @@ const RUNTIME_WORKER_ASSIGNMENT_REQUEST_FIELDS = Object.freeze([
   'runtime_replay_reference', 'idempotency_reference',
   'runtime_worker_references', 'runtime_worker_capability_references', 'runtime_worker_capacity_references',
   'runtime_worker_health_references', 'runtime_worker_network_policy_references', 'runtime_worker_secret_policy_references',
+  'network_permission_policy_references', 'secret_resolution_policy_references',
   'correlation_id', 'causation_id', 'trace_id', 'logical_sequence', 'expected_worker_assignment_registry_version',
   'simulation_context', 'validator_version'
 ]);
@@ -65,7 +70,9 @@ const LIST_NESTED_REFERENCE_VALIDATORS = Object.freeze([
   ['runtime_worker_capacity_references', validateRuntimeWorkerCapacityReference],
   ['runtime_worker_health_references', validateRuntimeWorkerHealthReference],
   ['runtime_worker_network_policy_references', validateRuntimeWorkerNetworkPolicyReference],
-  ['runtime_worker_secret_policy_references', validateRuntimeWorkerSecretPolicyReference]
+  ['runtime_worker_secret_policy_references', validateRuntimeWorkerSecretPolicyReference],
+  ['network_permission_policy_references', validateDestinationReference],
+  ['secret_resolution_policy_references', validateSecretReference]
 ]);
 
 const MAX_LIST_ITEMS = 200;
@@ -134,6 +141,8 @@ function buildRuntimeWorkerAssignmentRequest(input = {}) {
     runtime_worker_health_references: Array.isArray(input.runtime_worker_health_references) ? input.runtime_worker_health_references : [],
     runtime_worker_network_policy_references: Array.isArray(input.runtime_worker_network_policy_references) ? input.runtime_worker_network_policy_references : [],
     runtime_worker_secret_policy_references: Array.isArray(input.runtime_worker_secret_policy_references) ? input.runtime_worker_secret_policy_references : [],
+    network_permission_policy_references: Array.isArray(input.network_permission_policy_references) ? input.network_permission_policy_references : [],
+    secret_resolution_policy_references: Array.isArray(input.secret_resolution_policy_references) ? input.secret_resolution_policy_references : [],
     correlation_id: input.correlation_id,
     causation_id: input.causation_id,
     trace_id: input.trace_id,

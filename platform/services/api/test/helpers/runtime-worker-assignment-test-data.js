@@ -15,6 +15,58 @@ const { buildRuntimeWorkerNetworkPolicyReference } = require('../../src/core/run
 const { buildRuntimeWorkerSecretPolicyReference } = require('../../src/core/runtime-worker-secret-policy-reference');
 const { buildRuntimeWorkerAssignmentRequest } = require('../../src/core/runtime-worker-assignment-request');
 const { evaluateRuntimeWorkerAssignmentRequest } = require('../../src/core/runtime-worker-assignment-boundary');
+// pr106fix2: the official, pre-existing Network Permission Boundary / Secret Resolution Boundary
+// declarative policy contracts (PR #75/#76) -- reused verbatim, never duplicated.
+const { validateDestinationReference } = require('../../src/core/transcription-network-permission-boundary');
+const { validateSecretReference } = require('../../src/core/transcription-secret-resolution-boundary');
+const { stablePayload: computeOfficialPolicyFingerprint } = require('../../src/core/transcription-provider-contract-registry');
+
+const OFFICIAL_NETWORK_VALIDATOR_VERSION = 'transcription_network_permission_boundary_validator_v1';
+const OFFICIAL_SECRET_VALIDATOR_VERSION = 'transcription_secret_resolution_boundary_validator_v1';
+
+function buildOfficialNetworkPolicy(baseId, overrides = {}) {
+  const official = {
+    destination_ref_id: `${baseId}-official-network-policy`,
+    destination_ref_version: 1,
+    destination_alias: `${baseId}-official-network-policy-alias`,
+    provider_slug: 'mock-provider-a',
+    transport_id: `${baseId}-official-transport`,
+    protocol: 'INTERNAL_REFERENCE',
+    environment: 'DEVELOPMENT',
+    scope: 'INTERNAL_SERVICE',
+    region_class: 'SYNTHETIC_LOCAL',
+    endpoint_present: false, hostname_present: false, ip_present: false, port_present: false, url_present: false,
+    dns_required: false, tls_required: false, streaming_requested: false,
+    active: false, approved: false,
+    simulation: true, production_blocked: true, network_enabled: false, runtime_enabled: false,
+    validator_version: OFFICIAL_NETWORK_VALIDATOR_VERSION,
+    ...overrides
+  };
+  const validation = validateDestinationReference(official);
+  if (!validation.valid) throw new Error(`official_network_policy_construction_invalid::${JSON.stringify(validation.errors)}`);
+  return official;
+}
+
+function buildOfficialSecretPolicy(baseId, tenantId, overrides = {}) {
+  const official = {
+    secret_ref_id: `${baseId}-official-secpolicy`,
+    secret_ref_version: 1,
+    secret_alias: `${baseId}-official-secpolicy-alias`,
+    secret_type: 'API_KEY_REFERENCE',
+    provider_slug: 'mock-provider-a',
+    tenant_id: tenantId,
+    environment: 'DEVELOPMENT',
+    scope: 'INTERNAL_SERVICE',
+    rotation_version: 1,
+    active: false, revoked: false,
+    simulation: true, production_blocked: true, network_enabled: false, runtime_enabled: false,
+    validator_version: OFFICIAL_SECRET_VALIDATOR_VERSION,
+    ...overrides
+  };
+  const validation = validateSecretReference(official);
+  if (!validation.valid) throw new Error(`official_secret_policy_construction_invalid::${JSON.stringify(validation.errors)}`);
+  return official;
+}
 
 function buildWorkerPool(baseId, overrides = {}) {
   const capability = buildRuntimeWorkerCapabilityReference({
@@ -76,11 +128,19 @@ function buildWorkerPool(baseId, overrides = {}) {
   const tenantId = overrides.tenantId || 'tenant-a';
   const organizationId = overrides.organizationId || 'tenant-a:org-1';
   const projectId = overrides.projectId || 'proj-1';
+  // pr106fix2: genuine official Network Permission Boundary / Secret Resolution Boundary policy
+  // objects, validated by their own real validators -- the binding below points to these by ID/
+  // version/fingerprint, never a self-declared parallel policy.
+  const officialNetworkPolicy = overrides.officialNetworkPolicy === null ? null : buildOfficialNetworkPolicy(baseId, overrides.officialNetworkPolicy);
+  const officialSecretPolicy = overrides.officialSecretPolicy === null ? null : buildOfficialSecretPolicy(baseId, tenantId, overrides.officialSecretPolicy);
   const networkPolicy = buildRuntimeWorkerNetworkPolicyReference({
     worker_network_policy_reference_id: `${baseId}-worker-network-policy-ref`,
     runtime_worker_reference_id: worker.runtime_worker_reference_id,
     runtime_environment_reference_id: worker.runtime_environment_reference_id,
     network_policy_reference_id: worker.network_policy_reference_id,
+    official_network_policy_reference_id: officialNetworkPolicy ? officialNetworkPolicy.destination_ref_id : 'official-network-policy-not-available',
+    official_network_policy_version: officialNetworkPolicy ? officialNetworkPolicy.destination_ref_version : 1,
+    official_network_policy_fingerprint: officialNetworkPolicy ? computeOfficialPolicyFingerprint(officialNetworkPolicy) : 'official-network-policy-not-available',
     tenant_id: tenantId, organization_id: organizationId, project_id: projectId,
     ...overrides.networkPolicy
   });
@@ -89,10 +149,13 @@ function buildWorkerPool(baseId, overrides = {}) {
     runtime_worker_reference_id: worker.runtime_worker_reference_id,
     runtime_environment_reference_id: worker.runtime_environment_reference_id,
     secret_policy_reference_id: worker.secret_policy_reference_id,
+    official_secret_policy_reference_id: officialSecretPolicy ? officialSecretPolicy.secret_ref_id : 'official-secret-policy-not-available',
+    official_secret_policy_version: officialSecretPolicy ? officialSecretPolicy.secret_ref_version : 1,
+    official_secret_policy_fingerprint: officialSecretPolicy ? computeOfficialPolicyFingerprint(officialSecretPolicy) : 'official-secret-policy-not-available',
     tenant_id: tenantId, organization_id: organizationId, project_id: projectId,
     ...overrides.secretPolicy
   });
-  return { worker, capability, capacity, health, networkPolicy, secretPolicy };
+  return { worker, capability, capacity, health, networkPolicy, secretPolicy, officialNetworkPolicy, officialSecretPolicy };
 }
 
 function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan', overrides = {}) {
@@ -133,6 +196,10 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
   // than the empty, NOT_APPLICABLE-safe list a no-llm-only custom worker set actually needs.
   const workerNetworkPolicyRefs = overrides.workerNetworkPolicyRefs || (overrides.workerRefs ? [] : [pool.networkPolicy]);
   const workerSecretPolicyRefs = overrides.workerSecretPolicyRefs || (overrides.workerRefs ? [] : [pool.secretPolicy]);
+  const networkPermissionPolicyRefs = overrides.networkPermissionPolicyRefs
+    || (overrides.workerRefs ? [] : (pool.officialNetworkPolicy ? [pool.officialNetworkPolicy] : []));
+  const secretResolutionPolicyRefs = overrides.secretResolutionPolicyRefs
+    || (overrides.workerRefs ? [] : (pool.officialSecretPolicy ? [pool.officialSecretPolicy] : []));
 
   const request = buildRuntimeWorkerAssignmentRequest({
     runtime_worker_assignment_request_id: requestId,
@@ -154,6 +221,8 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
     runtime_worker_health_references: workerHealthRefs,
     runtime_worker_network_policy_references: workerNetworkPolicyRefs,
     runtime_worker_secret_policy_references: workerSecretPolicyRefs,
+    network_permission_policy_references: networkPermissionPolicyRefs,
+    secret_resolution_policy_references: secretResolutionPolicyRefs,
     correlation_id: 'corr-worker-assignment-1',
     causation_id: 'cause-worker-assignment-1',
     trace_id: 'trace-worker-assignment-1',
@@ -166,13 +235,17 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
   return {
     ...schedulerGolden, schedulerOutcome, baseId, requestId, assignmentPolicy, pool, workerRefs,
     workerCapabilityRefs, workerCapacityRefs, workerHealthRefs, workerNetworkPolicyRefs, workerSecretPolicyRefs,
+    networkPermissionPolicyRefs, secretResolutionPolicyRefs,
     workerAssignmentRequest: request
   };
 }
 
 module.exports = {
   buildGoldenWorkerAssignmentBundle,
+  buildOfficialNetworkPolicy,
+  buildOfficialSecretPolicy,
   buildWorkerPool,
+  computeOfficialPolicyFingerprint,
   evaluateRuntimeSchedulerRequest,
   evaluateRuntimeWorkerAssignmentRequest
 };
