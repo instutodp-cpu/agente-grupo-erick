@@ -13,6 +13,11 @@ const { stablePayload: computeOfficialPolicyFingerprint } = require('./transcrip
 // bind to -- reused verbatim via their own real validators, never a second self-declared source.
 const { ALLOWED_CAPABILITY_PROVIDER_SLUGS } = require('./transcription-provider-capability-matrix');
 const { FRESHNESS_DIMENSIONS } = require('./runtime-readiness-freshness-reference');
+// pr106fix5: the genuine, already-established Registry Snapshot contract (reused across the Gateway/
+// Admission/Readiness chain) -- a Stage Policy Requirement's declared
+// `source_registry_snapshot_reference_id` must bind to a real instance of this, never an arbitrary
+// caller-declared ID.
+const { computeSnapshotFingerprint } = require('./execution-registry-snapshot-reference');
 const { computeIdempotencyFingerprint } = require('./execution-plan-idempotency');
 const { validateRuntimeWorkerAssignmentRequest } = require('./runtime-worker-assignment-request');
 const { buildRuntimeWorkerCompatibilityReference } = require('./runtime-worker-compatibility-reference');
@@ -142,7 +147,50 @@ function deriveStagePolicyRequirements(stage) {
 // fechada" -- Tool/Workflow Contracts carry no provider/domain data in this codebase, so a TOOL/
 // WORKFLOW requirement can never structurally resolve, regardless of how well-formed its official
 // source is.
-function resolveRequirementProvenance(requirement, hint, officialSourcesByTypeAndId) {
+// pr106fix5: "Hoje qualquer Registry Snapshot ID pode ser declarado sem alterar a decisão" -- closed
+// by requiring the hint's `source_registry_snapshot_reference_id` to bind, by real ID/consistency/
+// self-fingerprint/tenant-organization-project/sequence, to the one genuine
+// `ExecutionRegistrySnapshotReference` this Worker Assignment Request carries (`registrySnapshotContext.ref`),
+// and to prove that snapshot is the SAME one the Runtime Execution Package and Freshness Reference
+// already committed to -- never an independent snapshot substituted by the caller. `provider_slug`/
+// `stage_domain` derivation for MODEL is not tied to a dedicated registry entity because
+// `ALLOWED_CAPABILITY_PROVIDER_SLUGS` is a static, non-snapshot-tracked module constant in this
+// codebase (documented limitation, see docs) -- the strongest provable binding available today is
+// requiring a genuine, matching, non-stale Registry Snapshot to back every RESOLVED requirement.
+function resolveRegistrySnapshotBinding(hint, registrySnapshotContext) {
+  const snapshot = registrySnapshotContext && isPlainObject(registrySnapshotContext.ref) ? registrySnapshotContext.ref : null;
+  if (!snapshot) return { authorized: false, reason: 'registry_snapshot_missing' };
+  if (
+    hint.source_registry_snapshot_reference_id !== snapshot.registry_snapshot_reference_id
+    || snapshot.registry_snapshot_reference_id !== registrySnapshotContext.packageRegistrySnapshotId
+    || snapshot.registry_snapshot_reference_id !== registrySnapshotContext.freshnessRegistrySnapshotId
+    || snapshot.execution_plan_id !== registrySnapshotContext.packageExecutionPlanId
+  ) {
+    return { authorized: false, reason: 'registry_snapshot_mismatch' };
+  }
+  if (snapshot.snapshot_consistent !== true || snapshot.snapshot_validated !== true) {
+    return { authorized: false, reason: 'registry_snapshot_version_mismatch' };
+  }
+  if (computeSnapshotFingerprint(snapshot) !== snapshot.snapshot_fingerprint) {
+    return { authorized: false, reason: 'registry_snapshot_fingerprint_mismatch' };
+  }
+  if (
+    snapshot.tenant_id !== registrySnapshotContext.tenantId
+    || snapshot.organization_id !== registrySnapshotContext.organizationId
+    || snapshot.project_id !== registrySnapshotContext.projectId
+  ) {
+    return { authorized: false, reason: 'registry_snapshot_scope_mismatch' };
+  }
+  if (snapshot.logical_sequence !== registrySnapshotContext.freshnessRegistryCreatedSequence) {
+    return { authorized: false, reason: 'registry_snapshot_mismatch' };
+  }
+  if ((registrySnapshotContext.requestLogicalSequence - snapshot.logical_sequence) > registrySnapshotContext.freshnessMaxRegistryValidSequences) {
+    return { authorized: false, reason: 'registry_snapshot_stale' };
+  }
+  return { authorized: true };
+}
+
+function resolveRequirementProvenance(requirement, hint, officialSourcesByTypeAndId, registrySnapshotContext = null) {
   const tag = `${requirement.requirement_element}::${requirement.source_reference_id}`;
   const expectedSourceType = SOURCE_TYPE_BY_ELEMENT[requirement.requirement_element];
   if (!isPlainObject(hint)) return { authorized: false, tag, reason: 'unresolvable' };
@@ -173,6 +221,13 @@ function resolveRequirementProvenance(requirement, hint, officialSourcesByTypeAn
 
   if (derivedStageDomain !== OFFICIAL_POLICY_DOMAIN) return { authorized: false, tag, reason: 'domain_mismatch' };
 
+  // pr106fix5: registry snapshot binding is the final gate -- every other, more specific provenance
+  // failure (shape/type/status/source-lookup/version/fingerprint/provider/domain) is reported with its
+  // own distinct reason first; only a requirement that has already cleared all of those still needs a
+  // genuine, matching, non-stale Registry Snapshot to be declared authorized.
+  const snapshotBinding = resolveRegistrySnapshotBinding(hint, registrySnapshotContext);
+  if (!snapshotBinding.authorized) return { authorized: false, tag, reason: snapshotBinding.reason };
+
   return { authorized: true, tag, provider_slug: derivedProviderSlug, stage_domain: derivedStageDomain };
 }
 
@@ -186,7 +241,7 @@ function resolveRequirementProvenance(requirement, hint, officialSourcesByTypeAn
 // upstream provenance) and `official_policy_authorizes_stage_requirement` (provider+destination/
 // purpose) -- `every(requirement is authorized)`, so a well-authorized MODEL component never masks
 // an unauthorized TOOL/WORKFLOW component of the same stage.
-function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical, officialPolicyById, stagePolicyRequirementByKey, officialSourcesByTypeAndId) {
+function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical, officialPolicyById, stagePolicyRequirementByKey, officialSourcesByTypeAndId, registrySnapshotContext = null) {
   const idField = `${kind}_policy_reference_id`;
   const validField = `${kind}_policy_reference_valid`;
   const officialIdField = `official_${kind}_policy_reference_id`;
@@ -216,15 +271,28 @@ function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical,
   // Gates 2+3, independently, for every requirement the stage has.
   for (const requirement of requirements) {
     const hint = stagePolicyRequirementByKey.get(`${stage.scheduler_stage_reference_id}::${requirement.requirement_element}::${requirement.source_reference_id}`);
-    const provenance = resolveRequirementProvenance(requirement, hint, officialSourcesByTypeAndId);
+    const provenance = resolveRequirementProvenance(requirement, hint, officialSourcesByTypeAndId, registrySnapshotContext);
     if (!provenance.authorized) {
-      const reasonKind = provenance.reason === 'domain_mismatch' ? 'official_policy_domain_mismatch' : 'policy_requirement_unresolvable';
-      return { match: false, reason: `worker_${kind}_${reasonKind}::${provenance.tag}` };
+      if (provenance.reason === 'domain_mismatch') {
+        return { match: false, reason: `worker_${kind}_official_policy_domain_mismatch::${provenance.tag}` };
+      }
+      // pr106fix5: registry snapshot binding failures are a property of the requirement's own
+      // provenance, identical regardless of whether the caller is evaluating network or secret --
+      // never templated with `worker_${kind}_`.
+      if (isNonEmptyString(provenance.reason) && provenance.reason.startsWith('registry_snapshot_')) {
+        return { match: false, reason: `worker_stage_policy_source_${provenance.reason}::${provenance.tag}` };
+      }
+      return { match: false, reason: `worker_${kind}_policy_requirement_unresolvable::${provenance.tag}` };
     }
     if (official.provider_slug !== provenance.provider_slug) {
       return { match: false, reason: `worker_${kind}_official_policy_provider_mismatch::${provenance.tag}` };
     }
-    if (official.scope !== requirement.destination_class) {
+    // pr106fix5: Network compares the official policy's scope against the requirement's
+    // `destination_class`; Secret must compare against its `secret_purpose` -- these are genuinely
+    // distinct scopes the official policy's own `scope` field represents, never interchangeable
+    // despite `destination_class`/`secret_purpose` sharing structurally parallel values.
+    const expectedOfficialScope = kind === 'network' ? requirement.destination_class : requirement.secret_purpose;
+    if (official.scope !== expectedOfficialScope) {
       const mismatchKind = kind === 'network' ? 'destination_mismatch' : 'purpose_mismatch';
       return { match: false, reason: `worker_${kind}_official_policy_${mismatchKind}::${provenance.tag}` };
     }
@@ -256,13 +324,13 @@ function evaluateHealthAtAssignment(health, requestLogicalSequence) {
 function deriveMatches(
   stage, worker, capability, capacity, health, canonical, freshnessValid, requestLogicalSequence,
   networkPolicyRef, secretPolicyRef, officialNetworkPolicyById, officialSecretPolicyById, stagePolicyRequirementByKey,
-  officialSourcesByTypeAndId
+  officialSourcesByTypeAndId, registrySnapshotContext
 ) {
   const hasModel = stage.model_selection_reference_id !== null;
   const hasTools = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0;
   const hasWorkflow = stage.workflow_reference_id !== null;
-  const networkEvaluation = evaluatePolicyReferenceMatch('network', stage, worker, networkPolicyRef, canonical, officialNetworkPolicyById, stagePolicyRequirementByKey, officialSourcesByTypeAndId);
-  const secretEvaluation = evaluatePolicyReferenceMatch('secret', stage, worker, secretPolicyRef, canonical, officialSecretPolicyById, stagePolicyRequirementByKey, officialSourcesByTypeAndId);
+  const networkEvaluation = evaluatePolicyReferenceMatch('network', stage, worker, networkPolicyRef, canonical, officialNetworkPolicyById, stagePolicyRequirementByKey, officialSourcesByTypeAndId, registrySnapshotContext);
+  const secretEvaluation = evaluatePolicyReferenceMatch('secret', stage, worker, secretPolicyRef, canonical, officialSecretPolicyById, stagePolicyRequirementByKey, officialSourcesByTypeAndId, registrySnapshotContext);
   const healthEvaluation = evaluateHealthAtAssignment(health, requestLogicalSequence);
   return {
     matches: {
@@ -377,6 +445,10 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
   const modelSelectionDecisionRefs = requestIsObject && Array.isArray(request.model_selection_decision_references) ? request.model_selection_decision_references : [];
   const toolContractRefs = requestIsObject && Array.isArray(request.tool_contract_references) ? request.tool_contract_references : [];
   const workflowContractRefs = requestIsObject && Array.isArray(request.workflow_contract_references) ? request.workflow_contract_references : [];
+  // pr106fix5: the single genuine Registry Snapshot reference (nullable -- "quando existentes") this
+  // request carries, reused verbatim via `execution-registry-snapshot-reference.js`'s own validator,
+  // never a second self-declared snapshot.
+  const registrySnapshotRef = requestIsObject ? request.registry_snapshot_reference : undefined;
 
   const canonical = {
     tenantId: isPlainObject(packageRef) ? packageRef.tenant_id : undefined,
@@ -387,6 +459,22 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
     actorId: isPlainObject(packageRef) ? packageRef.actor_id : undefined
   };
 
+  // pr106fix5: built once, from data already in scope -- never re-derived per requirement, never
+  // reading `context`. `resolveRequirementProvenance` uses this to prove a RESOLVED Stage Policy
+  // Requirement's declared registry snapshot is the SAME one the Runtime Execution Package
+  // (`registry_snapshot_reference_id`) and the Freshness Reference (`registry_snapshot_reference_id`/
+  // `registry_created_logical_sequence`/`maximum_registry_valid_sequences`) already committed to.
+  const registrySnapshotContext = {
+    ref: registrySnapshotRef,
+    packageRegistrySnapshotId: isPlainObject(packageRef) ? packageRef.registry_snapshot_reference_id : undefined,
+    packageExecutionPlanId: isPlainObject(packageRef) ? packageRef.execution_plan_id : undefined,
+    freshnessRegistrySnapshotId: isPlainObject(freshnessRef) ? freshnessRef.registry_snapshot_reference_id : undefined,
+    freshnessRegistryCreatedSequence: isPlainObject(freshnessRef) ? freshnessRef.registry_created_logical_sequence : undefined,
+    freshnessMaxRegistryValidSequences: isPlainObject(freshnessRef) ? freshnessRef.maximum_registry_valid_sequences : undefined,
+    requestLogicalSequence: requestIsObject ? request.logical_sequence : undefined,
+    tenantId: canonical.tenantId, organizationId: canonical.organizationId, projectId: canonical.projectId
+  };
+
   const requestForFingerprint = requestIsObject ? omitReplayReference(request) : request;
   const requestFingerprint = computeCanonicalContentDigest(requestForFingerprint);
 
@@ -394,13 +482,13 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
     return buildWorkerAssignmentOutcome(status, reasonCodes, {
       request, requestFingerprint, canonical, schedulerDecisionRef, schedulerResultRef, schedulerPackageRef,
       packageRef, capacitySnapshotRef, concurrencyRef, freshnessRef, idempotencyReference, replayRef,
-      // pr106fix4: every one of these is a raw request-level collection, already in scope regardless
-      // of how early the evaluation is blocked -- included unconditionally so the package's own
-      // integrity fingerprint lists (see buildWorkerAssignmentOutcome) are always derived from the
-      // real objects the request carried, "inclusive listas vazias quando legitimamente não
-      // aplicáveis," never a caller-supplied list substituted in.
+      // pr106fix4/pr106fix5: every one of these is a raw request-level collection/reference, already
+      // in scope regardless of how early the evaluation is blocked -- included unconditionally so the
+      // package's own integrity fingerprint fields (see buildWorkerAssignmentOutcome) are always
+      // derived from the real objects the request carried, "inclusive listas vazias quando
+      // legitimamente não aplicáveis," never a caller-supplied list substituted in.
       networkPermissionPolicyRefs, secretResolutionPolicyRefs, stagePolicyRequirementRefs,
-      modelSelectionDecisionRefs, toolContractRefs, workflowContractRefs,
+      modelSelectionDecisionRefs, toolContractRefs, workflowContractRefs, registrySnapshotRef,
       ...derived
     }, validatedFlags);
   }
@@ -670,7 +758,7 @@ function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
       const { matches, reasons } = deriveMatches(
         stage, worker, capability, capacity, health, canonical, freshnessRef.freshness_validated,
         request.logical_sequence, networkPolicyRef, secretPolicyRef, officialNetworkPolicyById, officialSecretPolicyById,
-        stagePolicyRequirementByKey, officialSourcesByTypeAndId
+        stagePolicyRequirementByKey, officialSourcesByTypeAndId, registrySnapshotContext
       );
       const ref = buildRuntimeWorkerCompatibilityReference({
         worker_compatibility_reference_id: `${stage.scheduler_stage_reference_id}-${worker.runtime_worker_reference_id}-compatibility`,
@@ -828,7 +916,7 @@ function buildWorkerAssignmentOutcome(status, reasonCodes, ctx, validatedFlags) 
     packageRef, capacitySnapshotRef, concurrencyRef, freshnessRef, idempotencyReference, replayRef,
     workerNetworkPolicyRefs = [], workerSecretPolicyRefs = [],
     networkPermissionPolicyRefs = [], secretResolutionPolicyRefs = [], stagePolicyRequirementRefs = [],
-    modelSelectionDecisionRefs = [], toolContractRefs = [], workflowContractRefs = [],
+    modelSelectionDecisionRefs = [], toolContractRefs = [], workflowContractRefs = [], registrySnapshotRef,
     stages = [], workerRefs = [], workerCapabilityRefs = [], workerCapacityRefs = [], workerHealthRefs = [],
     compatibilityRefs = [], candidateSetByStageId = new Map(), assignmentRefs = []
   } = ctx;
@@ -842,6 +930,7 @@ function buildWorkerAssignmentOutcome(status, reasonCodes, ctx, validatedFlags) 
   const freshnessSafe = isPlainObject(freshnessRef) ? freshnessRef : {};
   const idempotencySafe = isPlainObject(idempotencyReference) ? idempotencyReference : {};
   const replaySafe = isPlainObject(replayRef) ? replayRef : {};
+  const registrySnapshotSafe = isPlainObject(registrySnapshotRef) ? registrySnapshotRef : {};
   const canonicalSafe = canonical || {};
 
   const requestId = requestSafe.runtime_worker_assignment_request_id || 'runtime_worker_assignment_request_not_available';
@@ -890,6 +979,9 @@ function buildWorkerAssignmentOutcome(status, reasonCodes, ctx, validatedFlags) 
     // absent or malformed.
     replay_fingerprint: replaySafe.replay_fingerprint || 'fingerprint_not_available',
     idempotency_fingerprint: idempotencySafe.idempotency_fingerprint || 'fingerprint_not_available',
+    // pr106fix5: package integrity -- the Registry Snapshot fingerprint the same object every RESOLVED
+    // Stage Policy Requirement was proven bound to, so tampering the snapshot changes the package.
+    registry_snapshot_reference_fingerprint: registrySnapshotSafe.snapshot_fingerprint || 'fingerprint_not_available',
     worker_fingerprints: workerRefs.map((w) => w.worker_fingerprint),
     worker_capability_fingerprints: workerCapabilityRefs.map((c) => c.capability_fingerprint),
     worker_capacity_fingerprints: workerCapacityRefs.map((c) => c.capacity_fingerprint),
@@ -991,5 +1083,6 @@ module.exports = {
   evaluatePolicyReferenceMatch,
   evaluateRuntimeWorkerAssignmentRequest,
   omitReplayReference,
+  resolveRegistrySnapshotBinding,
   resolveRequirementProvenance
 };

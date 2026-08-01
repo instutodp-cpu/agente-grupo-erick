@@ -34,7 +34,11 @@ const COUNT_FIELDS = Object.freeze([
 const UPSTREAM_FINGERPRINT_FIELDS = Object.freeze([
   'scheduler_package_fingerprint', 'scheduler_package_digest', 'runtime_execution_package_fingerprint',
   'runtime_execution_package_digest', 'capacity_snapshot_fingerprint', 'concurrency_fingerprint',
-  'freshness_fingerprint', 'replay_fingerprint', 'idempotency_fingerprint'
+  'freshness_fingerprint', 'replay_fingerprint', 'idempotency_fingerprint',
+  // pr106fix5: the Registry Snapshot every RESOLVED Stage Policy Requirement provenance is proven
+  // bound to -- participates in the package fingerprint/digest so altering the snapshot alters or
+  // blocks the package.
+  'registry_snapshot_reference_fingerprint'
 ]);
 
 const DERIVED_FINGERPRINT_LIST_FIELDS = Object.freeze([

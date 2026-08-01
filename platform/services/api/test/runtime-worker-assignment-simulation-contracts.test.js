@@ -48,7 +48,7 @@ const {
 } = require('../src/core/runtime-worker-secret-policy-reference');
 const {
   deriveStageRequiresNetworkOrSecret, evaluatePolicyReferenceMatch, evaluateHealthAtAssignment,
-  deriveStagePolicyRequirements, resolveRequirementProvenance
+  deriveStagePolicyRequirements, resolveRequirementProvenance, resolveRegistrySnapshotBinding
 } = require('../src/core/runtime-worker-assignment-boundary');
 const {
   validateRuntimeWorkerStagePolicyRequirementReference, RUNTIME_WORKER_STAGE_POLICY_REQUIREMENT_REFERENCE_FIELDS
@@ -57,7 +57,8 @@ const {
 const {
   buildGoldenWorkerAssignmentBundle, buildWorkerPool, evaluateRuntimeWorkerAssignmentRequest,
   buildOfficialNetworkPolicy, buildOfficialSecretPolicy, computeOfficialPolicyFingerprint,
-  buildResolvedRequirementHint, buildUnresolvedRequirementHint, buildOfficialModelSelectionDecision
+  buildResolvedRequirementHint, buildUnresolvedRequirementHint, buildOfficialModelSelectionDecision,
+  buildOfficialRegistrySnapshot
 } = require('./helpers/runtime-worker-assignment-test-data');
 const { validateDestinationReference } = require('../src/core/transcription-network-permission-boundary');
 const { validateSecretReference } = require('../src/core/transcription-secret-resolution-boundary');
@@ -601,6 +602,25 @@ function modelHintMap(schedulerStageReferenceId, sourceReferenceId, officialMode
   return new Map([[`${hint.scheduler_stage_reference_id}::${hint.requirement_element}::${hint.source_reference_id}`, hint]]);
 }
 
+// pr106fix5: the canonical, genuinely matching Registry Snapshot binding context -- built once,
+// reused by every test that needs a RESOLVED requirement to reach `authorized: true`/`match: true`.
+// `snapshotContext(overrides)` lets a test target one field's mismatch while every other field stays
+// genuinely valid.
+const REGISTRY_SNAPSHOT = buildOfficialRegistrySnapshot();
+function snapshotContext(overrides = {}) {
+  return {
+    ref: REGISTRY_SNAPSHOT,
+    packageRegistrySnapshotId: REGISTRY_SNAPSHOT.registry_snapshot_reference_id,
+    packageExecutionPlanId: REGISTRY_SNAPSHOT.execution_plan_id,
+    freshnessRegistrySnapshotId: REGISTRY_SNAPSHOT.registry_snapshot_reference_id,
+    freshnessRegistryCreatedSequence: REGISTRY_SNAPSHOT.logical_sequence,
+    freshnessMaxRegistryValidSequences: 1000,
+    requestLogicalSequence: 0,
+    tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1',
+    ...overrides
+  };
+}
+
 const MODEL_STAGE = Object.freeze({ scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: [], workflow_reference_id: null, required_capabilities: [], required_modalities: [] });
 const TOOL_STAGE = Object.freeze({ scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: ['tool-a'], workflow_reference_id: null, required_capabilities: [], required_modalities: [] });
 const WORKFLOW_STAGE = Object.freeze({ scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: 'flow-a', required_capabilities: [], required_modalities: [] });
@@ -702,7 +722,7 @@ test('evaluatePolicyReferenceMatch: own-binding ID/version/tenant/organization/p
   const netMap = officialMap('network', officialNetwork);
   const hints = modelHintMap(MODEL_STAGE.scheduler_stage_reference_id, 'genref-1', officialModel);
   const sources = sourcesMap(officialModel);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validPolicyRef, canonical, netMap, hints, sources).match, true);
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validPolicyRef, canonical, netMap, hints, sources, snapshotContext()).match, true);
   assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, network_policy_reference_id: 'other-id' }, canonical, netMap, hints, sources).reason, 'worker_network_policy_id_mismatch');
   assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, network_policy_reference_valid: false }, canonical, netMap, hints, sources).reason, 'worker_network_policy_reference_invalid');
   assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, tenant_id: 'other-tenant' }, canonical, netMap, hints, sources).reason, 'worker_network_policy_tenant_mismatch');
@@ -720,14 +740,21 @@ function modelProvenance(baseId) {
   return { officialModel, hints: modelHintMap(MODEL_STAGE.scheduler_stage_reference_id, 'genref-1', officialModel), sources: sourcesMap(officialModel) };
 }
 
-test('official policy binding: valid Network/Secret binding against a genuine official policy matches', () => {
+test('official policy binding: valid Network binding against a genuine official policy matches', () => {
   const officialNetwork = buildOfficialNetworkPolicy('official-valid-net');
-  const officialSecret = buildOfficialSecretPolicy('official-valid-sec', 'tenant-a');
-  const worker = { network_policy_reference_id: 'w1-network-policy', secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
   const { hints, sources } = modelProvenance('official-valid');
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetwork), canonical, officialMap('network', officialNetwork), hints, sources).match, true);
-  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, validSecretBinding(officialSecret), canonical, officialMap('secret', officialSecret), hints, sources).match, true);
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetwork), canonical, officialMap('network', officialNetwork), hints, sources, snapshotContext()).match, true);
+  // pr106fix5: a genuine, request-validated official Secret Policy can never match a MODEL/TOOL/
+  // WORKFLOW `secret_purpose` today -- `SECRET_SCOPES` (transcription-secret-resolution-boundary.js,
+  // reused verbatim, PR #76) is `['TRANSCRIPTION_PROVIDER', 'TRANSPORT', 'WEBHOOK', 'INTERNAL_SERVICE']`,
+  // disjoint from `MODEL_PROVIDER_ACCESS`/`TOOL_ACCESS`/`WORKFLOW_ACCESS`. Documented honestly as a
+  // limitation below; see "Secret purpose vs destination_class (pr106fix5 FIX 1)" for coverage of the
+  // comparison logic itself via a raw (non-request-validated) official object.
+  const officialSecret = buildOfficialSecretPolicy('official-valid-sec', 'tenant-a');
+  const secWorker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, secWorker, validSecretBinding(officialSecret), canonical, officialMap('secret', officialSecret), hints, sources, snapshotContext()).reason, 'worker_secret_official_policy_purpose_mismatch::MODEL::genref-1');
 });
 
 test('official policy binding: official policy missing from the registry blocks with a distinct reason', () => {
@@ -824,8 +851,8 @@ test('official policy binding: input order of official policies in the map never
   const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
   const binding = validNetworkBinding(officialA);
   const { hints, sources } = modelProvenance('order');
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, mapAB, hints, sources).match, true);
-  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, mapBA, hints, sources).match, true);
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, mapAB, hints, sources, snapshotContext()).match, true);
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, mapBA, hints, sources, snapshotContext()).match, true);
 });
 
 test('official policy binding: structurally invalid official policy is rejected by its own real validator', () => {
@@ -846,7 +873,152 @@ test('worker assignment boundary: model stage with a compatible network/secret p
   const sources = sourcesMap(officialModel);
   assert.equal(evaluatePolicyReferenceMatch('network', modelStage, golden.pool.worker, golden.pool.networkPolicy, {
     tenantId: golden.runtimePackage.tenant_id, organizationId: golden.runtimePackage.organization_id, projectId: golden.runtimePackage.project_id
-  }, netMap, hints, sources).match, true);
+  }, netMap, hints, sources, snapshotContext()).match, true);
+});
+
+// --- Secret purpose vs destination_class (pr106fix5 FIX 1) -----------------------------------------
+// "Para Network: official.scope deve ser comparado com requirement.destination_class. Para Secret:
+// official.scope deve ser comparado com requirement.secret_purpose." A genuine, request-validated
+// TranscriptionSecretReference can never carry `scope: 'MODEL_PROVIDER_ACCESS'`/`'TOOL_ACCESS'`/
+// `'WORKFLOW_ACCESS'` today -- `SECRET_SCOPES` (transcription-secret-resolution-boundary.js, reused
+// verbatim, PR #76) is `['TRANSCRIPTION_PROVIDER', 'TRANSPORT', 'WEBHOOK', 'INTERNAL_SERVICE']`,
+// disjoint from the `secret_purpose` vocabulary `deriveStagePolicyRequirements` assigns. This is an
+// honest, documented limitation of the current official contract (see docs "Limitações") -- these
+// tests exercise the comparison LOGIC itself via a raw, non-request-validated official object
+// (`rawOfficialSecret`), the same technique already used elsewhere in this file to isolate boundary
+// logic from full end-to-end request validation.
+function rawOfficialSecret(baseId, tenantId, scope, overrides = {}) {
+  return {
+    secret_ref_id: `${baseId}-official-secpolicy`, secret_ref_version: 1,
+    secret_alias: `${baseId}-official-secpolicy-alias`, secret_type: 'API_KEY_REFERENCE',
+    provider_slug: 'mock-provider-a', tenant_id: tenantId, environment: 'DEVELOPMENT',
+    scope, rotation_version: 1, active: false, revoked: false,
+    simulation: true, production_blocked: true, network_enabled: false, runtime_enabled: false,
+    validator_version: 'raw-test-secret-not-request-validated',
+    ...overrides
+  };
+}
+
+function secretBindingFor(official) {
+  return {
+    secret_policy_reference_id: 'w1-secpolicy-reference', secret_policy_reference_valid: true,
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1', runtime_environment_reference_id: 'w1-env',
+    official_secret_policy_reference_id: official.secret_ref_id,
+    official_secret_policy_version: official.secret_ref_version,
+    official_secret_policy_fingerprint: computeOfficialPolicyFingerprint(official)
+  };
+}
+
+test('secret purpose vs destination_class: network policy comparison uses destination_class', () => {
+  const official = buildOfficialNetworkPolicy('fix1-net-destclass');
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-net-destclass');
+  const result = evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(official), canonical, officialMap('network', official), hints, sources, snapshotContext());
+  assert.equal(result.match, true);
+});
+
+test('secret purpose vs destination_class: secret policy comparison uses secret_purpose, never destination_class', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-sec-purpose');
+  const officialWithPurpose = rawOfficialSecret('fix1-sec-purpose-scope', 'tenant-a', 'MODEL_PROVIDER_ACCESS');
+  const matchResult = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secretBindingFor(officialWithPurpose), canonical, officialMap('secret', officialWithPurpose), hints, sources, snapshotContext());
+  assert.equal(matchResult.match, true);
+  const officialWithDestinationClass = rawOfficialSecret('fix1-sec-destclass-scope', 'tenant-a', 'TRANSCRIPTION_PROVIDER');
+  const mismatchResult = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secretBindingFor(officialWithDestinationClass), canonical, officialMap('secret', officialWithDestinationClass), hints, sources, snapshotContext());
+  assert.equal(mismatchResult.match, false);
+  assert.equal(mismatchResult.reason, 'worker_secret_official_policy_purpose_mismatch::MODEL::genref-1');
+});
+
+test('secret purpose vs destination_class: destination correta + purpose divergente bloqueia Secret', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-destok-purposebad');
+  // Scope genuinely equals MODEL's own destination_class (TRANSCRIPTION_PROVIDER) -- structurally the
+  // "correct" value for Network, but never the correct value for Secret's own secret_purpose.
+  const official = rawOfficialSecret('fix1-destok-purposebad-scope', 'tenant-a', 'TRANSCRIPTION_PROVIDER');
+  const result = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secretBindingFor(official), canonical, officialMap('secret', official), hints, sources, snapshotContext());
+  assert.equal(result.match, false);
+  assert.equal(result.reason, 'worker_secret_official_policy_purpose_mismatch::MODEL::genref-1');
+});
+
+test('secret purpose vs destination_class: purpose correto + destination divergente não altera Secret', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-purposeok-destbad');
+  // scope equals secret_purpose (MODEL_PROVIDER_ACCESS) -- genuinely never equal to destination_class
+  // (TRANSCRIPTION_PROVIDER) -- Secret still matches, proving destination_class is never consulted.
+  const official = rawOfficialSecret('fix1-purposeok-destbad-scope', 'tenant-a', 'MODEL_PROVIDER_ACCESS');
+  const result = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secretBindingFor(official), canonical, officialMap('secret', official), hints, sources, snapshotContext());
+  assert.equal(result.match, true);
+});
+
+test('secret purpose vs destination_class: scope correto de Network não autoriza Secret', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-networkscope-forsecret');
+  // A scope value that is structurally valid for Network's own destination_class comparison is never
+  // automatically valid for Secret's own secret_purpose comparison, even when both nominally describe
+  // "the same stage element".
+  const official = rawOfficialSecret('fix1-networkscope-forsecret-scope', 'tenant-a', 'TRANSCRIPTION_PROVIDER');
+  const result = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secretBindingFor(official), canonical, officialMap('secret', official), hints, sources, snapshotContext());
+  assert.equal(result.match, false);
+  assert.equal(result.reason, 'worker_secret_official_policy_purpose_mismatch::MODEL::genref-1');
+});
+
+test('secret purpose vs destination_class: stage misto valida cada scope/purpose independentemente', () => {
+  const officialModel = buildOfficialModelSelectionDecision('fix1-mixed', { decision_id: 'genref-1' });
+  const officialNetwork = buildOfficialNetworkPolicy('fix1-mixed-net');
+  const officialSecretWithPurpose = rawOfficialSecret('fix1-mixed-sec', 'tenant-a', 'MODEL_PROVIDER_ACCESS');
+  const netWorker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const secWorker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const hints = modelHintMap(MODEL_STAGE.scheduler_stage_reference_id, 'genref-1', officialModel);
+  const sources = sourcesMap(officialModel);
+  const networkResult = evaluatePolicyReferenceMatch('network', MODEL_STAGE, netWorker, validNetworkBinding(officialNetwork), canonical, officialMap('network', officialNetwork), hints, sources, snapshotContext());
+  const secretResult = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, secWorker, secretBindingFor(officialSecretWithPurpose), canonical, officialMap('secret', officialSecretWithPurpose), hints, sources, snapshotContext());
+  assert.equal(networkResult.match, true);
+  assert.equal(secretResult.match, true);
+});
+
+test('secret purpose vs destination_class: fingerprint oficial válido não mascara purpose mismatch', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-fpvalid-purposebad');
+  const official = rawOfficialSecret('fix1-fpvalid-purposebad-scope', 'tenant-a', 'WEBHOOK');
+  const binding = secretBindingFor(official);
+  // The binding's own official fingerprint is genuinely valid (Gate 1 passes) -- purpose mismatch is
+  // never masked by fingerprint validity.
+  assert.equal(binding.official_secret_policy_fingerprint, computeOfficialPolicyFingerprint(official));
+  const result = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, officialMap('secret', official), hints, sources, snapshotContext());
+  assert.equal(result.match, false);
+  assert.equal(result.reason, 'worker_secret_official_policy_purpose_mismatch::MODEL::genref-1');
+});
+
+test('secret purpose vs destination_class: input order of official policies never alters the purpose comparison', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-order');
+  const officialA = rawOfficialSecret('fix1-order-a', 'tenant-a', 'MODEL_PROVIDER_ACCESS');
+  const officialB = rawOfficialSecret('fix1-order-b', 'tenant-a', 'TRANSPORT');
+  const mapAB = new Map([[officialA.secret_ref_id, officialA], [officialB.secret_ref_id, officialB]]);
+  const mapBA = new Map([[officialB.secret_ref_id, officialB], [officialA.secret_ref_id, officialA]]);
+  const binding = secretBindingFor(officialA);
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, mapAB, hints, sources, snapshotContext()).match, true);
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, mapBA, hints, sources, snapshotContext()).match, true);
+});
+
+test('secret purpose vs destination_class: context never alters the scope/purpose comparison', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-context-inert');
+  const official = rawOfficialSecret('fix1-context-inert-scope', 'tenant-a', 'MODEL_PROVIDER_ACCESS');
+  const binding = secretBindingFor(official);
+  const officialMapArg = officialMap('secret', official);
+  const result1 = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, officialMapArg, hints, sources, snapshotContext());
+  const result2 = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, officialMapArg, hints, sources, snapshotContext());
+  assert.deepEqual(result1, result2);
 });
 
 // --- Stage Policy Requirement derivation (pr106fix4 FIX 1) -----------------------------------------
@@ -943,7 +1115,7 @@ test('evaluatePolicyReferenceMatch: MODEL authorized never masks an unresolvable
   const mixedStage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: ['tool-a'], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
   const hints = modelHintMap('stage-1', 'genref-1', officialModel);
   const sources = sourcesMap(officialModel);
-  const result = evaluatePolicyReferenceMatch('network', mixedStage, worker, binding, canonical, officialMap('network', officialNetwork), hints, sources);
+  const result = evaluatePolicyReferenceMatch('network', mixedStage, worker, binding, canonical, officialMap('network', officialNetwork), hints, sources, snapshotContext());
   assert.equal(result.match, false);
   assert.equal(result.reason, 'worker_network_policy_requirement_unresolvable::TOOL::tool-a');
 });
@@ -957,7 +1129,7 @@ test('evaluatePolicyReferenceMatch: MODEL authorized never masks an unresolvable
   const mixedStage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: [], workflow_reference_id: 'flow-a', required_capabilities: [], required_modalities: [] };
   const hints = modelHintMap('stage-1', 'genref-1', officialModel);
   const sources = sourcesMap(officialModel);
-  const result = evaluatePolicyReferenceMatch('network', mixedStage, worker, binding, canonical, officialMap('network', officialNetwork), hints, sources);
+  const result = evaluatePolicyReferenceMatch('network', mixedStage, worker, binding, canonical, officialMap('network', officialNetwork), hints, sources, snapshotContext());
   assert.equal(result.match, false);
   assert.equal(result.reason, 'worker_network_policy_requirement_unresolvable::WORKFLOW::flow-a');
 });
@@ -974,7 +1146,7 @@ function modelRequirement(sourceReferenceId) {
 test('resolveRequirementProvenance: source oficial válida resolves and authorizes', () => {
   const official = buildOfficialModelSelectionDecision('prov-valid');
   const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
-  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official));
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official), snapshotContext());
   assert.equal(result.authorized, true);
   assert.equal(result.provider_slug, 'mock-provider-a');
   assert.equal(result.stage_domain, 'TRANSCRIPTION_DOMAIN');
@@ -1088,6 +1260,156 @@ test('stage policy requirement provenance: no network access and no secret resol
   assert.deepEqual(findAgentCoreOperationalMaterial(official), []);
 });
 
+// --- Registry Snapshot provenance (pr106fix5 FIX 2) -------------------------------------------------
+// "Hoje qualquer Registry Snapshot ID pode ser declarado sem alterar a decisão." Closed by requiring a
+// RESOLVED requirement's `source_registry_snapshot_reference_id` to bind to the one genuine
+// `ExecutionRegistrySnapshotReference` this request carries, proven to be the SAME snapshot the
+// Runtime Execution Package and Freshness Reference already committed to.
+
+test('resolveRegistrySnapshotBinding: snapshot oficial correto authorizes', () => {
+  const official = buildOfficialModelSelectionDecision('snap-valid');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const result = resolveRegistrySnapshotBinding(hint, snapshotContext());
+  assert.deepEqual(result, { authorized: true });
+});
+
+test('resolveRegistrySnapshotBinding: snapshot ausente (no registry_snapshot_reference on the request) blocks', () => {
+  const official = buildOfficialModelSelectionDecision('snap-missing');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  assert.equal(resolveRegistrySnapshotBinding(hint, null).reason, 'registry_snapshot_missing');
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ ref: null })).reason, 'registry_snapshot_missing');
+});
+
+test('resolveRegistrySnapshotBinding: snapshot ID divergente (hint declares an ID the real snapshot does not have) blocks', () => {
+  const official = buildOfficialModelSelectionDecision('snap-idmismatch');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official, { source_registry_snapshot_reference_id: 'a-different-snapshot-id' });
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext()).reason, 'registry_snapshot_mismatch');
+});
+
+test('resolveRegistrySnapshotBinding: snapshot não é o mesmo que o Runtime Execution Package/Freshness Reference já comprometeram blocks', () => {
+  const official = buildOfficialModelSelectionDecision('snap-notpackage');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ packageRegistrySnapshotId: 'a-different-package-snapshot-id' })).reason, 'registry_snapshot_mismatch');
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ freshnessRegistrySnapshotId: 'a-different-freshness-snapshot-id' })).reason, 'registry_snapshot_mismatch');
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ packageExecutionPlanId: 'a-different-execution-plan-id' })).reason, 'registry_snapshot_mismatch');
+});
+
+test('resolveRegistrySnapshotBinding: snapshot version divergente (snapshot_consistent/snapshot_validated false) blocks', () => {
+  const official = buildOfficialModelSelectionDecision('snap-version');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const inconsistentSnapshot = buildOfficialRegistrySnapshot({ observed_registry_version: 'a-different-observed-version' });
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ ref: inconsistentSnapshot })).reason, 'registry_snapshot_version_mismatch');
+});
+
+test('resolveRegistrySnapshotBinding: snapshot fingerprint divergente (conteúdo adulterado após fingerprint calculado) blocks', () => {
+  const official = buildOfficialModelSelectionDecision('snap-fp');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const genuineSnapshot = buildOfficialRegistrySnapshot();
+  // Bypasses the real builder to simulate a tampered-after-construction object -- the same "self-
+  // fingerprint válido não mascara" technique already used throughout this file.
+  const tamperedSnapshot = { ...genuineSnapshot, execution_plan_request_id: 'a-completely-different-request-id' };
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ ref: tamperedSnapshot })).reason, 'registry_snapshot_fingerprint_mismatch');
+});
+
+test('resolveRegistrySnapshotBinding: snapshot de outro tenant/organização/projeto blocks with scope_mismatch', () => {
+  const official = buildOfficialModelSelectionDecision('snap-scope');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const otherTenantSnapshot = buildOfficialRegistrySnapshot({ tenant_id: 'other-tenant' });
+  const otherOrgSnapshot = buildOfficialRegistrySnapshot({ organization_id: 'other-tenant:org-9' });
+  const otherProjectSnapshot = buildOfficialRegistrySnapshot({ project_id: 'other-proj' });
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ ref: otherTenantSnapshot })).reason, 'registry_snapshot_scope_mismatch');
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ ref: otherOrgSnapshot })).reason, 'registry_snapshot_scope_mismatch');
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ ref: otherProjectSnapshot })).reason, 'registry_snapshot_scope_mismatch');
+});
+
+test('resolveRegistrySnapshotBinding: snapshot expirado (stale) blocks', () => {
+  const official = buildOfficialModelSelectionDecision('snap-stale');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const result = resolveRegistrySnapshotBinding(hint, snapshotContext({ freshnessMaxRegistryValidSequences: 10, requestLogicalSequence: 11 }));
+  assert.equal(result.reason, 'registry_snapshot_stale');
+});
+
+test('resolveRequirementProvenance: requirement RESOLVED sem snapshot oficial correspondente bloqueia', () => {
+  const official = buildOfficialModelSelectionDecision('snap-noregistry');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official), null);
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'registry_snapshot_missing');
+});
+
+test('resolveRequirementProvenance: self-fingerprint válido do requirement não mascara snapshot divergente', () => {
+  const official = buildOfficialModelSelectionDecision('snap-selfvalid');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  assertValid('hint self-fingerprint is genuinely valid', validateRuntimeWorkerStagePolicyRequirementReference(hint));
+  const otherSnapshot = buildOfficialRegistrySnapshot({ registry_snapshot_reference_id: 'a-different-snapshot-entirely' });
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official), snapshotContext({ ref: otherSnapshot }));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'registry_snapshot_mismatch');
+});
+
+test('resolveRequirementProvenance: source fingerprint correto não mascara snapshot divergente', () => {
+  const official = buildOfficialModelSelectionDecision('snap-sourcevalid');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  // The MODEL source's own fingerprint genuinely matches (provenance to the source itself is fine) --
+  // only the registry snapshot binding is wrong, and it is never masked by the source being valid.
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official), snapshotContext({ packageRegistrySnapshotId: 'a-different-id' }));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'registry_snapshot_mismatch');
+});
+
+test('evaluatePolicyReferenceMatch: provider permitido no snapshot passa (genuine snapshot binding + genuine provider both required)', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('snap-provok-net');
+  const officialModel = buildOfficialModelSelectionDecision('snap-provok-gen', { decision_id: 'genref-1' });
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const hints = modelHintMap('stage-1', 'genref-1', officialModel);
+  const sources = sourcesMap(officialModel);
+  const result = evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetwork), canonical, officialMap('network', officialNetwork), hints, sources, snapshotContext());
+  assert.equal(result.match, true);
+});
+
+test('evaluatePolicyReferenceMatch: provider ausente do ALLOWED_CAPABILITY_PROVIDER_SLUGS fica unresolved/bloqueado mesmo com snapshot genuíno', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('snap-provbad-net');
+  // A provider not in the closed capability registry -- a genuinely valid, matching Registry Snapshot
+  // never overrides this: the requirement is still GENERIC_DOMAIN, structurally never authorizable.
+  const officialModel = buildOfficialModelSelectionDecision('snap-provbad-gen', { decision_id: 'genref-1', selected_provider_id: 'not-an-allowed-provslug' });
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  // The hint honestly declares the recomputed domain (GENERIC_DOMAIN) rather than falsely claiming
+  // TRANSCRIPTION_DOMAIN -- an honest-but-out-of-domain hint reaches the domain check itself, rather
+  // than being caught earlier as a claim/recomputation mismatch (`unresolvable`).
+  const hints = modelHintMap('stage-1', 'genref-1', officialModel, { source_stage_domain: 'GENERIC_DOMAIN' });
+  const sources = sourcesMap(officialModel);
+  const result = evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetwork), canonical, officialMap('network', officialNetwork), hints, sources, snapshotContext());
+  assert.equal(result.match, false);
+  assert.equal(result.reason, 'worker_network_official_policy_domain_mismatch::MODEL::genref-1');
+});
+
+test('resolveRegistrySnapshotBinding: context never alters the snapshot binding outcome', () => {
+  const official = buildOfficialModelSelectionDecision('snap-context-inert');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const ctx = snapshotContext();
+  assert.deepEqual(resolveRegistrySnapshotBinding(hint, ctx), resolveRegistrySnapshotBinding(hint, ctx));
+});
+
+test('resolveRegistrySnapshotBinding: input order of registry snapshot context fields never alters the outcome', () => {
+  const official = buildOfficialModelSelectionDecision('snap-order');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const ctxA = snapshotContext();
+  const ctxB = {
+    tenantId: ctxA.tenantId, projectId: ctxA.projectId, organizationId: ctxA.organizationId,
+    requestLogicalSequence: ctxA.requestLogicalSequence, freshnessMaxRegistryValidSequences: ctxA.freshnessMaxRegistryValidSequences,
+    freshnessRegistryCreatedSequence: ctxA.freshnessRegistryCreatedSequence, freshnessRegistrySnapshotId: ctxA.freshnessRegistrySnapshotId,
+    packageExecutionPlanId: ctxA.packageExecutionPlanId, packageRegistrySnapshotId: ctxA.packageRegistrySnapshotId, ref: ctxA.ref
+  };
+  assert.deepEqual(resolveRegistrySnapshotBinding(hint, ctxA), resolveRegistrySnapshotBinding(hint, ctxB));
+});
+
+test('registry snapshot provenance: no network access and no secret resolution ever occurs while resolving snapshot binding', () => {
+  const snapshot = buildOfficialRegistrySnapshot();
+  assert.deepEqual(findAgentCoreOperationalMaterial(snapshot), []);
+});
+
 // --- Worker Assignment Package integrity (pr106fix4 FIX 3) -----------------------------------------
 // "O Worker Assignment Package inclui Replay, policies oficiais, requirements e suas fontes no
 // próprio fingerprint e digest."
@@ -1184,16 +1506,37 @@ test('package integrity: duplicate entries within a fingerprint list diverge fro
   assertInvalid('duplicate fingerprint entries diverge from expected cardinality', validateRuntimeWorkerAssignmentPackage(tampered));
 });
 
-test('package integrity: package digest covers replay, official policies, requirements, and their sources', () => {
-  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { networkPermissionPolicyRefs: [buildOfficialNetworkPolicy('digest-cover-net')] });
+test('package integrity: package digest covers replay, official policies, requirements, their sources, and the registry snapshot', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    networkPermissionPolicyRefs: [buildOfficialNetworkPolicy('digest-cover-net')], registrySnapshotRef: buildOfficialRegistrySnapshot()
+  });
   const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
   assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
-  for (const field of ['official_network_policy_fingerprints', 'official_secret_policy_fingerprints', 'stage_policy_requirement_fingerprints', 'stage_policy_requirement_source_fingerprints', 'replay_fingerprint']) {
+  for (const field of [
+    'official_network_policy_fingerprints', 'official_secret_policy_fingerprints', 'stage_policy_requirement_fingerprints',
+    'stage_policy_requirement_source_fingerprints', 'replay_fingerprint', 'registry_snapshot_reference_fingerprint'
+  ]) {
     const original = outcome.package[field];
     const tamperedValue = Array.isArray(original) ? [...original, 'sha256:' + 'b'.repeat(64)].sort() : 'sha256:' + 'b'.repeat(64);
     const tampered = { ...outcome.package, [field]: tamperedValue };
     assertInvalid(`tampering ${field} invalidates the stored digest`, validateRuntimeWorkerAssignmentPackage(tampered));
   }
+});
+
+test('package integrity: altering the Registry Snapshot changes the package fingerprint, and no snapshot never uses a placeholder-masking value', () => {
+  const goldenNoSnapshot = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {});
+  const outcomeNoSnapshot = evaluateRuntimeWorkerAssignmentRequest(goldenNoSnapshot.workerAssignmentRequest, {});
+  assert.equal(outcomeNoSnapshot.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeNoSnapshot.package.registry_snapshot_reference_fingerprint, 'fingerprint_not_available');
+
+  const goldenA = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { registrySnapshotRef: buildOfficialRegistrySnapshot({ execution_plan_request_id: 'snap-fp-variant-a' }) });
+  const goldenB = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { registrySnapshotRef: buildOfficialRegistrySnapshot({ execution_plan_request_id: 'snap-fp-variant-b' }) });
+  const outcomeA = evaluateRuntimeWorkerAssignmentRequest(goldenA.workerAssignmentRequest, {});
+  const outcomeB = evaluateRuntimeWorkerAssignmentRequest(goldenB.workerAssignmentRequest, {});
+  assert.equal(outcomeA.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeB.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcomeA.package.registry_snapshot_reference_fingerprint, outcomeB.package.registry_snapshot_reference_fingerprint);
+  assert.notEqual(outcomeA.package.worker_assignment_package_fingerprint, outcomeB.package.worker_assignment_package_fingerprint);
 });
 
 test('worker assignment boundary: secret policy fingerprint tamper is rejected at the contract level, never silently accepted', () => {

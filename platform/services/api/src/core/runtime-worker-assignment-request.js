@@ -31,6 +31,10 @@ const { validateRuntimeWorkerStagePolicyRequirementReference } = require('./runt
 const { validateModelSelectionDecision } = require('./model-selection-decision');
 const { validateToolContract } = require('./tool-contract');
 const { validateWorkflowContract } = require('./workflow-contract');
+// pr106fix5: the genuine, already-established Registry Snapshot contract a RESOLVED Stage Policy
+// Requirement's `source_registry_snapshot_reference_id` must bind to -- reused verbatim, never a
+// second self-declared snapshot.
+const { validateExecutionRegistrySnapshotReference } = require('./execution-registry-snapshot-reference');
 
 // pr106: aggregates every reference runtime-worker-assignment-boundary.js needs -- the already-
 // SCHEDULER_PACKAGE_PREPARED_SIMULATION chain (Scheduler Request/Decision/Result/Package), the real
@@ -53,6 +57,7 @@ const RUNTIME_WORKER_ASSIGNMENT_REQUEST_FIELDS = Object.freeze([
   'network_permission_policy_references', 'secret_resolution_policy_references',
   'stage_policy_requirement_references',
   'model_selection_decision_references', 'tool_contract_references', 'workflow_contract_references',
+  'registry_snapshot_reference',
   'correlation_id', 'causation_id', 'trace_id', 'logical_sequence', 'expected_worker_assignment_registry_version',
   'simulation_context', 'validator_version'
 ]);
@@ -70,6 +75,13 @@ const SINGLE_NESTED_REFERENCE_VALIDATORS = Object.freeze([
   ['runtime_freshness_reference', validateRuntimeReadinessFreshnessReference],
   ['runtime_replay_reference', validateRuntimeReadinessReplayReference],
   ['idempotency_reference', validateExecutionPlanIdempotency]
+]);
+
+// pr106fix5: "quando existentes" -- the only nullable single nested reference this request carries.
+// `null` is a legitimate declaration (no genuine Registry Snapshot is available yet); when present it
+// must still pass its own real validator, never a free-form object.
+const NULLABLE_SINGLE_NESTED_REFERENCE_VALIDATORS = Object.freeze([
+  ['registry_snapshot_reference', validateExecutionRegistrySnapshotReference]
 ]);
 
 const LIST_NESTED_REFERENCE_VALIDATORS = Object.freeze([
@@ -109,6 +121,12 @@ function validateRuntimeWorkerAssignmentRequest(request) {
   for (const [field, validator] of SINGLE_NESTED_REFERENCE_VALIDATORS) {
     const result = validator(request[field]);
     if (!result.valid) errors.push(`${field}_invalid::${result.errors.join('|')}`);
+  }
+  for (const [field, validator] of NULLABLE_SINGLE_NESTED_REFERENCE_VALIDATORS) {
+    if (request[field] !== null) {
+      const result = validator(request[field]);
+      if (!result.valid) errors.push(`${field}_invalid::${result.errors.join('|')}`);
+    }
   }
   for (const [field, validator] of LIST_NESTED_REFERENCE_VALIDATORS) {
     if (!Array.isArray(request[field]) || request[field].length > MAX_LIST_ITEMS) {
@@ -159,6 +177,7 @@ function buildRuntimeWorkerAssignmentRequest(input = {}) {
     model_selection_decision_references: Array.isArray(input.model_selection_decision_references) ? input.model_selection_decision_references : [],
     tool_contract_references: Array.isArray(input.tool_contract_references) ? input.tool_contract_references : [],
     workflow_contract_references: Array.isArray(input.workflow_contract_references) ? input.workflow_contract_references : [],
+    registry_snapshot_reference: input.registry_snapshot_reference === undefined ? null : input.registry_snapshot_reference,
     correlation_id: input.correlation_id,
     causation_id: input.causation_id,
     trace_id: input.trace_id,
@@ -178,6 +197,7 @@ function buildRuntimeWorkerAssignmentRequest(input = {}) {
 module.exports = {
   LIST_NESTED_REFERENCE_VALIDATORS,
   MAX_LIST_ITEMS,
+  NULLABLE_SINGLE_NESTED_REFERENCE_VALIDATORS,
   RUNTIME_WORKER_ASSIGNMENT_REQUEST_FIELDS,
   RUNTIME_WORKER_ASSIGNMENT_REQUEST_VALIDATOR_VERSION,
   SINGLE_NESTED_REFERENCE_VALIDATORS,

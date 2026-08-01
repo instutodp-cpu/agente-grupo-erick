@@ -25,6 +25,9 @@ const { stablePayload: computeOfficialPolicyFingerprint } = require('../../src/c
 // bind to -- reused verbatim via their own real validators/builders, never a second self-declared
 // source.
 const { buildModelSelectionDecision } = require('../../src/core/model-selection-decision');
+// pr106fix5: the genuine Registry Snapshot contract a RESOLVED Stage Policy Requirement's
+// `source_registry_snapshot_reference_id` must bind to -- reused verbatim.
+const { buildExecutionRegistrySnapshotReference } = require('../../src/core/execution-registry-snapshot-reference');
 
 const OFFICIAL_NETWORK_VALIDATOR_VERSION = 'transcription_network_permission_boundary_validator_v1';
 const OFFICIAL_SECRET_VALIDATOR_VERSION = 'transcription_secret_resolution_boundary_validator_v1';
@@ -98,6 +101,38 @@ const REQUIREMENT_SOURCE_TYPES = Object.freeze({
   MODEL: 'MODEL_SELECTION_REFERENCE', TOOL: 'TOOL_CONTRACT_REFERENCE', WORKFLOW: 'WORKFLOW_CONTRACT_REFERENCE'
 });
 
+// pr106fix5: the canonical Registry Snapshot ID/scope/sequence the golden scheduler bundle's own
+// `runtime_execution_package_reference`/`runtime_freshness_reference` already carry (verified via
+// direct inspection) -- `buildOfficialRegistrySnapshot`'s defaults and `buildResolvedRequirementHint`'s
+// default `source_registry_snapshot_reference_id` both anchor to this single canonical value so the
+// golden-bundle-based happy path never needs a per-call override.
+const GOLDEN_REGISTRY_SNAPSHOT_ID = 'snapshotref-001';
+const GOLDEN_REGISTRY_ENTITY_KEYS = Object.freeze([
+  'execution_plan_request', 'stage_manifest', 'dependency_graph', 'provenance', 'scope', 'execution_plan_budget',
+  'idempotency_policy'
+]);
+
+// pr106fix5: a genuine official Registry Snapshot -- the canonical source
+// `resolveRequirementProvenance` proves a RESOLVED requirement's `source_registry_snapshot_reference_id`
+// is genuinely bound to, never an arbitrary caller-declared ID.
+function buildOfficialRegistrySnapshot(overrides = {}) {
+  const entityVersions = {};
+  const entityFingerprints = {};
+  for (const key of GOLDEN_REGISTRY_ENTITY_KEYS) {
+    entityVersions[key] = 1;
+    entityFingerprints[key] = `genentityfingerprint-${key}`;
+  }
+  return buildExecutionRegistrySnapshotReference({
+    registry_snapshot_reference_id: GOLDEN_REGISTRY_SNAPSHOT_ID,
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1',
+    session_reference_id: 'gensession-1', execution_plan_request_id: 'genplan-request-1', execution_plan_id: 'plan-1',
+    expected_registry_version: 'genv1', observed_registry_version: 'genv1',
+    registry_entity_versions: entityVersions, registry_entity_fingerprints: entityFingerprints,
+    snapshot_validated: true, logical_sequence: 0,
+    ...overrides
+  });
+}
+
 // pr106fix4: a Stage Policy Requirement hint genuinely bound (ID/version/fingerprint) to
 // `officialSource` -- never a free-form caller claim. Defaults to a resolvable MODEL requirement.
 function buildResolvedRequirementHint(schedulerStageReferenceId, requirementElement, sourceReferenceId, officialSource, overrides = {}) {
@@ -111,7 +146,7 @@ function buildResolvedRequirementHint(schedulerStageReferenceId, requirementElem
     source_reference_type: sourceType,
     source_reference_version: versionKey ? officialSource[versionKey] : 1,
     source_reference_fingerprint: computeOfficialPolicyFingerprint(officialSource),
-    source_registry_snapshot_reference_id: `${schedulerStageReferenceId}-registry-snapshot`,
+    source_registry_snapshot_reference_id: GOLDEN_REGISTRY_SNAPSHOT_ID,
     source_resolution_status: 'RESOLVED_FROM_OFFICIAL_REFERENCE',
     source_provider_slug: requirementElement === 'MODEL' ? officialSource.selected_provider_id : 'mock-provider-a',
     source_stage_domain: 'TRANSCRIPTION_DOMAIN',
@@ -272,6 +307,10 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
   const modelSelectionDecisionRefs = overrides.modelSelectionDecisionRefs || [];
   const toolContractRefs = overrides.toolContractRefs || [];
   const workflowContractRefs = overrides.workflowContractRefs || [];
+  // pr106fix5: "quando existentes" -- no default Registry Snapshot unless a test explicitly opts in
+  // (e.g. via `buildOfficialRegistrySnapshot()`, which already matches this golden bundle's own
+  // package/freshness `registry_snapshot_reference_id`/`execution_plan_id`/scope/sequence).
+  const registrySnapshotRef = overrides.registrySnapshotRef === undefined ? null : overrides.registrySnapshotRef;
 
   const request = buildRuntimeWorkerAssignmentRequest({
     runtime_worker_assignment_request_id: requestId,
@@ -299,6 +338,7 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
     model_selection_decision_references: modelSelectionDecisionRefs,
     tool_contract_references: toolContractRefs,
     workflow_contract_references: workflowContractRefs,
+    registry_snapshot_reference: registrySnapshotRef,
     correlation_id: 'corr-worker-assignment-1',
     causation_id: 'cause-worker-assignment-1',
     trace_id: 'trace-worker-assignment-1',
@@ -312,15 +352,17 @@ function buildGoldenWorkerAssignmentBundle(scenarioKey = 'prepared-no-llm-plan',
     ...schedulerGolden, schedulerOutcome, baseId, requestId, assignmentPolicy, pool, workerRefs,
     workerCapabilityRefs, workerCapacityRefs, workerHealthRefs, workerNetworkPolicyRefs, workerSecretPolicyRefs,
     networkPermissionPolicyRefs, secretResolutionPolicyRefs, stagePolicyRequirementRefs,
-    modelSelectionDecisionRefs, toolContractRefs, workflowContractRefs,
+    modelSelectionDecisionRefs, toolContractRefs, workflowContractRefs, registrySnapshotRef,
     workerAssignmentRequest: request
   };
 }
 
 module.exports = {
+  GOLDEN_REGISTRY_SNAPSHOT_ID,
   buildGoldenWorkerAssignmentBundle,
   buildOfficialModelSelectionDecision,
   buildOfficialNetworkPolicy,
+  buildOfficialRegistrySnapshot,
   buildOfficialSecretPolicy,
   buildResolvedRequirementHint,
   buildUnresolvedRequirementHint,
