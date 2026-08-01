@@ -287,7 +287,10 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'runtime_worker_stage_assignment_references', 'runtime_worker_stage_policy_requirement_references',
   'runtime_stage_capacity_available', 'runtime_parallel_capacity_available', 'runtime_model_capacity_available',
   'runtime_tool_capacity_available', 'runtime_workflow_capacity_available', 'runtime_token_capacity_available',
-  'runtime_cost_capacity_available', 'worker_token_capacity_available'
+  'runtime_cost_capacity_available', 'worker_token_capacity_available',
+  // pr107fix FIX 2: the raw official RuntimeSchedulerDependencyReference objects (PR #105), reused
+  // verbatim on the Dispatch Request so predecessor-before-target can be genuinely proven.
+  'runtime_scheduler_dependency_references'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept

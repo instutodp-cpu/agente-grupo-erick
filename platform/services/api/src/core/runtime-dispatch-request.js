@@ -28,6 +28,7 @@ const { validateRuntimeWorkerCompatibilityReference } = require('./runtime-worke
 const { validateRuntimeWorkerCandidateSetReference } = require('./runtime-worker-candidate-set-reference');
 const { validateRuntimeWorkerStageAssignmentReference } = require('./runtime-worker-stage-assignment-reference');
 const { validateRuntimeWorkerStagePolicyRequirementReference } = require('./runtime-worker-stage-policy-requirement-reference');
+const { validateRuntimeSchedulerDependencyReference } = require('./runtime-scheduler-dependency-reference');
 const { validateDestinationReference } = require('./transcription-network-permission-boundary');
 const { validateSecretReference } = require('./transcription-secret-resolution-boundary');
 const { validateRuntimeDispatchReplayReference } = require('./runtime-dispatch-replay-reference');
@@ -61,6 +62,11 @@ const RUNTIME_DISPATCH_REQUEST_FIELDS = Object.freeze([
   'runtime_worker_health_references', 'runtime_worker_compatibility_references', 'runtime_worker_candidate_set_references',
   'runtime_worker_stage_assignment_references', 'runtime_worker_stage_policy_requirement_references',
   'network_permission_policy_references', 'secret_resolution_policy_references',
+  // pr107fix FIX 2: the official RuntimeSchedulerDependencyReference objects (PR #105), reused
+  // verbatim via their own validator -- required so the Dispatch Order boundary can prove
+  // predecessor-before-target for every required dependency edge, instead of trusting the
+  // Scheduler Result's own declared stage order.
+  'runtime_scheduler_dependency_references',
   'correlation_id', 'causation_id', 'trace_id', 'logical_sequence', 'expected_dispatch_registry_version',
   'simulation_context', 'validator_version'
 ]);
@@ -101,7 +107,8 @@ const LIST_NESTED_REFERENCE_VALIDATORS = Object.freeze([
   ['runtime_worker_stage_assignment_references', validateRuntimeWorkerStageAssignmentReference],
   ['runtime_worker_stage_policy_requirement_references', validateRuntimeWorkerStagePolicyRequirementReference],
   ['network_permission_policy_references', validateDestinationReference],
-  ['secret_resolution_policy_references', validateSecretReference]
+  ['secret_resolution_policy_references', validateSecretReference],
+  ['runtime_scheduler_dependency_references', validateRuntimeSchedulerDependencyReference]
 ]);
 
 const MAX_LIST_ITEMS = 200;
@@ -194,6 +201,7 @@ function buildRuntimeDispatchRequest(input = {}) {
     runtime_worker_stage_policy_requirement_references: Array.isArray(input.runtime_worker_stage_policy_requirement_references) ? input.runtime_worker_stage_policy_requirement_references : [],
     network_permission_policy_references: Array.isArray(input.network_permission_policy_references) ? input.network_permission_policy_references : [],
     secret_resolution_policy_references: Array.isArray(input.secret_resolution_policy_references) ? input.secret_resolution_policy_references : [],
+    runtime_scheduler_dependency_references: Array.isArray(input.runtime_scheduler_dependency_references) ? input.runtime_scheduler_dependency_references : [],
     correlation_id: input.correlation_id,
     causation_id: input.causation_id,
     trace_id: input.trace_id,

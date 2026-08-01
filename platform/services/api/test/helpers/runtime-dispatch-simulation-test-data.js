@@ -66,6 +66,7 @@ function buildGoldenDispatchBundle(scenarioKey = 'prepared-no-llm-plan', overrid
       runtime_worker_stage_policy_requirement_references: workerAssignmentGolden.workerAssignmentRequest.stage_policy_requirement_references,
       network_permission_policy_references: workerAssignmentGolden.workerAssignmentRequest.network_permission_policy_references,
       secret_resolution_policy_references: workerAssignmentGolden.workerAssignmentRequest.secret_resolution_policy_references,
+      runtime_scheduler_dependency_references: workerAssignmentGolden.schedulerOutcome.schedulerDependencyRefs,
       correlation_id: 'corr-dispatch-1',
       causation_id: 'cause-dispatch-1',
       trace_id: 'trace-dispatch-1',

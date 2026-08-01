@@ -164,6 +164,7 @@ function evaluateRuntimeDispatchRequest(request, context = {}) {
   const stagePolicyRequirementRefs = requestIsObject && Array.isArray(request.runtime_worker_stage_policy_requirement_references) ? request.runtime_worker_stage_policy_requirement_references : [];
   const networkPermissionPolicyRefs = requestIsObject && Array.isArray(request.network_permission_policy_references) ? request.network_permission_policy_references : [];
   const secretResolutionPolicyRefs = requestIsObject && Array.isArray(request.secret_resolution_policy_references) ? request.secret_resolution_policy_references : [];
+  const schedulerDependencyRefs = requestIsObject && Array.isArray(request.runtime_scheduler_dependency_references) ? request.runtime_scheduler_dependency_references : [];
 
   const canonical = {
     tenantId: isPlainObject(packageRef) ? packageRef.tenant_id : undefined,
@@ -251,6 +252,12 @@ function evaluateRuntimeDispatchRequest(request, context = {}) {
     || schedulerDecisionRef.scheduler_started === true || schedulerResultRef.scheduler_started === true
   ) {
     return finalize('DISPATCH_SCHEDULER_BLOCKED', ['scheduler_chain_not_genuinely_prepared']);
+  }
+  // pr107fix FIX 2: the raw Scheduler Dependency References this request carries must be exactly
+  // the same set the Scheduler Package already fingerprinted -- never an independently substituted
+  // list standing in for "predecessor order proof."
+  if (!idSetMatches(schedulerDependencyRefs, 'scheduler_dependency_reference_id', schedulerPackageRef.scheduler_dependency_reference_ids)) {
+    return finalize('DISPATCH_SCHEDULER_BLOCKED', ['scheduler_dependency_references_substituted_or_incomplete']);
   }
   markValid('scheduler_validated');
 
@@ -361,7 +368,27 @@ function evaluateRuntimeDispatchRequest(request, context = {}) {
   markValid('worker_references_validated');
 
   // 24-25. Derive Dispatch Stage References + Worker Binding References.
+  //
+  // pr107fix FIX 2: "Não confiar apenas na ordem declarada pelo Scheduler Result." The canonical
+  // source of stage order is the Scheduler PACKAGE's own `ordered_scheduler_stage_reference_ids`
+  // (PR #105) -- the main derivation loop below now iterates THAT list directly (not
+  // `schedulerResultRef.scheduler_stage_references`'s own array order), so every downstream
+  // sequence field (`stage_sequence`, `dispatch_sequence`, the Order Reference's `ordered_*` lists)
+  // is genuinely sourced from the canonical order rather than merely assumed to already agree with
+  // it.
   const schedulerStages = Array.isArray(schedulerResultRef.scheduler_stage_references) ? schedulerResultRef.scheduler_stage_references : [];
+  const schedulerStageById = new Map(schedulerStages.map((s) => [s.scheduler_stage_reference_id, s]));
+  const canonicalStageOrder = Array.isArray(schedulerPackageRef.ordered_scheduler_stage_reference_ids) ? schedulerPackageRef.ordered_scheduler_stage_reference_ids : [];
+  const canonicalOrderUnique = new Set(canonicalStageOrder).size === canonicalStageOrder.length;
+  const everyResultStageInCanonicalOrder = schedulerStages.every((s) => canonicalStageOrder.includes(s.scheduler_stage_reference_id));
+  const cardinalityMatches = canonicalStageOrder.length === schedulerStages.length;
+  if (!canonicalOrderUnique) {
+    return finalize('DISPATCH_ORDER_BLOCKED', ['dispatch_stage_duplicate_in_order']);
+  }
+  if (!everyResultStageInCanonicalOrder || !cardinalityMatches) {
+    return finalize('DISPATCH_ORDER_BLOCKED', ['dispatch_stage_not_in_scheduler_order']);
+  }
+
   const requestId = request.runtime_dispatch_request_id;
   const packageId = `${requestId}-package`;
   const dispatchStageRefs = [];
@@ -374,7 +401,11 @@ function evaluateRuntimeDispatchRequest(request, context = {}) {
   const intentRefs = [];
   let dispatchSequence = 0;
 
-  for (const stage of schedulerStages) {
+  for (const schedulerStageId of canonicalStageOrder) {
+    const stage = schedulerStageById.get(schedulerStageId);
+    if (!stage) {
+      return finalize('DISPATCH_ORDER_BLOCKED', ['dispatch_stage_not_in_scheduler_order']);
+    }
     const assignment = assignmentByStageId.get(stage.scheduler_stage_reference_id);
     if (!assignment) {
       return finalize('DISPATCH_STAGE_BLOCKED', ['scheduler_stage_missing_worker_stage_assignment']);
@@ -498,6 +529,16 @@ function evaluateRuntimeDispatchRequest(request, context = {}) {
       const capacityId = `${dispatchStageId}-capacity`;
       const requestedTokens = stage.estimated_total_tokens;
       const requestedCost = stage.estimated_cost_minor_units;
+      const requestedStageSlots = 1;
+      const requestedParallelSlots = stage.parallelizable ? 1 : 0;
+      const requestedModelSlots = stage.model_selection_reference_id !== null ? 1 : 0;
+      const requestedToolSlots = Array.isArray(stage.tool_reference_ids) ? stage.tool_reference_ids.length : 0;
+      const requestedWorkflowSlots = stage.workflow_reference_id !== null ? 1 : 0;
+      // pr107fix FIX 3: recalculated per dimension against RuntimeCapacitySnapshotReference's own
+      // real `available_*` fields (PR #104) -- never a single aggregate `capacity_available` reused
+      // for every dimension. A dimension not actually requested by this stage is trivially
+      // satisfied (mirrors the same "only check what the stage actually needs" discipline
+      // `revalidateWorkerBinding`'s own `capacityValid` already applies at worker level).
       capacityRef = buildRuntimeDispatchCapacityReference({
         dispatch_capacity_reference_id: capacityId,
         runtime_dispatch_package_id: packageId,
@@ -506,20 +547,24 @@ function evaluateRuntimeDispatchRequest(request, context = {}) {
         runtime_capacity_snapshot_reference_id: capacitySnapshotRef.runtime_capacity_snapshot_reference_id,
         runtime_concurrency_reference_id: concurrencyRef.runtime_concurrency_reference_id,
         worker_capacity_reference_id: worker ? worker.worker_capacity_reference_id : 'worker_capacity_not_available',
-        requested_stage_slots: 1,
-        requested_parallel_slots: stage.parallelizable ? 1 : 0,
-        requested_model_slots: stage.model_selection_reference_id !== null ? 1 : 0,
-        requested_tool_slots: Array.isArray(stage.tool_reference_ids) ? stage.tool_reference_ids.length : 0,
-        requested_workflow_slots: stage.workflow_reference_id !== null ? 1 : 0,
+        requested_stage_slots: requestedStageSlots,
+        requested_parallel_slots: requestedParallelSlots,
+        requested_model_slots: requestedModelSlots,
+        requested_tool_slots: requestedToolSlots,
+        requested_workflow_slots: requestedWorkflowSlots,
         requested_tokens: requestedTokens,
         requested_cost_minor_units: requestedCost,
-        runtime_stage_capacity_available: capacitySnapshotRef.capacity_available === true,
-        runtime_parallel_capacity_available: concurrencyRef.parallel_slots_available === true,
-        runtime_model_capacity_available: concurrencyRef.model_slots_available === true,
-        runtime_tool_capacity_available: concurrencyRef.tool_slots_available === true,
-        runtime_workflow_capacity_available: concurrencyRef.workflow_slots_available === true,
-        runtime_token_capacity_available: capacitySnapshotRef.capacity_available === true,
-        runtime_cost_capacity_available: capacitySnapshotRef.capacity_available === true,
+        runtime_stage_capacity_available: capacitySnapshotRef.available_stage_capacity >= requestedStageSlots,
+        runtime_parallel_capacity_available: requestedParallelSlots === 0
+          || (capacitySnapshotRef.available_parallel_stage_capacity >= requestedParallelSlots && concurrencyRef.parallel_slots_available === true),
+        runtime_model_capacity_available: requestedModelSlots === 0
+          || (capacitySnapshotRef.available_model_stage_capacity >= requestedModelSlots && concurrencyRef.model_slots_available === true),
+        runtime_tool_capacity_available: requestedToolSlots === 0
+          || (capacitySnapshotRef.available_tool_stage_capacity >= requestedToolSlots && concurrencyRef.tool_slots_available === true),
+        runtime_workflow_capacity_available: requestedWorkflowSlots === 0
+          || (capacitySnapshotRef.available_workflow_stage_capacity >= requestedWorkflowSlots && concurrencyRef.workflow_slots_available === true),
+        runtime_token_capacity_available: capacitySnapshotRef.available_tokens_capacity >= requestedTokens,
+        runtime_cost_capacity_available: capacitySnapshotRef.available_cost_capacity_minor_units >= requestedCost,
         worker_stage_capacity_available: capacity ? capacity.available_stage_assignments >= 1 : false,
         worker_parallel_capacity_available: capacity ? capacity.available_parallel_assignments >= 1 : false,
         worker_model_capacity_available: capacity ? capacity.available_model_assignments >= 1 : false,
@@ -629,15 +674,41 @@ function evaluateRuntimeDispatchRequest(request, context = {}) {
   markValid('payload_references_validated');
   markValid('dispatch_intents_validated');
 
-  // 32. Derive Dispatch Order -- "subsequência estável da ordem topológica do Scheduler Package,"
-  // never recalculated by score.
-  const orderedStageIds = schedulerStages.map((s) => `${s.scheduler_stage_reference_id}-dispatch-stage`);
+  // pr107fix FIX 2: "Não confiar apenas na ordem declarada pelo Scheduler Result." Every `required`
+  // Scheduler Dependency edge must have its predecessor strictly before its target in the SAME
+  // canonical order (`canonicalStageOrder`) the loop above just derived every Dispatch Stage from --
+  // genuinely proven here, never assumed true by construction.
+  const positionBySchedulerStageId = new Map(canonicalStageOrder.map((id, index) => [id, index]));
+  for (const dep of schedulerDependencyRefs) {
+    if (dep.required !== true) continue;
+    const fromPosition = positionBySchedulerStageId.get(dep.from_scheduler_stage_reference_id);
+    const toPosition = positionBySchedulerStageId.get(dep.to_scheduler_stage_reference_id);
+    if (fromPosition === undefined || toPosition === undefined || !(fromPosition < toPosition)) {
+      return finalize('DISPATCH_ORDER_BLOCKED', [`dispatch_required_predecessor_order_violation::${dep.scheduler_dependency_reference_id}`]);
+    }
+  }
+
+  // 32. Derive Dispatch Order -- "subsequência estável da ordem topológica do Scheduler Package."
+  // `dispatchStageRefs`/`intentRefs` were themselves built by iterating `canonicalStageOrder`
+  // above, so their own array order already IS that stable subsequence -- never independently
+  // reordered or recalculated by score.
+  const orderedStageIds = dispatchStageRefs.map((s) => s.runtime_dispatch_stage_reference_id);
   const orderedIntentIds = intentRefs.map((i) => i.dispatch_intent_reference_id);
   const preparedIntentIds = intentRefs.filter((i) => i.dispatch_intent_status === 'DISPATCH_INTENT_PREPARED_SIMULATION').map((i) => i.dispatch_intent_reference_id);
   const waitingDependencyIntentIds = intentRefs.filter((i) => i.dispatch_intent_status === 'DISPATCH_INTENT_WAITING_DEPENDENCY_REFERENCE').map((i) => i.dispatch_intent_reference_id);
   const waitingApprovalIntentIds = intentRefs.filter((i) => i.dispatch_intent_status === 'DISPATCH_INTENT_WAITING_APPROVAL_REFERENCE').map((i) => i.dispatch_intent_reference_id);
   const optionalIntentIds = intentRefs.filter((i) => i.dispatch_intent_status === 'DISPATCH_INTENT_OPTIONAL_REFERENCE').map((i) => i.dispatch_intent_reference_id);
   const blockedIntentIds = intentRefs.filter((i) => !['DISPATCH_INTENT_PREPARED_SIMULATION', 'DISPATCH_INTENT_WAITING_DEPENDENCY_REFERENCE', 'DISPATCH_INTENT_WAITING_APPROVAL_REFERENCE', 'DISPATCH_INTENT_OPTIONAL_REFERENCE'].includes(i.dispatch_intent_status)).map((i) => i.dispatch_intent_reference_id);
+
+  // Defensive coherence check: dispatch_sequence on every prepared intent must equal its own
+  // position among prepared intents (structurally guaranteed by the canonical-order loop above,
+  // but verified explicitly rather than merely assumed -- same "prove, don't assume" discipline).
+  const preparedSequenceValues = intentRefs
+    .filter((i) => i.dispatch_intent_status === 'DISPATCH_INTENT_PREPARED_SIMULATION')
+    .map((i) => i.dispatch_sequence);
+  if (!preparedSequenceValues.every((seq, index) => seq === index)) {
+    return finalize('DISPATCH_ORDER_BLOCKED', ['dispatch_sequence_mismatch']);
+  }
 
   const orderId = `${packageId}-order`;
   const orderRef = buildRuntimeDispatchOrderReference({
@@ -651,34 +722,103 @@ function evaluateRuntimeDispatchRequest(request, context = {}) {
     waiting_approval_intent_reference_ids: waitingApprovalIntentIds,
     optional_intent_reference_ids: optionalIntentIds,
     blocked_intent_reference_ids: blockedIntentIds,
-    // "A ordem de dispatch é uma subsequência estável da ordem topológica do Scheduler Package" --
-    // stage ids are emitted in exactly the order schedulerResultRef.scheduler_stage_references
-    // itself already carries (already topologically ordered by PR #105), never recomputed here.
+    // Both genuinely true only because every check above (canonical-order sourcing, cardinality,
+    // required-predecessor-before-target, sequence coherence) already passed -- never asserted by
+    // construction.
     scheduler_order_preserved: true,
     required_predecessor_order_preserved: true
   });
   markValid('dispatch_order_validated');
 
-  // 33. Policy limits.
-  if (Number.isInteger(policy.maximum_dispatch_intent_count) && preparedIntentIds.length > policy.maximum_dispatch_intent_count) {
+  // pr107fix FIX 1: "Depois de derivar todas as Dispatch Intent References, considerar somente
+  // DISPATCH_INTENT_PREPARED_SIMULATION." A stage misto (model+tool, por exemplo) conta em mais de
+  // uma dimensão simultaneamente, conforme suas referências reais.
+  const stageByDispatchStageId = new Map(dispatchStageRefs.map((s) => [s.runtime_dispatch_stage_reference_id, s]));
+  const preparedStages = intentRefs
+    .filter((i) => i.dispatch_intent_status === 'DISPATCH_INTENT_PREPARED_SIMULATION')
+    .map((i) => stageByDispatchStageId.get(i.runtime_dispatch_stage_reference_id));
+  const preparedIntentCount = preparedIntentIds.length;
+  const preparedModelIntentCount = preparedStages.filter((s) => s && s.model_selection_reference_id !== null).length;
+  const preparedToolIntentCount = preparedStages.filter((s) => s && Array.isArray(s.tool_reference_ids) && s.tool_reference_ids.length > 0).length;
+  const preparedWorkflowIntentCount = preparedStages.filter((s) => s && s.workflow_reference_id !== null).length;
+  const preparedParallelIntentCount = preparedStages.filter((s) => s && s.parallelizable === true).length;
+  const preparedEstimatedInputTokens = preparedStages.reduce((sum, s) => sum + (s ? s.estimated_input_tokens : 0), 0);
+  const preparedEstimatedOutputTokens = preparedStages.reduce((sum, s) => sum + (s ? s.estimated_output_tokens : 0), 0);
+  const preparedEstimatedTotalTokens = preparedStages.reduce((sum, s) => sum + (s ? s.estimated_total_tokens : 0), 0);
+  const preparedEstimatedTotalCost = preparedStages.reduce((sum, s) => sum + (s ? s.estimated_cost_minor_units : 0), 0);
+
+  // 33. Policy limits -- every maximum_* declared on the RuntimeDispatchPolicy, all applied against
+  // the prepared-only aggregates above (never against every derived intent regardless of status).
+  if (Number.isInteger(policy.maximum_dispatch_intent_count) && preparedIntentCount > policy.maximum_dispatch_intent_count) {
     return finalize('DISPATCH_POLICY_BLOCKED', ['dispatch_intent_count_exceeds_policy_limit']);
   }
-  const hasModelIntent = intentRefs.some((i) => i.dispatch_intent_status === 'DISPATCH_INTENT_PREPARED_SIMULATION' && dispatchStageRefs.find((s) => s.runtime_dispatch_stage_reference_id === i.runtime_dispatch_stage_reference_id)?.model_selection_reference_id !== null);
-  void hasModelIntent;
+  if (Number.isInteger(policy.maximum_model_dispatch_intent_count) && preparedModelIntentCount > policy.maximum_model_dispatch_intent_count) {
+    return finalize('DISPATCH_POLICY_BLOCKED', ['dispatch_model_intent_count_exceeds_policy_limit']);
+  }
+  if (Number.isInteger(policy.maximum_tool_dispatch_intent_count) && preparedToolIntentCount > policy.maximum_tool_dispatch_intent_count) {
+    return finalize('DISPATCH_POLICY_BLOCKED', ['dispatch_tool_intent_count_exceeds_policy_limit']);
+  }
+  if (Number.isInteger(policy.maximum_workflow_dispatch_intent_count) && preparedWorkflowIntentCount > policy.maximum_workflow_dispatch_intent_count) {
+    return finalize('DISPATCH_POLICY_BLOCKED', ['dispatch_workflow_intent_count_exceeds_policy_limit']);
+  }
+  if (Number.isInteger(policy.maximum_parallel_dispatch_intent_count) && preparedParallelIntentCount > policy.maximum_parallel_dispatch_intent_count) {
+    return finalize('DISPATCH_POLICY_BLOCKED', ['dispatch_parallel_intent_count_exceeds_policy_limit']);
+  }
+  if (Number.isInteger(policy.maximum_estimated_tokens) && preparedEstimatedTotalTokens > policy.maximum_estimated_tokens) {
+    return finalize('DISPATCH_POLICY_BLOCKED', ['dispatch_estimated_tokens_exceed_policy_limit']);
+  }
+  if (Number.isInteger(policy.maximum_estimated_cost_minor_units) && preparedEstimatedTotalCost > policy.maximum_estimated_cost_minor_units) {
+    return finalize('DISPATCH_POLICY_BLOCKED', ['dispatch_estimated_cost_exceeds_policy_limit']);
+  }
+
+  // pr107fix FIX 1: aggregate budget check -- the SUM of every prepared intent's estimate against
+  // the official Runtime Budget, never each stage compared in isolation against the whole plan's
+  // ceiling (multiple stages can individually fit but collectively exceed the total). No consumption
+  // invented, nothing reserved.
+  if (preparedEstimatedInputTokens > budgetRef.maximum_input_tokens) {
+    return finalize('DISPATCH_BUDGET_BLOCKED', ['dispatch_prepared_input_tokens_exceed_runtime_budget']);
+  }
+  if (preparedEstimatedOutputTokens > budgetRef.maximum_output_tokens) {
+    return finalize('DISPATCH_BUDGET_BLOCKED', ['dispatch_prepared_output_tokens_exceed_runtime_budget']);
+  }
+  if (preparedEstimatedTotalTokens > budgetRef.maximum_total_tokens) {
+    return finalize('DISPATCH_BUDGET_BLOCKED', ['dispatch_prepared_total_tokens_exceed_runtime_budget']);
+  }
+  if (preparedEstimatedTotalCost > budgetRef.maximum_total_cost_minor_units) {
+    return finalize('DISPATCH_BUDGET_BLOCKED', ['dispatch_prepared_cost_exceeds_runtime_budget']);
+  }
 
   // 36. Non-execution invariants.
   if (schedulerResultRef.executed === true || workerAssignmentResultRef.executed === true || packageRef.executed === true) {
     return finalize('DISPATCH_VALIDATION_FAILED', ['non_execution_invariant_violated']);
   }
   markValid('non_execution_invariants_validated');
+
+  // pr107fix FIX 4: "Em status preparado, qualquer fonte obrigatória ausente deve bloquear antes da
+  // construção do package... e não gerar placeholder." Every one of these sources was already
+  // proven genuine and self-consistent by its own contract validator back at step 1-2 (a
+  // structurally impossible placeholder by the time execution reaches here) -- checked again here,
+  // defense-in-depth, so a placeholder can never silently reach a PREPARED package even if an
+  // earlier gate were ever weakened.
+  const mandatoryFingerprintSources = [
+    workerAssignmentPackageRef.worker_assignment_package_fingerprint, workerAssignmentPackageRef.worker_assignment_package_digest,
+    schedulerDecisionRef.runtime_scheduler_package_fingerprint, schedulerDecisionRef.runtime_scheduler_package_digest,
+    packageRef.package_fingerprint, packageRef.package_digest,
+    capacitySnapshotRef.capacity_fingerprint, concurrencyRef.concurrency_fingerprint, budgetRef.budget_fingerprint,
+    freshnessRef.freshness_fingerprint, idempotencyReference.idempotency_fingerprint, dispatchReplayRef.replay_fingerprint,
+    ...workerStageAssignmentRefs.map((a) => a.assignment_fingerprint)
+  ];
+  if (mandatoryFingerprintSources.some((v) => !isNonEmptyString(v) || v === 'fingerprint_not_available' || v === 'digest_not_available')) {
+    return finalize('DISPATCH_VALIDATION_FAILED', ['dispatch_package_placeholder_fingerprint_forbidden']);
+  }
   markValid('package_fingerprint_validated');
   markValid('package_digest_validated');
 
   return finalize('DISPATCH_PACKAGE_PREPARED_SIMULATION', ['dispatch_package_prepared_in_simulation_only'], {
     dispatchStageRefs, workerBindingRefs, dependencyGateRefs, approvalGateRefs, capacityRefs, budgetRefs, payloadRefs,
     intentRefs, orderRef, dispatchReplayRef, registrySnapshotRef, networkPermissionPolicyRefs, secretResolutionPolicyRefs,
-    stagePolicyRequirementRefs, workerRefs, workerCompatibilityRefs, workerCandidateSetRefs, capacitySnapshotRef,
-    concurrencyRef, budgetRef, freshnessRef, idempotencyReference
+    stagePolicyRequirementRefs, workerRefs, workerCompatibilityRefs, workerCandidateSetRefs, workerStageAssignmentRefs,
+    capacitySnapshotRef, concurrencyRef, budgetRef, freshnessRef, idempotencyReference
   });
 }
 
@@ -690,7 +830,7 @@ function buildDispatchOutcome(status, reasonCodes, ctx, validatedFlags) {
     dispatchStageRefs = [], workerBindingRefs = [], dependencyGateRefs = [], approvalGateRefs = [],
     capacityRefs = [], budgetRefs = [], payloadRefs = [], intentRefs = [], orderRef, dispatchReplayRef,
     registrySnapshotRef, networkPermissionPolicyRefs = [], secretResolutionPolicyRefs = [], stagePolicyRequirementRefs = [],
-    workerRefs = [], workerCompatibilityRefs = [], workerCandidateSetRefs = [],
+    workerRefs = [], workerCompatibilityRefs = [], workerCandidateSetRefs = [], workerStageAssignmentRefs = [],
     capacitySnapshotRef, concurrencyRef, budgetRef, freshnessRef, idempotencyReference
   } = ctx;
 
@@ -790,11 +930,19 @@ function buildDispatchOutcome(status, reasonCodes, ctx, validatedFlags) {
     idempotency_fingerprint: idempotencySafe.idempotency_fingerprint || 'fingerprint_not_available',
     registry_snapshot_fingerprint: registrySnapshotSafe.snapshot_fingerprint || 'fingerprint_not_available',
     worker_fingerprints: workerRefs.map((w) => w.worker_fingerprint),
-    worker_assignment_fingerprints: [],
+    // pr107fix FIX 4: populated with the real per-assignment fingerprints the Worker Assignment
+    // layer already produced -- never left empty in a prepared package.
+    worker_assignment_fingerprints: workerStageAssignmentRefs.map((a) => a.assignment_fingerprint),
     worker_compatibility_fingerprints: workerCompatibilityRefs.map((c) => c.compatibility_fingerprint),
     worker_candidate_set_fingerprints: workerCandidateSetRefs.map((c) => c.candidate_set_fingerprint),
     stage_policy_requirement_fingerprints: stagePolicyRequirementRefs.map((h) => h.requirement_reference_fingerprint),
-    stage_policy_requirement_source_fingerprints: [],
+    // pr107fix FIX 4: only RESOLVED requirements carry a real (non-placeholder) source fingerprint
+    // -- UNRESOLVED_REFERENCE requirements structurally use the NOT_AVAILABLE placeholder on their
+    // own contract (runtime-worker-stage-policy-requirement-reference.js), so they are excluded
+    // here rather than smuggling that placeholder into the package's own fingerprint list.
+    stage_policy_requirement_source_fingerprints: stagePolicyRequirementRefs
+      .filter((h) => h.source_resolution_status === 'RESOLVED_FROM_OFFICIAL_REFERENCE')
+      .map((h) => h.source_reference_fingerprint),
     official_network_policy_fingerprints: networkPermissionPolicyRefs.map((o) => computeOfficialPolicyFingerprint(o)),
     official_secret_policy_fingerprints: secretResolutionPolicyRefs.map((o) => computeOfficialPolicyFingerprint(o)),
     dispatch_stage_fingerprints: dispatchStageRefs.map((s) => s.dispatch_stage_fingerprint),
