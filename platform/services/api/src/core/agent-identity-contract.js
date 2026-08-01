@@ -264,7 +264,30 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'model_selection_decision_references', 'tool_contract_references', 'workflow_contract_references',
   'stage_policy_requirement_source_registry_duplicate',
   'official_network_policy_fingerprints', 'official_secret_policy_fingerprints',
-  'stage_policy_requirement_fingerprints', 'stage_policy_requirement_source_fingerprints'
+  'stage_policy_requirement_fingerprints', 'stage_policy_requirement_source_fingerprints',
+  // pr107: Runtime Dispatch Simulation Contracts field names carrying a forbidden segment
+  // ("runtime"/"secret") as an ordinary compound identifier -- never a real runtime enablement or
+  // secret value. `secret_*_included`/`prompt_included`/`endpoint_included` are the Dispatch Payload
+  // Reference's own always-false content flags (see "Payload não pode conter conteúdo operacional").
+  'endpoint_included', 'prompt_included', 'secret_included',
+  'require_runtime_admitted', 'require_secret_policy_valid', 'secret_policies_validated',
+  'secret_policy_reference_ids', 'secret_resolved',
+  'runtime_dispatch_policy', 'runtime_dispatch_policy_id', 'runtime_dispatch_policy_version',
+  'runtime_dispatch_request_id', 'runtime_dispatch_request_version', 'runtime_dispatch_request_fingerprint',
+  'runtime_dispatch_replay_reference',
+  'runtime_dispatch_stage_reference_id', 'runtime_dispatch_stage_reference_version',
+  'runtime_dispatch_package_id', 'runtime_dispatch_package_version', 'runtime_dispatch_package_fingerprint',
+  'runtime_dispatch_package_digest',
+  'runtime_dispatch_decision_id', 'runtime_dispatch_decision_fingerprint',
+  'runtime_dispatch_result_id',
+  'runtime_dispatch_replay_reference_id', 'runtime_dispatch_replay_reference_version',
+  'runtime_worker_assignment_request_reference', 'runtime_worker_assignment_decision_reference',
+  'runtime_worker_assignment_result_reference', 'runtime_worker_assignment_package_reference',
+  'runtime_worker_compatibility_references', 'runtime_worker_candidate_set_references',
+  'runtime_worker_stage_assignment_references', 'runtime_worker_stage_policy_requirement_references',
+  'runtime_stage_capacity_available', 'runtime_parallel_capacity_available', 'runtime_model_capacity_available',
+  'runtime_tool_capacity_available', 'runtime_workflow_capacity_available', 'runtime_token_capacity_available',
+  'runtime_cost_capacity_available', 'worker_token_capacity_available'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept
