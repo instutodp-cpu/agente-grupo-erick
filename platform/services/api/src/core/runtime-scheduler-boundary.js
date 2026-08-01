@@ -840,6 +840,10 @@ function buildSchedulerOutcome(status, reasonCodes, ctx, validatedFlags) {
     estimated_output_tokens: pkg.estimated_output_tokens,
     estimated_total_tokens: pkg.estimated_total_tokens,
     estimated_total_cost_minor_units: pkg.estimated_total_cost_minor_units,
+    // pr106: the full derived stage list, never just IDs -- lets a downstream Worker Assignment
+    // evaluation cross-check each stage's own eligibility/type/capabilities/modalities 1:1 without
+    // re-deriving them from the raw manifest a second time.
+    scheduler_stage_references: schedulerStageRefs,
     blockers: reasonCodes,
     reason_codes: reasonCodes
   });

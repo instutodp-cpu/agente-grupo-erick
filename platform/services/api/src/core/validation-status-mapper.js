@@ -24,6 +24,10 @@ const { TAXONOMY_STATUSES, isTaxonomyStatus } = require('./validation-taxonomy')
 // pr105: the Runtime Scheduler Simulation Contracts layer's own RUNTIME_SCHEDULER_STATUSES
 // (runtime-scheduler-decision.js) is, likewise, a further separate, self-contained vocabulary with
 // its own STATUS_OUTCOME_MAP -- not bridged through this module either.
+//
+// pr106: the Runtime Worker Assignment Simulation Contracts layer's own WORKER_ASSIGNMENT_STATUSES
+// (runtime-worker-assignment-decision.js) is, likewise, a further separate, self-contained
+// vocabulary with its own STATUS_OUTCOME_MAP -- not bridged through this module either.
 const UNKNOWN_STATUS_BLOCKED = 'UNKNOWN_STATUS_BLOCKED';
 
 // pr101 fix: EXECUTION_PLAN_PREPARED_SIMULATION and BINDING_BLOCKED are both genuine, already-

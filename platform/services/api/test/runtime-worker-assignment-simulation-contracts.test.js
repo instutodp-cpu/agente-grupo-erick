@@ -1,0 +1,1885 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const { findAgentCoreOperationalMaterial } = require('../src/core/agent-identity-contract');
+const {
+  validateRuntimeWorkerAssignmentPolicy, buildRuntimeWorkerAssignmentPolicy, RUNTIME_WORKER_ASSIGNMENT_POLICY_FIELDS
+} = require('../src/core/runtime-worker-assignment-policy');
+const {
+  validateRuntimeWorkerReference, buildRuntimeWorkerReference, RUNTIME_WORKER_REFERENCE_FIELDS
+} = require('../src/core/runtime-worker-reference');
+const {
+  validateRuntimeWorkerCapabilityReference, buildRuntimeWorkerCapabilityReference, RUNTIME_WORKER_CAPABILITY_REFERENCE_FIELDS
+} = require('../src/core/runtime-worker-capability-reference');
+const {
+  validateRuntimeWorkerCapacityReference, buildRuntimeWorkerCapacityReference, RUNTIME_WORKER_CAPACITY_REFERENCE_FIELDS
+} = require('../src/core/runtime-worker-capacity-reference');
+const {
+  validateRuntimeWorkerHealthReference, buildRuntimeWorkerHealthReference, RUNTIME_WORKER_HEALTH_REFERENCE_FIELDS
+} = require('../src/core/runtime-worker-health-reference');
+const {
+  validateRuntimeWorkerCompatibilityReference, buildRuntimeWorkerCompatibilityReference,
+  RUNTIME_WORKER_COMPATIBILITY_REFERENCE_FIELDS, MATCH_FIELDS
+} = require('../src/core/runtime-worker-compatibility-reference');
+const {
+  validateRuntimeWorkerCandidateSetReference, buildRuntimeWorkerCandidateSetReference,
+  RUNTIME_WORKER_CANDIDATE_SET_REFERENCE_FIELDS
+} = require('../src/core/runtime-worker-candidate-set-reference');
+const {
+  validateRuntimeWorkerStageAssignmentReference, buildRuntimeWorkerStageAssignmentReference,
+  RUNTIME_WORKER_STAGE_ASSIGNMENT_REFERENCE_FIELDS
+} = require('../src/core/runtime-worker-stage-assignment-reference');
+const { validateRuntimeWorkerAssignmentRequest, buildRuntimeWorkerAssignmentRequest } = require('../src/core/runtime-worker-assignment-request');
+const { validateRuntimeWorkerAssignmentPackage } = require('../src/core/runtime-worker-assignment-package');
+const {
+  validateRuntimeWorkerAssignmentDecision, WORKER_ASSIGNMENT_STATUSES, WORKER_ASSIGNMENT_PRECEDENCE_ORDER
+} = require('../src/core/runtime-worker-assignment-decision');
+const { validateRuntimeWorkerAssignmentResult } = require('../src/core/runtime-worker-assignment-result');
+const { validateRuntimeWorkerAssignmentAudit } = require('../src/core/runtime-worker-assignment-audit');
+const { createRuntimeWorkerAssignmentRegistry } = require('../src/core/runtime-worker-assignment-registry');
+const { runAllGates } = require('../src/core/architecture-gate-runner');
+const {
+  validateRuntimeWorkerNetworkPolicyReference, buildRuntimeWorkerNetworkPolicyReference, RUNTIME_WORKER_NETWORK_POLICY_REFERENCE_FIELDS
+} = require('../src/core/runtime-worker-network-policy-reference');
+const {
+  validateRuntimeWorkerSecretPolicyReference, buildRuntimeWorkerSecretPolicyReference, RUNTIME_WORKER_SECRET_POLICY_REFERENCE_FIELDS
+} = require('../src/core/runtime-worker-secret-policy-reference');
+const {
+  deriveStageRequiresNetworkOrSecret, evaluatePolicyReferenceMatch, evaluateHealthAtAssignment,
+  deriveStagePolicyRequirements, resolveRequirementProvenance, resolveRegistrySnapshotBinding
+} = require('../src/core/runtime-worker-assignment-boundary');
+const {
+  validateRuntimeWorkerStagePolicyRequirementReference, RUNTIME_WORKER_STAGE_POLICY_REQUIREMENT_REFERENCE_FIELDS
+} = require('../src/core/runtime-worker-stage-policy-requirement-reference');
+
+const {
+  buildGoldenWorkerAssignmentBundle, buildWorkerPool, evaluateRuntimeWorkerAssignmentRequest,
+  buildOfficialNetworkPolicy, buildOfficialSecretPolicy, computeOfficialPolicyFingerprint,
+  buildResolvedRequirementHint, buildUnresolvedRequirementHint, buildOfficialModelSelectionDecision,
+  buildOfficialRegistrySnapshot
+} = require('./helpers/runtime-worker-assignment-test-data');
+const { validateDestinationReference } = require('../src/core/transcription-network-permission-boundary');
+const { validateSecretReference } = require('../src/core/transcription-secret-resolution-boundary');
+
+const fixture = require('./fixtures/hermes-runtime-worker-assignment-simulation-contracts.json');
+
+function assertValid(label, validation) {
+  assert.equal(validation.valid, true, `${label}: ${JSON.stringify(validation.errors)}`);
+}
+
+function assertInvalid(label, validation) {
+  assert.equal(validation.valid, false, `${label} unexpectedly valid`);
+}
+
+function rebuild(request) {
+  return buildRuntimeWorkerAssignmentRequest(request);
+}
+
+const OPERATIONAL_FLAG_FIELDS = [
+  'worker_assignment_applied', 'worker_reserved', 'worker_started', 'worker_connection_opened',
+  'worker_process_created', 'worker_thread_created', 'container_started', 'job_created', 'queue_created',
+  'queue_used', 'stage_dispatched', 'stage_started', 'stage_completed', 'stage_failed', 'runtime_enabled',
+  'execution_authorized', 'execution_started', 'executed'
+];
+
+// --- Policy -----------------------------------------------------------------------------------
+
+test('worker assignment policy: valid contract, exact fields, safe defaults, nenhuma policy habilita worker', () => {
+  const policy = buildRuntimeWorkerAssignmentPolicy({ runtime_worker_assignment_policy_id: 'wap-1' });
+  assertValid('worker assignment policy', validateRuntimeWorkerAssignmentPolicy(policy));
+  assert.deepEqual(Object.keys(policy).sort(), [...RUNTIME_WORKER_ASSIGNMENT_POLICY_FIELDS].sort());
+  assert.equal(policy.allow_external_effect_reference, false);
+  assert.equal(policy.allow_irreversible_reference, false);
+  assert.equal(policy.simulation, true);
+  assert.equal(policy.production_blocked, true);
+  for (const field of RUNTIME_WORKER_ASSIGNMENT_POLICY_FIELDS) {
+    if (field.startsWith('require_') || field.startsWith('fail_on_')) assert.equal(policy[field], true, field);
+  }
+});
+
+test('worker assignment policy: fields missing/extra rejected, invalid limits rejected', () => {
+  const policy = buildRuntimeWorkerAssignmentPolicy({ runtime_worker_assignment_policy_id: 'wap-1' });
+  const { runtime_worker_assignment_policy_id, ...missing } = policy;
+  assertInvalid('missing field', validateRuntimeWorkerAssignmentPolicy(missing));
+  assertInvalid('extra field', validateRuntimeWorkerAssignmentPolicy({ ...policy, extra_field: true }));
+  assertInvalid('require flipped false', validateRuntimeWorkerAssignmentPolicy({ ...policy, require_capability_match: false }));
+  assertInvalid('external effect flipped true', validateRuntimeWorkerAssignmentPolicy({ ...policy, allow_external_effect_reference: true }));
+  assertInvalid('negative maximum', validateRuntimeWorkerAssignmentPolicy({ ...policy, maximum_worker_candidates_per_stage: -1 }));
+});
+
+// --- Worker Reference ---------------------------------------------------------------------------
+
+test('worker reference: valid contract, exact fields, immutable, capacity arithmetic, fingerprint/digest', () => {
+  const pool = buildWorkerPool('wr-1');
+  assertValid('worker reference', validateRuntimeWorkerReference(pool.worker));
+  assert.deepEqual(Object.keys(pool.worker).sort(), [...RUNTIME_WORKER_REFERENCE_FIELDS].sort());
+  assert.equal(pool.worker.available_parallel_assignments, pool.worker.maximum_parallel_assignments - pool.worker.current_parallel_assignments);
+  assert.throws(() => { pool.worker.worker_reserved = true; });
+  assertInvalid('tampered fingerprint', validateRuntimeWorkerReference({ ...pool.worker, worker_fingerprint: 'sha256:' + 'f'.repeat(64) }));
+  assertInvalid('tampered digest', validateRuntimeWorkerReference({ ...pool.worker, worker_digest: 'sha256:' + 'f'.repeat(64) }));
+});
+
+test('worker reference: safe flags always forced regardless of input', () => {
+  const pool = buildWorkerPool('wr-2');
+  assert.equal(pool.worker.worker_registered, true);
+  assert.equal(pool.worker.worker_reserved, false);
+  assert.equal(pool.worker.worker_started, false);
+  assert.equal(pool.worker.worker_connection_opened, false);
+  assert.equal(pool.worker.rollout_percentage, 0);
+});
+
+test('worker reference: worker_active_reference tracks status, all 4 worker types and 5 classifications construct validly', () => {
+  for (const workerType of ['LOCAL_REFERENCE', 'REMOTE_REFERENCE', 'SHARED_REFERENCE', 'DEDICATED_REFERENCE']) {
+    const scope = workerType === 'DEDICATED_REFERENCE' ? { tenant_scope_id: 't1', organization_scope_id: 'o1', project_scope_id: 'p1' } : {};
+    const pool = buildWorkerPool(`wr-type-${workerType}`, { worker: { worker_type: workerType, ...scope } });
+    assertValid(`worker type ${workerType}`, validateRuntimeWorkerReference(pool.worker));
+  }
+  for (const classification of ['DETERMINISTIC_WORKER_REFERENCE', 'MODEL_WORKER_REFERENCE', 'TOOL_WORKER_REFERENCE', 'WORKFLOW_WORKER_REFERENCE', 'MULTI_CAPABILITY_WORKER_REFERENCE']) {
+    const pool = buildWorkerPool(`wr-class-${classification}`, { worker: { worker_classification: classification } });
+    assertValid(`classification ${classification}`, validateRuntimeWorkerReference(pool.worker));
+  }
+  const unhealthy = buildWorkerPool('wr-unavailable', { worker: { worker_status: 'WORKER_UNHEALTHY_REFERENCE' } });
+  assert.equal(unhealthy.worker.worker_active_reference, false);
+});
+
+// --- Capability -----------------------------------------------------------------------------
+
+test('capability reference: no-LLM, model, tool, workflow, modalities, stage types all construct validly', () => {
+  const noLlm = buildRuntimeWorkerCapabilityReference({
+    worker_capability_reference_id: 'cap-no-llm', runtime_worker_reference_id: 'w-1',
+    capability_ids: [], modality_ids: [], stage_type_ids: ['DETERMINISTIC_STAGE'],
+    model_provider_ids: [], model_ids: [], tool_ids: [], workflow_ids: [],
+    supports_no_llm: true, supports_model_reference: false, supports_tool_reference: false, supports_workflow_reference: false,
+    supports_parallel_reference: true, supports_state_change_reference: false
+  });
+  assertValid('no-llm capability', validateRuntimeWorkerCapabilityReference(noLlm));
+  assert.deepEqual(Object.keys(noLlm).sort(), [...RUNTIME_WORKER_CAPABILITY_REFERENCE_FIELDS].sort());
+
+  const model = buildRuntimeWorkerCapabilityReference({
+    worker_capability_reference_id: 'cap-genref', runtime_worker_reference_id: 'w-2',
+    capability_ids: ['cap-a'], modality_ids: ['TEXT_INPUT'], stage_type_ids: ['MODEL_REFERENCE_STAGE'],
+    model_provider_ids: ['prov-a'], model_ids: ['gen-a'], tool_ids: [], workflow_ids: [],
+    supports_no_llm: false, supports_model_reference: true, supports_tool_reference: false, supports_workflow_reference: false,
+    supports_parallel_reference: false, supports_state_change_reference: false
+  });
+  assert.equal(model.supports_model_reference, true);
+
+  const tool = buildRuntimeWorkerCapabilityReference({
+    worker_capability_reference_id: 'cap-tool', runtime_worker_reference_id: 'w-3',
+    capability_ids: [], modality_ids: [], stage_type_ids: ['TOOL_REFERENCE_STAGE'],
+    model_provider_ids: [], model_ids: [], tool_ids: ['tool-a'], workflow_ids: [],
+    supports_no_llm: false, supports_model_reference: false, supports_tool_reference: true, supports_workflow_reference: false,
+    supports_parallel_reference: false, supports_state_change_reference: false
+  });
+  assert.equal(tool.supports_tool_reference, true);
+
+  const workflow = buildRuntimeWorkerCapabilityReference({
+    worker_capability_reference_id: 'cap-workflow', runtime_worker_reference_id: 'w-4',
+    capability_ids: [], modality_ids: [], stage_type_ids: ['WORKFLOW_REFERENCE_STAGE'],
+    model_provider_ids: [], model_ids: [], tool_ids: [], workflow_ids: ['flow-a'],
+    supports_no_llm: false, supports_model_reference: false, supports_tool_reference: false, supports_workflow_reference: true,
+    supports_parallel_reference: false, supports_state_change_reference: false
+  });
+  assert.equal(workflow.supports_workflow_reference, true);
+
+  const stateChange = buildRuntimeWorkerCapabilityReference({
+    worker_capability_reference_id: 'cap-state', runtime_worker_reference_id: 'w-5',
+    capability_ids: [], modality_ids: [], stage_type_ids: ['DETERMINISTIC_STAGE'],
+    model_provider_ids: [], model_ids: [], tool_ids: [], workflow_ids: [],
+    supports_no_llm: true, supports_model_reference: false, supports_tool_reference: false, supports_workflow_reference: false,
+    supports_parallel_reference: false, supports_state_change_reference: true
+  });
+  assert.equal(stateChange.supports_state_change_reference, true);
+});
+
+test('capability reference: external/irreversible support permanently forced false', () => {
+  const cap = buildRuntimeWorkerCapabilityReference({
+    worker_capability_reference_id: 'cap-6', runtime_worker_reference_id: 'w-6',
+    capability_ids: [], modality_ids: [], stage_type_ids: [], model_provider_ids: [], model_ids: [], tool_ids: [], workflow_ids: [],
+    supports_no_llm: true
+  });
+  assert.equal(cap.supports_external_effect_reference, false);
+  assert.equal(cap.supports_irreversible_reference, false);
+  assert.equal(cap.capability_applied, false);
+  assertInvalid('smuggled external support', validateRuntimeWorkerCapabilityReference({ ...cap, supports_external_effect_reference: true }));
+});
+
+// --- Capacity -------------------------------------------------------------------------------
+
+test('capacity reference: arithmetic per dimension, fingerprint/digest, no reserve/consume', () => {
+  const pool = buildWorkerPool('cap-arith-1');
+  assertValid('capacity reference', validateRuntimeWorkerCapacityReference(pool.capacity));
+  assert.deepEqual(Object.keys(pool.capacity).sort(), [...RUNTIME_WORKER_CAPACITY_REFERENCE_FIELDS].sort());
+  assert.equal(pool.capacity.capacity_applied, false);
+  assert.equal(pool.capacity.capacity_reserved, false);
+  assert.equal(pool.capacity.slots_consumed, false);
+  assertInvalid('used exceeds total', validateRuntimeWorkerCapacityReference({ ...pool.capacity, current_stage_assignments: 999999 }));
+});
+
+test('capacity reference: each dimension exhausted (available=0) still constructs, capacity_validated tracks capacity_available flag', () => {
+  const exhausted = buildRuntimeWorkerCapacityReference({
+    worker_capacity_reference_id: 'cap-exhausted', runtime_worker_reference_id: 'w-1',
+    maximum_stage_assignments: 1, current_stage_assignments: 1, available_stage_assignments: 0,
+    maximum_parallel_assignments: 1, current_parallel_assignments: 1, available_parallel_assignments: 0,
+    maximum_model_assignments: 1, current_model_assignments: 1, available_model_assignments: 0,
+    maximum_tool_assignments: 1, current_tool_assignments: 1, available_tool_assignments: 0,
+    maximum_workflow_assignments: 1, current_workflow_assignments: 1, available_workflow_assignments: 0,
+    maximum_token_capacity: 1, used_token_capacity: 1, available_token_capacity: 0,
+    maximum_cost_capacity_minor_units: 1, used_cost_capacity_minor_units: 1, available_cost_capacity_minor_units: 0,
+    capacity_available: true
+  });
+  assert.equal(exhausted.capacity_consistent, true);
+  assert.equal(exhausted.capacity_validated, true);
+});
+
+// --- Health -----------------------------------------------------------------------------------
+
+test('health reference: healthy/degraded/unhealthy/unknown/expired statuses all construct validly', () => {
+  for (const status of ['HEALTHY_REFERENCE_SIMULATION', 'DEGRADED_REFERENCE', 'UNHEALTHY_REFERENCE', 'UNKNOWN_REFERENCE', 'EXPIRED_REFERENCE']) {
+    const health = buildRuntimeWorkerHealthReference({
+      worker_health_reference_id: `health-${status}`, runtime_worker_reference_id: 'w-1',
+      health_status: status, health_source_type: 'simulation_declared_reference',
+      health_created_logical_sequence: 0, current_logical_sequence: 0, maximum_valid_sequences: 1000,
+      configuration_valid: true, registration_valid: true, capability_reference_valid: true, capacity_reference_valid: true, policy_references_valid: true
+    });
+    assertValid(`health status ${status}`, validateRuntimeWorkerHealthReference(health));
+    assert.deepEqual(Object.keys(health).sort(), [...RUNTIME_WORKER_HEALTH_REFERENCE_FIELDS].sort());
+    assert.equal(health.health_validated, status === 'HEALTHY_REFERENCE_SIMULATION');
+  }
+});
+
+test('health reference: logical freshness expires deterministically, no Date/timer used', () => {
+  const expired = buildRuntimeWorkerHealthReference({
+    worker_health_reference_id: 'health-expired-seq', runtime_worker_reference_id: 'w-1',
+    health_status: 'HEALTHY_REFERENCE_SIMULATION', health_source_type: 'simulation_declared_reference',
+    health_created_logical_sequence: 0, current_logical_sequence: 5000, maximum_valid_sequences: 1000,
+    configuration_valid: true, registration_valid: true, capability_reference_valid: true, capacity_reference_valid: true, policy_references_valid: true
+  });
+  assert.equal(expired.health_expired_logically, true);
+  assert.equal(expired.health_validated, false);
+});
+
+test('health reference: any binding invalid blocks health_validated even when status is healthy', () => {
+  const badBinding = buildRuntimeWorkerHealthReference({
+    worker_health_reference_id: 'health-bad-binding', runtime_worker_reference_id: 'w-1',
+    health_status: 'HEALTHY_REFERENCE_SIMULATION', health_source_type: 'simulation_declared_reference',
+    health_created_logical_sequence: 0, current_logical_sequence: 0, maximum_valid_sequences: 1000,
+    configuration_valid: true, registration_valid: true, capability_reference_valid: false, capacity_reference_valid: true, policy_references_valid: true
+  });
+  assert.equal(badBinding.health_validated, false);
+});
+
+// --- Compatibility ----------------------------------------------------------------------------
+
+test('compatibility reference: worker_compatible=true only when all 17 matches are true', () => {
+  const allTrue = Object.fromEntries(MATCH_FIELDS.map((f) => [f, true]));
+  const compat = buildRuntimeWorkerCompatibilityReference({
+    worker_compatibility_reference_id: 'wc-1', runtime_worker_assignment_request_id: 'war-1', runtime_scheduler_package_id: 'sp-1',
+    scheduler_stage_reference_id: 'ss-1', runtime_stage_reference_id: 'rs-1', runtime_worker_reference_id: 'w-1',
+    ...allTrue
+  });
+  assertValid('compatibility reference', validateRuntimeWorkerCompatibilityReference(compat));
+  assert.deepEqual(Object.keys(compat).sort(), [...RUNTIME_WORKER_COMPATIBILITY_REFERENCE_FIELDS].sort());
+  assert.equal(compat.worker_compatible, true);
+  assert.equal(compat.compatibility_applied, false);
+});
+
+for (const field of MATCH_FIELDS) {
+  test(`compatibility reference: ${field}=false alone blocks worker_compatible`, () => {
+    const allTrue = Object.fromEntries(MATCH_FIELDS.map((f) => [f, true]));
+    const compat = buildRuntimeWorkerCompatibilityReference({
+      worker_compatibility_reference_id: `wc-${field}`, runtime_worker_assignment_request_id: 'war-1', runtime_scheduler_package_id: 'sp-1',
+      scheduler_stage_reference_id: 'ss-1', runtime_stage_reference_id: 'rs-1', runtime_worker_reference_id: 'w-1',
+      ...allTrue, [field]: false
+    });
+    assert.equal(compat.worker_compatible, false, field);
+  });
+}
+
+// --- Candidate Set ------------------------------------------------------------------------------
+
+test('candidate set reference: complete partition, deterministic recommendation, no compatible candidate yields null recommendation', () => {
+  const withCandidate = buildRuntimeWorkerCandidateSetReference({
+    worker_candidate_set_reference_id: 'cs-1', runtime_worker_assignment_request_id: 'war-1', runtime_scheduler_package_id: 'sp-1',
+    scheduler_stage_reference_id: 'ss-1', runtime_stage_reference_id: 'rs-1',
+    worker_compatibility_reference_ids: ['wc-1', 'wc-2'], compatible_worker_reference_ids: ['w-1'], incompatible_worker_reference_ids: ['w-2'],
+    recommended_worker_reference_id: 'w-1'
+  });
+  assertValid('candidate set', validateRuntimeWorkerCandidateSetReference(withCandidate));
+  assert.deepEqual(Object.keys(withCandidate).sort(), [...RUNTIME_WORKER_CANDIDATE_SET_REFERENCE_FIELDS].sort());
+  assert.equal(withCandidate.candidate_count, 2);
+
+  const noCandidate = buildRuntimeWorkerCandidateSetReference({
+    worker_candidate_set_reference_id: 'cs-2', runtime_worker_assignment_request_id: 'war-1', runtime_scheduler_package_id: 'sp-1',
+    scheduler_stage_reference_id: 'ss-2', runtime_stage_reference_id: 'rs-2',
+    worker_compatibility_reference_ids: ['wc-3'], compatible_worker_reference_ids: [], incompatible_worker_reference_ids: ['w-3']
+  });
+  assert.equal(noCandidate.recommended_worker_reference_id, null);
+  assert.equal(noCandidate.candidate_set_applied, false);
+});
+
+test('candidate set reference: recommended worker not in compatible set is rejected', () => {
+  assertInvalid('recommended not compatible', validateRuntimeWorkerCandidateSetReference({
+    worker_candidate_set_reference_id: 'cs-3', worker_candidate_set_reference_version: 1,
+    runtime_worker_assignment_request_id: 'war-1', runtime_scheduler_package_id: 'sp-1',
+    scheduler_stage_reference_id: 'ss-1', runtime_stage_reference_id: 'rs-1',
+    worker_compatibility_reference_ids: [], compatible_worker_reference_ids: ['w-1'], incompatible_worker_reference_ids: [],
+    candidate_count: 1, compatible_candidate_count: 1, incompatible_candidate_count: 0,
+    recommended_worker_reference_id: 'w-not-in-set', selection_strategy: 'DETERMINISTIC_CAPABILITY_CAPACITY_PRIORITY',
+    selection_reason_codes: [], candidate_set_validated: true, candidate_set_applied: false,
+    candidate_set_fingerprint: 'x', simulation: true, production_blocked: true, validator_version: 'runtime_worker_candidate_set_reference_validator_v1'
+  }));
+});
+
+test('candidate set reference: duplicate ID across compatible/incompatible lists rejected', () => {
+  assert.throws(() => buildRuntimeWorkerCandidateSetReference({
+    worker_candidate_set_reference_id: 'cs-4', runtime_worker_assignment_request_id: 'war-1', runtime_scheduler_package_id: 'sp-1',
+    scheduler_stage_reference_id: 'ss-1', runtime_stage_reference_id: 'rs-1',
+    worker_compatibility_reference_ids: [], compatible_worker_reference_ids: ['w-1'], incompatible_worker_reference_ids: ['w-1']
+  }));
+});
+
+// --- Stage Assignment -----------------------------------------------------------------------
+
+test('stage assignment reference: eligible/optional/waiting/blocked/no-candidate all construct validly, never reserve/start/dispatch', () => {
+  const base = {
+    worker_stage_assignment_reference_id: 'wsa-1', runtime_worker_assignment_package_id: 'wap-1', runtime_scheduler_package_id: 'sp-1',
+    runtime_execution_package_id: 'pkg-1', scheduler_stage_reference_id: 'ss-1', runtime_stage_reference_id: 'rs-1',
+    worker_candidate_set_reference_id: 'cs-1', stage_type: 'DETERMINISTIC_STAGE', priority: 0
+  };
+  const recommended = buildRuntimeWorkerStageAssignmentReference({ ...base, assignment_status: 'WORKER_RECOMMENDED_SIMULATION', recommended_worker_reference_id: 'w-1' });
+  assertValid('recommended', validateRuntimeWorkerStageAssignmentReference(recommended));
+  assert.deepEqual(Object.keys(recommended).sort(), [...RUNTIME_WORKER_STAGE_ASSIGNMENT_REFERENCE_FIELDS].sort());
+  for (const status of ['WORKER_WAITING_APPROVAL_REFERENCE', 'WORKER_WAITING_DEPENDENCY_REFERENCE', 'WORKER_NO_COMPATIBLE_CANDIDATE_BLOCKED', 'WORKER_ASSIGNMENT_BLOCKED']) {
+    const ref = buildRuntimeWorkerStageAssignmentReference({ ...base, assignment_status: status });
+    assert.equal(ref.recommended_worker_reference_id, null, status);
+    assert.equal(ref.worker_reserved, false);
+    assert.equal(ref.worker_started, false);
+    assert.equal(ref.stage_dispatched, false);
+  }
+});
+
+test('stage assignment reference: recommended status requires a worker id, other statuses forbid one', () => {
+  const base = {
+    worker_stage_assignment_reference_id: 'wsa-2', worker_stage_assignment_reference_version: 1,
+    runtime_worker_assignment_package_id: 'wap-1', runtime_scheduler_package_id: 'sp-1', runtime_execution_package_id: 'pkg-1',
+    scheduler_stage_reference_id: 'ss-1', runtime_stage_reference_id: 'rs-1', worker_candidate_set_reference_id: 'cs-1',
+    assignment_reason_codes: [], stage_type: 'DETERMINISTIC_STAGE', priority: 0, parallelizable: false, approval_required: false,
+    required_capability_ids: [], required_modality_ids: [], estimated_total_tokens: 0, estimated_cost_minor_units: 0,
+    worker_assignment_validated: true, worker_assignment_applied: false, worker_reserved: false, worker_started: false,
+    stage_dispatched: false, stage_started: false, simulation: true, production_blocked: true,
+    validator_version: 'runtime_worker_stage_assignment_reference_validator_v1'
+  };
+  assertInvalid('recommended without worker id', validateRuntimeWorkerStageAssignmentReference({ ...base, assignment_status: 'WORKER_RECOMMENDED_SIMULATION', recommended_worker_reference_id: null, assignment_fingerprint: 'x' }));
+  assertInvalid('blocked with worker id', validateRuntimeWorkerStageAssignmentReference({ ...base, assignment_status: 'WORKER_ASSIGNMENT_BLOCKED', recommended_worker_reference_id: 'w-1', assignment_fingerprint: 'x' }));
+});
+
+// --- Request ------------------------------------------------------------------------------------
+
+test('worker assignment request: golden bundle is structurally valid, nested validators cover every reference', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  assertValid('worker assignment request', validateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest));
+});
+
+test('worker assignment request: missing/extra field and invalid nested reference rejected', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const { runtime_worker_assignment_request_id, ...missing } = golden.workerAssignmentRequest;
+  assertInvalid('missing field', validateRuntimeWorkerAssignmentRequest(missing));
+  assertInvalid('extra field', validateRuntimeWorkerAssignmentRequest({ ...golden.workerAssignmentRequest, extra_field: true }));
+  assertInvalid('invalid nested policy', validateRuntimeWorkerAssignmentRequest({ ...golden.workerAssignmentRequest, runtime_worker_assignment_policy: { not: 'valid' } }));
+});
+
+test('worker assignment request: immutable once built', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  assert.throws(() => { golden.workerAssignmentRequest.logical_sequence = 999; });
+});
+
+// --- Boundary: golden happy path -----------------------------------------------------------------
+
+test('worker assignment boundary: golden bundle reaches WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION with every validated flag true', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcome.decision.worker_assignment_package_prepared_in_simulation, true);
+  assert.equal(outcome.decision.worker_assignment_evaluated, true);
+  assertValid('worker assignment decision', validateRuntimeWorkerAssignmentDecision(outcome.decision));
+  assertValid('worker assignment result', validateRuntimeWorkerAssignmentResult(outcome.result));
+  assertValid('worker assignment audit', validateRuntimeWorkerAssignmentAudit(outcome.audit));
+  assertValid('worker assignment package', validateRuntimeWorkerAssignmentPackage(outcome.package));
+  assert.equal(outcome.result.recommended_assignment_count, 2);
+});
+
+test('worker assignment boundary: every stage receives a recommendation when a compatible worker exists', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  for (const assignment of outcome.assignmentRefs) {
+    assert.equal(assignment.assignment_status, 'WORKER_RECOMMENDED_SIMULATION');
+    assert.equal(assignment.recommended_worker_reference_id, golden.pool.worker.runtime_worker_reference_id);
+  }
+});
+
+test('worker assignment boundary: dedicated-worker-selected -- a dedicated worker outranks a shared one', () => {
+  const dedicated = buildWorkerPool('dedicated-1', { worker: { worker_type: 'DEDICATED_REFERENCE' } });
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {});
+  const badPackage = golden.runtimePackage;
+  const scopedDedicated = buildWorkerPool('dedicated-2', {
+    worker: { worker_type: 'DEDICATED_REFERENCE', tenant_scope_id: badPackage.tenant_id, organization_scope_id: badPackage.organization_id, project_scope_id: badPackage.project_id }
+  });
+  const shared = buildWorkerPool('shared-1');
+  const golden2 = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerRefs: [shared.worker, scopedDedicated.worker],
+    workerCapabilityRefs: [shared.capability, scopedDedicated.capability],
+    workerCapacityRefs: [shared.capacity, scopedDedicated.capacity],
+    workerHealthRefs: [shared.health, scopedDedicated.health]
+  });
+  void dedicated;
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden2.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  for (const assignment of outcome.assignmentRefs) {
+    assert.equal(assignment.recommended_worker_reference_id, scopedDedicated.worker.runtime_worker_reference_id);
+  }
+});
+
+test('worker assignment boundary: candidate-order-deterministic -- input order of workers never changes the recommendation', () => {
+  const workerA = buildWorkerPool('order-a');
+  const workerB = buildWorkerPool('order-b', { capacity: { available_stage_assignments: 200, maximum_stage_assignments: 200 } });
+  const golden1 = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerRefs: [workerA.worker, workerB.worker], workerCapabilityRefs: [workerA.capability, workerB.capability],
+    workerCapacityRefs: [workerA.capacity, workerB.capacity], workerHealthRefs: [workerA.health, workerB.health]
+  });
+  const golden2 = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerRefs: [workerB.worker, workerA.worker], workerCapabilityRefs: [workerB.capability, workerA.capability],
+    workerCapacityRefs: [workerB.capacity, workerA.capacity], workerHealthRefs: [workerB.health, workerA.health]
+  });
+  const outcome1 = evaluateRuntimeWorkerAssignmentRequest(golden1.workerAssignmentRequest, {});
+  const outcome2 = evaluateRuntimeWorkerAssignmentRequest(golden2.workerAssignmentRequest, {});
+  assert.equal(outcome1.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcome2.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.deepEqual(
+    outcome1.assignmentRefs.map((a) => a.recommended_worker_reference_id).sort(),
+    outcome2.assignmentRefs.map((a) => a.recommended_worker_reference_id).sort()
+  );
+  // Both orderings must recommend the worker with more available capacity (workerB).
+  for (const assignment of outcome1.assignmentRefs) assert.equal(assignment.recommended_worker_reference_id, workerB.worker.runtime_worker_reference_id);
+});
+
+// --- Boundary: reference-tamper -> specific blocker -----------------------------------------------
+
+test('worker assignment boundary: stage type mismatch blocks as WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { capability: { stage_type_ids: ['MODEL_REFERENCE_STAGE'] } } });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+});
+
+test('worker assignment boundary: unhealthy worker blocks as WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { health: { health_status: 'UNHEALTHY_REFERENCE' } } });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+});
+
+test('worker assignment boundary: health expired between creation and assignment blocks as WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED', () => {
+  // pr106fix FIX 2: health_created_logical_sequence/current_logical_sequence stay at 0 (no
+  // regression relative to the request), but maximum_valid_sequences is small and the request's own
+  // logical_sequence has moved forward past it -- a genuine "aged since creation" expiration,
+  // recomputed on request.logical_sequence, never on the health reference's own frozen sequence.
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerPool: { health: { maximum_valid_sequences: 10 } },
+    request: { logical_sequence: 50 }
+  });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+});
+
+test('worker assignment boundary: health current_logical_sequence ahead of the assignment request blocks as WORKER_ASSIGNMENT_HEALTH_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { health: { current_logical_sequence: 5000 } } });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_HEALTH_BLOCKED');
+});
+
+test('worker assignment boundary: health_created_logical_sequence ahead of the assignment request blocks as WORKER_ASSIGNMENT_HEALTH_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { health: { health_created_logical_sequence: 5000, current_logical_sequence: 5000 } } });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_HEALTH_BLOCKED');
+});
+
+test('worker assignment boundary: health valid at the same sequence as the request stays selectable', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { health: { current_logical_sequence: 0 } }, request: { logical_sequence: 0 } });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+});
+
+test('worker assignment boundary: health valid at a later sequence within the limit stays selectable', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerPool: { health: { maximum_valid_sequences: 1000 } }, request: { logical_sequence: 50 }
+  });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+});
+
+for (const status of ['DEGRADED_REFERENCE', 'UNHEALTHY_REFERENCE', 'UNKNOWN_REFERENCE', 'EXPIRED_REFERENCE']) {
+  test(`worker assignment boundary: health status ${status} blocks as WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED`, () => {
+    const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { health: { health_status: status } } });
+    const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+    assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+  });
+}
+
+test('worker assignment boundary: invalid health binding flag blocks as WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { health: { capability_reference_valid: false } } });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+});
+
+test('worker assignment boundary: a caller-supplied health_validated=true never masks expiration recomputed at the assignment sequence', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerPool: { health: { maximum_valid_sequences: 10 } },
+    request: { logical_sequence: 50 }
+  });
+  assert.equal(golden.pool.health.health_validated, true);
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+});
+
+test('worker assignment boundary: a caller-supplied health_expired_logically=false never masks expiration recomputed at the assignment sequence', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerPool: { health: { maximum_valid_sequences: 10 } },
+    request: { logical_sequence: 50 }
+  });
+  assert.equal(golden.pool.health.health_expired_logically, false);
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+});
+
+test('evaluateHealthAtAssignment: unit coverage of every branch', () => {
+  const healthyBase = {
+    current_logical_sequence: 0, health_created_logical_sequence: 0, maximum_valid_sequences: 1000,
+    health_status: 'HEALTHY_REFERENCE_SIMULATION', configuration_valid: true, registration_valid: true,
+    capability_reference_valid: true, capacity_reference_valid: true, policy_references_valid: true
+  };
+  assert.equal(evaluateHealthAtAssignment(healthyBase, 0).match, true);
+  assert.equal(evaluateHealthAtAssignment(healthyBase, 500).match, true);
+  assert.equal(evaluateHealthAtAssignment({ ...healthyBase, current_logical_sequence: 10 }, 5).reason, 'worker_health_sequence_regressive');
+  assert.equal(evaluateHealthAtAssignment({ ...healthyBase, health_created_logical_sequence: 10 }, 5).reason, 'worker_health_sequence_regressive');
+  assert.equal(evaluateHealthAtAssignment(healthyBase, 1500).reason, 'worker_health_expired_at_assignment_sequence');
+  assert.equal(evaluateHealthAtAssignment({ ...healthyBase, health_status: 'DEGRADED_REFERENCE' }, 0).reason, 'worker_health_status_not_healthy');
+  assert.equal(evaluateHealthAtAssignment({ ...healthyBase, registration_valid: false }, 0).reason, 'worker_health_binding_invalid');
+});
+
+test('worker assignment boundary: exhausted worker capacity blocks as WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerPool: { capacity: { maximum_stage_assignments: 1, current_stage_assignments: 1, available_stage_assignments: 0 } }
+  });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED');
+});
+
+// --- Network / Secret Policy Reference (pr106fix FIX 1) ------------------------------------------
+
+function officialMap(kind, official) {
+  const m = new Map();
+  if (official) m.set(kind === 'network' ? official.destination_ref_id : official.secret_ref_id, official);
+  return m;
+}
+
+function sourcesMap(...sources) {
+  const m = new Map();
+  for (const source of sources) {
+    if ('decision_id' in source) m.set(`MODEL_SELECTION_REFERENCE::${source.decision_id}`, source);
+    else if ('tool_id' in source) m.set(`TOOL_CONTRACT_REFERENCE::${source.tool_id}`, source);
+    else if ('workflow_id' in source) m.set(`WORKFLOW_CONTRACT_REFERENCE::${source.workflow_id}`, source);
+  }
+  return m;
+}
+
+// pr106fix4: a resolvable MODEL requirement hint for `schedulerStageReferenceId`, genuinely bound to
+// `officialModelSelection` -- the default "this stage's requirement is genuinely known and matches
+// the official policy" scenario. Tests exercising unresolvable/domain-mismatch pass `new Map()` or an
+// explicit override.
+function modelHintMap(schedulerStageReferenceId, sourceReferenceId, officialModelSelection, overrides = {}) {
+  const hint = buildResolvedRequirementHint(schedulerStageReferenceId, 'MODEL', sourceReferenceId, officialModelSelection, overrides);
+  return new Map([[`${hint.scheduler_stage_reference_id}::${hint.requirement_element}::${hint.source_reference_id}`, hint]]);
+}
+
+// pr106fix5: the canonical, genuinely matching Registry Snapshot binding context -- built once,
+// reused by every test that needs a RESOLVED requirement to reach `authorized: true`/`match: true`.
+// `snapshotContext(overrides)` lets a test target one field's mismatch while every other field stays
+// genuinely valid.
+const REGISTRY_SNAPSHOT = buildOfficialRegistrySnapshot();
+function snapshotContext(overrides = {}) {
+  return {
+    ref: REGISTRY_SNAPSHOT,
+    packageRegistrySnapshotId: REGISTRY_SNAPSHOT.registry_snapshot_reference_id,
+    packageExecutionPlanId: REGISTRY_SNAPSHOT.execution_plan_id,
+    freshnessRegistrySnapshotId: REGISTRY_SNAPSHOT.registry_snapshot_reference_id,
+    freshnessRegistryCreatedSequence: REGISTRY_SNAPSHOT.logical_sequence,
+    freshnessMaxRegistryValidSequences: 1000,
+    requestLogicalSequence: 0,
+    tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1',
+    ...overrides
+  };
+}
+
+const MODEL_STAGE = Object.freeze({ scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: [], workflow_reference_id: null, required_capabilities: [], required_modalities: [] });
+const TOOL_STAGE = Object.freeze({ scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: ['tool-a'], workflow_reference_id: null, required_capabilities: [], required_modalities: [] });
+const WORKFLOW_STAGE = Object.freeze({ scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: 'flow-a', required_capabilities: [], required_modalities: [] });
+
+function validNetworkBinding(officialNetworkPolicy) {
+  return {
+    network_policy_reference_id: 'w1-network-policy', network_policy_reference_valid: true,
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1', runtime_environment_reference_id: 'w1-env',
+    official_network_policy_reference_id: officialNetworkPolicy.destination_ref_id,
+    official_network_policy_version: officialNetworkPolicy.destination_ref_version,
+    official_network_policy_fingerprint: computeOfficialPolicyFingerprint(officialNetworkPolicy)
+  };
+}
+
+function validSecretBinding(officialSecretPolicy) {
+  return {
+    secret_policy_reference_id: 'w1-secpolicy-reference', secret_policy_reference_valid: true,
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1', runtime_environment_reference_id: 'w1-env',
+    official_secret_policy_reference_id: officialSecretPolicy.secret_ref_id,
+    official_secret_policy_version: officialSecretPolicy.secret_ref_version,
+    official_secret_policy_fingerprint: computeOfficialPolicyFingerprint(officialSecretPolicy)
+  };
+}
+
+test('network policy reference: valid contract, exact fields, genuine fingerprint', () => {
+  const official = buildOfficialNetworkPolicy('w1');
+  const ref = buildRuntimeWorkerNetworkPolicyReference({
+    worker_network_policy_reference_id: 'w1-netpolicy', runtime_worker_reference_id: 'w1',
+    runtime_environment_reference_id: 'w1-env', network_policy_reference_id: 'w1-network-policy',
+    official_network_policy_reference_id: official.destination_ref_id,
+    official_network_policy_version: official.destination_ref_version,
+    official_network_policy_fingerprint: computeOfficialPolicyFingerprint(official),
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1'
+  });
+  assertValid('network policy reference', validateRuntimeWorkerNetworkPolicyReference(ref));
+  assert.deepEqual(Object.keys(ref).sort(), [...RUNTIME_WORKER_NETWORK_POLICY_REFERENCE_FIELDS].sort());
+  assert.equal(ref.project_id, 'proj-1');
+  assertInvalid('tampered fingerprint', validateRuntimeWorkerNetworkPolicyReference({ ...ref, network_policy_fingerprint: 'sha256:' + 'f'.repeat(64) }));
+});
+
+test('network policy reference: project_id may be null (shared / non-project-scoped policy)', () => {
+  const official = buildOfficialNetworkPolicy('w2');
+  const ref = buildRuntimeWorkerNetworkPolicyReference({
+    worker_network_policy_reference_id: 'w2-netpolicy', runtime_worker_reference_id: 'w2',
+    runtime_environment_reference_id: 'w2-env', network_policy_reference_id: 'w2-network-policy',
+    official_network_policy_reference_id: official.destination_ref_id,
+    official_network_policy_version: official.destination_ref_version,
+    official_network_policy_fingerprint: computeOfficialPolicyFingerprint(official),
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1'
+  });
+  assert.equal(ref.project_id, null);
+  assertValid('nullable project', validateRuntimeWorkerNetworkPolicyReference(ref));
+});
+
+test('secret policy reference: valid contract, exact fields, genuine fingerprint', () => {
+  const official = buildOfficialSecretPolicy('w1', 'tenant-a');
+  const ref = buildRuntimeWorkerSecretPolicyReference({
+    worker_secret_policy_reference_id: 'w1-secpolicy-ref', runtime_worker_reference_id: 'w1',
+    runtime_environment_reference_id: 'w1-env', secret_policy_reference_id: 'w1-secpolicy-reference',
+    official_secret_policy_reference_id: official.secret_ref_id,
+    official_secret_policy_version: official.secret_ref_version,
+    official_secret_policy_fingerprint: computeOfficialPolicyFingerprint(official),
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1'
+  });
+  assertValid('secret policy reference', validateRuntimeWorkerSecretPolicyReference(ref));
+  assert.deepEqual(Object.keys(ref).sort(), [...RUNTIME_WORKER_SECRET_POLICY_REFERENCE_FIELDS].sort());
+  assertInvalid('tampered fingerprint', validateRuntimeWorkerSecretPolicyReference({ ...ref, secret_policy_fingerprint: 'sha256:' + 'f'.repeat(64) }));
+});
+
+test('deriveStageRequiresNetworkOrSecret: only stages reaching model/tool/workflow require network or secret access', () => {
+  const base = { model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null };
+  assert.equal(deriveStageRequiresNetworkOrSecret(base), false);
+  assert.equal(deriveStageRequiresNetworkOrSecret({ ...base, model_selection_reference_id: 'model-ref-1' }), true);
+  assert.equal(deriveStageRequiresNetworkOrSecret({ ...base, tool_reference_ids: ['tool-a'] }), true);
+  assert.equal(deriveStageRequiresNetworkOrSecret({ ...base, workflow_reference_id: 'flow-a' }), true);
+});
+
+test('evaluatePolicyReferenceMatch: stage with no requirement is NOT_APPLICABLE (match true) regardless of policy state', () => {
+  const stage = { model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null };
+  const result = evaluatePolicyReferenceMatch('network', stage, { network_policy_reference_id: 'w1-network-policy' }, undefined, { tenantId: 't', organizationId: 'o', projectId: 'p' }, new Map(), new Map(), new Map());
+  assert.equal(result.match, true);
+  assert.equal(result.reason, null);
+});
+
+test('evaluatePolicyReferenceMatch: required stage with no policy reference bound blocks with missing reason', () => {
+  const stage = { model_selection_reference_id: 'genref-1', tool_reference_ids: [], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
+  const result = evaluatePolicyReferenceMatch('network', stage, { network_policy_reference_id: 'w1-network-policy' }, undefined, { tenantId: 't', organizationId: 'o', projectId: 'p' }, new Map(), new Map(), new Map());
+  assert.equal(result.match, false);
+  assert.equal(result.reason, 'worker_network_policy_reference_missing');
+});
+
+test('evaluatePolicyReferenceMatch: own-binding ID/version/tenant/organization/project/environment mismatch each block with a distinct reason', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('unit-net');
+  const officialSecret = buildOfficialSecretPolicy('unit-sec', 'tenant-a');
+  const officialModel = buildOfficialModelSelectionDecision('unitgen', { decision_id: 'genref-1' });
+  const worker = { network_policy_reference_id: 'w1-network-policy', secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const validPolicyRef = validNetworkBinding(officialNetwork);
+  const netMap = officialMap('network', officialNetwork);
+  const hints = modelHintMap(MODEL_STAGE.scheduler_stage_reference_id, 'genref-1', officialModel);
+  const sources = sourcesMap(officialModel);
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validPolicyRef, canonical, netMap, hints, sources, snapshotContext()).match, true);
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, network_policy_reference_id: 'other-id' }, canonical, netMap, hints, sources).reason, 'worker_network_policy_id_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, network_policy_reference_valid: false }, canonical, netMap, hints, sources).reason, 'worker_network_policy_reference_invalid');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, tenant_id: 'other-tenant' }, canonical, netMap, hints, sources).reason, 'worker_network_policy_tenant_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, organization_id: 'other-org' }, canonical, netMap, hints, sources).reason, 'worker_network_policy_organization_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, project_id: 'other-project' }, canonical, netMap, hints, sources).reason, 'worker_network_policy_project_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, { ...validPolicyRef, runtime_environment_reference_id: 'other-env' }, canonical, netMap, hints, sources).reason, 'worker_network_policy_environment_mismatch');
+  const secretMap = officialMap('secret', officialSecret);
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, { ...validSecretBinding(officialSecret), secret_policy_reference_id: 'other-id' }, canonical, secretMap, hints, sources).reason, 'worker_secret_policy_id_mismatch');
+});
+
+// --- Official policy binding (pr106fix2) ----------------------------------------------------------
+
+function modelProvenance(baseId) {
+  const officialModel = buildOfficialModelSelectionDecision(baseId, { decision_id: 'genref-1' });
+  return { officialModel, hints: modelHintMap(MODEL_STAGE.scheduler_stage_reference_id, 'genref-1', officialModel), sources: sourcesMap(officialModel) };
+}
+
+test('official policy binding: valid Network binding against a genuine official policy matches', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('official-valid-net');
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('official-valid');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetwork), canonical, officialMap('network', officialNetwork), hints, sources, snapshotContext()).match, true);
+  // pr106fix5: a genuine, request-validated official Secret Policy can never match a MODEL/TOOL/
+  // WORKFLOW `secret_purpose` today -- `SECRET_SCOPES` (transcription-secret-resolution-boundary.js,
+  // reused verbatim, PR #76) is `['TRANSCRIPTION_PROVIDER', 'TRANSPORT', 'WEBHOOK', 'INTERNAL_SERVICE']`,
+  // disjoint from `MODEL_PROVIDER_ACCESS`/`TOOL_ACCESS`/`WORKFLOW_ACCESS`. Documented honestly as a
+  // limitation below; see "Secret purpose vs destination_class (pr106fix5 FIX 1)" for coverage of the
+  // comparison logic itself via a raw (non-request-validated) official object.
+  const officialSecret = buildOfficialSecretPolicy('official-valid-sec', 'tenant-a');
+  const secWorker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, secWorker, validSecretBinding(officialSecret), canonical, officialMap('secret', officialSecret), hints, sources, snapshotContext()).reason, 'worker_secret_official_policy_purpose_mismatch::MODEL::genref-1');
+});
+
+test('official policy binding: official policy missing from the registry blocks with a distinct reason', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('official-missing-net');
+  const officialSecret = buildOfficialSecretPolicy('official-missing-sec', 'tenant-a');
+  const worker = { network_policy_reference_id: 'w1-network-policy', secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('official-missing');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetwork), canonical, new Map(), hints, sources).reason, 'worker_network_official_policy_missing');
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, validSecretBinding(officialSecret), canonical, new Map(), hints, sources).reason, 'worker_secret_official_policy_missing');
+});
+
+test('official policy binding: official ID divergente blocks as missing (lookup by ID fails)', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('official-idmismatch-net');
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const binding = { ...validNetworkBinding(officialNetwork), official_network_policy_reference_id: 'a-different-official-id' };
+  const { hints, sources } = modelProvenance('official-idmismatch');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, officialMap('network', officialNetwork), hints, sources).reason, 'worker_network_official_policy_missing');
+});
+
+test('official policy binding: official version divergente blocks with a distinct reason', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('official-version-net');
+  const officialSecret = buildOfficialSecretPolicy('official-version-sec', 'tenant-a');
+  const worker = { network_policy_reference_id: 'w1-network-policy', secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const netBinding = { ...validNetworkBinding(officialNetwork), official_network_policy_version: 2 };
+  const secBinding = { ...validSecretBinding(officialSecret), official_secret_policy_version: 2 };
+  const { hints, sources } = modelProvenance('official-version');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, netBinding, canonical, officialMap('network', officialNetwork), hints, sources).reason, 'worker_network_official_policy_version_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secBinding, canonical, officialMap('secret', officialSecret), hints, sources).reason, 'worker_secret_official_policy_version_mismatch');
+});
+
+test('official policy binding: official fingerprint divergente blocks with a distinct reason', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('official-fp-net');
+  const officialSecret = buildOfficialSecretPolicy('official-fp-sec', 'tenant-a');
+  const worker = { network_policy_reference_id: 'w1-network-policy', secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const netBinding = { ...validNetworkBinding(officialNetwork), official_network_policy_fingerprint: 'stale-fingerprint-value' };
+  const secBinding = { ...validSecretBinding(officialSecret), official_secret_policy_fingerprint: 'stale-fingerprint-value' };
+  const { hints, sources } = modelProvenance('official-fp');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, netBinding, canonical, officialMap('network', officialNetwork), hints, sources).reason, 'worker_network_official_policy_fingerprint_mismatch');
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secBinding, canonical, officialMap('secret', officialSecret), hints, sources).reason, 'worker_secret_official_policy_fingerprint_mismatch');
+});
+
+test('official policy binding: conteúdo oficial adulterado com fingerprint antigo (binding) is caught, not masked', () => {
+  // The binding's own official_network_policy_fingerprint was computed against the ORIGINAL official
+  // policy content. If the official policy object itself is later tampered (e.g. destination_alias
+  // changed) but the binding still carries the OLD fingerprint, the recomputed fingerprint of the
+  // (now-different) official object no longer matches -- caught, never silently accepted.
+  const officialNetwork = buildOfficialNetworkPolicy('official-tamper-net');
+  const binding = validNetworkBinding(officialNetwork);
+  const tamperedOfficial = { ...officialNetwork, destination_alias: 'a-completely-different-alias' };
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('official-tamper');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, officialMap('network', tamperedOfficial), hints, sources).reason, 'worker_network_official_policy_fingerprint_mismatch');
+});
+
+test('official policy binding: secret tenant/organization/project divergente blocks appropriately', () => {
+  const officialSecretOtherTenant = buildOfficialSecretPolicy('official-tenant-sec', 'other-tenant');
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const binding = validSecretBinding(officialSecretOtherTenant);
+  const { hints, sources } = modelProvenance('official-tenant');
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, officialMap('secret', officialSecretOtherTenant), hints, sources).reason, 'worker_secret_official_policy_scope_mismatch');
+});
+
+test('official policy binding: official environment PRODUCTION is never allowed', () => {
+  const officialNetworkProd = buildOfficialNetworkPolicy('official-prod-net', { environment: 'PRODUCTION' });
+  const officialSecretProd = buildOfficialSecretPolicy('official-prod-sec', 'tenant-a', { environment: 'PRODUCTION' });
+  const worker = { network_policy_reference_id: 'w1-network-policy', secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('official-prod');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetworkProd), canonical, officialMap('network', officialNetworkProd), hints, sources).reason, 'worker_network_official_policy_not_allowed');
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, validSecretBinding(officialSecretProd), canonical, officialMap('secret', officialSecretProd), hints, sources).reason, 'worker_secret_official_policy_not_allowed');
+});
+
+test('official policy binding: deterministic stage without requirement remains explicitly NOT_APPLICABLE', () => {
+  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const result = evaluatePolicyReferenceMatch('network', stage, worker, undefined, canonical, new Map(), new Map(), new Map());
+  assert.equal(result.match, true);
+  assert.equal(result.reason, null);
+});
+
+test('official policy binding: input order of official policies in the map never alters compatibility', () => {
+  const officialA = buildOfficialNetworkPolicy('order-a-net');
+  const officialB = buildOfficialNetworkPolicy('order-b-net');
+  const mapAB = new Map([[officialA.destination_ref_id, officialA], [officialB.destination_ref_id, officialB]]);
+  const mapBA = new Map([[officialB.destination_ref_id, officialB], [officialA.destination_ref_id, officialA]]);
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const binding = validNetworkBinding(officialA);
+  const { hints, sources } = modelProvenance('order');
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, mapAB, hints, sources, snapshotContext()).match, true);
+  assert.equal(evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, binding, canonical, mapBA, hints, sources, snapshotContext()).match, true);
+});
+
+test('official policy binding: structurally invalid official policy is rejected by its own real validator', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('official-structural-net');
+  assertValid('official network policy well-formed', validateDestinationReference(officialNetwork));
+  assertInvalid('official network policy with active=true rejected', validateDestinationReference({ ...officialNetwork, active: true }));
+  const officialSecret = buildOfficialSecretPolicy('official-structural-sec', 'tenant-a');
+  assertValid('official secret policy well-formed', validateSecretReference(officialSecret));
+  assertInvalid('official secret policy revoked=true rejected (policy revogada)', validateSecretReference({ ...officialSecret, revoked: true }));
+});
+
+test('worker assignment boundary: model stage with a compatible network/secret policy bound to a genuine official policy and genuine provenance reaches match true', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const modelStage = { ...golden.schedulerOutcome.schedulerStageRefs[0], model_selection_reference_id: 'genref-1' };
+  const officialModel = buildOfficialModelSelectionDecision('goldengenstage', { decision_id: 'genref-1' });
+  const netMap = officialMap('network', golden.pool.officialNetworkPolicy);
+  const hints = modelHintMap(modelStage.scheduler_stage_reference_id, 'genref-1', officialModel);
+  const sources = sourcesMap(officialModel);
+  assert.equal(evaluatePolicyReferenceMatch('network', modelStage, golden.pool.worker, golden.pool.networkPolicy, {
+    tenantId: golden.runtimePackage.tenant_id, organizationId: golden.runtimePackage.organization_id, projectId: golden.runtimePackage.project_id
+  }, netMap, hints, sources, snapshotContext()).match, true);
+});
+
+// --- Secret purpose vs destination_class (pr106fix5 FIX 1) -----------------------------------------
+// "Para Network: official.scope deve ser comparado com requirement.destination_class. Para Secret:
+// official.scope deve ser comparado com requirement.secret_purpose." A genuine, request-validated
+// TranscriptionSecretReference can never carry `scope: 'MODEL_PROVIDER_ACCESS'`/`'TOOL_ACCESS'`/
+// `'WORKFLOW_ACCESS'` today -- `SECRET_SCOPES` (transcription-secret-resolution-boundary.js, reused
+// verbatim, PR #76) is `['TRANSCRIPTION_PROVIDER', 'TRANSPORT', 'WEBHOOK', 'INTERNAL_SERVICE']`,
+// disjoint from the `secret_purpose` vocabulary `deriveStagePolicyRequirements` assigns. This is an
+// honest, documented limitation of the current official contract (see docs "Limitações") -- these
+// tests exercise the comparison LOGIC itself via a raw, non-request-validated official object
+// (`rawOfficialSecret`), the same technique already used elsewhere in this file to isolate boundary
+// logic from full end-to-end request validation.
+function rawOfficialSecret(baseId, tenantId, scope, overrides = {}) {
+  return {
+    secret_ref_id: `${baseId}-official-secpolicy`, secret_ref_version: 1,
+    secret_alias: `${baseId}-official-secpolicy-alias`, secret_type: 'API_KEY_REFERENCE',
+    provider_slug: 'mock-provider-a', tenant_id: tenantId, environment: 'DEVELOPMENT',
+    scope, rotation_version: 1, active: false, revoked: false,
+    simulation: true, production_blocked: true, network_enabled: false, runtime_enabled: false,
+    validator_version: 'raw-test-secret-not-request-validated',
+    ...overrides
+  };
+}
+
+function secretBindingFor(official) {
+  return {
+    secret_policy_reference_id: 'w1-secpolicy-reference', secret_policy_reference_valid: true,
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1', runtime_environment_reference_id: 'w1-env',
+    official_secret_policy_reference_id: official.secret_ref_id,
+    official_secret_policy_version: official.secret_ref_version,
+    official_secret_policy_fingerprint: computeOfficialPolicyFingerprint(official)
+  };
+}
+
+test('secret purpose vs destination_class: network policy comparison uses destination_class', () => {
+  const official = buildOfficialNetworkPolicy('fix1-net-destclass');
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-net-destclass');
+  const result = evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(official), canonical, officialMap('network', official), hints, sources, snapshotContext());
+  assert.equal(result.match, true);
+});
+
+test('secret purpose vs destination_class: secret policy comparison uses secret_purpose, never destination_class', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-sec-purpose');
+  const officialWithPurpose = rawOfficialSecret('fix1-sec-purpose-scope', 'tenant-a', 'MODEL_PROVIDER_ACCESS');
+  const matchResult = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secretBindingFor(officialWithPurpose), canonical, officialMap('secret', officialWithPurpose), hints, sources, snapshotContext());
+  assert.equal(matchResult.match, true);
+  const officialWithDestinationClass = rawOfficialSecret('fix1-sec-destclass-scope', 'tenant-a', 'TRANSCRIPTION_PROVIDER');
+  const mismatchResult = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secretBindingFor(officialWithDestinationClass), canonical, officialMap('secret', officialWithDestinationClass), hints, sources, snapshotContext());
+  assert.equal(mismatchResult.match, false);
+  assert.equal(mismatchResult.reason, 'worker_secret_official_policy_purpose_mismatch::MODEL::genref-1');
+});
+
+test('secret purpose vs destination_class: destination correta + purpose divergente bloqueia Secret', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-destok-purposebad');
+  // Scope genuinely equals MODEL's own destination_class (TRANSCRIPTION_PROVIDER) -- structurally the
+  // "correct" value for Network, but never the correct value for Secret's own secret_purpose.
+  const official = rawOfficialSecret('fix1-destok-purposebad-scope', 'tenant-a', 'TRANSCRIPTION_PROVIDER');
+  const result = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secretBindingFor(official), canonical, officialMap('secret', official), hints, sources, snapshotContext());
+  assert.equal(result.match, false);
+  assert.equal(result.reason, 'worker_secret_official_policy_purpose_mismatch::MODEL::genref-1');
+});
+
+test('secret purpose vs destination_class: purpose correto + destination divergente não altera Secret', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-purposeok-destbad');
+  // scope equals secret_purpose (MODEL_PROVIDER_ACCESS) -- genuinely never equal to destination_class
+  // (TRANSCRIPTION_PROVIDER) -- Secret still matches, proving destination_class is never consulted.
+  const official = rawOfficialSecret('fix1-purposeok-destbad-scope', 'tenant-a', 'MODEL_PROVIDER_ACCESS');
+  const result = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secretBindingFor(official), canonical, officialMap('secret', official), hints, sources, snapshotContext());
+  assert.equal(result.match, true);
+});
+
+test('secret purpose vs destination_class: scope correto de Network não autoriza Secret', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-networkscope-forsecret');
+  // A scope value that is structurally valid for Network's own destination_class comparison is never
+  // automatically valid for Secret's own secret_purpose comparison, even when both nominally describe
+  // "the same stage element".
+  const official = rawOfficialSecret('fix1-networkscope-forsecret-scope', 'tenant-a', 'TRANSCRIPTION_PROVIDER');
+  const result = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, secretBindingFor(official), canonical, officialMap('secret', official), hints, sources, snapshotContext());
+  assert.equal(result.match, false);
+  assert.equal(result.reason, 'worker_secret_official_policy_purpose_mismatch::MODEL::genref-1');
+});
+
+test('secret purpose vs destination_class: stage misto valida cada scope/purpose independentemente', () => {
+  const officialModel = buildOfficialModelSelectionDecision('fix1-mixed', { decision_id: 'genref-1' });
+  const officialNetwork = buildOfficialNetworkPolicy('fix1-mixed-net');
+  const officialSecretWithPurpose = rawOfficialSecret('fix1-mixed-sec', 'tenant-a', 'MODEL_PROVIDER_ACCESS');
+  const netWorker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const secWorker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const hints = modelHintMap(MODEL_STAGE.scheduler_stage_reference_id, 'genref-1', officialModel);
+  const sources = sourcesMap(officialModel);
+  const networkResult = evaluatePolicyReferenceMatch('network', MODEL_STAGE, netWorker, validNetworkBinding(officialNetwork), canonical, officialMap('network', officialNetwork), hints, sources, snapshotContext());
+  const secretResult = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, secWorker, secretBindingFor(officialSecretWithPurpose), canonical, officialMap('secret', officialSecretWithPurpose), hints, sources, snapshotContext());
+  assert.equal(networkResult.match, true);
+  assert.equal(secretResult.match, true);
+});
+
+test('secret purpose vs destination_class: fingerprint oficial válido não mascara purpose mismatch', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-fpvalid-purposebad');
+  const official = rawOfficialSecret('fix1-fpvalid-purposebad-scope', 'tenant-a', 'WEBHOOK');
+  const binding = secretBindingFor(official);
+  // The binding's own official fingerprint is genuinely valid (Gate 1 passes) -- purpose mismatch is
+  // never masked by fingerprint validity.
+  assert.equal(binding.official_secret_policy_fingerprint, computeOfficialPolicyFingerprint(official));
+  const result = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, officialMap('secret', official), hints, sources, snapshotContext());
+  assert.equal(result.match, false);
+  assert.equal(result.reason, 'worker_secret_official_policy_purpose_mismatch::MODEL::genref-1');
+});
+
+test('secret purpose vs destination_class: input order of official policies never alters the purpose comparison', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-order');
+  const officialA = rawOfficialSecret('fix1-order-a', 'tenant-a', 'MODEL_PROVIDER_ACCESS');
+  const officialB = rawOfficialSecret('fix1-order-b', 'tenant-a', 'TRANSPORT');
+  const mapAB = new Map([[officialA.secret_ref_id, officialA], [officialB.secret_ref_id, officialB]]);
+  const mapBA = new Map([[officialB.secret_ref_id, officialB], [officialA.secret_ref_id, officialA]]);
+  const binding = secretBindingFor(officialA);
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, mapAB, hints, sources, snapshotContext()).match, true);
+  assert.equal(evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, mapBA, hints, sources, snapshotContext()).match, true);
+});
+
+test('secret purpose vs destination_class: context never alters the scope/purpose comparison', () => {
+  const worker = { secret_policy_reference_id: 'w1-secpolicy-reference', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const { hints, sources } = modelProvenance('fix1-context-inert');
+  const official = rawOfficialSecret('fix1-context-inert-scope', 'tenant-a', 'MODEL_PROVIDER_ACCESS');
+  const binding = secretBindingFor(official);
+  const officialMapArg = officialMap('secret', official);
+  const result1 = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, officialMapArg, hints, sources, snapshotContext());
+  const result2 = evaluatePolicyReferenceMatch('secret', MODEL_STAGE, worker, binding, canonical, officialMapArg, hints, sources, snapshotContext());
+  assert.deepEqual(result1, result2);
+});
+
+// --- Stage Policy Requirement derivation (pr106fix4 FIX 1) -----------------------------------------
+// "Stages com múltiplos elementos produzem múltiplos requisitos. A autorização de MODEL não autoriza
+// implicitamente TOOL ou WORKFLOW."
+
+test('runtime-worker-stage-policy-requirement-reference: valid RESOLVED contract, exact fields, genuine fingerprint', () => {
+  const official = buildOfficialModelSelectionDecision('contract-valid');
+  const ref = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  assertValid('stage policy requirement reference', validateRuntimeWorkerStagePolicyRequirementReference(ref));
+  assert.deepEqual(Object.keys(ref).sort(), [...RUNTIME_WORKER_STAGE_POLICY_REQUIREMENT_REFERENCE_FIELDS].sort());
+  assertInvalid('unknown source_stage_domain rejected', validateRuntimeWorkerStagePolicyRequirementReference({ ...ref, source_stage_domain: 'OTHER_DOMAIN' }));
+  assertInvalid('tampered fingerprint', validateRuntimeWorkerStagePolicyRequirementReference({ ...ref, requirement_reference_fingerprint: 'sha256:' + 'f'.repeat(64) }));
+});
+
+test('runtime-worker-stage-policy-requirement-reference: valid UNRESOLVED contract uses only placeholder values', () => {
+  const ref = buildUnresolvedRequirementHint('stage-1', 'TOOL', 'tool-a');
+  assertValid('unresolved stage policy requirement reference', validateRuntimeWorkerStagePolicyRequirementReference(ref));
+  assert.equal(ref.source_reference_fingerprint, 'fingerprint_not_available');
+  assert.equal(ref.source_registry_snapshot_reference_id, 'registry_snapshot_not_available');
+  assert.equal(ref.source_provider_slug, null);
+  assert.equal(ref.source_stage_domain, null);
+});
+
+test('deriveStagePolicyRequirements: deterministic stage has no elements and no requirements', () => {
+  const stage = { model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
+  assert.deepEqual(deriveStagePolicyRequirements(stage), []);
+});
+
+test('deriveStagePolicyRequirements: model isolado produces exactly one MODEL requirement', () => {
+  const requirements = deriveStagePolicyRequirements(MODEL_STAGE);
+  assert.equal(requirements.length, 1);
+  assert.equal(requirements[0].requirement_element, 'MODEL');
+  assert.equal(requirements[0].source_reference_id, 'genref-1');
+  assert.equal(requirements[0].destination_class, 'TRANSCRIPTION_PROVIDER');
+  assert.equal(requirements[0].secret_purpose, 'MODEL_PROVIDER_ACCESS');
+});
+
+test('deriveStagePolicyRequirements: tool isolada produces exactly one TOOL requirement', () => {
+  const requirements = deriveStagePolicyRequirements(TOOL_STAGE);
+  assert.equal(requirements.length, 1);
+  assert.equal(requirements[0].requirement_element, 'TOOL');
+  assert.equal(requirements[0].source_reference_id, 'tool-a');
+  assert.equal(requirements[0].destination_class, 'TRANSPORT');
+  assert.equal(requirements[0].secret_purpose, 'TOOL_ACCESS');
+});
+
+test('deriveStagePolicyRequirements: workflow isolado produces exactly one WORKFLOW requirement', () => {
+  const requirements = deriveStagePolicyRequirements(WORKFLOW_STAGE);
+  assert.equal(requirements.length, 1);
+  assert.equal(requirements[0].requirement_element, 'WORKFLOW');
+  assert.equal(requirements[0].source_reference_id, 'flow-a');
+  assert.equal(requirements[0].destination_class, 'INTERNAL_SERVICE');
+  assert.equal(requirements[0].secret_purpose, 'WORKFLOW_ACCESS');
+});
+
+test('deriveStagePolicyRequirements: model+tool never collapses to a single requirement', () => {
+  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: ['tool-a'], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
+  assert.deepEqual(deriveStagePolicyRequirements(stage).map((r) => r.requirement_element), ['MODEL', 'TOOL']);
+});
+
+test('deriveStagePolicyRequirements: model+workflow never collapses to a single requirement', () => {
+  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: [], workflow_reference_id: 'flow-a', required_capabilities: [], required_modalities: [] };
+  assert.deepEqual(deriveStagePolicyRequirements(stage).map((r) => r.requirement_element), ['MODEL', 'WORKFLOW']);
+});
+
+test('deriveStagePolicyRequirements: tool+workflow produces both, ordered TOOL then WORKFLOW', () => {
+  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: ['tool-a'], workflow_reference_id: 'flow-a', required_capabilities: [], required_modalities: [] };
+  assert.deepEqual(deriveStagePolicyRequirements(stage).map((r) => r.requirement_element), ['TOOL', 'WORKFLOW']);
+});
+
+test('deriveStagePolicyRequirements: model+tool+workflow produces all three, ordered MODEL, TOOL, WORKFLOW', () => {
+  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: ['tool-a'], workflow_reference_id: 'flow-a', required_capabilities: [], required_modalities: [] };
+  assert.deepEqual(deriveStagePolicyRequirements(stage).map((r) => r.requirement_element), ['MODEL', 'TOOL', 'WORKFLOW']);
+});
+
+test('deriveStagePolicyRequirements: dois tools produce two TOOL requirements ordered by source_reference_id', () => {
+  const stage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: ['tool-b', 'tool-a'], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
+  assert.deepEqual(deriveStagePolicyRequirements(stage).map((r) => r.source_reference_id), ['tool-a', 'tool-b']);
+});
+
+test('deriveStagePolicyRequirements: input order of tool_reference_ids never alters the derived order', () => {
+  const stageAB = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: null, tool_reference_ids: ['tool-a', 'tool-b'], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
+  const stageBA = { ...stageAB, tool_reference_ids: ['tool-b', 'tool-a'] };
+  assert.deepEqual(deriveStagePolicyRequirements(stageAB), deriveStagePolicyRequirements(stageBA));
+});
+
+test('evaluatePolicyReferenceMatch: MODEL authorized never masks an unresolvable TOOL component of the same mixed stage', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('mixed-model-tool-net');
+  const officialModel = buildOfficialModelSelectionDecision('mixedgentool', { decision_id: 'genref-1' });
+  const binding = validNetworkBinding(officialNetwork);
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const mixedStage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: ['tool-a'], workflow_reference_id: null, required_capabilities: [], required_modalities: [] };
+  const hints = modelHintMap('stage-1', 'genref-1', officialModel);
+  const sources = sourcesMap(officialModel);
+  const result = evaluatePolicyReferenceMatch('network', mixedStage, worker, binding, canonical, officialMap('network', officialNetwork), hints, sources, snapshotContext());
+  assert.equal(result.match, false);
+  assert.equal(result.reason, 'worker_network_policy_requirement_unresolvable::TOOL::tool-a');
+});
+
+test('evaluatePolicyReferenceMatch: MODEL authorized never masks an unresolvable WORKFLOW component of the same mixed stage', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('mixed-model-workflow-net');
+  const officialModel = buildOfficialModelSelectionDecision('mixedgenworkflow', { decision_id: 'genref-1' });
+  const binding = validNetworkBinding(officialNetwork);
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const mixedStage = { scheduler_stage_reference_id: 'stage-1', model_selection_reference_id: 'genref-1', tool_reference_ids: [], workflow_reference_id: 'flow-a', required_capabilities: [], required_modalities: [] };
+  const hints = modelHintMap('stage-1', 'genref-1', officialModel);
+  const sources = sourcesMap(officialModel);
+  const result = evaluatePolicyReferenceMatch('network', mixedStage, worker, binding, canonical, officialMap('network', officialNetwork), hints, sources, snapshotContext());
+  assert.equal(result.match, false);
+  assert.equal(result.reason, 'worker_network_policy_requirement_unresolvable::WORKFLOW::flow-a');
+});
+
+// --- Stage Policy Requirement provenance (pr106fix4 FIX 2) -----------------------------------------
+// "Stage Policy Requirement não é um hint confiável isoladamente. Um requisito RESOLVED deve estar
+// vinculado a uma fonte upstream oficial por ID/versão/fingerprint." "Quando nenhuma fonte oficial
+// consegue resolver provider ou domínio, o requisito permanece UNRESOLVED e falha de forma fechada."
+
+function modelRequirement(sourceReferenceId) {
+  return { requirement_element: 'MODEL', source_reference_id: sourceReferenceId, destination_class: 'TRANSCRIPTION_PROVIDER', secret_purpose: 'MODEL_PROVIDER_ACCESS', required_capabilities: [], required_modalities: [] };
+}
+
+test('resolveRequirementProvenance: source oficial válida resolves and authorizes', () => {
+  const official = buildOfficialModelSelectionDecision('prov-valid');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official), snapshotContext());
+  assert.equal(result.authorized, true);
+  assert.equal(result.provider_slug, 'mock-provider-a');
+  assert.equal(result.stage_domain, 'TRANSCRIPTION_DOMAIN');
+});
+
+test('resolveRequirementProvenance: source ausente (nenhum hint) is unresolvable', () => {
+  const result = resolveRequirementProvenance(modelRequirement('genref-1'), undefined, new Map());
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('resolveRequirementProvenance: source ID divergente entre hint e requirement is unresolvable', () => {
+  const official = buildOfficialModelSelectionDecision('prov-idmismatch');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', 'a-different-source-id', official);
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('resolveRequirementProvenance: source version divergente is unresolvable', () => {
+  const officialToolV1 = { tool_id: 'tool-a', tool_version: 1, note: 'synthetic-tool-source-for-provenance-unit-test' };
+  const officialToolV2 = { tool_id: 'tool-a', tool_version: 2, note: 'synthetic-tool-source-for-provenance-unit-test' };
+  const hint = buildResolvedRequirementHint('stage-1', 'TOOL', 'tool-a', officialToolV1);
+  const toolRequirement = { requirement_element: 'TOOL', source_reference_id: 'tool-a', destination_class: 'TRANSPORT', secret_purpose: 'TOOL_ACCESS', required_capabilities: [], required_modalities: [] };
+  const result = resolveRequirementProvenance(toolRequirement, hint, sourcesMap(officialToolV2));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('resolveRequirementProvenance: source fingerprint divergente (hint claims a fingerprint the official object does not have) is unresolvable', () => {
+  const official = buildOfficialModelSelectionDecision('prov-fpmismatch');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official, { source_reference_fingerprint: 'sha256:' + 'a'.repeat(64) });
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('resolveRequirementProvenance: conteúdo oficial adulterado (fingerprint agora stale) is caught, never silently accepted', () => {
+  const official = buildOfficialModelSelectionDecision('prov-contenttamper');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const tamperedOfficial = { ...official, selected_model_id: 'a-completely-different-model' };
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(tamperedOfficial));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('resolveRequirementProvenance: provider declarado divergente da source recomputada is unresolvable, never trusted from the hint', () => {
+  const official = buildOfficialModelSelectionDecision('prov-providermismatch');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official, { source_provider_slug: 'mock-provider-b' });
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('resolveRequirementProvenance: domain declarado divergente da source recomputada is unresolvable, never trusted from the hint', () => {
+  const official = buildOfficialModelSelectionDecision('prov-domainmismatch');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official, { source_stage_domain: 'GENERIC_DOMAIN' });
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('resolveRequirementProvenance: model source usada para tool bloqueia (source_reference_type mismatch)', () => {
+  const officialModel = buildOfficialModelSelectionDecision('provgenfortool');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', officialModel.decision_id, officialModel, { requirement_element: 'TOOL' });
+  const toolRequirement = { requirement_element: 'TOOL', source_reference_id: officialModel.decision_id, destination_class: 'TRANSPORT', secret_purpose: 'TOOL_ACCESS', required_capabilities: [], required_modalities: [] };
+  const result = resolveRequirementProvenance(toolRequirement, hint, sourcesMap(officialModel));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('resolveRequirementProvenance: tool source usada para workflow bloqueia (source_reference_type mismatch)', () => {
+  const officialModel = buildOfficialModelSelectionDecision('prov-toolforworkflow');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', officialModel.decision_id, officialModel, { requirement_element: 'WORKFLOW', source_reference_type: 'TOOL_CONTRACT_REFERENCE' });
+  const workflowRequirement = { requirement_element: 'WORKFLOW', source_reference_id: officialModel.decision_id, destination_class: 'INTERNAL_SERVICE', secret_purpose: 'WORKFLOW_ACCESS', required_capabilities: [], required_modalities: [] };
+  const result = resolveRequirementProvenance(workflowRequirement, hint, sourcesMap(officialModel));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('resolveRequirementProvenance: RESOLVED sem objeto oficial correspondente no registry bloqueia', () => {
+  const official = buildOfficialModelSelectionDecision('prov-noregistry');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, new Map());
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('resolveRequirementProvenance: UNRESOLVED nunca produz match, mesmo com um objeto oficial genuíno disponível', () => {
+  const official = buildOfficialModelSelectionDecision('prov-unresolved');
+  const hint = buildUnresolvedRequirementHint('stage-1', 'MODEL', official.decision_id);
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('resolveRequirementProvenance: self-fingerprint válido do hint não mascara provenance inválida', () => {
+  const official = buildOfficialModelSelectionDecision('prov-selfvalid');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  assertValid('hint self-fingerprint is genuinely valid', validateRuntimeWorkerStagePolicyRequirementReference(hint));
+  const tamperedOfficial = { ...official, selected_model_id: 'a-different-model-entirely' };
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(tamperedOfficial));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'unresolvable');
+});
+
+test('stage policy requirement provenance: no network access and no secret resolution ever occurs while resolving provenance', () => {
+  const official = buildOfficialModelSelectionDecision('no-network-check');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  assert.deepEqual(findAgentCoreOperationalMaterial(hint), []);
+  assert.deepEqual(findAgentCoreOperationalMaterial(official), []);
+});
+
+// --- Registry Snapshot provenance (pr106fix5 FIX 2) -------------------------------------------------
+// "Hoje qualquer Registry Snapshot ID pode ser declarado sem alterar a decisão." Closed by requiring a
+// RESOLVED requirement's `source_registry_snapshot_reference_id` to bind to the one genuine
+// `ExecutionRegistrySnapshotReference` this request carries, proven to be the SAME snapshot the
+// Runtime Execution Package and Freshness Reference already committed to.
+
+test('resolveRegistrySnapshotBinding: snapshot oficial correto authorizes', () => {
+  const official = buildOfficialModelSelectionDecision('snap-valid');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const result = resolveRegistrySnapshotBinding(hint, snapshotContext());
+  assert.deepEqual(result, { authorized: true });
+});
+
+test('resolveRegistrySnapshotBinding: snapshot ausente (no registry_snapshot_reference on the request) blocks', () => {
+  const official = buildOfficialModelSelectionDecision('snap-missing');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  assert.equal(resolveRegistrySnapshotBinding(hint, null).reason, 'registry_snapshot_missing');
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ ref: null })).reason, 'registry_snapshot_missing');
+});
+
+test('resolveRegistrySnapshotBinding: snapshot ID divergente (hint declares an ID the real snapshot does not have) blocks', () => {
+  const official = buildOfficialModelSelectionDecision('snap-idmismatch');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official, { source_registry_snapshot_reference_id: 'a-different-snapshot-id' });
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext()).reason, 'registry_snapshot_mismatch');
+});
+
+test('resolveRegistrySnapshotBinding: snapshot não é o mesmo que o Runtime Execution Package/Freshness Reference já comprometeram blocks', () => {
+  const official = buildOfficialModelSelectionDecision('snap-notpackage');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ packageRegistrySnapshotId: 'a-different-package-snapshot-id' })).reason, 'registry_snapshot_mismatch');
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ freshnessRegistrySnapshotId: 'a-different-freshness-snapshot-id' })).reason, 'registry_snapshot_mismatch');
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ packageExecutionPlanId: 'a-different-execution-plan-id' })).reason, 'registry_snapshot_mismatch');
+});
+
+test('resolveRegistrySnapshotBinding: snapshot version divergente (snapshot_consistent/snapshot_validated false) blocks', () => {
+  const official = buildOfficialModelSelectionDecision('snap-version');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const inconsistentSnapshot = buildOfficialRegistrySnapshot({ observed_registry_version: 'a-different-observed-version' });
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ ref: inconsistentSnapshot })).reason, 'registry_snapshot_version_mismatch');
+});
+
+test('resolveRegistrySnapshotBinding: snapshot fingerprint divergente (conteúdo adulterado após fingerprint calculado) blocks', () => {
+  const official = buildOfficialModelSelectionDecision('snap-fp');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const genuineSnapshot = buildOfficialRegistrySnapshot();
+  // Bypasses the real builder to simulate a tampered-after-construction object -- the same "self-
+  // fingerprint válido não mascara" technique already used throughout this file.
+  const tamperedSnapshot = { ...genuineSnapshot, execution_plan_request_id: 'a-completely-different-request-id' };
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ ref: tamperedSnapshot })).reason, 'registry_snapshot_fingerprint_mismatch');
+});
+
+test('resolveRegistrySnapshotBinding: snapshot de outro tenant/organização/projeto blocks with scope_mismatch', () => {
+  const official = buildOfficialModelSelectionDecision('snap-scope');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const otherTenantSnapshot = buildOfficialRegistrySnapshot({ tenant_id: 'other-tenant' });
+  const otherOrgSnapshot = buildOfficialRegistrySnapshot({ organization_id: 'other-tenant:org-9' });
+  const otherProjectSnapshot = buildOfficialRegistrySnapshot({ project_id: 'other-proj' });
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ ref: otherTenantSnapshot })).reason, 'registry_snapshot_scope_mismatch');
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ ref: otherOrgSnapshot })).reason, 'registry_snapshot_scope_mismatch');
+  assert.equal(resolveRegistrySnapshotBinding(hint, snapshotContext({ ref: otherProjectSnapshot })).reason, 'registry_snapshot_scope_mismatch');
+});
+
+test('resolveRegistrySnapshotBinding: snapshot expirado (stale) blocks', () => {
+  const official = buildOfficialModelSelectionDecision('snap-stale');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const result = resolveRegistrySnapshotBinding(hint, snapshotContext({ freshnessMaxRegistryValidSequences: 10, requestLogicalSequence: 11 }));
+  assert.equal(result.reason, 'registry_snapshot_stale');
+});
+
+test('resolveRequirementProvenance: requirement RESOLVED sem snapshot oficial correspondente bloqueia', () => {
+  const official = buildOfficialModelSelectionDecision('snap-noregistry');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official), null);
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'registry_snapshot_missing');
+});
+
+test('resolveRequirementProvenance: self-fingerprint válido do requirement não mascara snapshot divergente', () => {
+  const official = buildOfficialModelSelectionDecision('snap-selfvalid');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  assertValid('hint self-fingerprint is genuinely valid', validateRuntimeWorkerStagePolicyRequirementReference(hint));
+  const otherSnapshot = buildOfficialRegistrySnapshot({ registry_snapshot_reference_id: 'a-different-snapshot-entirely' });
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official), snapshotContext({ ref: otherSnapshot }));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'registry_snapshot_mismatch');
+});
+
+test('resolveRequirementProvenance: source fingerprint correto não mascara snapshot divergente', () => {
+  const official = buildOfficialModelSelectionDecision('snap-sourcevalid');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  // The MODEL source's own fingerprint genuinely matches (provenance to the source itself is fine) --
+  // only the registry snapshot binding is wrong, and it is never masked by the source being valid.
+  const result = resolveRequirementProvenance(modelRequirement(official.decision_id), hint, sourcesMap(official), snapshotContext({ packageRegistrySnapshotId: 'a-different-id' }));
+  assert.equal(result.authorized, false);
+  assert.equal(result.reason, 'registry_snapshot_mismatch');
+});
+
+test('evaluatePolicyReferenceMatch: provider permitido no snapshot passa (genuine snapshot binding + genuine provider both required)', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('snap-provok-net');
+  const officialModel = buildOfficialModelSelectionDecision('snap-provok-gen', { decision_id: 'genref-1' });
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  const hints = modelHintMap('stage-1', 'genref-1', officialModel);
+  const sources = sourcesMap(officialModel);
+  const result = evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetwork), canonical, officialMap('network', officialNetwork), hints, sources, snapshotContext());
+  assert.equal(result.match, true);
+});
+
+test('evaluatePolicyReferenceMatch: provider ausente do ALLOWED_CAPABILITY_PROVIDER_SLUGS fica unresolved/bloqueado mesmo com snapshot genuíno', () => {
+  const officialNetwork = buildOfficialNetworkPolicy('snap-provbad-net');
+  // A provider not in the closed capability registry -- a genuinely valid, matching Registry Snapshot
+  // never overrides this: the requirement is still GENERIC_DOMAIN, structurally never authorizable.
+  const officialModel = buildOfficialModelSelectionDecision('snap-provbad-gen', { decision_id: 'genref-1', selected_provider_id: 'not-an-allowed-provslug' });
+  const worker = { network_policy_reference_id: 'w1-network-policy', runtime_environment_reference_id: 'w1-env' };
+  const canonical = { tenantId: 'tenant-a', organizationId: 'tenant-a:org-1', projectId: 'proj-1' };
+  // The hint honestly declares the recomputed domain (GENERIC_DOMAIN) rather than falsely claiming
+  // TRANSCRIPTION_DOMAIN -- an honest-but-out-of-domain hint reaches the domain check itself, rather
+  // than being caught earlier as a claim/recomputation mismatch (`unresolvable`).
+  const hints = modelHintMap('stage-1', 'genref-1', officialModel, { source_stage_domain: 'GENERIC_DOMAIN' });
+  const sources = sourcesMap(officialModel);
+  const result = evaluatePolicyReferenceMatch('network', MODEL_STAGE, worker, validNetworkBinding(officialNetwork), canonical, officialMap('network', officialNetwork), hints, sources, snapshotContext());
+  assert.equal(result.match, false);
+  assert.equal(result.reason, 'worker_network_official_policy_domain_mismatch::MODEL::genref-1');
+});
+
+test('resolveRegistrySnapshotBinding: context never alters the snapshot binding outcome', () => {
+  const official = buildOfficialModelSelectionDecision('snap-context-inert');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const ctx = snapshotContext();
+  assert.deepEqual(resolveRegistrySnapshotBinding(hint, ctx), resolveRegistrySnapshotBinding(hint, ctx));
+});
+
+test('resolveRegistrySnapshotBinding: input order of registry snapshot context fields never alters the outcome', () => {
+  const official = buildOfficialModelSelectionDecision('snap-order');
+  const hint = buildResolvedRequirementHint('stage-1', 'MODEL', official.decision_id, official);
+  const ctxA = snapshotContext();
+  const ctxB = {
+    tenantId: ctxA.tenantId, projectId: ctxA.projectId, organizationId: ctxA.organizationId,
+    requestLogicalSequence: ctxA.requestLogicalSequence, freshnessMaxRegistryValidSequences: ctxA.freshnessMaxRegistryValidSequences,
+    freshnessRegistryCreatedSequence: ctxA.freshnessRegistryCreatedSequence, freshnessRegistrySnapshotId: ctxA.freshnessRegistrySnapshotId,
+    packageExecutionPlanId: ctxA.packageExecutionPlanId, packageRegistrySnapshotId: ctxA.packageRegistrySnapshotId, ref: ctxA.ref
+  };
+  assert.deepEqual(resolveRegistrySnapshotBinding(hint, ctxA), resolveRegistrySnapshotBinding(hint, ctxB));
+});
+
+test('registry snapshot provenance: no network access and no secret resolution ever occurs while resolving snapshot binding', () => {
+  const snapshot = buildOfficialRegistrySnapshot();
+  assert.deepEqual(findAgentCoreOperationalMaterial(snapshot), []);
+});
+
+// --- Worker Assignment Package integrity (pr106fix4 FIX 3) -----------------------------------------
+// "O Worker Assignment Package inclui Replay, policies oficiais, requirements e suas fontes no
+// próprio fingerprint e digest."
+
+test('package integrity: replay_fingerprint in a prepared package is the genuine replay fingerprint, never the placeholder', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcome.package.replay_fingerprint, 'fingerprint_not_available');
+  assert.equal(outcome.package.replay_fingerprint, golden.workerAssignmentRequest.runtime_replay_reference.replay_fingerprint);
+});
+
+test('package integrity: altering an official network policy changes the package fingerprint', () => {
+  const goldenA = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { networkPermissionPolicyRefs: [buildOfficialNetworkPolicy('net-fp-a')] });
+  const goldenB = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { networkPermissionPolicyRefs: [buildOfficialNetworkPolicy('net-fp-b')] });
+  const outcomeA = evaluateRuntimeWorkerAssignmentRequest(goldenA.workerAssignmentRequest, {});
+  const outcomeB = evaluateRuntimeWorkerAssignmentRequest(goldenB.workerAssignmentRequest, {});
+  assert.equal(outcomeA.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeB.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcomeA.package.official_network_policy_fingerprints[0], outcomeB.package.official_network_policy_fingerprints[0]);
+  assert.notEqual(outcomeA.package.worker_assignment_package_fingerprint, outcomeB.package.worker_assignment_package_fingerprint);
+  assert.notEqual(outcomeA.package.worker_assignment_package_digest, outcomeB.package.worker_assignment_package_digest);
+});
+
+test('package integrity: altering an official secret policy changes the package fingerprint', () => {
+  const goldenA = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { secretResolutionPolicyRefs: [buildOfficialSecretPolicy('sec-fp-a', 'tenant-a')] });
+  const goldenB = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { secretResolutionPolicyRefs: [buildOfficialSecretPolicy('sec-fp-b', 'tenant-a')] });
+  const outcomeA = evaluateRuntimeWorkerAssignmentRequest(goldenA.workerAssignmentRequest, {});
+  const outcomeB = evaluateRuntimeWorkerAssignmentRequest(goldenB.workerAssignmentRequest, {});
+  assert.equal(outcomeA.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeB.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcomeA.package.official_secret_policy_fingerprints[0], outcomeB.package.official_secret_policy_fingerprints[0]);
+  assert.notEqual(outcomeA.package.worker_assignment_package_fingerprint, outcomeB.package.worker_assignment_package_fingerprint);
+});
+
+test('package integrity: altering a stage policy requirement changes the package fingerprint', () => {
+  const hintA = buildUnresolvedRequirementHint('any-stage', 'TOOL', 'tool-x');
+  const hintB = buildUnresolvedRequirementHint('any-stage', 'TOOL', 'tool-y');
+  const goldenA = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { stagePolicyRequirementRefs: [hintA] });
+  const goldenB = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { stagePolicyRequirementRefs: [hintB] });
+  const outcomeA = evaluateRuntimeWorkerAssignmentRequest(goldenA.workerAssignmentRequest, {});
+  const outcomeB = evaluateRuntimeWorkerAssignmentRequest(goldenB.workerAssignmentRequest, {});
+  assert.equal(outcomeA.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeB.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcomeA.package.stage_policy_requirement_fingerprints[0], outcomeB.package.stage_policy_requirement_fingerprints[0]);
+  assert.notEqual(outcomeA.package.worker_assignment_package_fingerprint, outcomeB.package.worker_assignment_package_fingerprint);
+});
+
+test('package integrity: altering a stage policy requirement source changes the package fingerprint', () => {
+  const sourceA = buildOfficialModelSelectionDecision('source-fp-a');
+  const sourceB = buildOfficialModelSelectionDecision('source-fp-b');
+  const goldenA = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { modelSelectionDecisionRefs: [sourceA] });
+  const goldenB = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { modelSelectionDecisionRefs: [sourceB] });
+  const outcomeA = evaluateRuntimeWorkerAssignmentRequest(goldenA.workerAssignmentRequest, {});
+  const outcomeB = evaluateRuntimeWorkerAssignmentRequest(goldenB.workerAssignmentRequest, {});
+  assert.equal(outcomeA.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeB.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcomeA.package.stage_policy_requirement_source_fingerprints[0], outcomeB.package.stage_policy_requirement_source_fingerprints[0]);
+  assert.notEqual(outcomeA.package.worker_assignment_package_fingerprint, outcomeB.package.worker_assignment_package_fingerprint);
+});
+
+test('package integrity: input order of official policies never alters the package fingerprint', () => {
+  const netA = buildOfficialNetworkPolicy('order-net-a');
+  const netB = buildOfficialNetworkPolicy('order-net-b');
+  const goldenAB = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { networkPermissionPolicyRefs: [netA, netB] });
+  const goldenBA = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { networkPermissionPolicyRefs: [netB, netA] });
+  const outcomeAB = evaluateRuntimeWorkerAssignmentRequest(goldenAB.workerAssignmentRequest, {});
+  const outcomeBA = evaluateRuntimeWorkerAssignmentRequest(goldenBA.workerAssignmentRequest, {});
+  assert.equal(outcomeAB.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeBA.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.deepEqual(outcomeAB.package.official_network_policy_fingerprints, outcomeBA.package.official_network_policy_fingerprints);
+  assert.equal(outcomeAB.package.worker_assignment_package_fingerprint, outcomeBA.package.worker_assignment_package_fingerprint);
+});
+
+test('package integrity: duplicate stage policy requirement (same stage+element+source) blocks as WORKER_ASSIGNMENT_POLICY_BLOCKED', () => {
+  const hint = buildUnresolvedRequirementHint('dup-stage', 'TOOL', 'tool-dup');
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { stagePolicyRequirementRefs: [hint, hint] });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_POLICY_BLOCKED');
+});
+
+test('package integrity: duplicate stage policy requirement source (same type+id) blocks as WORKER_ASSIGNMENT_POLICY_BLOCKED', () => {
+  const source = buildOfficialModelSelectionDecision('dup-source');
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { modelSelectionDecisionRefs: [source, source] });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_POLICY_BLOCKED');
+});
+
+test('package integrity: duplicate entries within a fingerprint list diverge from expected cardinality and are rejected', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  const tampered = { ...outcome.package, official_network_policy_fingerprints: ['sha256:' + 'a'.repeat(64), 'sha256:' + 'a'.repeat(64)] };
+  assertInvalid('duplicate fingerprint entries diverge from expected cardinality', validateRuntimeWorkerAssignmentPackage(tampered));
+});
+
+test('package integrity: package digest covers replay, official policies, requirements, their sources, and the registry snapshot', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    networkPermissionPolicyRefs: [buildOfficialNetworkPolicy('digest-cover-net')], registrySnapshotRef: buildOfficialRegistrySnapshot()
+  });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  for (const field of [
+    'official_network_policy_fingerprints', 'official_secret_policy_fingerprints', 'stage_policy_requirement_fingerprints',
+    'stage_policy_requirement_source_fingerprints', 'replay_fingerprint', 'registry_snapshot_reference_fingerprint'
+  ]) {
+    const original = outcome.package[field];
+    const tamperedValue = Array.isArray(original) ? [...original, 'sha256:' + 'b'.repeat(64)].sort() : 'sha256:' + 'b'.repeat(64);
+    const tampered = { ...outcome.package, [field]: tamperedValue };
+    assertInvalid(`tampering ${field} invalidates the stored digest`, validateRuntimeWorkerAssignmentPackage(tampered));
+  }
+});
+
+test('package integrity: altering the Registry Snapshot changes the package fingerprint, and no snapshot never uses a placeholder-masking value', () => {
+  const goldenNoSnapshot = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {});
+  const outcomeNoSnapshot = evaluateRuntimeWorkerAssignmentRequest(goldenNoSnapshot.workerAssignmentRequest, {});
+  assert.equal(outcomeNoSnapshot.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeNoSnapshot.package.registry_snapshot_reference_fingerprint, 'fingerprint_not_available');
+
+  const goldenA = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { registrySnapshotRef: buildOfficialRegistrySnapshot({ execution_plan_request_id: 'snap-fp-variant-a' }) });
+  const goldenB = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { registrySnapshotRef: buildOfficialRegistrySnapshot({ execution_plan_request_id: 'snap-fp-variant-b' }) });
+  const outcomeA = evaluateRuntimeWorkerAssignmentRequest(goldenA.workerAssignmentRequest, {});
+  const outcomeB = evaluateRuntimeWorkerAssignmentRequest(goldenB.workerAssignmentRequest, {});
+  assert.equal(outcomeA.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcomeB.decision.status, 'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcomeA.package.registry_snapshot_reference_fingerprint, outcomeB.package.registry_snapshot_reference_fingerprint);
+  assert.notEqual(outcomeA.package.worker_assignment_package_fingerprint, outcomeB.package.worker_assignment_package_fingerprint);
+});
+
+test('worker assignment boundary: secret policy fingerprint tamper is rejected at the contract level, never silently accepted', () => {
+  const official = buildOfficialSecretPolicy('w1-tamper', 'tenant-a');
+  const ref = buildRuntimeWorkerSecretPolicyReference({
+    worker_secret_policy_reference_id: 'w1-secpolicy-ref', runtime_worker_reference_id: 'w1',
+    runtime_environment_reference_id: 'w1-env', secret_policy_reference_id: 'w1-secpolicy-reference',
+    official_secret_policy_reference_id: official.secret_ref_id, official_secret_policy_version: official.secret_ref_version,
+    official_secret_policy_fingerprint: computeOfficialPolicyFingerprint(official),
+    tenant_id: 'tenant-a', organization_id: 'tenant-a:org-1', project_id: 'proj-1'
+  });
+  const tampered = { ...ref, secret_policy_reference_id: 'tampered-id' };
+  assertInvalid('tampered secret policy id without fingerprint recompute', validateRuntimeWorkerSecretPolicyReference(tampered));
+});
+
+test('worker assignment boundary: duplicate network policy reference for the same worker blocks as WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const request = rebuild({ ...golden.workerAssignmentRequest, runtime_worker_network_policy_references: [golden.pool.networkPolicy, golden.pool.networkPolicy] });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED');
+});
+
+test('worker assignment boundary: network/secret policy reference orphaned to a nonexistent worker blocks as WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const officialForOrphan = buildOfficialNetworkPolicy('orphan-official');
+  const orphan = buildRuntimeWorkerNetworkPolicyReference({
+    worker_network_policy_reference_id: 'orphan-netpolicy', runtime_worker_reference_id: 'nonexistent-worker-id',
+    runtime_environment_reference_id: 'nonexistent-env', network_policy_reference_id: 'nonexistent-network-policy',
+    official_network_policy_reference_id: officialForOrphan.destination_ref_id,
+    official_network_policy_version: officialForOrphan.destination_ref_version,
+    official_network_policy_fingerprint: computeOfficialPolicyFingerprint(officialForOrphan),
+    tenant_id: golden.runtimePackage.tenant_id, organization_id: golden.runtimePackage.organization_id, project_id: golden.runtimePackage.project_id
+  });
+  const request = rebuild({ ...golden.workerAssignmentRequest, runtime_worker_network_policy_references: [golden.pool.networkPolicy, orphan] });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED');
+});
+
+test('worker assignment boundary: duplicate official policy ID in the registry blocks as WORKER_ASSIGNMENT_POLICY_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const request = rebuild({
+    ...golden.workerAssignmentRequest,
+    network_permission_policy_references: [golden.pool.officialNetworkPolicy, golden.pool.officialNetworkPolicy]
+  });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_POLICY_BLOCKED');
+});
+
+test('worker assignment boundary: structurally invalid official policy in the request blocks as WORKER_ASSIGNMENT_VALIDATION_FAILED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const invalidOfficial = { ...golden.pool.officialNetworkPolicy, active: true };
+  const request = { ...golden.workerAssignmentRequest, network_permission_policy_references: [invalidOfficial] };
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_VALIDATION_FAILED');
+});
+
+test('worker assignment boundary: context never alters network/secret policy evaluation', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const withContext = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, { networkAllowed: true, secretResolved: true });
+  const withoutContext = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.deepEqual(withContext.decision, withoutContext.decision);
+});
+
+test('worker assignment boundary: no network access and no secret resolution ever occurs while evaluating policy references', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  assert.deepEqual(findAgentCoreOperationalMaterial(golden.pool.networkPolicy), []);
+  assert.deepEqual(findAgentCoreOperationalMaterial(golden.pool.secretPolicy), []);
+  assert.deepEqual(findAgentCoreOperationalMaterial(golden.pool.officialNetworkPolicy), []);
+  assert.deepEqual(findAgentCoreOperationalMaterial(golden.pool.officialSecretPolicy), []);
+});
+
+test('worker assignment boundary: scheduler not prepared blocks as WORKER_ASSIGNMENT_SCHEDULER_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const { buildRuntimeSchedulerDecision } = require('../src/core/runtime-scheduler-decision');
+  const badDecision = buildRuntimeSchedulerDecision({ ...golden.schedulerOutcome.decision, status: 'SCHEDULER_POLICY_BLOCKED', scheduler_package_prepared_in_simulation: false });
+  const request = rebuild({ ...golden.workerAssignmentRequest, runtime_scheduler_decision_reference: badDecision });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_SCHEDULER_BLOCKED');
+});
+
+test('worker assignment boundary: runtime package swapped since scheduling blocks as WORKER_ASSIGNMENT_RUNTIME_PACKAGE_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const badPackage = { ...golden.runtimePackage, package_fingerprint: 'sha256:' + 'f'.repeat(64) };
+  const request = rebuild({ ...golden.workerAssignmentRequest, runtime_execution_package_reference: badPackage });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_RUNTIME_PACKAGE_BLOCKED');
+});
+
+test('worker assignment boundary: duplicate worker reference id blocks as WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', () => {
+  const pool = buildWorkerPool('dup-1');
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerRefs: [pool.worker, pool.worker], workerCapabilityRefs: [pool.capability], workerCapacityRefs: [pool.capacity], workerHealthRefs: [pool.health]
+  });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED');
+});
+
+test('worker assignment boundary: dedicated worker missing scope blocks as WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', { workerPool: { worker: { worker_type: 'DEDICATED_REFERENCE' } } });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED');
+});
+
+test('worker assignment boundary: capability reference binding mismatch blocks as WORKER_ASSIGNMENT_CAPABILITY_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const badCapability = buildRuntimeWorkerCapabilityReference({ ...golden.pool.capability, runtime_worker_reference_id: 'other-worker-id' });
+  const request = rebuild({ ...golden.workerAssignmentRequest, runtime_worker_capability_references: [badCapability] });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_CAPABILITY_BLOCKED');
+});
+
+test('worker assignment boundary: capacity reference binding mismatch blocks as WORKER_ASSIGNMENT_CAPACITY_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const badCapacity = buildRuntimeWorkerCapacityReference({ ...golden.pool.capacity, runtime_worker_reference_id: 'other-worker-id' });
+  const request = rebuild({ ...golden.workerAssignmentRequest, runtime_worker_capacity_references: [badCapacity] });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_CAPACITY_BLOCKED');
+});
+
+test('worker assignment boundary: health reference binding mismatch blocks as WORKER_ASSIGNMENT_HEALTH_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const badHealth = buildRuntimeWorkerHealthReference({ ...golden.pool.health, runtime_worker_reference_id: 'other-worker-id' });
+  const request = rebuild({ ...golden.workerAssignmentRequest, runtime_worker_health_references: [badHealth] });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_HEALTH_BLOCKED');
+});
+
+test('worker assignment boundary: freshness expired at current logical_sequence blocks as WORKER_ASSIGNMENT_FRESHNESS_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const request = rebuild({ ...golden.workerAssignmentRequest, logical_sequence: 5000 });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_FRESHNESS_BLOCKED');
+});
+
+test('worker assignment boundary: replay reference swapped since scheduling blocks as WORKER_ASSIGNMENT_REPLAY_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const { buildRuntimeReadinessReplayReference } = require('../src/core/runtime-readiness-replay-reference');
+  const badReplay = buildRuntimeReadinessReplayReference({ ...golden.replayRef, maximum_readiness_attempts: golden.replayRef.maximum_readiness_attempts + 1 });
+  const request = rebuild({ ...golden.workerAssignmentRequest, runtime_replay_reference: badReplay });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  // A freshly rebuilt, structurally self-consistent but distinct object no longer matches the exact
+  // fingerprint the Scheduler Request originally carried -- proving genuine continuity, not merely
+  // "any valid-looking replay reference will do".
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_REPLAY_BLOCKED');
+});
+
+test('worker assignment boundary: idempotency reference swapped since scheduling blocks as WORKER_ASSIGNMENT_IDEMPOTENCY_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const badIdempotency = { ...golden.idempotencyReference, maximum_execution_attempts: golden.idempotencyReference.maximum_execution_attempts + 1 };
+  const request = rebuild({ ...golden.workerAssignmentRequest, idempotency_reference: badIdempotency });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_IDEMPOTENCY_BLOCKED');
+});
+
+test('worker assignment boundary: tenant mismatch blocks as TENANT_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const badPackage = { ...golden.runtimePackage, tenant_id: 'other-tenant-id' };
+  const request = rebuild({ ...golden.workerAssignmentRequest, runtime_execution_package_reference: badPackage });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'TENANT_BLOCKED');
+});
+
+test('worker assignment boundary: policy disallowing the plan\'s own stage shape blocks as WORKER_ASSIGNMENT_POLICY_BLOCKED', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const badPolicy = buildRuntimeWorkerAssignmentPolicy({ ...golden.assignmentPolicy, allow_no_llm_stage: false });
+  const request = rebuild({ ...golden.workerAssignmentRequest, runtime_worker_assignment_policy: badPolicy });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_POLICY_BLOCKED');
+});
+
+// --- Precedence + progressive flags ---------------------------------------------------------------
+
+test('worker assignment boundary: a structurally invalid request never reaches a later check', () => {
+  const outcome = evaluateRuntimeWorkerAssignmentRequest({ not: 'a valid request' }, {});
+  assert.equal(outcome.decision.status, 'WORKER_ASSIGNMENT_VALIDATION_FAILED');
+});
+
+test('worker assignment boundary: WORKER_ASSIGNMENT_STATUSES is exactly covered by WORKER_ASSIGNMENT_PRECEDENCE_ORDER', () => {
+  assert.deepEqual([...WORKER_ASSIGNMENT_STATUSES].sort(), [...WORKER_ASSIGNMENT_PRECEDENCE_ORDER].sort());
+});
+
+test('worker assignment boundary: identity blocker leaves later validated flags false (progressive, never retroactive)', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const badPackage = { ...golden.runtimePackage, tenant_id: 'other-tenant-id' };
+  const request = rebuild({ ...golden.workerAssignmentRequest, runtime_execution_package_reference: badPackage });
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(request, {});
+  assert.equal(outcome.decision.status, 'TENANT_BLOCKED');
+  assert.equal(outcome.decision.capacity_validated, false);
+  assert.equal(outcome.decision.non_execution_invariants_validated, false);
+});
+
+// --- Side-channels ------------------------------------------------------------------------------
+
+test('side-channels: a hostile context claiming worker availability/health/reservation has zero effect', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const hostileContext = {
+    workerAvailable: true, workerHealthy: true, workerCompatible: true, recommendedWorkerId: 'hostile-worker',
+    workerReserved: true, workerStarted: true, stageDispatched: true, networkAllowed: true, secretAvailable: true,
+    anything: 'hostile'
+  };
+  const withContext = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, hostileContext);
+  const withoutContext = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.deepEqual(withContext.decision, withoutContext.decision);
+});
+
+// --- Security -------------------------------------------------------------------------------------
+
+test('security: every worker assignment outcome forces every operational flag false, simulation=true, production_blocked=true, rollout=0', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  for (const field of ['worker_assignment_applied', 'worker_reserved', 'worker_started', 'stage_dispatched', 'stage_started', 'executed']) {
+    assert.equal(outcome.decision[field], false, field);
+  }
+  assert.equal(outcome.decision.simulation, true);
+  assert.equal(outcome.decision.production_blocked, true);
+  assert.equal(outcome.decision.rollout_percentage, 0);
+  for (const field of OPERATIONAL_FLAG_FIELDS) assert.equal(outcome.result[field], false, field);
+  assert.equal(outcome.package.worker_assignment_package_prepared_in_simulation, true);
+  for (const field of ['worker_assignment_applied', 'worker_reserved', 'worker_started', 'stage_dispatched', 'stage_started', 'executed']) {
+    assert.equal(outcome.package[field], false, field);
+  }
+});
+
+test('security: an operational flag smuggled directly onto a nested reference build input is silently forced false, never honored', () => {
+  const pool = buildWorkerPool('smuggle-1');
+  const ref = buildRuntimeWorkerStageAssignmentReference({
+    worker_stage_assignment_reference_id: 'wsa-x', runtime_worker_assignment_package_id: 'wap-1', runtime_scheduler_package_id: 'sp-1',
+    runtime_execution_package_id: 'pkg-1', scheduler_stage_reference_id: 'ss-1', runtime_stage_reference_id: 'rs-1',
+    worker_candidate_set_reference_id: 'cs-1', assignment_status: 'WORKER_ASSIGNMENT_BLOCKED',
+    stage_type: 'DETERMINISTIC_STAGE', priority: 0, worker_reserved: true, worker_started: true
+  });
+  assert.equal(ref.worker_reserved, false);
+  assert.equal(ref.worker_started, false);
+  void pool;
+});
+
+// --- Adversarial types --------------------------------------------------------------------------
+
+test('adversarial types: NaN/Infinity/bigint/symbol/function/undefined/Buffer/cyclic are all rejected by the request validator', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const adversarialValues = [NaN, Infinity, -Infinity, 10n, Symbol('x'), () => {}, undefined, Buffer.from('x')];
+  for (const value of adversarialValues) {
+    const request = { ...golden.workerAssignmentRequest, correlation_id: value };
+    assert.equal(validateRuntimeWorkerAssignmentRequest(request).valid, false, String(value));
+  }
+  const cyclic = { ...golden.workerAssignmentRequest };
+  cyclic.self = cyclic;
+  assert.equal(validateRuntimeWorkerAssignmentRequest(cyclic).valid, false);
+});
+
+test('adversarial types: Date/Map/Set/RegExp/ArrayBuffer value shapes are all rejected', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const adversarialValues = [new Date(), new Map(), new Set(), /x/, new ArrayBuffer(4)];
+  for (const value of adversarialValues) {
+    const request = { ...golden.workerAssignmentRequest, correlation_id: value };
+    assert.equal(validateRuntimeWorkerAssignmentRequest(request).valid, false);
+  }
+});
+
+// --- Registry -----------------------------------------------------------------------------------
+
+test('registry: registers a worker assignment package, replays an identical one, blocks a payload mismatch without a version bump', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  const registry = createRuntimeWorkerAssignmentRegistry();
+  const first = registry.registerRuntimeWorkerAssignmentPackage(outcome.package);
+  assert.equal(first.status, 'REGISTERED_SIMULATION');
+  const replay = registry.registerRuntimeWorkerAssignmentPackage(outcome.package);
+  assert.equal(replay.status, 'REPLAY_ACCEPTED');
+});
+
+test('registry: every store result is forced into simulation/production_blocked/executed=false', () => {
+  const registry = createRuntimeWorkerAssignmentRegistry();
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  const result = registry.registerRuntimeWorkerAssignmentDecision(outcome.decision);
+  assert.equal(result.simulation, true);
+  assert.equal(result.production_blocked, true);
+  assert.equal(result.executed, false);
+});
+
+test('registry: rejects a structurally invalid record as VALIDATION_FAILED', () => {
+  const registry = createRuntimeWorkerAssignmentRegistry();
+  const result = registry.registerRuntimeWorkerReference({ not: 'valid' });
+  assert.equal(result.status, 'VALIDATION_FAILED');
+});
+
+// --- Fixture --------------------------------------------------------------------------------------
+
+test('fixture: every scenario reproduces its recorded status deterministically', () => {
+  for (const [key, scenario] of Object.entries(fixture.scenarios)) {
+    const outcome = evaluateRuntimeWorkerAssignmentRequest(scenario.request, {});
+    assert.equal(outcome.decision.status, scenario.decision.status, key);
+  }
+});
+
+test('fixture: every runtime worker assignment contract in the fixture is free of forbidden operational material', () => {
+  for (const [key, scenario] of Object.entries(fixture.scenarios)) {
+    assert.deepEqual(findAgentCoreOperationalMaterial(scenario.request), [], `${key} request`);
+    assert.deepEqual(findAgentCoreOperationalMaterial(scenario.decision), [], `${key} decision`);
+  }
+});
+
+// --- Regression -----------------------------------------------------------------------------------
+
+test('regression: architecture gates report zero findings with every PR106 module included', () => {
+  const findings = runAllGates();
+  assert.deepEqual(findings, []);
+});
+
+test('regression: Runtime Scheduler topological order (PR #105) remains preserved and untouched by this PR', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  assert.equal(golden.schedulerOutcome.decision.status, 'SCHEDULER_PACKAGE_PREPARED_SIMULATION');
+  const bySequence = [...golden.schedulerOutcome.schedulerStageRefs].sort((a, b) => a.scheduler_sequence - b.scheduler_sequence).map((s) => s.scheduler_stage_reference_id);
+  assert.deepEqual(golden.schedulerOutcome.queuePlanRef.ordered_scheduler_stage_reference_ids, bySequence);
+});
+
+test('regression: optional dependencies remain non-blocking at the Scheduler layer this PR builds on', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  for (const stage of golden.schedulerOutcome.schedulerStageRefs) {
+    if (stage.optional === false && stage.blocking_dependency_reference_ids.length === 0) {
+      assert.notEqual(stage.scheduler_stage_status, 'SCHEDULER_STAGE_WAITING_DEPENDENCY_REFERENCE');
+    }
+  }
+});
+
+test('regression: nenhum scheduler operacional é iniciado, nenhuma fila/job/worker real in any producible outcome', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const outcome = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  assert.equal(outcome.decision.worker_reserved, false);
+  assert.equal(outcome.result.job_created, false);
+  assert.equal(outcome.result.queue_created, false);
+  assert.equal(outcome.result.worker_process_created, false);
+  assert.equal(outcome.result.worker_thread_created, false);
+  assert.equal(outcome.result.container_started, false);
+});
+
+test('regression: package fingerprint/digest change when a compatibility-affecting reference changes', () => {
+  const golden = buildGoldenWorkerAssignmentBundle();
+  const outcomeA = evaluateRuntimeWorkerAssignmentRequest(golden.workerAssignmentRequest, {});
+  const goldenB = buildGoldenWorkerAssignmentBundle('prepared-no-llm-plan', {
+    workerPool: { worker: { runtime_worker_reference_id: 'plan-1-rt-request-worker-assignment-worker' }, capacity: { maximum_stage_assignments: 999, available_stage_assignments: 999 } }
+  });
+  const outcomeB = evaluateRuntimeWorkerAssignmentRequest(goldenB.workerAssignmentRequest, {});
+  assert.notEqual(outcomeA.package.worker_assignment_package_fingerprint, outcomeB.package.worker_assignment_package_fingerprint);
+});

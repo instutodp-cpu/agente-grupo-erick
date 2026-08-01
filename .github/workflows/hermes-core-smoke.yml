@@ -57,6 +57,10 @@ jobs:
         working-directory: platform/services/api
         run: npm run test:runtime-scheduler
 
+      - name: Worker assignment contract tests
+        working-directory: platform/services/api
+        run: npm run test:runtime-worker-assignment
+
       - name: API tests
         working-directory: platform/services/api
         run: npm test

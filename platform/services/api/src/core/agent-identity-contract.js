@@ -169,7 +169,102 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   // 'token' (exact segment, singular) is forbidden even though 'tokens' (plural) is not -- the
   // Scheduler Capacity Plan's own spec-mandated field name uses the singular form for this one
   // declarative within-limit flag; it never holds or references a credential.
-  'token_capacity_within_limit'
+  'token_capacity_within_limit',
+  // Runtime Worker Assignment Simulation Contracts (PR #106) field names -- "runtime"/"worker"/
+  // "secret" here always refer to this PR's own declarative worker reference/policy/compatibility/
+  // candidate-set/assignment contracts, never a real interpreter, executor, or credential. This PR
+  // never resolves a secret or starts a worker; "secret_policy" fields only ever compare two
+  // declarative policy identifiers against each other.
+  'runtime_worker_assignment_policy_id', 'runtime_worker_assignment_policy_version',
+  'require_secret_policy_match', 'fail_on_secret_policy_mismatch',
+  'runtime_worker_reference_id', 'runtime_worker_reference_version', 'runtime_environment_reference_id',
+  'runtime_registry_snapshot_reference_id',
+  // 'token' (exact segment, singular) again -- Runtime Worker Capacity Reference's own
+  // spec-mandated field names use the singular form for this one declarative capacity dimension.
+  'maximum_token_capacity', 'used_token_capacity', 'available_token_capacity',
+  // Runtime Worker Reference's own declarative policy-reference-ID field -- "secret" here is a
+  // pointer to a declarative secret policy identity, never a real secret; this PR never resolves
+  // one (see "Não implementar" -- secret resolution).
+  'secret_policy_reference_id', 'secret_policy_match', 'secret_policy_mismatch',
+  // Runtime Worker Assignment Request/Package/Decision/Result (PR #106) field names -- "runtime"
+  // here always refers to this PR's own declarative worker-assignment request/package/decision/
+  // result contracts, never a real interpreter or executor.
+  'runtime_worker_assignment_request_id', 'runtime_worker_assignment_request_version',
+  'runtime_worker_assignment_policy', 'runtime_worker_assignment_package_id',
+  'runtime_worker_assignment_package_version', 'runtime_worker_assignment_decision_id',
+  'runtime_worker_assignment_result_id', 'runtime_worker_assignment_request_fingerprint',
+  'runtime_worker_assignment_package_fingerprint', 'runtime_worker_assignment_package_digest',
+  'runtime_worker_assignment_decision_fingerprint',
+  'runtime_scheduler_decision_reference', 'runtime_scheduler_package_reference', 'runtime_scheduler_request_reference',
+  'runtime_scheduler_result_reference',
+  'runtime_worker_capability_references', 'runtime_worker_capacity_references', 'runtime_worker_health_references',
+  'runtime_worker_references',
+  // pr106fix: RuntimeWorkerNetworkPolicyReference/RuntimeWorkerSecretPolicyReference field names --
+  // "secret"/"token" here always refer to this PR's own declarative, 1:1-bound policy identity
+  // reference contract, never a real credential or resolved secret material. Replaces the previous
+  // string-presence pass-through with genuine ID/version/fingerprint/tenant/org/project comparison.
+  'runtime_worker_network_policy_references', 'runtime_worker_secret_policy_references',
+  'worker_network_policy_fingerprints', 'worker_secret_policy_fingerprints',
+  'worker_network_policy_reference_id', 'worker_network_policy_reference_version',
+  'network_policy_reference_id', 'network_policy_version', 'network_policy_reference_valid', 'network_policy_fingerprint',
+  'worker_secret_policy_reference_id', 'worker_secret_policy_reference_version',
+  'secret_policy_version', 'secret_policy_reference_valid', 'secret_policy_fingerprint',
+  'worker_health_expired_at_assignment_sequence', 'worker_health_sequence_regressive',
+  'worker_health_status_not_healthy', 'worker_health_binding_invalid',
+  'worker_network_policy_id_mismatch', 'worker_network_policy_version_mismatch', 'worker_network_policy_fingerprint_mismatch',
+  'worker_network_policy_tenant_mismatch', 'worker_network_policy_organization_mismatch', 'worker_network_policy_project_mismatch',
+  'worker_network_policy_environment_mismatch', 'worker_network_policy_reference_missing', 'worker_network_policy_reference_invalid',
+  'worker_secret_policy_id_mismatch', 'worker_secret_policy_version_mismatch', 'worker_secret_policy_fingerprint_mismatch',
+  'worker_secret_policy_tenant_mismatch', 'worker_secret_policy_organization_mismatch', 'worker_secret_policy_project_mismatch',
+  'worker_secret_policy_environment_mismatch', 'worker_secret_policy_reference_missing', 'worker_secret_policy_reference_invalid',
+  // pr106fix2: the RuntimeWorkerNetworkPolicyReference/RuntimeWorkerSecretPolicyReference bindings
+  // above now must themselves bind to the official, pre-existing Network Permission Boundary
+  // (`transcription-network-permission-boundary.js`) and Secret Resolution Boundary
+  // (`transcription-secret-resolution-boundary.js`) declarative policy objects -- "official" here
+  // always means those two already-audited PR #75/#76 contracts, reused verbatim via their own real
+  // validators, never a second self-declared policy and never a real credential.
+  'network_permission_policy_references', 'secret_resolution_policy_references',
+  'official_network_policy_reference_id', 'official_network_policy_version', 'official_network_policy_fingerprint',
+  'official_secret_policy_reference_id', 'official_secret_policy_version', 'official_secret_policy_fingerprint',
+  'worker_network_official_policy_missing', 'worker_network_official_policy_version_mismatch',
+  'worker_network_official_policy_fingerprint_mismatch', 'worker_network_official_policy_scope_mismatch',
+  'worker_network_official_policy_not_allowed',
+  'worker_secret_official_policy_missing', 'worker_secret_official_policy_version_mismatch',
+  'worker_secret_official_policy_fingerprint_mismatch', 'worker_secret_official_policy_scope_mismatch',
+  'worker_secret_official_policy_not_allowed',
+  'network_official_policy_registry_duplicate', 'secret_official_policy_registry_duplicate',
+  // pr106fix2: field names belonging to the official, pre-existing
+  // `TranscriptionNetworkDestinationReference`/`TranscriptionSecretReference` contracts
+  // (`transcription-network-permission-boundary.js`/`transcription-secret-resolution-boundary.js`,
+  // PR #75/#76) -- reused verbatim as-is inside `network_permission_policy_references`/
+  // `secret_resolution_policy_references`. Every one of these is a forced-false presence flag or a
+  // declarative reference identifier, never a real endpoint/host/port/url/secret value; that
+  // invariant is already enforced by the official contract's own validator before it ever reaches
+  // this scan.
+  'endpoint_present', 'hostname_present', 'ip_present', 'port_present', 'url_present',
+  'secret_alias', 'secret_ref_id', 'secret_ref_version', 'secret_type',
+  // pr106fix3: RuntimeWorkerStagePolicyRequirementReference field names plus the new cross-check
+  // reason codes -- "the official policy's own content genuinely authorizes this stage's
+  // requirement," never inferred from mere existence/version/fingerprint match.
+  'stage_policy_requirement_references',
+  'stage_policy_requirement_reference_id', 'stage_policy_requirement_reference_version',
+  'stage_domain', 'provider_slug', 'requirement_reference_fingerprint',
+  'stage_policy_requirement_registry_duplicate',
+  'worker_network_official_policy_provider_mismatch', 'worker_network_official_policy_destination_mismatch',
+  'worker_network_official_policy_domain_mismatch', 'worker_network_policy_requirement_unresolvable',
+  'worker_secret_official_policy_provider_mismatch', 'worker_secret_official_policy_purpose_mismatch',
+  'worker_secret_official_policy_domain_mismatch', 'worker_secret_policy_requirement_unresolvable',
+  // pr106fix4: provenance fields on RuntimeWorkerStagePolicyRequirementReference -- "Stage Policy
+  // Requirement não é um hint confiável isoladamente. Um requisito RESOLVED deve estar vinculado a
+  // uma fonte upstream oficial por ID/versão/fingerprint." Plus the 3 new official-source request
+  // collections and the package's own integrity fingerprint lists.
+  'requirement_element', 'source_reference_id', 'source_reference_type', 'source_reference_version',
+  'source_reference_fingerprint', 'source_registry_snapshot_reference_id', 'source_resolution_status',
+  'source_provider_slug', 'source_stage_domain',
+  'model_selection_decision_references', 'tool_contract_references', 'workflow_contract_references',
+  'stage_policy_requirement_source_registry_duplicate',
+  'official_network_policy_fingerprints', 'official_secret_policy_fingerprints',
+  'stage_policy_requirement_fingerprints', 'stage_policy_requirement_source_fingerprints'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept
@@ -182,8 +277,20 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
 // 'AUTHORIZATION' is an exact whole-string match for the forbidden word pattern's own
 // \bauthorization\b and needs an explicit exemption the same way several field *names* already
 // needed one in PR #97-#100.
+// pr106fix2: 'mock-provider-a'/'mock-provider-b'/'mock-provider-c' are the closed-enum
+// `ALLOWED_CAPABILITY_PROVIDER_SLUGS` from the official, pre-existing transcription provider
+// capability matrix -- legitimate declarative identifiers a `TranscriptionNetworkDestinationReference`/
+// `TranscriptionSecretReference` (reused verbatim by this PR's Worker Assignment policy binding) is
+// structurally required to carry, never a real credential. The hyphen boundaries around "provider"
+// inside these exact strings are what trip the generic forbidden-word-value pattern; exempted the
+// same way 'AUTHORIZATION' already needed to be.
 const AGENT_CORE_ALLOWLISTED_VALUE_NAMES = Object.freeze(new Set([
-  'AUTHORIZATION'
+  'AUTHORIZATION',
+  'mock-provider-a', 'mock-provider-b', 'mock-provider-c',
+  // pr106fix4: 'MODEL' is one of the 3 closed-enum RUNTIME_WORKER_STAGE_POLICY_REQUIREMENT_ELEMENTS
+  // values (runtime-worker-stage-policy-requirement-reference.js) -- a legitimate declarative
+  // classification of which stage element a requirement is about, never an LLM model identifier.
+  'MODEL'
 ]));
 const AGENT_CORE_FORBIDDEN_VALUE_PATTERN = /\b(api[_-]?key|private[_-]?key|access[_-]?key|secret|token|password|authorization|bearer|jwt|oauth|cookie|filesystem|endpoint|hostname|callback|handler|execute|invoke|runtime|bootstrap|startup|plugin|tool_call|system_prompt|prompt|model|provider|sdk|eval)\b/i;
 const AGENT_CORE_FORBIDDEN_VALUE_SHAPES = Object.freeze([

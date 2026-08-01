@@ -6,8 +6,10 @@ const {
   RUNTIME_SCHEDULER_STATUSES, RUNTIME_SCHEDULER_DECISIONS, RUNTIME_SCHEDULER_NEXT_STATES, STATUS_OUTCOME_MAP,
   DEFAULT_OUTCOME, OPERATIONAL_SAFE_FLAGS
 } = require('./runtime-scheduler-decision');
+const { validateRuntimeSchedulerStageReference } = require('./runtime-scheduler-stage-reference');
 
 const RUNTIME_SCHEDULER_RESULT_VALIDATOR_VERSION = 'runtime_scheduler_result_validator_v1';
+const MAX_STAGE_REFERENCES = 200;
 
 const COUNT_FIELDS = Object.freeze([
   'scheduler_stage_count', 'scheduler_dependency_count', 'parallel_group_count', 'approval_wait_count',
@@ -26,6 +28,13 @@ const RUNTIME_SCHEDULER_RESULT_FIELDS = Object.freeze([
   'runtime_scheduler_package_fingerprint', 'runtime_scheduler_package_digest',
   'registry_version',
   ...COUNT_FIELDS,
+  // pr106: the full derived stage list (never just IDs) -- the one thing PR #105's own thin,
+  // ID-and-fingerprint-only Package/Decision shape deliberately omitted, but that a downstream
+  // consumer (Runtime Worker Assignment Simulation Contracts) genuinely needs to cross-check each
+  // stage's own eligibility/type/capabilities/modalities 1:1 without re-deriving them. Each entry is
+  // independently validated against its own real RuntimeSchedulerStageReference contract -- never a
+  // parallel, looser shape.
+  'scheduler_stage_references',
   'blockers', 'reason_codes',
   'scheduler_evaluated', 'scheduler_package_prepared_in_simulation',
   'scheduler_started', 'runtime_enabled', 'execution_authorized', 'execution_started', 'job_created',
@@ -64,6 +73,15 @@ function validateRuntimeSchedulerResult(result) {
 
   for (const field of COUNT_FIELDS) {
     if (!Number.isInteger(result[field]) || result[field] < 0 || result[field] > MAX_COUNT) errors.push(`${field}_invalid`);
+  }
+  if (!Array.isArray(result.scheduler_stage_references) || result.scheduler_stage_references.length > MAX_STAGE_REFERENCES) {
+    errors.push('scheduler_stage_references_invalid');
+  } else {
+    result.scheduler_stage_references.forEach((reference, index) => {
+      const referenceValidation = validateRuntimeSchedulerStageReference(reference);
+      if (!referenceValidation.valid) errors.push(`scheduler_stage_references[${index}]_invalid::${referenceValidation.errors.join('|')}`);
+    });
+    if (result.scheduler_stage_references.length !== result.scheduler_stage_count) errors.push('scheduler_stage_references_count_mismatch');
   }
   if (!isSanitizedList(result.blockers, MAX_BLOCKERS)) errors.push('blockers_invalid');
   if (!isSanitizedList(result.reason_codes, MAX_REASON_CODES)) errors.push('reason_codes_invalid');
@@ -126,6 +144,7 @@ function buildRuntimeSchedulerResult(input = {}) {
   for (const field of COUNT_FIELDS) {
     result[field] = Number.isInteger(input[field]) ? input[field] : 0;
   }
+  result.scheduler_stage_references = Array.isArray(input.scheduler_stage_references) ? input.scheduler_stage_references : [];
 
   const validation = validateRuntimeSchedulerResult(result);
   if (!validation.valid) {
@@ -139,6 +158,7 @@ module.exports = {
   MAX_BLOCKERS,
   MAX_COUNT,
   MAX_REASON_CODES,
+  MAX_STAGE_REFERENCES,
   RUNTIME_SCHEDULER_RESULT_FIELDS,
   RUNTIME_SCHEDULER_RESULT_VALIDATOR_VERSION,
   buildRuntimeSchedulerResult,

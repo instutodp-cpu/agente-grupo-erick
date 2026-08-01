@@ -1,0 +1,1088 @@
+'use strict';
+
+const { isNonEmptyString, isPlainObject } = require('./read-only-adapter-contract');
+const { computeCanonicalContentDigest } = require('./canonical-content-digest');
+const { checkIdentity } = require('./runtime-execution-package');
+// pr106fix2: the exact canonicalizer the official Network Permission Boundary/Secret Resolution
+// Boundary modules use internally to compute their own reference fingerprints (see
+// `createTranscriptionNetworkDestinationRegistry`/`createTranscriptionSecretReferenceRegistry`'s own
+// `JSON.stringify(stableCanonicalize(...))`) -- reused verbatim so a recomputed official fingerprint
+// here is byte-identical to what the official module itself would compute.
+const { stablePayload: computeOfficialPolicyFingerprint } = require('./transcription-provider-contract-registry');
+// pr106fix4: the genuine upstream official contracts a Stage Policy Requirement's provenance must
+// bind to -- reused verbatim via their own real validators, never a second self-declared source.
+const { ALLOWED_CAPABILITY_PROVIDER_SLUGS } = require('./transcription-provider-capability-matrix');
+const { FRESHNESS_DIMENSIONS } = require('./runtime-readiness-freshness-reference');
+// pr106fix5: the genuine, already-established Registry Snapshot contract (reused across the Gateway/
+// Admission/Readiness chain) -- a Stage Policy Requirement's declared
+// `source_registry_snapshot_reference_id` must bind to a real instance of this, never an arbitrary
+// caller-declared ID.
+const { computeSnapshotFingerprint } = require('./execution-registry-snapshot-reference');
+const { computeIdempotencyFingerprint } = require('./execution-plan-idempotency');
+const { validateRuntimeWorkerAssignmentRequest } = require('./runtime-worker-assignment-request');
+const { buildRuntimeWorkerCompatibilityReference } = require('./runtime-worker-compatibility-reference');
+const { buildRuntimeWorkerCandidateSetReference } = require('./runtime-worker-candidate-set-reference');
+const { buildRuntimeWorkerStageAssignmentReference } = require('./runtime-worker-stage-assignment-reference');
+const { buildRuntimeWorkerAssignmentPackage } = require('./runtime-worker-assignment-package');
+const { buildRuntimeWorkerAssignmentDecision } = require('./runtime-worker-assignment-decision');
+const { buildRuntimeWorkerAssignmentResult } = require('./runtime-worker-assignment-result');
+const { buildRuntimeWorkerAssignmentAudit } = require('./runtime-worker-assignment-audit');
+
+// pr106: the single evaluator this PR exists to build. Receives only an already
+// SCHEDULER_PACKAGE_PREPARED_SIMULATION package and produces a purely declarative recommendation:
+// which synthetic worker (if any) would be compatible with each Scheduler Stage Reference, and
+// which one would be recommended deterministically. Nothing here reserves a worker, starts a
+// process/thread/container, opens a connection, dispatches a stage, or consumes capacity -- every
+// one of those flags is forced false in every outcome this boundary can ever produce (see
+// buildWorkerAssignmentOutcome below).
+
+const WAITING_STATUSES = Object.freeze({
+  BLOCKED: 'SCHEDULER_STAGE_BLOCKED',
+  WAITING_DEPENDENCY: 'SCHEDULER_STAGE_WAITING_DEPENDENCY_REFERENCE',
+  WAITING_APPROVAL: 'SCHEDULER_STAGE_WAITING_APPROVAL_REFERENCE'
+});
+
+// Mirrors runtime-scheduler-boundary.js's own omitReplayReference exactly, for this layer's own
+// request field: `runtime_replay_reference`.
+function omitReplayReference(obj) {
+  if (!isPlainObject(obj)) return obj;
+  const { runtime_replay_reference, ...rest } = obj;
+  return rest;
+}
+
+// --- Compatibility derivation ---------------------------------------------------------------------
+
+// pr106fix FIX 1: a stage only requires network/secret access when it actually reaches an external
+// capability (model provider call, tool invocation, workflow orchestration) -- a pure no-LLM/
+// deterministic stage genuinely has no requirement, represented explicitly as NOT_APPLICABLE (match
+// true via this named rule), never inferred from string presence.
+function deriveStageRequiresNetworkOrSecret(stage) {
+  const hasModel = stage.model_selection_reference_id !== null;
+  const hasTools = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0;
+  const hasWorkflow = stage.workflow_reference_id !== null;
+  return hasModel || hasTools || hasWorkflow;
+}
+
+// pr106fix2: field-name lookup for the official Network Permission Boundary/Secret Resolution
+// Boundary contracts this binding must genuinely point to -- `transcription-network-permission-
+// boundary.js`'s own `TranscriptionNetworkDestinationReference` (destination_ref_id/_version) and
+// `transcription-secret-resolution-boundary.js`'s own `TranscriptionSecretReference` (secret_ref_id/
+// _version). Never a parallel, self-declared policy shape.
+const OFFICIAL_POLICY_KEYS = Object.freeze({
+  network: { idKey: 'destination_ref_id', versionKey: 'destination_ref_version' },
+  secret: { idKey: 'secret_ref_id', versionKey: 'secret_ref_version' }
+});
+
+// pr106fix3: the only domain the official policies this PR has access to (transcription-network-
+// permission-boundary.js / transcription-secret-resolution-boundary.js) can ever legitimately
+// authorize. "Uma policy de transcription só pode autorizar automaticamente um stage do domínio de
+// transcription."
+const OFFICIAL_POLICY_DOMAIN = 'TRANSCRIPTION_DOMAIN';
+
+// pr106fix4: an element's structural source type -- the only official contract kind whose upstream
+// object could ever genuinely stand behind a claim about that element.
+const SOURCE_TYPE_BY_ELEMENT = Object.freeze({
+  MODEL: 'MODEL_SELECTION_REFERENCE',
+  TOOL: 'TOOL_CONTRACT_REFERENCE',
+  WORKFLOW: 'WORKFLOW_CONTRACT_REFERENCE'
+});
+
+// The official source object's own version field, keyed by source type -- ModelSelectionDecision
+// carries no version field of its own (nothing to cross-check beyond ID+fingerprint).
+const SOURCE_VERSION_KEY_BY_TYPE = Object.freeze({
+  TOOL_CONTRACT_REFERENCE: 'tool_version',
+  WORKFLOW_CONTRACT_REFERENCE: 'workflow_version'
+});
+
+// pr106fix3/pr106fix4: a pure, deterministic classification of what a stage's network/secret
+// requirement structurally *is* -- one entry per element that genuinely needs one (MODEL, one per
+// TOOL by its own ID, WORKFLOW), never collapsed by precedence into a single requirement. Fixing
+// only the MODEL component of a mixed MODEL+TOOL/MODEL+WORKFLOW stage would silently let a
+// transcription policy authorize a tool/workflow requirement it was never meant to cover.
+// `destination_class`/`secret_purpose` are drawn from the same DESTINATION_SCOPES/SECRET_SCOPES enum
+// the official contracts themselves already use, never invented. Ordered deterministically: MODEL,
+// then TOOL by source_reference_id, then WORKFLOW. Never reads `context`.
+function deriveStagePolicyRequirements(stage) {
+  const requirements = [];
+  if (stage.model_selection_reference_id !== null) {
+    requirements.push({
+      requirement_element: 'MODEL',
+      source_reference_id: stage.model_selection_reference_id,
+      destination_class: 'TRANSCRIPTION_PROVIDER',
+      secret_purpose: 'MODEL_PROVIDER_ACCESS',
+      required_capabilities: stage.required_capabilities,
+      required_modalities: stage.required_modalities
+    });
+  }
+  const toolIds = Array.isArray(stage.tool_reference_ids) ? [...stage.tool_reference_ids].sort() : [];
+  for (const toolId of toolIds) {
+    requirements.push({
+      requirement_element: 'TOOL',
+      source_reference_id: toolId,
+      destination_class: 'TRANSPORT',
+      secret_purpose: 'TOOL_ACCESS',
+      required_capabilities: stage.required_capabilities,
+      required_modalities: stage.required_modalities
+    });
+  }
+  if (stage.workflow_reference_id !== null) {
+    requirements.push({
+      requirement_element: 'WORKFLOW',
+      source_reference_id: stage.workflow_reference_id,
+      destination_class: 'INTERNAL_SERVICE',
+      secret_purpose: 'WORKFLOW_ACCESS',
+      required_capabilities: stage.required_capabilities,
+      required_modalities: stage.required_modalities
+    });
+  }
+  return requirements;
+}
+
+// pr106fix4: "Stage Policy Requirement não é um hint confiável isoladamente. Um requisito RESOLVED
+// deve estar vinculado a uma fonte upstream oficial por ID/versão/fingerprint." Never trusts the
+// hint's own `source_provider_slug`/`source_stage_domain` claims directly -- both are recomputed from
+// the genuine official source object (`model_selection_decision_references`/`tool_contract_references`/
+// `workflow_contract_references`) and compared against what the hint declared. "Quando nenhuma fonte
+// oficial consegue resolver provider ou domínio, o requisito permanece UNRESOLVED e falha de forma
+// fechada" -- Tool/Workflow Contracts carry no provider/domain data in this codebase, so a TOOL/
+// WORKFLOW requirement can never structurally resolve, regardless of how well-formed its official
+// source is.
+// pr106fix5: "Hoje qualquer Registry Snapshot ID pode ser declarado sem alterar a decisão" -- closed
+// by requiring the hint's `source_registry_snapshot_reference_id` to bind, by real ID/consistency/
+// self-fingerprint/tenant-organization-project/sequence, to the one genuine
+// `ExecutionRegistrySnapshotReference` this Worker Assignment Request carries (`registrySnapshotContext.ref`),
+// and to prove that snapshot is the SAME one the Runtime Execution Package and Freshness Reference
+// already committed to -- never an independent snapshot substituted by the caller. `provider_slug`/
+// `stage_domain` derivation for MODEL is not tied to a dedicated registry entity because
+// `ALLOWED_CAPABILITY_PROVIDER_SLUGS` is a static, non-snapshot-tracked module constant in this
+// codebase (documented limitation, see docs) -- the strongest provable binding available today is
+// requiring a genuine, matching, non-stale Registry Snapshot to back every RESOLVED requirement.
+function resolveRegistrySnapshotBinding(hint, registrySnapshotContext) {
+  const snapshot = registrySnapshotContext && isPlainObject(registrySnapshotContext.ref) ? registrySnapshotContext.ref : null;
+  if (!snapshot) return { authorized: false, reason: 'registry_snapshot_missing' };
+  if (
+    hint.source_registry_snapshot_reference_id !== snapshot.registry_snapshot_reference_id
+    || snapshot.registry_snapshot_reference_id !== registrySnapshotContext.packageRegistrySnapshotId
+    || snapshot.registry_snapshot_reference_id !== registrySnapshotContext.freshnessRegistrySnapshotId
+    || snapshot.execution_plan_id !== registrySnapshotContext.packageExecutionPlanId
+  ) {
+    return { authorized: false, reason: 'registry_snapshot_mismatch' };
+  }
+  if (snapshot.snapshot_consistent !== true || snapshot.snapshot_validated !== true) {
+    return { authorized: false, reason: 'registry_snapshot_version_mismatch' };
+  }
+  if (computeSnapshotFingerprint(snapshot) !== snapshot.snapshot_fingerprint) {
+    return { authorized: false, reason: 'registry_snapshot_fingerprint_mismatch' };
+  }
+  if (
+    snapshot.tenant_id !== registrySnapshotContext.tenantId
+    || snapshot.organization_id !== registrySnapshotContext.organizationId
+    || snapshot.project_id !== registrySnapshotContext.projectId
+  ) {
+    return { authorized: false, reason: 'registry_snapshot_scope_mismatch' };
+  }
+  if (snapshot.logical_sequence !== registrySnapshotContext.freshnessRegistryCreatedSequence) {
+    return { authorized: false, reason: 'registry_snapshot_mismatch' };
+  }
+  if ((registrySnapshotContext.requestLogicalSequence - snapshot.logical_sequence) > registrySnapshotContext.freshnessMaxRegistryValidSequences) {
+    return { authorized: false, reason: 'registry_snapshot_stale' };
+  }
+  return { authorized: true };
+}
+
+function resolveRequirementProvenance(requirement, hint, officialSourcesByTypeAndId, registrySnapshotContext = null) {
+  const tag = `${requirement.requirement_element}::${requirement.source_reference_id}`;
+  const expectedSourceType = SOURCE_TYPE_BY_ELEMENT[requirement.requirement_element];
+  if (!isPlainObject(hint)) return { authorized: false, tag, reason: 'unresolvable' };
+  if (hint.requirement_element !== requirement.requirement_element) return { authorized: false, tag, reason: 'unresolvable' };
+  if (hint.source_reference_id !== requirement.source_reference_id) return { authorized: false, tag, reason: 'unresolvable' };
+  if (hint.source_reference_type !== expectedSourceType) return { authorized: false, tag, reason: 'unresolvable' };
+  if (hint.source_resolution_status !== 'RESOLVED_FROM_OFFICIAL_REFERENCE') return { authorized: false, tag, reason: 'unresolvable' };
+
+  const official = officialSourcesByTypeAndId.get(`${hint.source_reference_type}::${hint.source_reference_id}`);
+  if (!official) return { authorized: false, tag, reason: 'unresolvable' };
+
+  const versionKey = SOURCE_VERSION_KEY_BY_TYPE[hint.source_reference_type];
+  if (versionKey && official[versionKey] !== hint.source_reference_version) return { authorized: false, tag, reason: 'unresolvable' };
+  if (computeOfficialPolicyFingerprint(official) !== hint.source_reference_fingerprint) return { authorized: false, tag, reason: 'unresolvable' };
+
+  // Provider/domain are recomputed FROM the official source, never trusted from the hint. Only
+  // MODEL_SELECTION_REFERENCE carries a genuinely derivable provider (selected_provider_id); Tool/
+  // Workflow Contracts carry neither provider nor domain data anywhere in this codebase.
+  let derivedProviderSlug = null;
+  let derivedStageDomain = null;
+  if (hint.source_reference_type === 'MODEL_SELECTION_REFERENCE') {
+    derivedProviderSlug = isNonEmptyString(official.selected_provider_id) ? official.selected_provider_id : null;
+    derivedStageDomain = derivedProviderSlug ? (ALLOWED_CAPABILITY_PROVIDER_SLUGS.includes(derivedProviderSlug) ? OFFICIAL_POLICY_DOMAIN : 'GENERIC_DOMAIN') : null;
+  }
+  if (!isNonEmptyString(derivedProviderSlug) || !derivedStageDomain) return { authorized: false, tag, reason: 'unresolvable' };
+  if (hint.source_provider_slug !== derivedProviderSlug) return { authorized: false, tag, reason: 'unresolvable' };
+  if (hint.source_stage_domain !== derivedStageDomain) return { authorized: false, tag, reason: 'unresolvable' };
+
+  if (derivedStageDomain !== OFFICIAL_POLICY_DOMAIN) return { authorized: false, tag, reason: 'domain_mismatch' };
+
+  // pr106fix5: registry snapshot binding is the final gate -- every other, more specific provenance
+  // failure (shape/type/status/source-lookup/version/fingerprint/provider/domain) is reported with its
+  // own distinct reason first; only a requirement that has already cleared all of those still needs a
+  // genuine, matching, non-stale Registry Snapshot to be declared authorized.
+  const snapshotBinding = resolveRegistrySnapshotBinding(hint, registrySnapshotContext);
+  if (!snapshotBinding.authorized) return { authorized: false, tag, reason: snapshotBinding.reason };
+
+  return { authorized: true, tag, provider_slug: derivedProviderSlug, stage_domain: derivedStageDomain };
+}
+
+// pr106fix FIX 1 / pr106fix2 / pr106fix3 / pr106fix4: genuine 1:1 policy reference comparison -- ID,
+// version, fingerprint, and tenant/organization/project/environment binding, never a string-presence
+// pass-through. `policyRef` is the (at most one) RuntimeWorkerNetworkPolicyReference/
+// RuntimeWorkerSecretPolicyReference bound to this worker. `official_policy_valid` (existence+
+// version+fingerprint+scope/environment) is checked once per worker; then EVERY requirement the
+// stage actually has (pr106fix4: plural, never collapsed by MODEL>TOOL>WORKFLOW precedence) must
+// independently pass `official_policy_applicable_to_stage` (domain+element, backed by genuine
+// upstream provenance) and `official_policy_authorizes_stage_requirement` (provider+destination/
+// purpose) -- `every(requirement is authorized)`, so a well-authorized MODEL component never masks
+// an unauthorized TOOL/WORKFLOW component of the same stage.
+function evaluatePolicyReferenceMatch(kind, stage, worker, policyRef, canonical, officialPolicyById, stagePolicyRequirementByKey, officialSourcesByTypeAndId, registrySnapshotContext = null) {
+  const idField = `${kind}_policy_reference_id`;
+  const validField = `${kind}_policy_reference_valid`;
+  const officialIdField = `official_${kind}_policy_reference_id`;
+  const officialVersionField = `official_${kind}_policy_version`;
+  const officialFingerprintField = `official_${kind}_policy_fingerprint`;
+  const { idKey, versionKey } = OFFICIAL_POLICY_KEYS[kind];
+  const requirements = deriveStagePolicyRequirements(stage);
+  if (requirements.length === 0) return { match: true, reason: null };
+  if (!isPlainObject(policyRef)) return { match: false, reason: `worker_${kind}_policy_reference_missing` };
+  if (policyRef[idField] !== worker[idField]) return { match: false, reason: `worker_${kind}_policy_id_mismatch` };
+  if (policyRef[validField] !== true) return { match: false, reason: `worker_${kind}_policy_reference_invalid` };
+  if (policyRef.tenant_id !== canonical.tenantId) return { match: false, reason: `worker_${kind}_policy_tenant_mismatch` };
+  if (policyRef.organization_id !== canonical.organizationId) return { match: false, reason: `worker_${kind}_policy_organization_mismatch` };
+  if (policyRef.project_id !== null && policyRef.project_id !== canonical.projectId) return { match: false, reason: `worker_${kind}_policy_project_mismatch` };
+  if (policyRef.runtime_environment_reference_id !== worker.runtime_environment_reference_id) return { match: false, reason: `worker_${kind}_policy_environment_mismatch` };
+
+  // Gate 1: official_policy_valid (once per worker, shared across every requirement the stage has).
+  const official = officialPolicyById.get(policyRef[officialIdField]);
+  if (!official) return { match: false, reason: `worker_${kind}_official_policy_missing` };
+  if (official[versionKey] !== policyRef[officialVersionField]) return { match: false, reason: `worker_${kind}_official_policy_version_mismatch` };
+  if (computeOfficialPolicyFingerprint(official) !== policyRef[officialFingerprintField]) {
+    return { match: false, reason: `worker_${kind}_official_policy_fingerprint_mismatch` };
+  }
+  if (kind === 'secret' && official.tenant_id !== canonical.tenantId) return { match: false, reason: 'worker_secret_official_policy_scope_mismatch' };
+  if (official.environment === 'PRODUCTION') return { match: false, reason: `worker_${kind}_official_policy_not_allowed` };
+
+  // Gates 2+3, independently, for every requirement the stage has.
+  for (const requirement of requirements) {
+    const hint = stagePolicyRequirementByKey.get(`${stage.scheduler_stage_reference_id}::${requirement.requirement_element}::${requirement.source_reference_id}`);
+    const provenance = resolveRequirementProvenance(requirement, hint, officialSourcesByTypeAndId, registrySnapshotContext);
+    if (!provenance.authorized) {
+      if (provenance.reason === 'domain_mismatch') {
+        return { match: false, reason: `worker_${kind}_official_policy_domain_mismatch::${provenance.tag}` };
+      }
+      // pr106fix5: registry snapshot binding failures are a property of the requirement's own
+      // provenance, identical regardless of whether the caller is evaluating network or secret --
+      // never templated with `worker_${kind}_`.
+      if (isNonEmptyString(provenance.reason) && provenance.reason.startsWith('registry_snapshot_')) {
+        return { match: false, reason: `worker_stage_policy_source_${provenance.reason}::${provenance.tag}` };
+      }
+      return { match: false, reason: `worker_${kind}_policy_requirement_unresolvable::${provenance.tag}` };
+    }
+    if (official.provider_slug !== provenance.provider_slug) {
+      return { match: false, reason: `worker_${kind}_official_policy_provider_mismatch::${provenance.tag}` };
+    }
+    // pr106fix5: Network compares the official policy's scope against the requirement's
+    // `destination_class`; Secret must compare against its `secret_purpose` -- these are genuinely
+    // distinct scopes the official policy's own `scope` field represents, never interchangeable
+    // despite `destination_class`/`secret_purpose` sharing structurally parallel values.
+    const expectedOfficialScope = kind === 'network' ? requirement.destination_class : requirement.secret_purpose;
+    if (official.scope !== expectedOfficialScope) {
+      const mismatchKind = kind === 'network' ? 'destination_mismatch' : 'purpose_mismatch';
+      return { match: false, reason: `worker_${kind}_official_policy_${mismatchKind}::${provenance.tag}` };
+    }
+  }
+
+  void idKey;
+  return { match: true, reason: null };
+}
+
+// pr106fix FIX 2: worker health is reavaliated on the Worker Assignment Request's own
+// logical_sequence -- a health reference valid at an earlier sequence can have expired by the time
+// assignment is evaluated; the contract's own `health_validated`/`health_expired_logically` (computed
+// against the health reference's own frozen current_logical_sequence) are never trusted alone.
+function evaluateHealthAtAssignment(health, requestLogicalSequence) {
+  if (requestLogicalSequence < health.current_logical_sequence || requestLogicalSequence < health.health_created_logical_sequence) {
+    return { match: false, reason: 'worker_health_sequence_regressive', structural: true };
+  }
+  const healthExpiredAtAssignment = (requestLogicalSequence - health.health_created_logical_sequence) > health.maximum_valid_sequences;
+  if (healthExpiredAtAssignment) return { match: false, reason: 'worker_health_expired_at_assignment_sequence', structural: false };
+  if (health.health_status !== 'HEALTHY_REFERENCE_SIMULATION') return { match: false, reason: 'worker_health_status_not_healthy', structural: false };
+  const bindingsValid = health.configuration_valid === true && health.registration_valid === true
+    && health.capability_reference_valid === true && health.capacity_reference_valid === true && health.policy_references_valid === true;
+  if (!bindingsValid) return { match: false, reason: 'worker_health_binding_invalid', structural: false };
+  return { match: true, reason: null, structural: false };
+}
+
+// Every one of the 17 match dimensions, recomputed from the real stage/worker/capability/capacity/
+// health/policy data -- "Não aceitar worker_compatible=true como fonte de verdade."
+function deriveMatches(
+  stage, worker, capability, capacity, health, canonical, freshnessValid, requestLogicalSequence,
+  networkPolicyRef, secretPolicyRef, officialNetworkPolicyById, officialSecretPolicyById, stagePolicyRequirementByKey,
+  officialSourcesByTypeAndId, registrySnapshotContext
+) {
+  const hasModel = stage.model_selection_reference_id !== null;
+  const hasTools = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0;
+  const hasWorkflow = stage.workflow_reference_id !== null;
+  const networkEvaluation = evaluatePolicyReferenceMatch('network', stage, worker, networkPolicyRef, canonical, officialNetworkPolicyById, stagePolicyRequirementByKey, officialSourcesByTypeAndId, registrySnapshotContext);
+  const secretEvaluation = evaluatePolicyReferenceMatch('secret', stage, worker, secretPolicyRef, canonical, officialSecretPolicyById, stagePolicyRequirementByKey, officialSourcesByTypeAndId, registrySnapshotContext);
+  const healthEvaluation = evaluateHealthAtAssignment(health, requestLogicalSequence);
+  return {
+    matches: {
+      tenant_match: worker.tenant_scope_id === null || worker.tenant_scope_id === canonical.tenantId,
+      organization_match: worker.organization_scope_id === null || worker.organization_scope_id === canonical.organizationId,
+      project_match: worker.project_scope_id === null || worker.project_scope_id === canonical.projectId,
+      agent_scope_match: worker.agent_scope_ids.length === 0 || worker.agent_scope_ids.includes(canonical.agentId),
+      stage_type_match: capability.stage_type_ids.includes(stage.stage_type),
+      capability_match: stage.required_capabilities.every((id) => capability.capability_ids.includes(id)),
+      modality_match: stage.required_modalities.every((id) => capability.modality_ids.includes(id)),
+      model_support_match: !hasModel || capability.supports_model_reference === true,
+      tool_support_match: !hasTools || stage.tool_reference_ids.every((id) => capability.tool_ids.includes(id)),
+      workflow_support_match: !hasWorkflow || capability.workflow_ids.includes(stage.workflow_reference_id),
+      network_policy_match: networkEvaluation.match,
+      secret_policy_match: secretEvaluation.match,
+      // External/irreversible effects are already forced false on every worker capability
+      // (supports_external_effect_reference/supports_irreversible_reference) and already blocked at
+      // the Scheduler layer for any stage that carries one -- this dimension is true whenever the
+      // stage reaches this boundary at all.
+      effect_policy_match: stage.side_effect_classification !== 'EXTERNAL_EFFECT_REFERENCE' && stage.side_effect_classification !== 'IRREVERSIBLE_REFERENCE',
+      health_match: healthEvaluation.match,
+      capacity_match: (
+        capacity.available_stage_assignments >= 1
+        && (!stage.parallelizable || capacity.available_parallel_assignments >= 1)
+        && (!hasModel || capacity.available_model_assignments >= 1)
+        && (!hasTools || capacity.available_tool_assignments >= 1)
+        && (!hasWorkflow || capacity.available_workflow_assignments >= 1)
+        && capacity.available_token_capacity >= stage.estimated_total_tokens
+        && capacity.available_cost_capacity_minor_units >= stage.estimated_cost_minor_units
+      ),
+      concurrency_match: worker.available_parallel_assignments >= 1,
+      freshness_match: freshnessValid === true
+    },
+    reasons: {
+      network_policy_match: networkEvaluation.reason,
+      secret_policy_match: secretEvaluation.reason,
+      health_match: healthEvaluation.reason
+    }
+  };
+}
+
+function classificationMatchesStage(classification, stage) {
+  const hasModel = stage.model_selection_reference_id !== null;
+  const hasTools = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0;
+  const hasWorkflow = stage.workflow_reference_id !== null;
+  if (classification === 'MODEL_WORKER_REFERENCE') return hasModel;
+  if (classification === 'TOOL_WORKER_REFERENCE') return hasTools;
+  if (classification === 'WORKFLOW_WORKER_REFERENCE') return hasWorkflow;
+  if (classification === 'DETERMINISTIC_WORKER_REFERENCE') return !hasModel && !hasTools && !hasWorkflow;
+  return false;
+}
+
+// The spec's own 9-tier deterministic comparator, applied as a sort key tuple over the compatible
+// candidate set only.
+function selectionSortKey(worker, capacity, stage, canonical) {
+  const isDedicated = worker.worker_type === 'DEDICATED_REFERENCE'
+    && worker.tenant_scope_id === canonical.tenantId && worker.organization_scope_id === canonical.organizationId
+    && worker.project_scope_id === canonical.projectId;
+  const isExactClassification = classificationMatchesStage(worker.worker_classification, stage);
+  return [
+    isDedicated ? 0 : 1,
+    isExactClassification ? 0 : 1,
+    -capacity.available_stage_assignments,
+    -capacity.available_parallel_assignments,
+    -capacity.available_token_capacity,
+    -capacity.available_cost_capacity_minor_units,
+    capacity.current_stage_assignments,
+    capacity.current_parallel_assignments,
+    worker.runtime_worker_reference_id
+  ];
+}
+
+function compareSortKeys(a, b) {
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] < b[i]) return -1;
+    if (a[i] > b[i]) return 1;
+  }
+  return 0;
+}
+
+// --- Main evaluator ------------------------------------------------------------------------------
+
+function evaluateRuntimeWorkerAssignmentRequest(request, context = {}) {
+  void context; // never consulted for any decision.
+  const validatedFlags = {};
+  function markValid(flag) {
+    validatedFlags[flag] = true;
+  }
+
+  const requestIsObject = isPlainObject(request);
+  const policy = requestIsObject ? request.runtime_worker_assignment_policy : undefined;
+  const schedulerRequestRef = requestIsObject ? request.runtime_scheduler_request_reference : undefined;
+  const schedulerDecisionRef = requestIsObject ? request.runtime_scheduler_decision_reference : undefined;
+  const schedulerResultRef = requestIsObject ? request.runtime_scheduler_result_reference : undefined;
+  const schedulerPackageRef = requestIsObject ? request.runtime_scheduler_package_reference : undefined;
+  const packageRef = requestIsObject ? request.runtime_execution_package_reference : undefined;
+  const stageManifest = requestIsObject ? request.runtime_stage_manifest_reference : undefined;
+  const capacitySnapshotRef = requestIsObject ? request.runtime_capacity_snapshot_reference : undefined;
+  const concurrencyRef = requestIsObject ? request.runtime_concurrency_reference : undefined;
+  const freshnessRef = requestIsObject ? request.runtime_freshness_reference : undefined;
+  const replayRef = requestIsObject ? request.runtime_replay_reference : undefined;
+  const idempotencyReference = requestIsObject ? request.idempotency_reference : undefined;
+  const workerRefs = requestIsObject && Array.isArray(request.runtime_worker_references) ? request.runtime_worker_references : [];
+  const workerCapabilityRefs = requestIsObject && Array.isArray(request.runtime_worker_capability_references) ? request.runtime_worker_capability_references : [];
+  const workerCapacityRefs = requestIsObject && Array.isArray(request.runtime_worker_capacity_references) ? request.runtime_worker_capacity_references : [];
+  const workerHealthRefs = requestIsObject && Array.isArray(request.runtime_worker_health_references) ? request.runtime_worker_health_references : [];
+  const workerNetworkPolicyRefs = requestIsObject && Array.isArray(request.runtime_worker_network_policy_references) ? request.runtime_worker_network_policy_references : [];
+  const workerSecretPolicyRefs = requestIsObject && Array.isArray(request.runtime_worker_secret_policy_references) ? request.runtime_worker_secret_policy_references : [];
+  const networkPermissionPolicyRefs = requestIsObject && Array.isArray(request.network_permission_policy_references) ? request.network_permission_policy_references : [];
+  const secretResolutionPolicyRefs = requestIsObject && Array.isArray(request.secret_resolution_policy_references) ? request.secret_resolution_policy_references : [];
+  const stagePolicyRequirementRefs = requestIsObject && Array.isArray(request.stage_policy_requirement_references) ? request.stage_policy_requirement_references : [];
+  const modelSelectionDecisionRefs = requestIsObject && Array.isArray(request.model_selection_decision_references) ? request.model_selection_decision_references : [];
+  const toolContractRefs = requestIsObject && Array.isArray(request.tool_contract_references) ? request.tool_contract_references : [];
+  const workflowContractRefs = requestIsObject && Array.isArray(request.workflow_contract_references) ? request.workflow_contract_references : [];
+  // pr106fix5: the single genuine Registry Snapshot reference (nullable -- "quando existentes") this
+  // request carries, reused verbatim via `execution-registry-snapshot-reference.js`'s own validator,
+  // never a second self-declared snapshot.
+  const registrySnapshotRef = requestIsObject ? request.registry_snapshot_reference : undefined;
+
+  const canonical = {
+    tenantId: isPlainObject(packageRef) ? packageRef.tenant_id : undefined,
+    organizationId: isPlainObject(packageRef) ? packageRef.organization_id : undefined,
+    projectId: isPlainObject(packageRef) ? packageRef.project_id : undefined,
+    sessionId: isPlainObject(packageRef) ? packageRef.session_reference_id : undefined,
+    agentId: isPlainObject(packageRef) ? packageRef.agent_id : undefined,
+    actorId: isPlainObject(packageRef) ? packageRef.actor_id : undefined
+  };
+
+  // pr106fix5: built once, from data already in scope -- never re-derived per requirement, never
+  // reading `context`. `resolveRequirementProvenance` uses this to prove a RESOLVED Stage Policy
+  // Requirement's declared registry snapshot is the SAME one the Runtime Execution Package
+  // (`registry_snapshot_reference_id`) and the Freshness Reference (`registry_snapshot_reference_id`/
+  // `registry_created_logical_sequence`/`maximum_registry_valid_sequences`) already committed to.
+  const registrySnapshotContext = {
+    ref: registrySnapshotRef,
+    packageRegistrySnapshotId: isPlainObject(packageRef) ? packageRef.registry_snapshot_reference_id : undefined,
+    packageExecutionPlanId: isPlainObject(packageRef) ? packageRef.execution_plan_id : undefined,
+    freshnessRegistrySnapshotId: isPlainObject(freshnessRef) ? freshnessRef.registry_snapshot_reference_id : undefined,
+    freshnessRegistryCreatedSequence: isPlainObject(freshnessRef) ? freshnessRef.registry_created_logical_sequence : undefined,
+    freshnessMaxRegistryValidSequences: isPlainObject(freshnessRef) ? freshnessRef.maximum_registry_valid_sequences : undefined,
+    requestLogicalSequence: requestIsObject ? request.logical_sequence : undefined,
+    tenantId: canonical.tenantId, organizationId: canonical.organizationId, projectId: canonical.projectId
+  };
+
+  const requestForFingerprint = requestIsObject ? omitReplayReference(request) : request;
+  const requestFingerprint = computeCanonicalContentDigest(requestForFingerprint);
+
+  function finalize(status, reasonCodes, derived = {}) {
+    return buildWorkerAssignmentOutcome(status, reasonCodes, {
+      request, requestFingerprint, canonical, schedulerDecisionRef, schedulerResultRef, schedulerPackageRef,
+      packageRef, capacitySnapshotRef, concurrencyRef, freshnessRef, idempotencyReference, replayRef,
+      // pr106fix4/pr106fix5: every one of these is a raw request-level collection/reference, already
+      // in scope regardless of how early the evaluation is blocked -- included unconditionally so the
+      // package's own integrity fingerprint fields (see buildWorkerAssignmentOutcome) are always
+      // derived from the real objects the request carried, "inclusive listas vazias quando
+      // legitimamente não aplicáveis," never a caller-supplied list substituted in.
+      networkPermissionPolicyRefs, secretResolutionPolicyRefs, stagePolicyRequirementRefs,
+      modelSelectionDecisionRefs, toolContractRefs, workflowContractRefs, registrySnapshotRef,
+      ...derived
+    }, validatedFlags);
+  }
+
+  // 1-2. Request contract shape, including simulation_context and every nested reference against
+  // its own real validator (policy, scheduler chain, package, manifest, capacity, concurrency,
+  // freshness, replay, idempotency, worker/capability/capacity/health arrays).
+  const requestValidation = validateRuntimeWorkerAssignmentRequest(request);
+  if (!requestValidation.valid) return finalize('WORKER_ASSIGNMENT_VALIDATION_FAILED', ['runtime_worker_assignment_request_invalid']);
+  markValid('request_validated');
+
+  // 9. Identity -- evaluated early, matching the real precedence order.
+  const identityChecks = [
+    ['runtime_execution_package_reference', packageRef], ['runtime_stage_manifest_reference', stageManifest],
+    ['runtime_capacity_snapshot_reference', capacitySnapshotRef], ['runtime_concurrency_reference', concurrencyRef]
+  ];
+  for (const [label, reference] of identityChecks) {
+    const mismatch = checkIdentity(reference, canonical, label);
+    if (mismatch) return finalize(mismatch.status, [mismatch.reason]);
+  }
+  markValid('identity_validated');
+
+  // 3. Assignment Policy -- allow_* flags genuinely re-checked against the real stage/worker
+  // composition; external/irreversible effects are never allowed regardless of policy.
+  const stages = isPlainObject(stageManifest) && Array.isArray(stageManifest.runtime_stage_references) ? stageManifest.runtime_stage_references : [];
+  const hasExternalEffect = stages.some((s) => s.side_effect_classification === 'EXTERNAL_EFFECT_REFERENCE');
+  const hasIrreversibleEffect = stages.some((s) => s.side_effect_classification === 'IRREVERSIBLE_REFERENCE');
+  if (hasExternalEffect) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['external_effect_reference_never_allowed']);
+  if (hasIrreversibleEffect) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['irreversible_reference_never_allowed']);
+  const hasNoLlmStage = stages.some((s) => s.model_selection_reference_id === null && (!Array.isArray(s.tool_reference_ids) || s.tool_reference_ids.length === 0) && s.workflow_reference_id === null);
+  const hasModelStage = stages.some((s) => s.model_selection_reference_id !== null);
+  const hasToolStage = stages.some((s) => Array.isArray(s.tool_reference_ids) && s.tool_reference_ids.length > 0);
+  const hasWorkflowStage = stages.some((s) => s.workflow_reference_id !== null);
+  const hasParallelStage = stages.some((s) => s.parallelizable === true);
+  const hasStateChangeStage = stages.some((s) => s.side_effect_classification === 'STATE_CHANGE_REFERENCE');
+  if (hasNoLlmStage && policy.allow_no_llm_stage !== true) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['no_llm_stage_not_allowed_by_policy']);
+  if (hasModelStage && policy.allow_model_stage !== true) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['model_stage_not_allowed_by_policy']);
+  if (hasToolStage && policy.allow_tool_stage !== true) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['tool_stage_not_allowed_by_policy']);
+  if (hasWorkflowStage && policy.allow_workflow_stage !== true) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['workflow_stage_not_allowed_by_policy']);
+  if (hasParallelStage && policy.allow_parallel_stage !== true) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['parallel_stage_not_allowed_by_policy']);
+  if (hasStateChangeStage && policy.allow_state_change_reference !== true) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['state_change_reference_not_allowed_by_policy']);
+  const workerTypePolicyByType = {
+    LOCAL_REFERENCE: 'allow_local_worker_reference', REMOTE_REFERENCE: 'allow_remote_worker_reference',
+    SHARED_REFERENCE: 'allow_shared_worker_reference', DEDICATED_REFERENCE: 'allow_dedicated_worker_reference'
+  };
+  for (const worker of workerRefs) {
+    const flag = workerTypePolicyByType[worker.worker_type];
+    if (flag && policy[flag] !== true) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', [`${worker.worker_type.toLowerCase()}_not_allowed_by_policy`]);
+  }
+  markValid('policy_validated');
+
+  // 4-7. Scheduler chain -- must be a genuine, matching, already-prepared chain.
+  if (
+    schedulerDecisionRef.status !== 'SCHEDULER_PACKAGE_PREPARED_SIMULATION' || schedulerDecisionRef.scheduler_package_prepared_in_simulation !== true
+    || schedulerResultRef.status !== 'SCHEDULER_PACKAGE_PREPARED_SIMULATION' || schedulerResultRef.scheduler_package_prepared_in_simulation !== true
+    || schedulerPackageRef.scheduler_status !== 'SCHEDULER_PACKAGE_PREPARED_SIMULATION' || schedulerPackageRef.scheduler_package_prepared_in_simulation !== true
+    || schedulerDecisionRef.runtime_scheduler_request_id !== schedulerRequestRef.runtime_scheduler_request_id
+    || schedulerResultRef.runtime_scheduler_decision_id !== schedulerDecisionRef.runtime_scheduler_decision_id
+    || schedulerPackageRef.runtime_scheduler_package_id !== schedulerDecisionRef.runtime_scheduler_package_id
+    || schedulerDecisionRef.runtime_execution_package_id !== packageRef.runtime_execution_package_id
+    || schedulerDecisionRef.scheduler_started === true || schedulerResultRef.scheduler_started === true
+  ) {
+    return finalize('WORKER_ASSIGNMENT_SCHEDULER_BLOCKED', ['scheduler_chain_not_genuinely_prepared']);
+  }
+  markValid('scheduler_validated');
+
+  // 8. Runtime Execution Package -- still the exact same, never-mutated package the scheduler chain
+  // found prepared.
+  if (
+    packageRef.runtime_status !== 'RUNTIME_PACKAGE_PREPARED_SIMULATION' || packageRef.runtime_admitted_in_simulation !== false
+    || packageRef.runtime_enabled === true || packageRef.execution_authorized === true || packageRef.executed === true
+    || packageRef.package_fingerprint !== schedulerPackageRef.runtime_execution_package_fingerprint
+    || packageRef.package_digest !== schedulerPackageRef.runtime_execution_package_digest
+  ) {
+    return finalize('WORKER_ASSIGNMENT_RUNTIME_PACKAGE_BLOCKED', ['runtime_package_not_still_prepared_or_mutated']);
+  }
+  markValid('runtime_package_validated');
+
+  // 13-16 (worker registry portion). Every worker id/capability/capacity/health id is unique;
+  // DEDICATED workers carry a fully-scoped identity, SHARED workers carry none -- "validar
+  // escopos" folded in here since there is no separate precedence slot for it.
+  const workerIds = workerRefs.map((w) => w.runtime_worker_reference_id);
+  if (new Set(workerIds).size !== workerIds.length) {
+    return finalize('WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', ['duplicate_worker_reference_id']);
+  }
+  const scopeInvalid = workerRefs.some((worker) => {
+    if (worker.worker_type === 'DEDICATED_REFERENCE') {
+      return worker.tenant_scope_id === null || worker.organization_scope_id === null || worker.project_scope_id === null;
+    }
+    if (worker.worker_type === 'SHARED_REFERENCE') {
+      return worker.tenant_scope_id !== null || worker.organization_scope_id !== null || worker.project_scope_id !== null;
+    }
+    return false;
+  });
+  if (scopeInvalid) return finalize('WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', ['worker_scope_declaration_invalid']);
+  markValid('worker_registry_validated');
+  markValid('worker_references_validated');
+
+  // 17 (capability portion). Every worker's own capability/capacity/health binding must be exactly
+  // 1:1 -- present, matching runtime_worker_reference_id, never missing, never duplicated. Self-
+  // fingerprint válido não substitui cross-check entre objetos.
+  const capabilityById = new Map(workerCapabilityRefs.map((c) => [c.worker_capability_reference_id, c]));
+  const capacityById = new Map(workerCapacityRefs.map((c) => [c.worker_capacity_reference_id, c]));
+  const healthById = new Map(workerHealthRefs.map((h) => [h.worker_health_reference_id, h]));
+  for (const worker of workerRefs) {
+    const capability = capabilityById.get(worker.worker_capability_reference_id);
+    if (!capability || capability.runtime_worker_reference_id !== worker.runtime_worker_reference_id) {
+      return finalize('WORKER_ASSIGNMENT_CAPABILITY_BLOCKED', ['worker_capability_reference_binding_mismatch']);
+    }
+  }
+  markValid('capabilities_validated');
+
+  // 16 (health portion). pr106fix FIX 2: beyond the 1:1 binding, every health reference's own
+  // sequence fields must not be ahead of this Worker Assignment Request's own logical_sequence --
+  // a health reference describing a "later" sequence than the request itself is a structural
+  // inconsistency, never just "this worker happens to be unhealthy for this stage".
+  for (const worker of workerRefs) {
+    const health = healthById.get(worker.worker_health_reference_id);
+    if (!health || health.runtime_worker_reference_id !== worker.runtime_worker_reference_id) {
+      return finalize('WORKER_ASSIGNMENT_HEALTH_BLOCKED', ['worker_health_reference_binding_mismatch']);
+    }
+    if (request.logical_sequence < health.current_logical_sequence || request.logical_sequence < health.health_created_logical_sequence) {
+      return finalize('WORKER_ASSIGNMENT_HEALTH_BLOCKED', ['worker_health_sequence_regressive']);
+    }
+  }
+  markValid('health_validated');
+
+  // pr106fix FIX 1: network/secret policy references are optional per worker (only required when
+  // the worker is actually recommended for a stage that needs one -- see deriveMatches), but when
+  // present must be genuinely 1:1 -- never duplicated, never bound to a worker that does not exist.
+  const networkPolicyByWorkerId = new Map();
+  for (const ref of workerNetworkPolicyRefs) {
+    if (networkPolicyByWorkerId.has(ref.runtime_worker_reference_id)) {
+      return finalize('WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', ['duplicate_worker_network_policy_reference']);
+    }
+    if (!workerIds.includes(ref.runtime_worker_reference_id)) {
+      return finalize('WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', ['worker_network_policy_reference_orphaned']);
+    }
+    networkPolicyByWorkerId.set(ref.runtime_worker_reference_id, ref);
+  }
+  const secretPolicyByWorkerId = new Map();
+  for (const ref of workerSecretPolicyRefs) {
+    if (secretPolicyByWorkerId.has(ref.runtime_worker_reference_id)) {
+      return finalize('WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', ['duplicate_worker_secret_policy_reference']);
+    }
+    if (!workerIds.includes(ref.runtime_worker_reference_id)) {
+      return finalize('WORKER_ASSIGNMENT_WORKER_REGISTRY_BLOCKED', ['worker_secret_policy_reference_orphaned']);
+    }
+    secretPolicyByWorkerId.set(ref.runtime_worker_reference_id, ref);
+  }
+  markValid('network_secret_policy_registry_validated');
+
+  // pr106fix2: the official Network Permission Boundary / Secret Resolution Boundary policy objects
+  // this request supplies -- already structurally validated by their own real validators via the
+  // request's nested-reference validation (step 1). A duplicate official policy ID is a genuine
+  // "binding global incoerente" (two objects claiming the same official identity), never a per-worker
+  // compatibility concern -- blocks the whole request as WORKER_ASSIGNMENT_POLICY_BLOCKED.
+  const officialNetworkPolicyById = new Map();
+  for (const official of networkPermissionPolicyRefs) {
+    if (officialNetworkPolicyById.has(official.destination_ref_id)) {
+      return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['network_official_policy_registry_duplicate']);
+    }
+    officialNetworkPolicyById.set(official.destination_ref_id, official);
+  }
+  const officialSecretPolicyById = new Map();
+  for (const official of secretResolutionPolicyRefs) {
+    if (officialSecretPolicyById.has(official.secret_ref_id)) {
+      return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['secret_official_policy_registry_duplicate']);
+    }
+    officialSecretPolicyById.set(official.secret_ref_id, official);
+  }
+  // pr106fix3/pr106fix4: at most one declared policy requirement hint per (stage, element, source) --
+  // pr106fix4 keys by the full composite so a stage with MODEL+TOOL+WORKFLOW (or several TOOLs) can
+  // carry one hint per genuinely distinct requirement, never collapsed onto a single stage-level key.
+  const stagePolicyRequirementByKey = new Map();
+  for (const hint of stagePolicyRequirementRefs) {
+    const key = `${hint.scheduler_stage_reference_id}::${hint.requirement_element}::${hint.source_reference_id}`;
+    if (stagePolicyRequirementByKey.has(key)) {
+      return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['stage_policy_requirement_registry_duplicate']);
+    }
+    stagePolicyRequirementByKey.set(key, hint);
+  }
+  // pr106fix4: the genuine upstream official sources (Model Selection Decision / Tool Contract /
+  // Workflow Contract) a RESOLVED_FROM_OFFICIAL_REFERENCE requirement hint must bind to -- already
+  // structurally validated by their own real validators via the request's nested-reference
+  // validation. Keyed by (source type, source id); a duplicate is the same "binding global
+  // incoerente" class as a duplicate official network/secret policy.
+  const officialSourcesByTypeAndId = new Map();
+  for (const source of modelSelectionDecisionRefs) {
+    const key = `MODEL_SELECTION_REFERENCE::${source.decision_id}`;
+    if (officialSourcesByTypeAndId.has(key)) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['stage_policy_requirement_source_registry_duplicate']);
+    officialSourcesByTypeAndId.set(key, source);
+  }
+  for (const source of toolContractRefs) {
+    const key = `TOOL_CONTRACT_REFERENCE::${source.tool_id}`;
+    if (officialSourcesByTypeAndId.has(key)) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['stage_policy_requirement_source_registry_duplicate']);
+    officialSourcesByTypeAndId.set(key, source);
+  }
+  for (const source of workflowContractRefs) {
+    const key = `WORKFLOW_CONTRACT_REFERENCE::${source.workflow_id}`;
+    if (officialSourcesByTypeAndId.has(key)) return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['stage_policy_requirement_source_registry_duplicate']);
+    officialSourcesByTypeAndId.set(key, source);
+  }
+  markValid('official_policy_registry_validated');
+
+  // 15 (capacity portion).
+  for (const worker of workerRefs) {
+    const capacity = capacityById.get(worker.worker_capacity_reference_id);
+    if (!capacity || capacity.runtime_worker_reference_id !== worker.runtime_worker_reference_id) {
+      return finalize('WORKER_ASSIGNMENT_CAPACITY_BLOCKED', ['worker_capacity_reference_binding_mismatch']);
+    }
+  }
+  markValid('capacity_validated');
+
+  // 10. Freshness -- recomputed using this request's own logical_sequence, never the frozen
+  // current_logical_sequence the reference already carries.
+  if (!Number.isInteger(request.logical_sequence) || request.logical_sequence < freshnessRef.current_logical_sequence) {
+    return finalize('WORKER_ASSIGNMENT_FRESHNESS_BLOCKED', ['worker_assignment_logical_sequence_regressive']);
+  }
+  const freshnessExpired = FRESHNESS_DIMENSIONS.some(([, createdField, maximumField]) => (
+    (request.logical_sequence - freshnessRef[createdField]) > freshnessRef[maximumField]
+  ));
+  if (freshnessExpired || freshnessRef.freshness_validated !== true) {
+    return finalize('WORKER_ASSIGNMENT_FRESHNESS_BLOCKED', ['runtime_freshness_expired_at_worker_assignment_logical_sequence']);
+  }
+  markValid('freshness_validated');
+
+  // 11. Replay -- the reused RuntimeReadinessReplayReference is proven to be the exact same object
+  // the Scheduler Request itself already carried, never independently substituted, and to still
+  // genuinely describe this exact package.
+  if (
+    replayRef.replay_fingerprint !== schedulerRequestRef.runtime_replay_reference.replay_fingerprint
+    || replayRef.runtime_execution_package_id !== packageRef.runtime_execution_package_id
+    || replayRef.runtime_package_fingerprint !== packageRef.package_fingerprint
+    || replayRef.runtime_package_digest !== packageRef.package_digest
+    || replayRef.replay_validated !== true || replayRef.replay_allowed !== true
+  ) {
+    return finalize('WORKER_ASSIGNMENT_REPLAY_BLOCKED', ['runtime_replay_reference_not_bound_to_worker_assignment_request']);
+  }
+  markValid('replay_validated');
+
+  // 12. Idempotency -- the real, official ExecutionPlanIdempotencyReference is proven to be the
+  // exact same object the Scheduler Request itself already carried, plus its own self-fingerprint
+  // (the contract's own validator does not recompute-and-compare one) and safe flags.
+  if (
+    idempotencyReference.idempotency_reference_id !== schedulerRequestRef.idempotency_reference.idempotency_reference_id
+    || idempotencyReference.idempotency_fingerprint !== schedulerRequestRef.idempotency_reference.idempotency_fingerprint
+    || computeIdempotencyFingerprint(idempotencyReference) !== idempotencyReference.idempotency_fingerprint
+    || idempotencyReference.idempotency_validated !== true || idempotencyReference.idempotency_consumed !== false
+    || idempotencyReference.duplicate_execution_blocked !== true
+  ) {
+    return finalize('WORKER_ASSIGNMENT_IDEMPOTENCY_BLOCKED', ['idempotency_reference_not_bound_to_scheduler_chain']);
+  }
+  markValid('idempotency_validated');
+
+  // 20. Derive Compatibility References -- stage x worker, every match dimension recomputed.
+  const schedulerStages = Array.isArray(schedulerResultRef.scheduler_stage_references) ? schedulerResultRef.scheduler_stage_references : [];
+  const compatibilityRefs = [];
+  const compatibilityByStageAndWorker = new Map();
+  for (const stage of schedulerStages) {
+    for (const worker of workerRefs) {
+      const capability = capabilityById.get(worker.worker_capability_reference_id);
+      const capacity = capacityById.get(worker.worker_capacity_reference_id);
+      const health = healthById.get(worker.worker_health_reference_id);
+      const networkPolicyRef = networkPolicyByWorkerId.get(worker.runtime_worker_reference_id);
+      const secretPolicyRef = secretPolicyByWorkerId.get(worker.runtime_worker_reference_id);
+      const { matches, reasons } = deriveMatches(
+        stage, worker, capability, capacity, health, canonical, freshnessRef.freshness_validated,
+        request.logical_sequence, networkPolicyRef, secretPolicyRef, officialNetworkPolicyById, officialSecretPolicyById,
+        stagePolicyRequirementByKey, officialSourcesByTypeAndId, registrySnapshotContext
+      );
+      const ref = buildRuntimeWorkerCompatibilityReference({
+        worker_compatibility_reference_id: `${stage.scheduler_stage_reference_id}-${worker.runtime_worker_reference_id}-compatibility`,
+        runtime_worker_assignment_request_id: request.runtime_worker_assignment_request_id,
+        runtime_scheduler_package_id: schedulerPackageRef.runtime_scheduler_package_id,
+        scheduler_stage_reference_id: stage.scheduler_stage_reference_id,
+        runtime_stage_reference_id: stage.runtime_stage_reference_id,
+        runtime_worker_reference_id: worker.runtime_worker_reference_id,
+        ...matches,
+        mismatch_reason_codes: Object.entries(matches).filter(([, v]) => v !== true).map(([k]) => reasons[k] || k)
+      });
+      compatibilityRefs.push(ref);
+      compatibilityByStageAndWorker.set(`${stage.scheduler_stage_reference_id}::${worker.runtime_worker_reference_id}`, ref);
+    }
+  }
+  markValid('compatibilities_validated');
+
+  // 21-22. Derive Candidate Sets + deterministic selection.
+  const candidateSetByStageId = new Map();
+  for (const stage of schedulerStages) {
+    const stageCompatibilities = workerRefs.map((worker) => compatibilityByStageAndWorker.get(`${stage.scheduler_stage_reference_id}::${worker.runtime_worker_reference_id}`));
+    const compatibleWorkerIds = stageCompatibilities.filter((c) => c.worker_compatible === true).map((c) => c.runtime_worker_reference_id);
+    const incompatibleWorkerIds = stageCompatibilities.filter((c) => c.worker_compatible !== true).map((c) => c.runtime_worker_reference_id);
+    if (compatibleWorkerIds.length > policy.maximum_worker_candidates_per_stage) {
+      return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', ['worker_candidates_per_stage_exceeds_policy_limit']);
+    }
+    let recommendedWorkerId = null;
+    if (compatibleWorkerIds.length > 0) {
+      const compatibleWorkers = workerRefs.filter((w) => compatibleWorkerIds.includes(w.runtime_worker_reference_id));
+      const sorted = [...compatibleWorkers].sort((a, b) => compareSortKeys(
+        selectionSortKey(a, capacityById.get(a.worker_capacity_reference_id), stage, canonical),
+        selectionSortKey(b, capacityById.get(b.worker_capacity_reference_id), stage, canonical)
+      ));
+      recommendedWorkerId = sorted[0].runtime_worker_reference_id;
+    }
+    const candidateSet = buildRuntimeWorkerCandidateSetReference({
+      worker_candidate_set_reference_id: `${stage.scheduler_stage_reference_id}-candidate-set`,
+      runtime_worker_assignment_request_id: request.runtime_worker_assignment_request_id,
+      runtime_scheduler_package_id: schedulerPackageRef.runtime_scheduler_package_id,
+      scheduler_stage_reference_id: stage.scheduler_stage_reference_id,
+      runtime_stage_reference_id: stage.runtime_stage_reference_id,
+      worker_compatibility_reference_ids: stageCompatibilities.map((c) => c.worker_compatibility_reference_id),
+      compatible_worker_reference_ids: compatibleWorkerIds,
+      incompatible_worker_reference_ids: incompatibleWorkerIds,
+      recommended_worker_reference_id: recommendedWorkerId,
+      selection_reason_codes: recommendedWorkerId ? ['deterministic_capability_capacity_priority_selected'] : []
+    });
+    candidateSetByStageId.set(stage.scheduler_stage_reference_id, candidateSet);
+  }
+  markValid('candidate_sets_validated');
+
+  // 23. Derive Stage Assignment References -- waiting stages stay waiting regardless of candidate
+  // availability; blocked stages never receive a recommendation; only eligible/optional stages with
+  // at least one compatible candidate are recommended.
+  const assignmentRefs = [];
+  for (const stage of schedulerStages) {
+    const candidateSet = candidateSetByStageId.get(stage.scheduler_stage_reference_id);
+    let assignmentStatus;
+    if (stage.scheduler_stage_status === WAITING_STATUSES.BLOCKED) assignmentStatus = 'WORKER_ASSIGNMENT_BLOCKED';
+    else if (stage.scheduler_stage_status === WAITING_STATUSES.WAITING_DEPENDENCY) assignmentStatus = 'WORKER_WAITING_DEPENDENCY_REFERENCE';
+    else if (stage.scheduler_stage_status === WAITING_STATUSES.WAITING_APPROVAL) assignmentStatus = 'WORKER_WAITING_APPROVAL_REFERENCE';
+    else if (candidateSet.recommended_worker_reference_id !== null) assignmentStatus = 'WORKER_RECOMMENDED_SIMULATION';
+    else assignmentStatus = 'WORKER_NO_COMPATIBLE_CANDIDATE_BLOCKED';
+
+    assignmentRefs.push(buildRuntimeWorkerStageAssignmentReference({
+      worker_stage_assignment_reference_id: `${stage.scheduler_stage_reference_id}-assignment`,
+      runtime_worker_assignment_package_id: `${request.runtime_worker_assignment_request_id}-package`,
+      runtime_scheduler_package_id: schedulerPackageRef.runtime_scheduler_package_id,
+      runtime_execution_package_id: packageRef.runtime_execution_package_id,
+      scheduler_stage_reference_id: stage.scheduler_stage_reference_id,
+      runtime_stage_reference_id: stage.runtime_stage_reference_id,
+      worker_candidate_set_reference_id: candidateSet.worker_candidate_set_reference_id,
+      recommended_worker_reference_id: candidateSet.recommended_worker_reference_id,
+      assignment_status: assignmentStatus,
+      assignment_reason_codes: assignmentStatus === 'WORKER_NO_COMPATIBLE_CANDIDATE_BLOCKED' ? ['no_compatible_worker_candidate'] : [],
+      stage_type: stage.stage_type,
+      priority: stage.priority,
+      parallelizable: stage.parallelizable,
+      approval_required: stage.approval_required,
+      required_capability_ids: stage.required_capabilities,
+      required_modality_ids: stage.required_modalities,
+      estimated_total_tokens: stage.estimated_total_tokens,
+      estimated_cost_minor_units: stage.estimated_cost_minor_units
+    }));
+  }
+  markValid('assignments_validated');
+
+  // 16. No-candidate check -- an eligible/optional stage with zero compatible workers blocks the
+  // whole package fail-closed, never a silent fallback.
+  if (policy.fail_on_no_candidate === true && assignmentRefs.some((a) => a.assignment_status === 'WORKER_NO_COMPATIBLE_CANDIDATE_BLOCKED')) {
+    return finalize('WORKER_ASSIGNMENT_NO_CANDIDATE_BLOCKED', ['stage_has_no_compatible_worker_candidate']);
+  }
+
+  // 15. Compatibility-derived block -- a policy that requires every match dimension and finds none
+  // reachable at all (e.g. zero workers supplied while stages need one) fails closed here too.
+  if (policy.fail_on_capability_mismatch === true && workerRefs.length === 0 && schedulerStages.some((s) => s.scheduler_stage_status === 'SCHEDULER_STAGE_ELIGIBLE_SIMULATION' || s.scheduler_stage_status === 'SCHEDULER_STAGE_OPTIONAL_REFERENCE')) {
+    return finalize('WORKER_ASSIGNMENT_COMPATIBILITY_BLOCKED', ['no_worker_references_supplied_for_evaluable_stages']);
+  }
+
+  // 24. Policy limits -- per-worker aggregate caps across the whole package.
+  const perWorkerStageCounts = new Map();
+  const perWorkerParallelCounts = new Map();
+  const perWorkerModelCounts = new Map();
+  const perWorkerToolCounts = new Map();
+  const perWorkerWorkflowCounts = new Map();
+  const perWorkerTokens = new Map();
+  const perWorkerCost = new Map();
+  for (const assignment of assignmentRefs) {
+    if (assignment.assignment_status !== 'WORKER_RECOMMENDED_SIMULATION') continue;
+    const id = assignment.recommended_worker_reference_id;
+    perWorkerStageCounts.set(id, (perWorkerStageCounts.get(id) || 0) + 1);
+    if (assignment.parallelizable) perWorkerParallelCounts.set(id, (perWorkerParallelCounts.get(id) || 0) + 1);
+    if (assignment.stage_type === 'MODEL_REFERENCE_STAGE') perWorkerModelCounts.set(id, (perWorkerModelCounts.get(id) || 0) + 1);
+    if (assignment.stage_type === 'TOOL_REFERENCE_STAGE') perWorkerToolCounts.set(id, (perWorkerToolCounts.get(id) || 0) + 1);
+    if (assignment.stage_type === 'WORKFLOW_REFERENCE_STAGE') perWorkerWorkflowCounts.set(id, (perWorkerWorkflowCounts.get(id) || 0) + 1);
+    perWorkerTokens.set(id, (perWorkerTokens.get(id) || 0) + assignment.estimated_total_tokens);
+    perWorkerCost.set(id, (perWorkerCost.get(id) || 0) + assignment.estimated_cost_minor_units);
+  }
+  const limitViolations = [
+    [perWorkerStageCounts, policy.maximum_stages_per_worker_reference, 'maximum_stages_per_worker_reference_exceeded'],
+    [perWorkerParallelCounts, policy.maximum_parallel_stages_per_worker_reference, 'maximum_parallel_stages_per_worker_reference_exceeded'],
+    [perWorkerModelCounts, policy.maximum_model_stages_per_worker_reference, 'maximum_model_stages_per_worker_reference_exceeded'],
+    [perWorkerToolCounts, policy.maximum_tool_stages_per_worker_reference, 'maximum_tool_stages_per_worker_reference_exceeded'],
+    [perWorkerWorkflowCounts, policy.maximum_workflow_stages_per_worker_reference, 'maximum_workflow_stages_per_worker_reference_exceeded'],
+    [perWorkerTokens, policy.maximum_estimated_tokens_per_worker_reference, 'maximum_estimated_tokens_per_worker_reference_exceeded'],
+    [perWorkerCost, policy.maximum_estimated_cost_minor_units_per_worker_reference, 'maximum_estimated_cost_minor_units_per_worker_reference_exceeded']
+  ];
+  for (const [countsByWorker, maximum, reason] of limitViolations) {
+    if ([...countsByWorker.values()].some((count) => count > maximum)) {
+      return finalize('WORKER_ASSIGNMENT_POLICY_BLOCKED', [reason]);
+    }
+  }
+
+  // 27. Non-execution invariants.
+  if (schedulerResultRef.executed === true || schedulerResultRef.runtime_enabled === true || packageRef.executed === true) {
+    return finalize('WORKER_ASSIGNMENT_VALIDATION_FAILED', ['non_execution_invariant_violated']);
+  }
+  markValid('non_execution_invariants_validated');
+
+  markValid('package_fingerprint_validated');
+  markValid('package_digest_validated');
+
+  // 25-26. Emit the prepared outcome -- package fingerprint/digest are computed inside
+  // buildWorkerAssignmentOutcome, over the exact derived data this evaluation produced.
+  return finalize('WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION', ['worker_assignment_package_prepared_in_simulation_only'], {
+    stages: schedulerStages, workerRefs, workerCapabilityRefs, workerCapacityRefs, workerHealthRefs,
+    workerNetworkPolicyRefs, workerSecretPolicyRefs,
+    compatibilityRefs, candidateSetByStageId, assignmentRefs
+  });
+}
+
+function buildWorkerAssignmentOutcome(status, reasonCodes, ctx, validatedFlags) {
+  const {
+    request, requestFingerprint, canonical, schedulerDecisionRef, schedulerResultRef, schedulerPackageRef,
+    packageRef, capacitySnapshotRef, concurrencyRef, freshnessRef, idempotencyReference, replayRef,
+    workerNetworkPolicyRefs = [], workerSecretPolicyRefs = [],
+    networkPermissionPolicyRefs = [], secretResolutionPolicyRefs = [], stagePolicyRequirementRefs = [],
+    modelSelectionDecisionRefs = [], toolContractRefs = [], workflowContractRefs = [], registrySnapshotRef,
+    stages = [], workerRefs = [], workerCapabilityRefs = [], workerCapacityRefs = [], workerHealthRefs = [],
+    compatibilityRefs = [], candidateSetByStageId = new Map(), assignmentRefs = []
+  } = ctx;
+  const requestSafe = isPlainObject(request) ? request : {};
+  const schedulerDecisionSafe = isPlainObject(schedulerDecisionRef) ? schedulerDecisionRef : {};
+  const schedulerResultSafe = isPlainObject(schedulerResultRef) ? schedulerResultRef : {};
+  const schedulerPackageSafe = isPlainObject(schedulerPackageRef) ? schedulerPackageRef : {};
+  const packageSafe = isPlainObject(packageRef) ? packageRef : {};
+  const capacitySafe = isPlainObject(capacitySnapshotRef) ? capacitySnapshotRef : {};
+  const concurrencySafe = isPlainObject(concurrencyRef) ? concurrencyRef : {};
+  const freshnessSafe = isPlainObject(freshnessRef) ? freshnessRef : {};
+  const idempotencySafe = isPlainObject(idempotencyReference) ? idempotencyReference : {};
+  const replaySafe = isPlainObject(replayRef) ? replayRef : {};
+  const registrySnapshotSafe = isPlainObject(registrySnapshotRef) ? registrySnapshotRef : {};
+  const canonicalSafe = canonical || {};
+
+  const requestId = requestSafe.runtime_worker_assignment_request_id || 'runtime_worker_assignment_request_not_available';
+  const packageId = `${requestId}-package`;
+  const candidateSets = [...candidateSetByStageId.values()];
+
+  const pkg = buildRuntimeWorkerAssignmentPackage({
+    runtime_worker_assignment_package_id: packageId,
+    runtime_worker_assignment_request_id: requestId,
+    runtime_scheduler_request_id: schedulerDecisionSafe.runtime_scheduler_request_id || 'runtime_scheduler_request_not_available',
+    runtime_scheduler_decision_id: schedulerDecisionSafe.runtime_scheduler_decision_id || 'runtime_scheduler_decision_not_available',
+    runtime_scheduler_result_id: schedulerResultSafe.runtime_scheduler_result_id || 'runtime_scheduler_result_not_available',
+    runtime_scheduler_package_id: schedulerPackageSafe.runtime_scheduler_package_id || 'runtime_scheduler_package_not_available',
+    runtime_execution_package_id: packageSafe.runtime_execution_package_id || 'runtime_execution_package_not_available',
+    tenant_id: canonicalSafe.tenantId || 'tenant_not_available',
+    organization_id: canonicalSafe.organizationId || 'organization_not_available',
+    project_id: canonicalSafe.projectId || 'project_not_available',
+    session_reference_id: canonicalSafe.sessionId || 'session_not_available',
+    agent_id: canonicalSafe.agentId || 'agent_not_available',
+    actor_id: canonicalSafe.actorId || 'actor_not_available',
+    worker_reference_ids: workerRefs.map((w) => w.runtime_worker_reference_id),
+    worker_compatibility_reference_ids: compatibilityRefs.map((c) => c.worker_compatibility_reference_id),
+    worker_candidate_set_reference_ids: candidateSets.map((c) => c.worker_candidate_set_reference_id),
+    worker_stage_assignment_reference_ids: assignmentRefs.map((a) => a.worker_stage_assignment_reference_id),
+    stage_count: stages.length,
+    worker_count: workerRefs.length,
+    compatibility_count: compatibilityRefs.length,
+    candidate_set_count: candidateSets.length,
+    assignment_count: assignmentRefs.length,
+    recommended_assignment_count: assignmentRefs.filter((a) => a.assignment_status === 'WORKER_RECOMMENDED_SIMULATION').length,
+    waiting_dependency_assignment_count: assignmentRefs.filter((a) => a.assignment_status === 'WORKER_WAITING_DEPENDENCY_REFERENCE').length,
+    waiting_approval_assignment_count: assignmentRefs.filter((a) => a.assignment_status === 'WORKER_WAITING_APPROVAL_REFERENCE').length,
+    no_candidate_assignment_count: assignmentRefs.filter((a) => a.assignment_status === 'WORKER_NO_COMPATIBLE_CANDIDATE_BLOCKED').length,
+    blocked_assignment_count: assignmentRefs.filter((a) => a.assignment_status === 'WORKER_ASSIGNMENT_BLOCKED').length,
+    scheduler_package_fingerprint: schedulerDecisionSafe.runtime_scheduler_package_fingerprint || 'fingerprint_not_available',
+    scheduler_package_digest: schedulerDecisionSafe.runtime_scheduler_package_digest || 'digest_not_available',
+    runtime_execution_package_fingerprint: packageSafe.package_fingerprint || 'fingerprint_not_available',
+    runtime_execution_package_digest: packageSafe.package_digest || 'digest_not_available',
+    capacity_snapshot_fingerprint: capacitySafe.capacity_fingerprint || 'fingerprint_not_available',
+    concurrency_fingerprint: concurrencySafe.concurrency_fingerprint || 'fingerprint_not_available',
+    freshness_fingerprint: freshnessSafe.freshness_fingerprint || 'fingerprint_not_available',
+    // pr106fix4: never the 'fingerprint_not_available' placeholder in a prepared outcome -- replayRef
+    // is validated (step 11) before any WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION outcome is ever
+    // reached, so its own real replay_fingerprint is always genuinely available by then; the
+    // placeholder only ever surfaces for the early-blocked paths where replayRef itself may still be
+    // absent or malformed.
+    replay_fingerprint: replaySafe.replay_fingerprint || 'fingerprint_not_available',
+    idempotency_fingerprint: idempotencySafe.idempotency_fingerprint || 'fingerprint_not_available',
+    // pr106fix5: package integrity -- the Registry Snapshot fingerprint the same object every RESOLVED
+    // Stage Policy Requirement was proven bound to, so tampering the snapshot changes the package.
+    registry_snapshot_reference_fingerprint: registrySnapshotSafe.snapshot_fingerprint || 'fingerprint_not_available',
+    worker_fingerprints: workerRefs.map((w) => w.worker_fingerprint),
+    worker_capability_fingerprints: workerCapabilityRefs.map((c) => c.capability_fingerprint),
+    worker_capacity_fingerprints: workerCapacityRefs.map((c) => c.capacity_fingerprint),
+    worker_health_fingerprints: workerHealthRefs.map((h) => h.health_fingerprint),
+    worker_network_policy_fingerprints: workerNetworkPolicyRefs.map((n) => n.network_policy_fingerprint),
+    worker_secret_policy_fingerprints: workerSecretPolicyRefs.map((s) => s.secret_policy_fingerprint),
+    // pr106fix4: package integrity -- derived strictly from the request's own real objects, never a
+    // caller-supplied list, so tampering any official policy/requirement/source changes the package
+    // fingerprint/digest (both computed over these lists via the established two-field-exclusion
+    // pattern in runtime-worker-assignment-package.js).
+    official_network_policy_fingerprints: networkPermissionPolicyRefs.map((o) => computeOfficialPolicyFingerprint(o)),
+    official_secret_policy_fingerprints: secretResolutionPolicyRefs.map((o) => computeOfficialPolicyFingerprint(o)),
+    stage_policy_requirement_fingerprints: stagePolicyRequirementRefs.map((h) => h.requirement_reference_fingerprint),
+    stage_policy_requirement_source_fingerprints: [
+      ...modelSelectionDecisionRefs, ...toolContractRefs, ...workflowContractRefs
+    ].map((s) => computeOfficialPolicyFingerprint(s)),
+    compatibility_fingerprints: compatibilityRefs.map((c) => c.compatibility_fingerprint),
+    candidate_set_fingerprints: candidateSets.map((c) => c.candidate_set_fingerprint),
+    assignment_fingerprints: assignmentRefs.map((a) => a.assignment_fingerprint),
+    worker_assignment_status: status
+  });
+
+  const decision = buildRuntimeWorkerAssignmentDecision({
+    runtime_worker_assignment_decision_id: `${requestId}-decision`,
+    runtime_worker_assignment_request_id: requestId,
+    runtime_worker_assignment_package_id: pkg.runtime_worker_assignment_package_id,
+    runtime_scheduler_decision_id: pkg.runtime_scheduler_decision_id,
+    runtime_scheduler_result_id: pkg.runtime_scheduler_result_id,
+    runtime_scheduler_package_id: pkg.runtime_scheduler_package_id,
+    runtime_execution_package_id: pkg.runtime_execution_package_id,
+    tenant_id: pkg.tenant_id,
+    organization_id: pkg.organization_id,
+    project_id: pkg.project_id,
+    session_reference_id: pkg.session_reference_id,
+    agent_id: pkg.agent_id,
+    actor_id: pkg.actor_id,
+    status,
+    runtime_worker_assignment_request_fingerprint: requestFingerprint || 'fingerprint_not_available',
+    runtime_worker_assignment_package_fingerprint: pkg.worker_assignment_package_fingerprint,
+    runtime_worker_assignment_package_digest: pkg.worker_assignment_package_digest,
+    runtime_scheduler_package_fingerprint: pkg.scheduler_package_fingerprint,
+    runtime_scheduler_package_digest: pkg.scheduler_package_digest,
+    runtime_execution_package_fingerprint: pkg.runtime_execution_package_fingerprint,
+    runtime_execution_package_digest: pkg.runtime_execution_package_digest,
+    blockers: reasonCodes,
+    reason_codes: reasonCodes,
+    ...validatedFlags
+  });
+
+  const result = buildRuntimeWorkerAssignmentResult({
+    runtime_worker_assignment_result_id: `${requestId}-result`,
+    runtime_worker_assignment_request_id: requestId,
+    runtime_worker_assignment_decision_id: decision.runtime_worker_assignment_decision_id,
+    runtime_worker_assignment_package_id: decision.runtime_worker_assignment_package_id,
+    runtime_scheduler_package_id: decision.runtime_scheduler_package_id,
+    runtime_execution_package_id: decision.runtime_execution_package_id,
+    tenant_id: decision.tenant_id,
+    organization_id: decision.organization_id,
+    project_id: decision.project_id,
+    session_reference_id: decision.session_reference_id,
+    agent_id: decision.agent_id,
+    actor_id: decision.actor_id,
+    status,
+    runtime_worker_assignment_request_fingerprint: decision.runtime_worker_assignment_request_fingerprint,
+    runtime_worker_assignment_decision_fingerprint: computeCanonicalContentDigest(decision),
+    runtime_worker_assignment_package_fingerprint: decision.runtime_worker_assignment_package_fingerprint,
+    runtime_worker_assignment_package_digest: decision.runtime_worker_assignment_package_digest,
+    registry_version: String(requestSafe.expected_worker_assignment_registry_version || 'registry_version_not_available'),
+    stage_count: pkg.stage_count,
+    worker_count: pkg.worker_count,
+    compatible_candidate_count: candidateSets.reduce((sum, c) => sum + c.compatible_candidate_count, 0),
+    incompatible_candidate_count: candidateSets.reduce((sum, c) => sum + c.incompatible_candidate_count, 0),
+    recommended_assignment_count: pkg.recommended_assignment_count,
+    waiting_dependency_assignment_count: pkg.waiting_dependency_assignment_count,
+    waiting_approval_assignment_count: pkg.waiting_approval_assignment_count,
+    no_candidate_assignment_count: pkg.no_candidate_assignment_count,
+    blocked_assignment_count: pkg.blocked_assignment_count,
+    blockers: reasonCodes,
+    reason_codes: reasonCodes
+  });
+
+  const audit = buildRuntimeWorkerAssignmentAudit({
+    decision, result,
+    recommendedWorkerIds: assignmentRefs.filter((a) => a.recommended_worker_reference_id).map((a) => a.recommended_worker_reference_id),
+    capabilityMismatchCodes: compatibilityRefs.flatMap((c) => c.mismatch_reason_codes),
+    healthStatuses: workerHealthRefs.map((h) => h.health_status),
+    availableStageAssignmentsTotal: workerCapacityRefs.reduce((sum, c) => sum + c.available_stage_assignments, 0),
+    availableParallelAssignmentsTotal: workerCapacityRefs.reduce((sum, c) => sum + c.available_parallel_assignments, 0),
+    logicalSequence: requestSafe.logical_sequence
+  });
+
+  return { decision, result, audit, package: pkg, compatibilityRefs, candidateSets, assignmentRefs };
+}
+
+module.exports = {
+  deriveStagePolicyRequirements,
+  deriveStageRequiresNetworkOrSecret,
+  evaluateHealthAtAssignment,
+  evaluatePolicyReferenceMatch,
+  evaluateRuntimeWorkerAssignmentRequest,
+  omitReplayReference,
+  resolveRegistrySnapshotBinding,
+  resolveRequirementProvenance
+};
