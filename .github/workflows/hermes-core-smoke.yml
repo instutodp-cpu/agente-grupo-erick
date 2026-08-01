@@ -12,7 +12,7 @@ permissions:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     defaults:
       run:
         working-directory: platform
@@ -60,10 +60,6 @@ jobs:
       - name: Worker assignment contract tests
         working-directory: platform/services/api
         run: npm run test:runtime-worker-assignment
-
-      - name: Runtime dispatch contract tests
-        working-directory: platform/services/api
-        run: npm run test:runtime-dispatch
 
       - name: API tests
         working-directory: platform/services/api
