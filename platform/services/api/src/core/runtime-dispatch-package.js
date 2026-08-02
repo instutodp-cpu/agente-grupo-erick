@@ -60,6 +60,9 @@ const UPSTREAM_FINGERPRINT_FIELDS = Object.freeze([
 const DERIVED_FINGERPRINT_LIST_FIELDS = Object.freeze([
   'worker_fingerprints', 'worker_assignment_fingerprints', 'worker_compatibility_fingerprints',
   'worker_candidate_set_fingerprints', 'stage_policy_requirement_fingerprints', 'stage_policy_requirement_source_fingerprints',
+  // pr107fix2 FIX 2: the cross-validated Scheduler Dependency collection's own fingerprints --
+  // altering any dependency now changes or blocks the package.
+  'scheduler_dependency_fingerprints',
   'official_network_policy_fingerprints', 'official_secret_policy_fingerprints',
   'dispatch_stage_fingerprints', 'dispatch_worker_binding_fingerprints', 'dispatch_dependency_gate_fingerprints',
   'dispatch_approval_gate_fingerprints', 'dispatch_capacity_fingerprints', 'dispatch_budget_fingerprints',

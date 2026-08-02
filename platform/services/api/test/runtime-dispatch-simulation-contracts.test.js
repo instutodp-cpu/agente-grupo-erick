@@ -61,6 +61,8 @@ const { buildRuntimeSchedulerResult } = require('../src/core/runtime-scheduler-r
 const { buildRuntimeSchedulerStageReference } = require('../src/core/runtime-scheduler-stage-reference');
 const { buildRuntimeCapacitySnapshotReference } = require('../src/core/runtime-capacity-snapshot-reference');
 const { buildRuntimeBudgetSimulationReference } = require('../src/core/runtime-budget-simulation-reference');
+const { buildRuntimeWorkerCapacityReference } = require('../src/core/runtime-worker-capacity-reference');
+const { buildRuntimeSchedulerDependencyReference } = require('../src/core/runtime-scheduler-dependency-reference');
 
 function assertValid(label, validation) {
   assert.equal(validation.valid, true, `${label}: ${JSON.stringify(validation.errors)}`);
@@ -89,6 +91,26 @@ function tamperSchedulerStageAt(golden, targetIndex, stageOverrides) {
     index === targetIndex ? buildRuntimeSchedulerStageReference({ ...s, ...stageOverrides }) : s
   ));
   return buildRuntimeSchedulerResult({ ...origResult, scheduler_stage_references: stages });
+}
+
+// pr107fix2: rebuilds every RuntimeWorkerCapacityReference the golden bundle carries with the given
+// dimensions zeroed out (each rebuilt through its own real builder, self-fingerprint stays valid).
+function zeroWorkerCapacityDimensions(golden, dimensionFields) {
+  const origCapacityRefs = golden.dispatchRequest.runtime_worker_capacity_references;
+  const overrides = {};
+  for (const dim of dimensionFields) {
+    overrides[`maximum_${dim}_assignments`] = 0;
+    overrides[`current_${dim}_assignments`] = 0;
+    overrides[`available_${dim}_assignments`] = 0;
+  }
+  return origCapacityRefs.map((c) => buildRuntimeWorkerCapacityReference({ ...c, ...overrides }));
+}
+
+// pr107fix2: rebuilds the golden Scheduler Dependency References list with the first entry's
+// declarative fields overridden (through its own real builder).
+function tamperFirstSchedulerDependency(golden, depOverrides) {
+  const origDeps = golden.dispatchRequest.runtime_scheduler_dependency_references;
+  return origDeps.map((d, index) => (index === 0 ? buildRuntimeSchedulerDependencyReference({ ...d, ...depOverrides }) : d));
 }
 
 const OPERATIONAL_FLAG_FIELDS = [
@@ -753,6 +775,162 @@ test('FIX4: altering a worker stage assignment changes worker_assignment_fingerp
   // only needs the fingerprint LIST itself (computed straight from the raw request field) to differ.
   const rawFingerprints = tamperedAssignments.map((a) => a.assignment_fingerprint).sort();
   assert.notDeepEqual(rawFingerprints, [...outcomeA.package.worker_assignment_fingerprints].sort());
+});
+
+// --- pr107fix2 FIX 1: Worker Capacity only requires genuinely-requested dimensions ------------------
+
+test('pr107fix2 FIX1: no-LLM stages prepare even with zero worker model/tool/workflow/parallel capacity', () => {
+  const golden = buildGoldenDispatchBundle();
+  const zeroed = zeroWorkerCapacityDimensions(golden, ['model', 'tool', 'workflow', 'parallel']);
+  const outcome = evaluateRuntimeDispatchRequest(
+    rebuildDispatchRequest({ ...golden.dispatchRequest, runtime_worker_capacity_references: zeroed }), {}
+  );
+  assert.equal(outcome.decision.status, 'DISPATCH_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcome.package.prepared_intent_count, 2);
+  for (const capacity of outcome.capacityRefs) {
+    assert.equal(capacity.worker_model_capacity_available, true);
+    assert.equal(capacity.worker_tool_capacity_available, true);
+    assert.equal(capacity.worker_workflow_capacity_available, true);
+    assert.equal(capacity.worker_parallel_capacity_available, true);
+    assert.equal(capacity.capacity_validated, true);
+  }
+});
+
+test('pr107fix2 FIX1: a model/tool/workflow/parallel-carrying stage blocks when that worker dimension is zero', () => {
+  const golden = buildGoldenDispatchBundle();
+  for (const [stageOverride, capacityDimension, flagField] of [
+    [{ model_selection_reference_id: 'selref-4' }, 'model', 'worker_model_capacity_available'],
+    [{ tool_reference_ids: ['toolref-2'] }, 'tool', 'worker_tool_capacity_available'],
+    [{ workflow_reference_id: 'workflowref-2' }, 'workflow', 'worker_workflow_capacity_available'],
+    [{ parallelizable: true }, 'parallel', 'worker_parallel_capacity_available']
+  ]) {
+    const taggedResult = tamperFirstSchedulerStage(golden, stageOverride);
+    const zeroed = zeroWorkerCapacityDimensions(golden, [capacityDimension]);
+    const outcome = evaluateRuntimeDispatchRequest(rebuildDispatchRequest({
+      ...golden.dispatchRequest, runtime_scheduler_result_reference: taggedResult, runtime_worker_capacity_references: zeroed
+    }), {});
+    assert.equal(outcome.decision.status, 'DISPATCH_PACKAGE_PREPARED_SIMULATION');
+    const firstCapacity = outcome.capacityRefs[0];
+    assert.equal(firstCapacity[flagField], false, capacityDimension);
+    assert.equal(firstCapacity.capacity_validated, false, capacityDimension);
+  }
+});
+
+test('pr107fix2 FIX1: a stage with two tools requires exactly one tool assignment, never two', () => {
+  const golden = buildGoldenDispatchBundle();
+  const twoToolsResult = tamperFirstSchedulerStage(golden, { tool_reference_ids: ['toolref-a', 'toolref-b'] });
+  const origCapacityRefs = golden.dispatchRequest.runtime_worker_capacity_references;
+  const exactlyOneToolSlot = origCapacityRefs.map((c) => buildRuntimeWorkerCapacityReference({
+    ...c, maximum_tool_assignments: 1, current_tool_assignments: 0, available_tool_assignments: 1
+  }));
+  const outcome = evaluateRuntimeDispatchRequest(rebuildDispatchRequest({
+    ...golden.dispatchRequest, runtime_scheduler_result_reference: twoToolsResult, runtime_worker_capacity_references: exactlyOneToolSlot
+  }), {});
+  assert.equal(outcome.decision.status, 'DISPATCH_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcome.capacityRefs[0].requested_tool_slots, 1);
+  assert.equal(outcome.capacityRefs[0].worker_tool_capacity_available, true);
+  assert.equal(outcome.package.prepared_intent_count, 2);
+});
+
+test('pr107fix2 FIX1: a hostile context never alters capacity outcomes', () => {
+  const golden = buildGoldenDispatchBundle();
+  const clean = evaluateRuntimeDispatchRequest(golden.dispatchRequest, {});
+  const hostile = evaluateRuntimeDispatchRequest(golden.dispatchRequest, { capacityAvailable: true, workerModelCapacityAvailable: true });
+  assert.deepEqual(clean.capacityRefs, hostile.capacityRefs);
+});
+
+// --- pr107fix2 FIX 2: cross-validated Scheduler Dependency collection + real required/optional -----
+
+test('pr107fix2 FIX2: sequential-plan derives a genuine required/optional partition from the collection, not stage.dependency_reference_ids wholesale', () => {
+  const golden = buildGoldenDispatchBundle('sequential-plan');
+  const outcome = evaluateRuntimeDispatchRequest(golden.dispatchRequest, {});
+  assert.equal(outcome.decision.status, 'DISPATCH_PACKAGE_PREPARED_SIMULATION');
+  const [dependencyRef] = golden.schedulerOutcome.schedulerDependencyRefs;
+  assert.equal(dependencyRef.required, true);
+  const targetGate = outcome.dependencyGateRefs.find((g) => g.required_dependency_reference_ids.includes(dependencyRef.source_runtime_dependency_reference_id));
+  assert.ok(targetGate, 'expected a dependency gate carrying the real dependency id as required');
+  assert.deepEqual(targetGate.optional_dependency_reference_ids, []);
+  assert.equal(outcome.package.scheduler_dependency_fingerprints.length, 1);
+  assert.equal(outcome.package.scheduler_dependency_fingerprints[0], dependencyRef.dependency_fingerprint);
+});
+
+test('pr107fix2 FIX2: an optional (required=false) dependency never blocks the Dependency Gate, but required=true does', () => {
+  const zero = buildRuntimeDispatchDependencyGateReference({
+    dispatch_dependency_gate_reference_id: 'dg-optional-1', runtime_dispatch_package_id: 'pkg-1', runtime_scheduler_package_id: 'sched-1',
+    runtime_dispatch_stage_reference_id: 'stg-1', scheduler_stage_reference_id: 'sstage-1',
+    required_dependency_reference_ids: [], optional_dependency_reference_ids: ['dep-opt-1'], blocking_dependency_reference_ids: []
+  });
+  assert.equal(zero.dispatch_allowed_by_dependencies, true);
+
+  const required = buildRuntimeDispatchDependencyGateReference({
+    dispatch_dependency_gate_reference_id: 'dg-required-1', runtime_dispatch_package_id: 'pkg-1', runtime_scheduler_package_id: 'sched-1',
+    runtime_dispatch_stage_reference_id: 'stg-2', scheduler_stage_reference_id: 'sstage-2',
+    required_dependency_reference_ids: ['dep-req-1'], optional_dependency_reference_ids: [], blocking_dependency_reference_ids: ['dep-req-1']
+  });
+  assert.equal(required.dispatch_allowed_by_dependencies, false);
+});
+
+test('pr107fix2 FIX2: duplicated scheduler_dependency_reference_id blocks as DISPATCH_SCHEDULER_BLOCKED', () => {
+  const golden = buildGoldenDispatchBundle('sequential-plan');
+  const [dependencyRef] = golden.dispatchRequest.runtime_scheduler_dependency_references;
+  const duplicated = [dependencyRef, dependencyRef];
+  const outcome = evaluateRuntimeDispatchRequest({ ...golden.dispatchRequest, runtime_scheduler_dependency_references: duplicated }, {});
+  assert.equal(outcome.decision.status, 'DISPATCH_SCHEDULER_BLOCKED');
+  assert.deepEqual(outcome.decision.reason_codes, ['dispatch_scheduler_dependency_duplicate']);
+});
+
+test('pr107fix2 FIX2: a dependency retargeted to a non-existent scheduler stage blocks with a target-mismatch reason', () => {
+  const golden = buildGoldenDispatchBundle('sequential-plan');
+  const tamperedDeps = tamperFirstSchedulerDependency(golden, { to_scheduler_stage_reference_id: 'a-nonexistent-scheduler-stage-reference-id' });
+  const outcome = evaluateRuntimeDispatchRequest({ ...golden.dispatchRequest, runtime_scheduler_dependency_references: tamperedDeps }, {});
+  assert.equal(outcome.decision.status, 'DISPATCH_ORDER_BLOCKED');
+  assert.deepEqual(outcome.decision.reason_codes, ['dispatch_scheduler_dependency_target_mismatch']);
+});
+
+test('pr107fix2 FIX2: a required dependency missing from blocking_dependency_reference_ids blocks as inconsistent', () => {
+  const golden = buildGoldenDispatchBundle('sequential-plan');
+  const origResult = golden.dispatchRequest.runtime_scheduler_result_reference;
+  const [dependencyRef] = golden.dispatchRequest.runtime_scheduler_dependency_references;
+  const stages = origResult.scheduler_stage_references.map((s) => (
+    s.scheduler_stage_reference_id === dependencyRef.to_scheduler_stage_reference_id
+      ? buildRuntimeSchedulerStageReference({ ...s, blocking_dependency_reference_ids: [] })
+      : s
+  ));
+  const tamperedResult = buildRuntimeSchedulerResult({ ...origResult, scheduler_stage_references: stages });
+  const outcome = evaluateRuntimeDispatchRequest({ ...golden.dispatchRequest, runtime_scheduler_result_reference: tamperedResult }, {});
+  assert.equal(outcome.decision.status, 'DISPATCH_ORDER_BLOCKED');
+  assert.deepEqual(outcome.decision.reason_codes, ['dispatch_scheduler_blocking_dependency_not_required']);
+});
+
+test('pr107fix2 FIX2: shuffled input order of the dependency collection never alters the outcome', () => {
+  const golden = buildGoldenDispatchBundle('sequential-plan');
+  const shuffled = [...golden.dispatchRequest.runtime_scheduler_dependency_references].reverse();
+  const clean = evaluateRuntimeDispatchRequest(golden.dispatchRequest, {});
+  const outcome = evaluateRuntimeDispatchRequest({ ...golden.dispatchRequest, runtime_scheduler_dependency_references: shuffled }, {});
+  assert.equal(outcome.decision.status, 'DISPATCH_PACKAGE_PREPARED_SIMULATION');
+  assert.deepEqual(clean.decision, outcome.decision);
+});
+
+test('pr107fix2 FIX2: altering a dependency (same id, different content) changes scheduler_dependency_fingerprints and the package fingerprint', () => {
+  // `dependency_order` does not participate in the collection's structural cross-checks (it is a
+  // tie-break display field, not a topology field), so this is the "muda" branch of "Alterar
+  // qualquer dependency deve mudar ou bloquear o package" -- the id-set non-substitution proof is
+  // deliberately identity-based (see idSetMatches), not a full-content fingerprint compare, so a
+  // same-id content change is expected to be reflected in the package rather than block the request.
+  const golden = buildGoldenDispatchBundle('sequential-plan');
+  const outcomeA = evaluateRuntimeDispatchRequest(golden.dispatchRequest, {});
+  assert.equal(outcomeA.decision.status, 'DISPATCH_PACKAGE_PREPARED_SIMULATION');
+
+  const [dependencyRef] = golden.dispatchRequest.runtime_scheduler_dependency_references;
+  const rebuilt = buildRuntimeSchedulerDependencyReference({ ...dependencyRef, dependency_order: dependencyRef.dependency_order + 1 });
+  assert.notEqual(rebuilt.dependency_fingerprint, dependencyRef.dependency_fingerprint);
+  const outcomeB = evaluateRuntimeDispatchRequest(
+    { ...golden.dispatchRequest, runtime_scheduler_dependency_references: [rebuilt] }, {}
+  );
+  assert.equal(outcomeB.decision.status, 'DISPATCH_PACKAGE_PREPARED_SIMULATION');
+  assert.notDeepEqual(outcomeB.package.scheduler_dependency_fingerprints, outcomeA.package.scheduler_dependency_fingerprints);
+  assert.notEqual(outcomeB.package.dispatch_package_fingerprint, outcomeA.package.dispatch_package_fingerprint);
+  assert.notEqual(outcomeB.decision.runtime_dispatch_package_fingerprint, outcomeA.decision.runtime_dispatch_package_fingerprint);
 });
 
 // --- Regression -----------------------------------------------------------------------------------

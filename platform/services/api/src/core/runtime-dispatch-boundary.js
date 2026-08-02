@@ -10,6 +10,7 @@ const { FRESHNESS_DIMENSIONS } = require('./runtime-readiness-freshness-referenc
 const { computeIdempotencyFingerprint } = require('./execution-plan-idempotency');
 const { evaluateHealthAtAssignment } = require('./runtime-worker-assignment-boundary');
 const { validateRuntimeDispatchRequest, omitDispatchReplayReference } = require('./runtime-dispatch-request');
+const { validateRuntimeSchedulerDependencyReference } = require('./runtime-scheduler-dependency-reference');
 const { buildRuntimeDispatchStageReference, ELIGIBILITY_BY_STAGE_STATUS } = require('./runtime-dispatch-stage-reference');
 const { buildRuntimeDispatchWorkerBindingReference } = require('./runtime-dispatch-worker-binding-reference');
 const { buildRuntimeDispatchDependencyGateReference } = require('./runtime-dispatch-dependency-gate-reference');
@@ -389,6 +390,69 @@ function evaluateRuntimeDispatchRequest(request, context = {}) {
     return finalize('DISPATCH_ORDER_BLOCKED', ['dispatch_stage_not_in_scheduler_order']);
   }
 
+  // pr107fix2 FIX 2: cross-validate the whole Scheduler Dependency collection against the Scheduler
+  // Package/Stages before deriving anything from it. "Uma lista válida, porém vazia, incompleta ou
+  // substituída não pode eliminar arestas da prova topológica." Non-substitution of the collection
+  // AS A SET was already proven above (step 8-11's idSetMatches); this proves the collection is
+  // genuinely COMPLETE and CONSISTENT with every Scheduler Stage's own declared dependency/blocking
+  // ids -- never merely a validly-shaped but incomplete/extra/rebound list.
+  const seenSchedulerDependencyIds = new Set();
+  const knownSchedulerStageIds = new Set(schedulerStages.map((s) => s.scheduler_stage_reference_id));
+  for (const dep of schedulerDependencyRefs) {
+    const depValidation = validateRuntimeSchedulerDependencyReference(dep);
+    if (!depValidation.valid) {
+      return finalize('DISPATCH_SCHEDULER_BLOCKED', ['dispatch_scheduler_dependency_fingerprint_mismatch']);
+    }
+    if (seenSchedulerDependencyIds.has(dep.scheduler_dependency_reference_id)) {
+      return finalize('DISPATCH_SCHEDULER_BLOCKED', ['dispatch_scheduler_dependency_duplicate']);
+    }
+    seenSchedulerDependencyIds.add(dep.scheduler_dependency_reference_id);
+    if (
+      dep.runtime_scheduler_package_id !== schedulerPackageRef.runtime_scheduler_package_id
+      || dep.runtime_execution_package_id !== packageRef.runtime_execution_package_id
+    ) {
+      return finalize('DISPATCH_SCHEDULER_BLOCKED', ['dispatch_scheduler_dependency_stage_binding_mismatch']);
+    }
+    if (!knownSchedulerStageIds.has(dep.from_scheduler_stage_reference_id) || !knownSchedulerStageIds.has(dep.to_scheduler_stage_reference_id)) {
+      return finalize('DISPATCH_ORDER_BLOCKED', ['dispatch_scheduler_dependency_target_mismatch']);
+    }
+  }
+
+  const dependencyRefsByTargetStageId = new Map();
+  for (const dep of schedulerDependencyRefs) {
+    const list = dependencyRefsByTargetStageId.get(dep.to_scheduler_stage_reference_id) || [];
+    list.push(dep);
+    dependencyRefsByTargetStageId.set(dep.to_scheduler_stage_reference_id, list);
+  }
+
+  for (const stage of schedulerStages) {
+    const depsForStage = dependencyRefsByTargetStageId.get(stage.scheduler_stage_reference_id) || [];
+    const declaredIds = Array.isArray(stage.dependency_reference_ids) ? stage.dependency_reference_ids : [];
+    const declaredBlockingIds = Array.isArray(stage.blocking_dependency_reference_ids) ? stage.blocking_dependency_reference_ids : [];
+
+    for (const id of declaredIds) {
+      if (!depsForStage.some((d) => d.source_runtime_dependency_reference_id === id)) {
+        return finalize('DISPATCH_ORDER_BLOCKED', ['dispatch_scheduler_dependency_collection_missing']);
+      }
+    }
+    for (const dep of depsForStage) {
+      if (!declaredIds.includes(dep.source_runtime_dependency_reference_id)) {
+        return finalize('DISPATCH_ORDER_BLOCKED', ['dispatch_scheduler_dependency_collection_extra']);
+      }
+      if (dep.required === true && !declaredBlockingIds.includes(dep.source_runtime_dependency_reference_id)) {
+        return finalize('DISPATCH_ORDER_BLOCKED', ['dispatch_scheduler_blocking_dependency_not_required']);
+      }
+      if (dep.required !== true && declaredBlockingIds.includes(dep.source_runtime_dependency_reference_id)) {
+        return finalize('DISPATCH_ORDER_BLOCKED', ['dispatch_scheduler_dependency_required_mismatch']);
+      }
+    }
+    for (const id of declaredBlockingIds) {
+      if (!declaredIds.includes(id)) {
+        return finalize('DISPATCH_ORDER_BLOCKED', ['dispatch_scheduler_dependency_required_mismatch']);
+      }
+    }
+  }
+
   const requestId = request.runtime_dispatch_request_id;
   const packageId = `${requestId}-package`;
   const dispatchStageRefs = [];
@@ -457,15 +521,22 @@ function evaluateRuntimeDispatchRequest(request, context = {}) {
     dispatchStageRefs.push(dispatchStageRef);
 
     // 26-27. Dependency/Approval gates -- derived for every stage, regardless of eligibility.
+    // pr107fix2 FIX 2: required/optional now genuinely partitioned from the cross-validated
+    // Scheduler Dependency collection's own `required` field -- "Dependency Gates particionam
+    // required e optional usando o campo required da referência oficial." Never
+    // `stage.dependency_reference_ids` wholesale into required with optional always `[]`.
     const dependencyGateId = `${dispatchStageId}-dependency-gate`;
+    const depsTargetingThisStage = dependencyRefsByTargetStageId.get(stage.scheduler_stage_reference_id) || [];
+    const requiredDependencyIds = depsTargetingThisStage.filter((d) => d.required === true).map((d) => d.source_runtime_dependency_reference_id);
+    const optionalDependencyIds = depsTargetingThisStage.filter((d) => d.required !== true).map((d) => d.source_runtime_dependency_reference_id);
     const dependencyGateRef = buildRuntimeDispatchDependencyGateReference({
       dispatch_dependency_gate_reference_id: dependencyGateId,
       runtime_dispatch_package_id: packageId,
       runtime_scheduler_package_id: schedulerPackageRef.runtime_scheduler_package_id,
       runtime_dispatch_stage_reference_id: dispatchStageId,
       scheduler_stage_reference_id: stage.scheduler_stage_reference_id,
-      required_dependency_reference_ids: stage.dependency_reference_ids,
-      optional_dependency_reference_ids: [],
+      required_dependency_reference_ids: requiredDependencyIds,
+      optional_dependency_reference_ids: optionalDependencyIds,
       blocking_dependency_reference_ids: stage.blocking_dependency_reference_ids
     });
     dependencyGateRefs.push(dependencyGateRef);
@@ -532,7 +603,9 @@ function evaluateRuntimeDispatchRequest(request, context = {}) {
       const requestedStageSlots = 1;
       const requestedParallelSlots = stage.parallelizable ? 1 : 0;
       const requestedModelSlots = stage.model_selection_reference_id !== null ? 1 : 0;
-      const requestedToolSlots = Array.isArray(stage.tool_reference_ids) ? stage.tool_reference_ids.length : 0;
+      // pr107fix2 FIX 1: a presence flag (0/1), not a per-tool count -- `available_tool_assignments`
+      // represents assignment capacity for the stage as a whole, never a unit-per-tool budget.
+      const requestedToolSlots = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0 ? 1 : 0;
       const requestedWorkflowSlots = stage.workflow_reference_id !== null ? 1 : 0;
       // pr107fix FIX 3: recalculated per dimension against RuntimeCapacitySnapshotReference's own
       // real `available_*` fields (PR #104) -- never a single aggregate `capacity_available` reused
@@ -565,11 +638,19 @@ function evaluateRuntimeDispatchRequest(request, context = {}) {
           || (capacitySnapshotRef.available_workflow_stage_capacity >= requestedWorkflowSlots && concurrencyRef.workflow_slots_available === true),
         runtime_token_capacity_available: capacitySnapshotRef.available_tokens_capacity >= requestedTokens,
         runtime_cost_capacity_available: capacitySnapshotRef.available_cost_capacity_minor_units >= requestedCost,
-        worker_stage_capacity_available: capacity ? capacity.available_stage_assignments >= 1 : false,
-        worker_parallel_capacity_available: capacity ? capacity.available_parallel_assignments >= 1 : false,
-        worker_model_capacity_available: capacity ? capacity.available_model_assignments >= 1 : false,
-        worker_tool_capacity_available: capacity ? capacity.available_tool_assignments >= 1 : false,
-        worker_workflow_capacity_available: capacity ? capacity.available_workflow_assignments >= 1 : false,
+        // pr107fix2 FIX 1: same "requested === 0 is trivially satisfied" semantics as Runtime
+        // Capacity above -- a worker's own model/tool/workflow/parallel assignment budget is never
+        // required for a dimension the stage itself does not use (a no-LLM stage must never block on
+        // a worker's model slots, etc).
+        worker_stage_capacity_available: capacity ? capacity.available_stage_assignments >= requestedStageSlots : false,
+        worker_parallel_capacity_available: capacity
+          ? (requestedParallelSlots === 0 || capacity.available_parallel_assignments >= requestedParallelSlots) : false,
+        worker_model_capacity_available: capacity
+          ? (requestedModelSlots === 0 || capacity.available_model_assignments >= requestedModelSlots) : false,
+        worker_tool_capacity_available: capacity
+          ? (requestedToolSlots === 0 || capacity.available_tool_assignments >= requestedToolSlots) : false,
+        worker_workflow_capacity_available: capacity
+          ? (requestedWorkflowSlots === 0 || capacity.available_workflow_assignments >= requestedWorkflowSlots) : false,
         worker_token_capacity_available: capacity ? capacity.available_token_capacity >= requestedTokens : false,
         worker_cost_capacity_available: capacity ? capacity.available_cost_capacity_minor_units >= requestedCost : false
       });
@@ -818,7 +899,7 @@ function evaluateRuntimeDispatchRequest(request, context = {}) {
     dispatchStageRefs, workerBindingRefs, dependencyGateRefs, approvalGateRefs, capacityRefs, budgetRefs, payloadRefs,
     intentRefs, orderRef, dispatchReplayRef, registrySnapshotRef, networkPermissionPolicyRefs, secretResolutionPolicyRefs,
     stagePolicyRequirementRefs, workerRefs, workerCompatibilityRefs, workerCandidateSetRefs, workerStageAssignmentRefs,
-    capacitySnapshotRef, concurrencyRef, budgetRef, freshnessRef, idempotencyReference
+    schedulerDependencyRefs, capacitySnapshotRef, concurrencyRef, budgetRef, freshnessRef, idempotencyReference
   });
 }
 
@@ -831,7 +912,7 @@ function buildDispatchOutcome(status, reasonCodes, ctx, validatedFlags) {
     capacityRefs = [], budgetRefs = [], payloadRefs = [], intentRefs = [], orderRef, dispatchReplayRef,
     registrySnapshotRef, networkPermissionPolicyRefs = [], secretResolutionPolicyRefs = [], stagePolicyRequirementRefs = [],
     workerRefs = [], workerCompatibilityRefs = [], workerCandidateSetRefs = [], workerStageAssignmentRefs = [],
-    capacitySnapshotRef, concurrencyRef, budgetRef, freshnessRef, idempotencyReference
+    schedulerDependencyRefs = [], capacitySnapshotRef, concurrencyRef, budgetRef, freshnessRef, idempotencyReference
   } = ctx;
 
   const requestSafe = isPlainObject(request) ? request : {};
@@ -943,6 +1024,9 @@ function buildDispatchOutcome(status, reasonCodes, ctx, validatedFlags) {
     stage_policy_requirement_source_fingerprints: stagePolicyRequirementRefs
       .filter((h) => h.source_resolution_status === 'RESOLVED_FROM_OFFICIAL_REFERENCE')
       .map((h) => h.source_reference_fingerprint),
+    // pr107fix2 FIX 2: the cross-validated Scheduler Dependency collection's own fingerprints --
+    // altering any dependency changes or blocks the package.
+    scheduler_dependency_fingerprints: schedulerDependencyRefs.map((d) => d.dependency_fingerprint),
     official_network_policy_fingerprints: networkPermissionPolicyRefs.map((o) => computeOfficialPolicyFingerprint(o)),
     official_secret_policy_fingerprints: secretResolutionPolicyRefs.map((o) => computeOfficialPolicyFingerprint(o)),
     dispatch_stage_fingerprints: dispatchStageRefs.map((s) => s.dispatch_stage_fingerprint),
