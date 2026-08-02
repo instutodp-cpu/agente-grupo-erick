@@ -13,6 +13,7 @@
     "test:runtime-scheduler": "node --test test/runtime-scheduler-simulation-contracts.test.js",
     "test:runtime-worker-assignment": "node --test test/runtime-worker-assignment-simulation-contracts.test.js",
     "test:runtime-dispatch": "node --test test/runtime-dispatch-simulation-contracts.test.js",
+    "test:runtime-queue-admission": "node --test test/runtime-queue-admission-simulation-contracts.test.js",
     "gates": "node scripts/run-architecture-gates.js"
   }
 }

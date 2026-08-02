@@ -290,7 +290,35 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'runtime_cost_capacity_available', 'worker_token_capacity_available',
   // pr107fix FIX 2: the raw official RuntimeSchedulerDependencyReference objects (PR #105), reused
   // verbatim on the Dispatch Request so predecessor-before-target can be genuinely proven.
-  'runtime_scheduler_dependency_references'
+  'runtime_scheduler_dependency_references',
+  // pr108: Runtime Queue Admission Simulation Contracts field names carrying a forbidden segment
+  // ("runtime"/"key") as an ordinary compound identifier -- never a real runtime enablement or key
+  // material. `partition_key_type`/`partition_key_value` describe which declarative dimension (e.g.
+  // tenant_id) a Queue Partition Reference's key was derived from, never a cryptographic key.
+  'partition_key_type', 'partition_key_value',
+  'runtime_dispatch_approval_gate_references', 'runtime_dispatch_budget_references',
+  'runtime_dispatch_capacity_references', 'runtime_dispatch_decision_reference',
+  'runtime_dispatch_dependency_gate_references', 'runtime_dispatch_intent_references',
+  'runtime_dispatch_order_reference', 'runtime_dispatch_package_reference', 'runtime_dispatch_payload_references',
+  'runtime_dispatch_replay_fingerprint', 'runtime_dispatch_request_reference', 'runtime_dispatch_result_reference',
+  'runtime_dispatch_stage_references', 'runtime_dispatch_worker_binding_references',
+  'runtime_queue_admission_decision_fingerprint', 'runtime_queue_admission_decision_id',
+  'runtime_queue_admission_entry_reference_id', 'runtime_queue_admission_entry_reference_version',
+  'runtime_queue_admission_order_reference_id', 'runtime_queue_admission_order_reference_version',
+  'runtime_queue_admission_package_id', 'runtime_queue_admission_package_version',
+  'runtime_queue_admission_policy', 'runtime_queue_admission_policy_id', 'runtime_queue_admission_policy_version',
+  'runtime_queue_admission_replay_reference', 'runtime_queue_admission_replay_reference_id',
+  'runtime_queue_admission_replay_reference_version', 'runtime_queue_admission_request_fingerprint',
+  'runtime_queue_admission_request_id', 'runtime_queue_admission_request_version',
+  'runtime_queue_admission_result_id',
+  'runtime_queue_capacity_snapshot_reference_id', 'runtime_queue_capacity_snapshot_reference_version',
+  'runtime_queue_capacity_snapshot_references',
+  'runtime_queue_class_reference_id', 'runtime_queue_class_reference_version', 'runtime_queue_class_references',
+  'runtime_queue_fairness_reference_id', 'runtime_queue_fairness_reference_version',
+  'runtime_queue_partition_reference_id', 'runtime_queue_partition_reference_version',
+  'runtime_queue_partition_references',
+  'runtime_queue_quota_reference_id', 'runtime_queue_quota_reference_version', 'runtime_queue_quota_references',
+  'runtime_queue_admission_package_fingerprint', 'runtime_queue_admission_package_digest'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept
