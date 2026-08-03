@@ -1,6 +1,6 @@
 'use strict';
 
-const { isNonEmptyString, isPlainObject } = require('./read-only-adapter-contract');
+const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
 const { findAgentCoreOperationalMaterial } = require('./agent-identity-contract');
 const { computeCanonicalContentDigest } = require('./canonical-content-digest');
 const { checkIdentity } = require('./runtime-execution-package');
@@ -37,6 +37,25 @@ const QUEUE_CLASS_SPECIFICITY_RANK = Object.freeze({
   DEDICATED_QUEUE_REFERENCE: 0, PROJECT_QUEUE_REFERENCE: 1, AGENT_QUEUE_REFERENCE: 1,
   ORGANIZATION_QUEUE_REFERENCE: 2, TENANT_QUEUE_REFERENCE: 2, SHARED_QUEUE_REFERENCE: 3
 });
+
+// pr108fix FIX 3: "Nesta PR, suportar operacionalmente somente FIFO_WITHIN_PRIORITY_REFERENCE."
+// STRICT_PRIORITY_WITH_TENANT_FAIRNESS/WEIGHTED_ROUND_ROBIN_REFERENCE/DETERMINISTIC_FAIR_SHARE_REFERENCE
+// remain declared on RuntimeQueueClassReference's own enum for a future version, but any Queue Class
+// that declares one of them is never selected -- fail-closed, never simulated as FIFO.
+const FAIRNESS_STRATEGIES_IMPLEMENTED = Object.freeze(['FIFO_WITHIN_PRIORITY_REFERENCE']);
+
+// pr108fix FIX 2: the four scopes every Queue Class candidate must carry a complete, genuinely
+// identity-bound quota collection for -- "A policy e a spec exigem avaliação por: tenant;
+// organização; projeto; agente."
+const QUOTA_SCOPE_TYPES = Object.freeze(['TENANT', 'ORGANIZATION', 'PROJECT', 'AGENT']);
+
+function classifyQuotaScope(quota) {
+  if (quota.tenant_id !== null) return 'TENANT';
+  if (quota.organization_id !== null) return 'ORGANIZATION';
+  if (quota.project_id !== null) return 'PROJECT';
+  if (quota.agent_id !== null) return 'AGENT';
+  return null;
+}
 
 const NON_PREPARED_STATUS_MAP = Object.freeze({
   DISPATCH_INTENT_WAITING_DEPENDENCY_REFERENCE: 'QUEUE_ADMISSION_WAITING_DEPENDENCY_REFERENCE',
@@ -87,38 +106,111 @@ function derivePartitionKeyValue(strategy, ctx) {
   }
 }
 
-// pr108: "Seleção da Queue Class" -- filters queue classes down to those genuinely compatible with
-// this stage's declarative composition (scope, stage type, capabilities/modalities, model/tool/
-// workflow/optional/parallel/state-change support), then sorts the survivors deterministically.
-function selectQueueClass(stage, ctx) {
-  const { queueClassRefs, canonical, capacitySnapshotByClassId, quotaRefsByClassId } = ctx;
+// pr108fix FIX 1/FIX 2/FIX 3/FIX 4: every reason a single Queue Class candidate is genuinely
+// incompatible with a stage -- structural compatibility (scope/stage-type/capability/modality/
+// supports_* flags), real provider/model/tool/workflow ID membership (never just supports_*),
+// capacity snapshot freshness at this admission's own sequence, complete tenant+organization+
+// project+agent quota collection, and fairness strategy actually implemented. Returns an empty list
+// when genuinely compatible -- never a boolean alone, so the boundary can surface the specific
+// reason(s) an entry with no compatible class was rejected for.
+function evaluateQueueClassCompatibility(qc, stage, ctx) {
+  const {
+    canonical, stagePolicyRequirementsByStageId, modelSelectionDecisionsById, validCapacityClassIds,
+    capacitySnapshotByClassId, quotaCollectionByClassId
+  } = ctx;
+  const reasons = [];
+  const classId = qc.runtime_queue_class_reference_id;
+
+  const isExternalOrIrreversible = stage.side_effect_classification === 'EXTERNAL_EFFECT_REFERENCE' || stage.side_effect_classification === 'IRREVERSIBLE_REFERENCE';
+  if (qc.queue_class_active !== true || isExternalOrIrreversible) {
+    reasons.push('queue_class_inactive_or_never_external_or_irreversible');
+  }
+  const scopeOk = (qc.tenant_scope_id === null || qc.tenant_scope_id === canonical.tenantId)
+    && (qc.organization_scope_id === null || qc.organization_scope_id === canonical.organizationId)
+    && (qc.project_scope_id === null || qc.project_scope_id === canonical.projectId)
+    && (qc.agent_scope_ids.length === 0 || qc.agent_scope_ids.includes(canonical.agentId));
+  if (!scopeOk) reasons.push('queue_class_scope_mismatch');
+  if (!qc.supported_stage_types.includes(stage.stage_type)) reasons.push('queue_class_stage_type_mismatch');
+  if (!stage.required_capabilities.every((id) => qc.supported_capability_ids.includes(id))) reasons.push('queue_class_capability_mismatch');
+  if (!stage.required_modalities.every((id) => qc.supported_modality_ids.includes(id))) reasons.push('queue_class_modality_mismatch');
+
   const hasModel = stage.model_selection_reference_id !== null;
   const hasTools = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0;
   const hasWorkflow = stage.workflow_reference_id !== null;
   const isStateChange = stage.side_effect_classification === 'STATE_CHANGE_REFERENCE';
-  const isExternalOrIrreversible = stage.side_effect_classification === 'EXTERNAL_EFFECT_REFERENCE' || stage.side_effect_classification === 'IRREVERSIBLE_REFERENCE';
 
-  const compatible = queueClassRefs.filter((qc) => {
-    if (qc.queue_class_active !== true) return false;
-    if (isExternalOrIrreversible) return false;
-    const scopeOk = (qc.tenant_scope_id === null || qc.tenant_scope_id === canonical.tenantId)
-      && (qc.organization_scope_id === null || qc.organization_scope_id === canonical.organizationId)
-      && (qc.project_scope_id === null || qc.project_scope_id === canonical.projectId)
-      && (qc.agent_scope_ids.length === 0 || qc.agent_scope_ids.includes(canonical.agentId));
-    if (!scopeOk) return false;
-    if (!qc.supported_stage_types.includes(stage.stage_type)) return false;
-    if (!stage.required_capabilities.every((id) => qc.supported_capability_ids.includes(id))) return false;
-    if (!stage.required_modalities.every((id) => qc.supported_modality_ids.includes(id))) return false;
-    if (hasModel && qc.supports_model !== true) return false;
-    if (hasTools && qc.supports_tool !== true) return false;
-    if (hasWorkflow && qc.supports_workflow !== true) return false;
-    if (stage.optional === true && qc.supports_optional !== true) return false;
-    if (stage.parallelizable === true && qc.supports_parallel !== true) return false;
-    if (isStateChange && qc.supports_state_change !== true) return false;
-    if (!capacitySnapshotByClassId.has(qc.runtime_queue_class_reference_id)) return false;
-    if (!quotaRefsByClassId.has(qc.runtime_queue_class_reference_id)) return false;
-    return true;
-  });
+  if (hasModel && qc.supports_model !== true) reasons.push('queue_class_model_support_missing');
+  if (hasTools && qc.supports_tool !== true) reasons.push('queue_class_tool_support_missing');
+  if (hasWorkflow && qc.supports_workflow !== true) reasons.push('queue_class_workflow_support_missing');
+  if (stage.optional === true && qc.supports_optional !== true) reasons.push('queue_class_optional_support_missing');
+  if (stage.parallelizable === true && qc.supports_parallel !== true) reasons.push('queue_class_parallel_support_missing');
+  if (isStateChange && qc.supports_state_change !== true) reasons.push('queue_class_state_change_support_missing');
+
+  // pr108fix FIX 1: "Uma fila pode aceitar um provider, model, tool ou workflow que não está em sua
+  // allowlist." Derived from the stage's own genuinely RESOLVED Stage Policy Requirements -- never
+  // trusting an UNRESOLVED claim, never treating an empty supported_*_ids list as a wildcard.
+  const stageReqs = stagePolicyRequirementsByStageId.get(stage.scheduler_stage_reference_id) || [];
+  if (hasModel) {
+    const modelReq = stageReqs.find((r) => r.requirement_element === 'MODEL');
+    if (!modelReq || modelReq.source_resolution_status !== 'RESOLVED_FROM_OFFICIAL_REFERENCE') {
+      reasons.push('queue_class_stage_requirement_unresolvable');
+    } else {
+      const decision = modelSelectionDecisionsById.get(modelReq.source_reference_id);
+      if (!decision || stablePayload(decision) !== modelReq.source_reference_fingerprint) {
+        reasons.push('queue_class_stage_requirement_unresolvable');
+      } else {
+        if (!qc.supported_model_provider_ids.includes(decision.selected_provider_id)) reasons.push('queue_class_model_provider_mismatch');
+        if (!qc.supported_model_ids.includes(decision.selected_model_id)) reasons.push('queue_class_model_id_mismatch');
+      }
+    }
+  }
+  if (hasTools) {
+    // "Não aceitar interseção parcial de tools" -- every tool the stage requires must independently
+    // resolve and independently appear in supported_tool_ids.
+    for (const toolId of stage.tool_reference_ids) {
+      const toolReq = stageReqs.find((r) => r.requirement_element === 'TOOL' && r.source_reference_id === toolId);
+      if (!toolReq || toolReq.source_resolution_status !== 'RESOLVED_FROM_OFFICIAL_REFERENCE') {
+        reasons.push('queue_class_stage_requirement_unresolvable');
+      } else if (!qc.supported_tool_ids.includes(toolId)) {
+        reasons.push(`queue_class_tool_id_mismatch::${toolId}`);
+      }
+    }
+  }
+  if (hasWorkflow) {
+    const workflowReq = stageReqs.find((r) => r.requirement_element === 'WORKFLOW' && r.source_reference_id === stage.workflow_reference_id);
+    if (!workflowReq || workflowReq.source_resolution_status !== 'RESOLVED_FROM_OFFICIAL_REFERENCE') {
+      reasons.push('queue_class_stage_requirement_unresolvable');
+    } else if (!qc.supported_workflow_ids.includes(stage.workflow_reference_id)) {
+      reasons.push('queue_class_workflow_id_mismatch');
+    }
+  }
+
+  // pr108fix FIX 4: capacity snapshot must be present and genuinely fresh at this admission's own
+  // logical_sequence -- never trusted merely because it exists for this class.
+  if (!capacitySnapshotByClassId.has(classId)) reasons.push('queue_capacity_snapshot_missing_for_class');
+  else if (!validCapacityClassIds.has(classId)) reasons.push('queue_capacity_snapshot_not_valid_at_admission');
+
+  // pr108fix FIX 2: "Uma classe com apenas quota de tenant pode passar" -- no longer. Requires the
+  // complete, genuinely identity-bound tenant+organization+project+agent quota collection.
+  if (!quotaCollectionByClassId.has(classId)) reasons.push('queue_quota_collection_incomplete');
+
+  // pr108fix FIX 3: only FIFO_WITHIN_PRIORITY_REFERENCE is operationally implemented this version.
+  if (!FAIRNESS_STRATEGIES_IMPLEMENTED.includes(qc.queue_fairness_strategy)) {
+    reasons.push(`queue_fairness_strategy_not_implemented::${qc.queue_fairness_strategy}`);
+  }
+
+  return reasons;
+}
+
+// pr108: "Seleção da Queue Class" -- filters queue classes down to those genuinely compatible with
+// this stage, then sorts the survivors deterministically. Also returns every rejection reason
+// collected across every candidate, so the boundary can distinguish "blocked only because no
+// implemented fairness strategy was available" from every other blocking reason.
+function selectQueueClass(stage, ctx) {
+  const { queueClassRefs, capacitySnapshotByClassId } = ctx;
+  const evaluated = queueClassRefs.map((qc) => ({ qc, reasons: evaluateQueueClassCompatibility(qc, stage, ctx) }));
+  const compatible = evaluated.filter((entry) => entry.reasons.length === 0).map((entry) => entry.qc);
+  const rejectionReasons = uniqueSorted(evaluated.flatMap((entry) => entry.reasons));
 
   compatible.sort((a, b) => {
     const specificityDiff = QUEUE_CLASS_SPECIFICITY_RANK[a.queue_class_type] - QUEUE_CLASS_SPECIFICITY_RANK[b.queue_class_type];
@@ -136,7 +228,7 @@ function selectQueueClass(stage, ctx) {
     return a.runtime_queue_class_reference_id < b.runtime_queue_class_reference_id ? -1 : 1;
   });
 
-  return compatible.length > 0 ? compatible[0] : null;
+  return { selectedClass: compatible.length > 0 ? compatible[0] : null, rejectionReasons };
 }
 
 function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
@@ -176,6 +268,7 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
   const secretResolutionPolicyRefs = requestIsObject && Array.isArray(request.secret_resolution_policy_references) ? request.secret_resolution_policy_references : [];
   const stagePolicyRequirementRefs = requestIsObject && Array.isArray(request.runtime_worker_stage_policy_requirement_references) ? request.runtime_worker_stage_policy_requirement_references : [];
   const schedulerDependencyRefs = requestIsObject && Array.isArray(request.runtime_scheduler_dependency_references) ? request.runtime_scheduler_dependency_references : [];
+  const officialModelSelectionDecisionRefs = requestIsObject && Array.isArray(request.official_model_selection_decision_references) ? request.official_model_selection_decision_references : [];
   const queueAdmissionReplayRef = requestIsObject ? request.runtime_queue_admission_replay_reference : undefined;
 
   const canonical = {
@@ -326,18 +419,63 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
     }
     capacitySnapshotByClassId.set(cap.runtime_queue_class_reference_id, cap);
   }
-  const quotaRefsByClassId = new Map();
-  for (const quota of queueQuotaRefsRaw) {
-    const list = quotaRefsByClassId.get(quota.runtime_queue_class_reference_id) || [];
-    list.push(quota);
-    quotaRefsByClassId.set(quota.runtime_queue_class_reference_id, list);
-  }
-  for (const qc of queueClassRefsRaw) {
-    const cap = capacitySnapshotByClassId.get(qc.runtime_queue_class_reference_id);
-    if (cap && cap.capacity_validated !== true) {
-      return finalize('QUEUE_ADMISSION_CAPACITY_BLOCKED', ['queue_capacity_snapshot_not_validated']);
+
+  // pr108fix FIX 4: "Queue Capacity Snapshot é reavaliada na sequência lógica do Queue Admission
+  // Request." Never trusts `capacity_validated`/`snapshot_expired_logically` in isolation --
+  // genuinely recomputed here from `request.logical_sequence` against this snapshot's own
+  // `logical_sequence`/`snapshot_valid_sequences`.
+  const validCapacityClassIds = new Set();
+  for (const cap of queueCapacityRefsRaw) {
+    const sequenceRegressive = request.logical_sequence < cap.logical_sequence;
+    const snapshotExpiredAtAdmission = (request.logical_sequence - cap.logical_sequence) > cap.snapshot_valid_sequences;
+    if (!sequenceRegressive && !snapshotExpiredAtAdmission && cap.capacity_available === true) {
+      validCapacityClassIds.add(cap.runtime_queue_class_reference_id);
     }
   }
+
+  // pr108fix FIX 2: "Uma classe com apenas quota de tenant pode passar" -- no longer. A Queue Class
+  // only ever becomes a valid candidate once it carries a complete, non-duplicate, genuinely
+  // identity-bound tenant+organization+project+agent quota collection.
+  const quotaGroupsByClassId = new Map();
+  for (const quota of queueQuotaRefsRaw) {
+    const list = quotaGroupsByClassId.get(quota.runtime_queue_class_reference_id) || [];
+    list.push(quota);
+    quotaGroupsByClassId.set(quota.runtime_queue_class_reference_id, list);
+  }
+  const CANONICAL_BY_SCOPE = Object.freeze({
+    TENANT: canonical.tenantId, ORGANIZATION: canonical.organizationId, PROJECT: canonical.projectId, AGENT: canonical.agentId
+  });
+  const QUOTA_ID_FIELD_BY_SCOPE = Object.freeze({
+    TENANT: 'tenant_id', ORGANIZATION: 'organization_id', PROJECT: 'project_id', AGENT: 'agent_id'
+  });
+  const quotaCollectionByClassId = new Map();
+  for (const [classId, quotas] of quotaGroupsByClassId) {
+    const collection = { TENANT: null, ORGANIZATION: null, PROJECT: null, AGENT: null };
+    let genuinelyComplete = true;
+    for (const quota of quotas) {
+      const scopeType = classifyQuotaScope(quota);
+      const identityMatches = scopeType !== null && quota[QUOTA_ID_FIELD_BY_SCOPE[scopeType]] === CANONICAL_BY_SCOPE[scopeType];
+      if (!identityMatches || collection[scopeType] !== null) {
+        genuinelyComplete = false;
+        continue;
+      }
+      collection[scopeType] = quota;
+    }
+    if (genuinelyComplete && QUOTA_SCOPE_TYPES.every((scopeType) => collection[scopeType] !== null)) {
+      quotaCollectionByClassId.set(classId, collection);
+    }
+  }
+
+  // pr108fix: officially reused Model Selection Decisions this evaluation's own MODEL Stage Policy
+  // Requirements are genuinely bound to (never a second self-declared source).
+  const modelSelectionDecisionsById = new Map(officialModelSelectionDecisionRefs.map((d) => [d.decision_id, d]));
+  const stagePolicyRequirementsByStageId = new Map();
+  for (const req of stagePolicyRequirementRefs) {
+    const list = stagePolicyRequirementsByStageId.get(req.scheduler_stage_reference_id) || [];
+    list.push(req);
+    stagePolicyRequirementsByStageId.set(req.scheduler_stage_reference_id, list);
+  }
+
   markValid('queue_classes_validated');
   markValid('queue_capacity_snapshots_validated');
   markValid('queue_quotas_validated');
@@ -373,8 +511,11 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
   for (const intent of preparedIntentsInOrder) {
     const stage = stageById.get(intent.runtime_dispatch_stage_reference_id);
     if (!stage) return finalize('QUEUE_ADMISSION_QUEUE_CLASS_BLOCKED', ['dispatch_stage_missing_for_prepared_intent']);
-    const selectedClass = selectQueueClass(stage, { queueClassRefs: queueClassRefsRaw, canonical, capacitySnapshotByClassId, quotaRefsByClassId });
-    withQueueClass.push({ intent, stage, selectedClass });
+    const { selectedClass, rejectionReasons } = selectQueueClass(stage, {
+      queueClassRefs: queueClassRefsRaw, canonical, capacitySnapshotByClassId, quotaCollectionByClassId,
+      validCapacityClassIds, stagePolicyRequirementsByStageId, modelSelectionDecisionsById
+    });
+    withQueueClass.push({ intent, stage, selectedClass, rejectionReasons });
   }
 
   const sortKey = (entry) => [
@@ -430,13 +571,11 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
     });
   }
 
+  // pr108fix FIX 2: the complete, already identity-validated 4-quota collection for this class --
+  // never a partial or arbitrarily-picked subset.
   function relevantQuotas(classId) {
-    return (quotaRefsByClassId.get(classId) || []).filter((q) => (
-      (q.tenant_id !== null && q.tenant_id === canonical.tenantId)
-      || (q.organization_id !== null && q.organization_id === canonical.organizationId)
-      || (q.project_id !== null && q.project_id === canonical.projectId)
-      || (q.agent_id !== null && q.agent_id === canonical.agentId)
-    ));
+    const collection = quotaCollectionByClassId.get(classId);
+    return collection ? QUOTA_SCOPE_TYPES.map((scopeType) => collection[scopeType]) : [];
   }
 
   const partitionRefs = [];
@@ -446,7 +585,7 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
   let admissionSequence = 0;
 
   for (const entry of fairnessOrder) {
-    const { intent, stage, selectedClass } = entry;
+    const { intent, stage, selectedClass, rejectionReasons } = entry;
     const dispatchStageId = intent.runtime_dispatch_stage_reference_id;
     const priorityClass = selectedClass ? selectedClass.queue_priority_class : 'BACKGROUND_REFERENCE';
 
@@ -473,8 +612,16 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
     const reasonCodes = [];
 
     if (!selectedClass) {
-      admissionStatus = 'QUEUE_ADMISSION_QUEUE_CLASS_BLOCKED';
-      reasonCodes.push('no_compatible_queue_class_reference');
+      // pr108fix FIX 3/FIX 4: when every candidate was rejected for EXCLUSIVELY one reason category,
+      // surface the specific status the fix requires instead of the generic "no compatible class"
+      // bucket -- never masking an unimplemented fairness strategy or a stale capacity snapshot as
+      // an ordinary incompatibility.
+      const onlyFairnessReasons = rejectionReasons.length > 0 && rejectionReasons.every((r) => r.startsWith('queue_fairness_strategy_not_implemented'));
+      const onlyCapacityReasons = rejectionReasons.length > 0 && rejectionReasons.every((r) => r === 'queue_capacity_snapshot_not_valid_at_admission' || r === 'queue_capacity_snapshot_missing_for_class');
+      admissionStatus = onlyFairnessReasons ? 'QUEUE_ADMISSION_FAIRNESS_BLOCKED'
+        : onlyCapacityReasons ? 'QUEUE_ADMISSION_CAPACITY_BLOCKED'
+        : 'QUEUE_ADMISSION_QUEUE_CLASS_BLOCKED';
+      reasonCodes.push('no_compatible_queue_class_reference', ...rejectionReasons);
     } else {
       const keyValue = derivePartitionKeyValue(selectedClass.queue_partition_strategy, { canonical, stage });
       if (!isNonEmptyString(keyValue)) {
@@ -567,7 +714,7 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
       runtime_worker_reference_id: intent.runtime_worker_reference_id,
       runtime_queue_class_reference_id: selectedClass ? selectedClass.runtime_queue_class_reference_id : 'runtime_queue_class_not_available',
       runtime_queue_partition_reference_id: partitionRef ? partitionRef.runtime_queue_partition_reference_id : 'runtime_queue_partition_not_available',
-      runtime_queue_quota_reference_id: selectedClass ? ((quotaRefsByClassId.get(selectedClass.runtime_queue_class_reference_id) || [])[0]?.runtime_queue_quota_reference_id || 'runtime_queue_quota_not_available') : 'runtime_queue_quota_not_available',
+      runtime_queue_quota_reference_ids: selectedClass ? relevantQuotas(selectedClass.runtime_queue_class_reference_id).map((q) => q.runtime_queue_quota_reference_id) : [],
       runtime_queue_capacity_snapshot_reference_id: selectedClass ? capacitySnapshotByClassId.get(selectedClass.runtime_queue_class_reference_id).runtime_queue_capacity_snapshot_reference_id : 'runtime_queue_capacity_snapshot_not_available',
       dispatch_intent_status: intent.dispatch_intent_status,
       queue_class_match: selectedClass !== null,
@@ -592,6 +739,7 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
       runtime_worker_reference_id: workerBindingRef ? workerBindingRef.runtime_worker_reference_id : null,
       runtime_queue_class_reference_id: selectedClass ? selectedClass.runtime_queue_class_reference_id : null,
       runtime_queue_partition_reference_id: partitionRef ? partitionRef.runtime_queue_partition_reference_id : null,
+      runtime_queue_quota_reference_ids: intentBindingRef.runtime_queue_quota_reference_ids,
       admission_sequence: admissionStatus === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION' ? admissionSequence++ : admissionSequence,
       queue_priority_class: priorityClass,
       admission_status: admissionStatus,
@@ -644,7 +792,7 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
       runtime_worker_reference_id: intent.runtime_worker_reference_id,
       runtime_queue_class_reference_id: 'runtime_queue_class_not_available',
       runtime_queue_partition_reference_id: 'runtime_queue_partition_not_available',
-      runtime_queue_quota_reference_id: 'runtime_queue_quota_not_available',
+      runtime_queue_quota_reference_ids: [],
       runtime_queue_capacity_snapshot_reference_id: 'runtime_queue_capacity_snapshot_not_available',
       dispatch_intent_status: intent.dispatch_intent_status,
       queue_class_match: false, partition_match: false, quota_match: false, capacity_match: false,
@@ -665,6 +813,7 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
       runtime_worker_reference_id: null,
       runtime_queue_class_reference_id: null,
       runtime_queue_partition_reference_id: null,
+      runtime_queue_quota_reference_ids: [],
       admission_sequence: admissionSequence,
       queue_priority_class: 'BACKGROUND_REFERENCE',
       admission_status: admissionStatus,
@@ -762,7 +911,7 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
     dispatchStageRefs, workerBindingRefs, dependencyGateRefs, approvalGateRefs, capacityRefs, budgetRefs, payloadRefs,
     intentRefs, dispatchOrderRef, dispatchReplayRef, schedulerDependencyRefs, stagePolicyRequirementRefs,
     networkPermissionPolicyRefs, secretResolutionPolicyRefs, capacitySnapshotRef, concurrencyRef, budgetRef,
-    freshnessRef, idempotencyReference, registrySnapshotRef,
+    freshnessRef, idempotencyReference, registrySnapshotRef, officialModelSelectionDecisionRefs,
     modelAdmissionCount, toolAdmissionCount, workflowAdmissionCount, parallelAdmissionCount,
     estimatedInputTokens, estimatedOutputTokens, estimatedTotalTokens, estimatedTotalCost
   });
@@ -772,6 +921,7 @@ function buildQueueAdmissionOutcome(status, reasonCodes, ctx, validatedFlags) {
   const {
     request, requestFingerprint, canonical, dispatchDecisionRef, dispatchResultRef, dispatchPackageRef,
     queueClassRefs = [], queueCapacityRefs = [], queueQuotaRefs = [], partitionRefs = [], fairnessRefs = [],
+    officialModelSelectionDecisionRefs = [],
     intentBindingRefs = [], admissionEntryRefs = [], orderRef, queueAdmissionReplayRef,
     dispatchStageRefs = [], workerBindingRefs = [], dependencyGateRefs = [], approvalGateRefs = [], capacityRefs = [],
     budgetRefs = [], payloadRefs = [], intentRefs = [], schedulerDependencyRefs = [], stagePolicyRequirementRefs = [],
@@ -871,6 +1021,7 @@ function buildQueueAdmissionOutcome(status, reasonCodes, ctx, validatedFlags) {
     queue_fairness_fingerprints: fairnessRefs.map((r) => r.fairness_fingerprint),
     queue_intent_binding_fingerprints: intentBindingRefs.map((r) => r.intent_binding_fingerprint),
     queue_admission_entry_fingerprints: admissionEntryRefs.map((r) => r.admission_entry_fingerprint),
+    official_model_selection_decision_fingerprints: officialModelSelectionDecisionRefs.map((d) => stablePayload(d)),
     queue_admission_order_fingerprint: orderRef ? orderRef.order_fingerprint : 'fingerprint_not_available',
     queue_admission_replay_fingerprint: queueReplaySafe.replay_fingerprint || 'fingerprint_not_available',
     queue_admission_status: status
@@ -939,10 +1090,14 @@ function buildQueueAdmissionOutcome(status, reasonCodes, ctx, validatedFlags) {
 }
 
 module.exports = {
+  FAIRNESS_STRATEGIES_IMPLEMENTED,
   NON_PREPARED_STATUS_MAP,
   PRIORITY_RANK,
   QUEUE_CLASS_SPECIFICITY_RANK,
+  QUOTA_SCOPE_TYPES,
+  classifyQuotaScope,
   derivePartitionKeyValue,
+  evaluateQueueClassCompatibility,
   evaluateRuntimeQueueAdmissionRequest,
   fingerprintSetMatches,
   idSetMatches,

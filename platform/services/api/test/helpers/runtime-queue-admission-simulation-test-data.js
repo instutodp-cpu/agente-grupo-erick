@@ -54,22 +54,34 @@ function buildGoldenQueueClassCatalog(baseId, canonical) {
     maximum_cost_minor_units: 100000000, current_cost_minor_units: 0, available_cost_minor_units: 100000000
   });
 
-  const quotaId = `${baseId}-queue-quota-tenant`;
-  const quota = buildRuntimeQueueQuotaReference({
-    runtime_queue_quota_reference_id: quotaId,
-    runtime_queue_class_reference_id: queueClassId,
-    tenant_id: canonical.tenantId,
-    maximum_admission_count: 1000, current_admission_count: 0, available_admission_count: 1000,
-    maximum_backlog_count: 1000, current_backlog_count: 0, available_backlog_count: 1000,
-    maximum_parallel_count: 100, current_parallel_count: 0, available_parallel_count: 100,
-    maximum_model_count: 100, current_model_count: 0, available_model_count: 100,
-    maximum_tool_count: 100, current_tool_count: 0, available_tool_count: 100,
-    maximum_workflow_count: 100, current_workflow_count: 0, available_workflow_count: 100,
-    maximum_tokens: 100000000, current_tokens: 0, available_tokens: 100000000,
-    maximum_cost_minor_units: 100000000, current_cost_minor_units: 0, available_cost_minor_units: 100000000
-  });
+  // pr108fix FIX 2: a Queue Class candidate is only ever eligible with a COMPLETE
+  // tenant+organization+project+agent quota collection -- one single-scope reference per scope,
+  // all bound to the same class, all genuinely matching this bundle's own canonical identity.
+  function buildScopedQuota(scopeType, scopeId) {
+    return buildRuntimeQueueQuotaReference({
+      runtime_queue_quota_reference_id: `${baseId}-queue-quota-${scopeType.toLowerCase()}`,
+      runtime_queue_class_reference_id: queueClassId,
+      tenant_id: scopeType === 'TENANT' ? scopeId : null,
+      organization_id: scopeType === 'ORGANIZATION' ? scopeId : null,
+      project_id: scopeType === 'PROJECT' ? scopeId : null,
+      agent_id: scopeType === 'AGENT' ? scopeId : null,
+      maximum_admission_count: 1000, current_admission_count: 0, available_admission_count: 1000,
+      maximum_backlog_count: 1000, current_backlog_count: 0, available_backlog_count: 1000,
+      maximum_parallel_count: 100, current_parallel_count: 0, available_parallel_count: 100,
+      maximum_model_count: 100, current_model_count: 0, available_model_count: 100,
+      maximum_tool_count: 100, current_tool_count: 0, available_tool_count: 100,
+      maximum_workflow_count: 100, current_workflow_count: 0, available_workflow_count: 100,
+      maximum_tokens: 100000000, current_tokens: 0, available_tokens: 100000000,
+      maximum_cost_minor_units: 100000000, current_cost_minor_units: 0, available_cost_minor_units: 100000000
+    });
+  }
+  const tenantQuota = buildScopedQuota('TENANT', canonical.tenantId);
+  const organizationQuota = buildScopedQuota('ORGANIZATION', canonical.organizationId);
+  const projectQuota = buildScopedQuota('PROJECT', canonical.projectId);
+  const agentQuota = buildScopedQuota('AGENT', canonical.agentId);
+  const quotas = [tenantQuota, organizationQuota, projectQuota, agentQuota];
 
-  return { queueClass, capacitySnapshot, quota };
+  return { queueClass, capacitySnapshot, quota: tenantQuota, quotas };
 }
 
 function buildGoldenQueueAdmissionBundle(scenarioKey = 'prepared-no-llm-plan', overrides = {}) {
@@ -101,7 +113,7 @@ function buildGoldenQueueAdmissionBundle(scenarioKey = 'prepared-no-llm-plan', o
     ...overrides.policy
   });
 
-  const { queueClass, capacitySnapshot, quota } = buildGoldenQueueClassCatalog(baseId, canonical);
+  const { queueClass, capacitySnapshot, quota, quotas } = buildGoldenQueueClassCatalog(baseId, canonical);
 
   const registrySnapshotRef = overrides.registrySnapshotRef === undefined ? null : overrides.registrySnapshotRef;
 
@@ -125,8 +137,9 @@ function buildGoldenQueueAdmissionBundle(scenarioKey = 'prepared-no-llm-plan', o
       runtime_dispatch_replay_reference: dispatchGolden.dispatchReplayRef,
       runtime_queue_class_references: [queueClass],
       runtime_queue_capacity_snapshot_references: [capacitySnapshot],
-      runtime_queue_quota_references: [quota],
+      runtime_queue_quota_references: quotas,
       runtime_queue_partition_references: [],
+      official_model_selection_decision_references: [],
       runtime_capacity_snapshot_reference: dispatchGolden.capacitySnapshotRef,
       runtime_concurrency_reference: dispatchGolden.concurrencyRef,
       runtime_budget_reference: dispatchGolden.runtimeBudgetReference,
@@ -186,7 +199,7 @@ function buildGoldenQueueAdmissionBundle(scenarioKey = 'prepared-no-llm-plan', o
   const request = buildRequestWith(queueAdmissionReplayRef);
 
   return {
-    ...dispatchGolden, dispatchOutcome, baseId, requestId, policy, queueClass, capacitySnapshot, quota,
+    ...dispatchGolden, dispatchOutcome, baseId, requestId, policy, queueClass, capacitySnapshot, quota, quotas,
     queueAdmissionReplayRef, queueAdmissionRequest: request
   };
 }

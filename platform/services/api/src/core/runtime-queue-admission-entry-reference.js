@@ -17,7 +17,7 @@ const ADMISSION_STATUSES = Object.freeze([
   'QUEUE_ADMISSION_WAITING_DEPENDENCY_REFERENCE', 'QUEUE_ADMISSION_WAITING_APPROVAL_REFERENCE',
   'QUEUE_ADMISSION_OPTIONAL_REFERENCE', 'QUEUE_ADMISSION_QUEUE_CLASS_BLOCKED', 'QUEUE_ADMISSION_PARTITION_BLOCKED',
   'QUEUE_ADMISSION_CAPACITY_BLOCKED', 'QUEUE_ADMISSION_BUDGET_BLOCKED', 'QUEUE_ADMISSION_POLICY_BLOCKED',
-  'QUEUE_ADMISSION_NO_WORKER_BLOCKED', 'QUEUE_ADMISSION_BLOCKED'
+  'QUEUE_ADMISSION_NO_WORKER_BLOCKED', 'QUEUE_ADMISSION_FAIRNESS_BLOCKED', 'QUEUE_ADMISSION_BLOCKED'
 ]);
 
 const GATE_PASSED_FIELDS = Object.freeze([
@@ -30,7 +30,7 @@ const RUNTIME_QUEUE_ADMISSION_ENTRY_REFERENCE_FIELDS = Object.freeze([
   'runtime_queue_admission_package_id', 'runtime_queue_admission_request_id',
   'queue_intent_binding_reference_id', 'runtime_queue_fairness_reference_id',
   'dispatch_intent_reference_id', 'runtime_dispatch_stage_reference_id', 'runtime_worker_reference_id',
-  'runtime_queue_class_reference_id', 'runtime_queue_partition_reference_id',
+  'runtime_queue_class_reference_id', 'runtime_queue_partition_reference_id', 'runtime_queue_quota_reference_ids',
   'admission_sequence', 'queue_priority_class', 'admission_status',
   ...GATE_PASSED_FIELDS,
   'queue_admission_validated', 'queue_admission_applied', 'queue_created', 'queue_item_created',
@@ -80,6 +80,14 @@ function validateRuntimeQueueAdmissionEntryReference(reference) {
   for (const field of ['runtime_worker_reference_id', 'runtime_queue_class_reference_id', 'runtime_queue_partition_reference_id']) {
     if (reference[field] !== null && !isNonEmptyString(reference[field])) errors.push(`${field}_must_be_null_or_string`);
   }
+  // pr108fix FIX 2: same complete-collection-or-none discipline as the Intent Binding this entry is
+  // derived from -- "Todos os quota IDs/fingerprints devem participar de... Admission Entry
+  // fingerprint."
+  if (!isSanitizedList(reference.runtime_queue_quota_reference_ids, 4)
+    || (reference.runtime_queue_quota_reference_ids.length !== 0 && reference.runtime_queue_quota_reference_ids.length !== 4)
+    || new Set(reference.runtime_queue_quota_reference_ids).size !== reference.runtime_queue_quota_reference_ids.length) {
+    errors.push('runtime_queue_quota_reference_ids_invalid');
+  }
   if (!Number.isInteger(reference.admission_sequence) || reference.admission_sequence < 0 || reference.admission_sequence > MAX_SEQUENCE) {
     errors.push('admission_sequence_invalid');
   }
@@ -127,6 +135,7 @@ function buildRuntimeQueueAdmissionEntryReference(input = {}) {
     runtime_worker_reference_id: input.runtime_worker_reference_id === undefined ? null : input.runtime_worker_reference_id,
     runtime_queue_class_reference_id: input.runtime_queue_class_reference_id === undefined ? null : input.runtime_queue_class_reference_id,
     runtime_queue_partition_reference_id: input.runtime_queue_partition_reference_id === undefined ? null : input.runtime_queue_partition_reference_id,
+    runtime_queue_quota_reference_ids: uniqueSorted(input.runtime_queue_quota_reference_ids || []),
     admission_sequence: Number.isInteger(input.admission_sequence) ? input.admission_sequence : 0,
     queue_priority_class: input.queue_priority_class,
     admission_status: status,

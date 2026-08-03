@@ -318,7 +318,11 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'runtime_queue_partition_reference_id', 'runtime_queue_partition_reference_version',
   'runtime_queue_partition_references',
   'runtime_queue_quota_reference_id', 'runtime_queue_quota_reference_version', 'runtime_queue_quota_references',
-  'runtime_queue_admission_package_fingerprint', 'runtime_queue_admission_package_digest'
+  'runtime_queue_quota_reference_ids',
+  'runtime_queue_admission_package_fingerprint', 'runtime_queue_admission_package_digest',
+  // pr108fix: FIX 1's official Model Selection Decision reuse plus FIX 4's capacity-snapshot
+  // freshness recomputation reason codes.
+  'official_model_selection_decision_references', 'official_model_selection_decision_fingerprints'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept

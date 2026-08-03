@@ -65,7 +65,12 @@ const DERIVED_FINGERPRINT_LIST_FIELDS = Object.freeze([
   'stage_policy_requirement_fingerprints', 'official_network_policy_fingerprints', 'official_secret_policy_fingerprints',
   'queue_class_fingerprints', 'queue_capacity_snapshot_fingerprints', 'queue_quota_fingerprints',
   'queue_partition_fingerprints', 'queue_fairness_fingerprints', 'queue_intent_binding_fingerprints',
-  'queue_admission_entry_fingerprints'
+  'queue_admission_entry_fingerprints',
+  // pr108fix Package Integrity: "Model/Tool/Workflow source fingerprints usados na seleção" --
+  // altering any official Model Selection Decision the boundary consulted alters or blocks the
+  // package. Tool/Workflow source identity is already fully covered by
+  // `stage_policy_requirement_fingerprints` (their `source_reference_id` IS the tool/workflow ID).
+  'official_model_selection_decision_fingerprints'
 ]);
 
 const OPERATIONAL_FLAG_FIELDS = Object.freeze([

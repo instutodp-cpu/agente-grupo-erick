@@ -22,7 +22,7 @@ const RUNTIME_QUEUE_INTENT_BINDING_REFERENCE_FIELDS = Object.freeze([
   'runtime_dispatch_package_id', 'dispatch_intent_reference_id', 'runtime_dispatch_stage_reference_id',
   'dispatch_worker_binding_reference_id',
   'scheduler_stage_reference_id', 'runtime_stage_reference_id', 'runtime_worker_reference_id',
-  'runtime_queue_class_reference_id', 'runtime_queue_partition_reference_id', 'runtime_queue_quota_reference_id',
+  'runtime_queue_class_reference_id', 'runtime_queue_partition_reference_id', 'runtime_queue_quota_reference_ids',
   'runtime_queue_capacity_snapshot_reference_id',
   'dispatch_intent_status', ...MATCH_FIELDS,
   'intent_binding_validated', 'intent_binding_applied', 'queue_item_created', 'queue_item_enqueued',
@@ -58,7 +58,7 @@ function validateRuntimeQueueIntentBindingReference(reference) {
     'queue_intent_binding_reference_id', 'runtime_queue_admission_request_id', 'runtime_queue_admission_package_id',
     'runtime_dispatch_package_id', 'dispatch_intent_reference_id', 'runtime_dispatch_stage_reference_id',
     'dispatch_worker_binding_reference_id', 'scheduler_stage_reference_id', 'runtime_stage_reference_id',
-    'runtime_queue_class_reference_id', 'runtime_queue_partition_reference_id', 'runtime_queue_quota_reference_id',
+    'runtime_queue_class_reference_id', 'runtime_queue_partition_reference_id',
     'runtime_queue_capacity_snapshot_reference_id', 'intent_binding_fingerprint', 'validator_version'
   ]) {
     if (!isNonEmptyString(reference[field])) errors.push(`${field}_invalid`);
@@ -68,6 +68,14 @@ function validateRuntimeQueueIntentBindingReference(reference) {
   }
   if (reference.runtime_worker_reference_id !== null && !isNonEmptyString(reference.runtime_worker_reference_id)) {
     errors.push('runtime_worker_reference_id_must_be_null_or_string');
+  }
+  // pr108fix FIX 2: "Não selecionar apenas (quotas || [])[0]." A genuine binding carries the
+  // complete, deduplicated tenant+organization+project+agent quota collection (exactly 4 ids) --
+  // never a single arbitrarily-picked quota. An unbound entry (no class selected) carries none.
+  if (!isSanitizedList(reference.runtime_queue_quota_reference_ids, 4)
+    || (reference.runtime_queue_quota_reference_ids.length !== 0 && reference.runtime_queue_quota_reference_ids.length !== 4)
+    || new Set(reference.runtime_queue_quota_reference_ids).size !== reference.runtime_queue_quota_reference_ids.length) {
+    errors.push('runtime_queue_quota_reference_ids_invalid');
   }
   if (!DISPATCH_INTENT_STATUSES.includes(reference.dispatch_intent_status)) errors.push('dispatch_intent_status_invalid');
   for (const field of MATCH_FIELDS) {
@@ -113,7 +121,7 @@ function buildRuntimeQueueIntentBindingReference(input = {}) {
     runtime_worker_reference_id: input.runtime_worker_reference_id === undefined ? null : input.runtime_worker_reference_id,
     runtime_queue_class_reference_id: input.runtime_queue_class_reference_id,
     runtime_queue_partition_reference_id: input.runtime_queue_partition_reference_id,
-    runtime_queue_quota_reference_id: input.runtime_queue_quota_reference_id,
+    runtime_queue_quota_reference_ids: uniqueSorted(input.runtime_queue_quota_reference_ids || []),
     runtime_queue_capacity_snapshot_reference_id: input.runtime_queue_capacity_snapshot_reference_id,
     dispatch_intent_status: input.dispatch_intent_status,
     reason_codes: Array.isArray(input.reason_codes) ? uniqueSorted(input.reason_codes) : [],

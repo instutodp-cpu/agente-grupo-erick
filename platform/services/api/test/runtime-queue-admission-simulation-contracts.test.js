@@ -51,7 +51,12 @@ const {
 const { validateRuntimeQueueAdmissionResult } = require('../src/core/runtime-queue-admission-result');
 const { validateRuntimeQueueAdmissionAudit } = require('../src/core/runtime-queue-admission-audit');
 const { createRuntimeQueueAdmissionRegistry } = require('../src/core/runtime-queue-admission-registry');
-const { evaluateRuntimeQueueAdmissionRequest, selectQueueClass } = require('../src/core/runtime-queue-admission-boundary');
+const {
+  evaluateRuntimeQueueAdmissionRequest, selectQueueClass, evaluateQueueClassCompatibility, classifyQuotaScope
+} = require('../src/core/runtime-queue-admission-boundary');
+const { buildModelSelectionDecision } = require('../src/core/model-selection-decision');
+const { buildRuntimeWorkerStagePolicyRequirementReference } = require('../src/core/runtime-worker-stage-policy-requirement-reference');
+const { stablePayload } = require('../src/core/transcription-provider-contract-registry');
 
 const { buildGoldenQueueAdmissionBundle } = require('./helpers/runtime-queue-admission-simulation-test-data');
 
@@ -159,7 +164,7 @@ test('queue intent binding reference: validated only when PREPARED and every mat
     runtime_dispatch_package_id: 'dp-1', dispatch_intent_reference_id: 'di-1', runtime_dispatch_stage_reference_id: 'ds-1',
     dispatch_worker_binding_reference_id: 'dwb-1', scheduler_stage_reference_id: 'ss-1', runtime_stage_reference_id: 'rs-1',
     runtime_worker_reference_id: 'w-1', runtime_queue_class_reference_id: 'qc-1', runtime_queue_partition_reference_id: 'qp-1',
-    runtime_queue_quota_reference_id: 'qq-1', runtime_queue_capacity_snapshot_reference_id: 'qcs-1'
+    runtime_queue_quota_reference_ids: ['qq-1-agent', 'qq-1-organization', 'qq-1-project', 'qq-1-tenant'], runtime_queue_capacity_snapshot_reference_id: 'qcs-1'
   };
   const allTrue = buildRuntimeQueueIntentBindingReference({
     ...base, dispatch_intent_status: 'DISPATCH_INTENT_PREPARED_SIMULATION',
@@ -187,7 +192,8 @@ test('queue admission entry reference: validated only when ACCEPTED and every ga
     runtime_queue_admission_entry_reference_id: 'qae-1', runtime_queue_admission_package_id: 'qap-1', runtime_queue_admission_request_id: 'qar-1',
     queue_intent_binding_reference_id: 'qib-1', runtime_queue_fairness_reference_id: 'qf-1', dispatch_intent_reference_id: 'di-1',
     runtime_dispatch_stage_reference_id: 'ds-1', runtime_worker_reference_id: 'w-1', runtime_queue_class_reference_id: 'qc-1',
-    runtime_queue_partition_reference_id: 'qp-1', admission_sequence: 0, queue_priority_class: 'NORMAL_REFERENCE'
+    runtime_queue_partition_reference_id: 'qp-1', runtime_queue_quota_reference_ids: ['qq-1-agent', 'qq-1-organization', 'qq-1-project', 'qq-1-tenant'],
+    admission_sequence: 0, queue_priority_class: 'NORMAL_REFERENCE'
   };
   const accepted = buildRuntimeQueueAdmissionEntryReference({
     ...base, admission_status: 'QUEUE_ADMISSION_ACCEPTED_SIMULATION',
@@ -342,11 +348,13 @@ test('boundary: insufficient queue capacity defers the entry as QUEUE_ADMISSION_
 
 test('boundary: insufficient quota defers the entry as QUEUE_ADMISSION_DEFERRED_QUOTA_REFERENCE', () => {
   const golden = buildGoldenQueueAdmissionBundle();
-  const zeroQuota = buildRuntimeQueueQuotaReference({
-    ...golden.quota, maximum_admission_count: 0, current_admission_count: 0, available_admission_count: 0
-  });
+  // pr108fix FIX 2: the quota collection must stay COMPLETE (all 4 scopes present) for the class to
+  // remain a candidate at all -- zero the available amounts on every scope, never remove one.
+  const zeroQuotas = golden.quotas.map((q) => buildRuntimeQueueQuotaReference({
+    ...q, maximum_admission_count: 0, current_admission_count: 0, available_admission_count: 0
+  }));
   const request = buildRuntimeQueueAdmissionRequest({
-    ...golden.queueAdmissionRequest, runtime_queue_quota_references: [zeroQuota]
+    ...golden.queueAdmissionRequest, runtime_queue_quota_references: zeroQuotas
   });
   const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
   assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
@@ -368,14 +376,285 @@ test('boundary: greedy sequential admission -- second entry deferred once the fi
   assert.equal(outcome.package.deferred_count, 1);
 });
 
+// --- pr108fix FIX 1: Queue Class validates real provider/model/tool/workflow IDs -----------------
+
+function buildFix1Fixture() {
+  const canonical = { tenantId: 't-1', organizationId: 'o-1', projectId: 'p-1', agentId: 'a-1' };
+  const decision = buildModelSelectionDecision({
+    decision_id: 'decision-1', selection_request_id: 'sel-req-1', agent_id: 'a-1', tenant_id: 't-1', organization_id: 'o-1',
+    status: 'MODEL_SELECTED_SIMULATION', selected_candidate_id: 'cand-1', selected_provider_id: 'mock-provider-a', selected_model_id: 'gen-a'
+  });
+  const modelReq = buildRuntimeWorkerStagePolicyRequirementReference({
+    stage_policy_requirement_reference_id: 'req-1', scheduler_stage_reference_id: 'stage-1', requirement_element: 'MODEL',
+    source_reference_id: 'decision-1', source_reference_type: 'MODEL_SELECTION_REFERENCE', source_reference_version: 1,
+    source_reference_fingerprint: stablePayload(decision), source_registry_snapshot_reference_id: 'snap-1',
+    source_resolution_status: 'RESOLVED_FROM_OFFICIAL_REFERENCE', source_provider_slug: 'mock-provider-a', source_stage_domain: 'GENERIC_DOMAIN'
+  });
+  const toolAReq = buildRuntimeWorkerStagePolicyRequirementReference({
+    stage_policy_requirement_reference_id: 'req-tool-a', scheduler_stage_reference_id: 'stage-1', requirement_element: 'TOOL',
+    source_reference_id: 'tool-a', source_reference_type: 'TOOL_CONTRACT_REFERENCE', source_reference_version: 1,
+    source_reference_fingerprint: stablePayload({ tool_id: 'tool-a', tool_version: 1 }), source_registry_snapshot_reference_id: 'snap-1',
+    source_resolution_status: 'RESOLVED_FROM_OFFICIAL_REFERENCE', source_provider_slug: 'mock-provider-a', source_stage_domain: 'GENERIC_DOMAIN'
+  });
+  const workflowReq = buildRuntimeWorkerStagePolicyRequirementReference({
+    stage_policy_requirement_reference_id: 'req-workflow', scheduler_stage_reference_id: 'stage-1', requirement_element: 'WORKFLOW',
+    source_reference_id: 'workflow-a', source_reference_type: 'WORKFLOW_CONTRACT_REFERENCE', source_reference_version: 1,
+    source_reference_fingerprint: stablePayload({ workflow_id: 'workflow-a', workflow_version: 1 }), source_registry_snapshot_reference_id: 'snap-1',
+    source_resolution_status: 'RESOLVED_FROM_OFFICIAL_REFERENCE', source_provider_slug: 'mock-provider-a', source_stage_domain: 'GENERIC_DOMAIN'
+  });
+  const qcBase = {
+    runtime_queue_class_reference_id: 'qc-1', queue_class_name: 'fix1-class', queue_class_type: 'SHARED_QUEUE_REFERENCE',
+    queue_domain: 'GENERIC_DOMAIN', queue_priority_class: 'NORMAL_REFERENCE', queue_partition_strategy: 'TENANT_PARTITION_REFERENCE',
+    queue_fairness_strategy: 'FIFO_WITHIN_PRIORITY_REFERENCE', queue_retry_class: 'NO_RETRY_REFERENCE',
+    supports_no_llm: true, supports_model: true, supports_tool: true, supports_workflow: true, supports_parallel: true,
+    supports_optional: true, supports_state_change: true,
+    supported_stage_types: ['MODEL_REFERENCE_STAGE'], supported_capability_ids: [], supported_modality_ids: [],
+    supported_model_provider_ids: ['mock-provider-a'], supported_model_ids: ['gen-a'], supported_tool_ids: ['tool-a'],
+    supported_workflow_ids: ['workflow-a'],
+    maximum_backlog_count: 1000, maximum_inflight_count: 1000, maximum_parallel_count: 100, maximum_model_count: 100,
+    maximum_tool_count: 100, maximum_workflow_count: 100, maximum_tokens: 100000000, maximum_cost_minor_units: 100000000,
+    maximum_logical_age_sequences: 100000, queue_class_active: true
+  };
+  const qc = buildRuntimeQueueClassReference(qcBase);
+  const stage = {
+    scheduler_stage_reference_id: 'stage-1', stage_type: 'MODEL_REFERENCE_STAGE', required_capabilities: [], required_modalities: [],
+    optional: false, parallelizable: false, side_effect_classification: 'NONE',
+    model_selection_reference_id: 'decision-1', tool_reference_ids: [], workflow_reference_id: null
+  };
+  const ctx = {
+    canonical,
+    stagePolicyRequirementsByStageId: new Map([['stage-1', [modelReq, toolAReq, workflowReq]]]),
+    modelSelectionDecisionsById: new Map([['decision-1', decision]]),
+    validCapacityClassIds: new Set(['qc-1']),
+    capacitySnapshotByClassId: new Map([['qc-1', {}]]),
+    quotaCollectionByClassId: new Map([['qc-1', {}]])
+  };
+  return { qcBase, qc, stage, ctx, decision };
+}
+
+test('FIX1: model provider/id compatible with matching Queue Class', () => {
+  const { qc, stage, ctx } = buildFix1Fixture();
+  assert.deepEqual(evaluateQueueClassCompatibility(qc, stage, ctx), []);
+});
+
+test('FIX1: model provider divergent from supported_model_provider_ids blocks', () => {
+  const { qcBase, stage, ctx } = buildFix1Fixture();
+  const wrongProvider = buildRuntimeQueueClassReference({ ...qcBase, supported_model_provider_ids: ['mock-provider-b'] });
+  assert.deepEqual(evaluateQueueClassCompatibility(wrongProvider, stage, ctx), ['queue_class_model_provider_mismatch']);
+});
+
+test('FIX1: model id divergent from supported_model_ids blocks', () => {
+  const { qcBase, stage, ctx } = buildFix1Fixture();
+  const wrongModel = buildRuntimeQueueClassReference({ ...qcBase, supported_model_ids: ['gen-b'] });
+  assert.deepEqual(evaluateQueueClassCompatibility(wrongModel, stage, ctx), ['queue_class_model_id_mismatch']);
+});
+
+test('FIX1: all required tools supported passes, partial tool support blocks', () => {
+  const { qc, qcBase, stage, ctx } = buildFix1Fixture();
+  const stageWithTool = { ...stage, tool_reference_ids: ['tool-a'] };
+  assert.deepEqual(evaluateQueueClassCompatibility(qc, stageWithTool, ctx), []);
+
+  const secondToolReq = buildRuntimeWorkerStagePolicyRequirementReference({
+    stage_policy_requirement_reference_id: 'req-tool-b', scheduler_stage_reference_id: 'stage-1', requirement_element: 'TOOL',
+    source_reference_id: 'tool-b', source_reference_type: 'TOOL_CONTRACT_REFERENCE', source_reference_version: 1,
+    source_reference_fingerprint: stablePayload({ tool_id: 'tool-b', tool_version: 1 }), source_registry_snapshot_reference_id: 'snap-1',
+    source_resolution_status: 'RESOLVED_FROM_OFFICIAL_REFERENCE', source_provider_slug: 'mock-provider-a', source_stage_domain: 'GENERIC_DOMAIN'
+  });
+  const ctxWithBothTools = {
+    ...ctx, stagePolicyRequirementsByStageId: new Map([['stage-1', [...ctx.stagePolicyRequirementsByStageId.get('stage-1'), secondToolReq]]])
+  };
+  const stageWithTwoTools = { ...stage, tool_reference_ids: ['tool-a', 'tool-b'] };
+  // qc only supports 'tool-a' -- 'tool-b' is genuinely resolved but not in the allowlist, never a partial match.
+  assert.deepEqual(evaluateQueueClassCompatibility(qc, stageWithTwoTools, ctxWithBothTools), ['queue_class_tool_id_mismatch::tool-b']);
+});
+
+test('FIX1: workflow compatible passes, workflow divergent blocks', () => {
+  const { qc, qcBase, stage, ctx } = buildFix1Fixture();
+  const stageWithWorkflow = { ...stage, workflow_reference_id: 'workflow-a' };
+  assert.deepEqual(evaluateQueueClassCompatibility(qc, stageWithWorkflow, ctx), []);
+  const wrongWorkflowClass = buildRuntimeQueueClassReference({ ...qcBase, supported_workflow_ids: ['workflow-b'] });
+  assert.deepEqual(evaluateQueueClassCompatibility(wrongWorkflowClass, stageWithWorkflow, ctx), ['queue_class_workflow_id_mismatch']);
+});
+
+test('FIX1: mixed stage (model+tool+workflow) validates every element independently', () => {
+  const { qc, qcBase, stage, ctx } = buildFix1Fixture();
+  const mixedStage = { ...stage, tool_reference_ids: ['tool-a'], workflow_reference_id: 'workflow-a' };
+  assert.deepEqual(evaluateQueueClassCompatibility(qc, mixedStage, ctx), []);
+  const wrongEverything = buildRuntimeQueueClassReference({
+    ...qcBase, supported_model_provider_ids: ['mock-provider-b'], supported_tool_ids: [], supported_workflow_ids: []
+  });
+  const reasons = evaluateQueueClassCompatibility(wrongEverything, mixedStage, ctx);
+  assert.ok(reasons.includes('queue_class_model_provider_mismatch'));
+  assert.ok(reasons.includes('queue_class_tool_id_mismatch::tool-a'));
+  assert.ok(reasons.includes('queue_class_workflow_id_mismatch'));
+});
+
+test('FIX1: an unresolvable stage requirement never authorizes a match, empty allowlists are never a wildcard', () => {
+  const { qc, qcBase, stage, ctx } = buildFix1Fixture();
+  const unresolvedCtx = { ...ctx, stagePolicyRequirementsByStageId: new Map() };
+  assert.deepEqual(evaluateQueueClassCompatibility(qc, stage, unresolvedCtx), ['queue_class_stage_requirement_unresolvable']);
+
+  const emptyLists = buildRuntimeQueueClassReference({
+    ...qcBase, supported_model_provider_ids: [], supported_model_ids: [], supported_tool_ids: [], supported_workflow_ids: []
+  });
+  const reasons = evaluateQueueClassCompatibility(emptyLists, stage, ctx);
+  assert.ok(reasons.includes('queue_class_model_provider_mismatch'));
+  assert.ok(reasons.includes('queue_class_model_id_mismatch'));
+});
+
+test('FIX1: input order of stage policy requirements never alters the outcome', () => {
+  const { qc, stage, ctx } = buildFix1Fixture();
+  const reversedCtx = { ...ctx, stagePolicyRequirementsByStageId: new Map([['stage-1', [...ctx.stagePolicyRequirementsByStageId.get('stage-1')].reverse()]]) };
+  assert.deepEqual(evaluateQueueClassCompatibility(qc, stage, ctx), evaluateQueueClassCompatibility(qc, stage, reversedCtx));
+});
+
+test('FIX1: a hostile context hint never changes which requirements are consulted', () => {
+  const { qc, stage, ctx } = buildFix1Fixture();
+  const outcomeClean = evaluateQueueClassCompatibility(qc, stage, ctx);
+  const outcomeHostile = evaluateQueueClassCompatibility(qc, stage, { ...ctx, hostileHint: { allow: true } });
+  assert.deepEqual(outcomeClean, outcomeHostile);
+});
+
+// --- pr108fix FIX 2: complete quota collection per scope -------------------------------------------
+
+test('FIX2: classifyQuotaScope derives the single non-null scope field', () => {
+  assert.equal(classifyQuotaScope({ tenant_id: 't-1', organization_id: null, project_id: null, agent_id: null }), 'TENANT');
+  assert.equal(classifyQuotaScope({ tenant_id: null, organization_id: 'o-1', project_id: null, agent_id: null }), 'ORGANIZATION');
+  assert.equal(classifyQuotaScope({ tenant_id: null, organization_id: null, project_id: 'p-1', agent_id: null }), 'PROJECT');
+  assert.equal(classifyQuotaScope({ tenant_id: null, organization_id: null, project_id: null, agent_id: 'a-1' }), 'AGENT');
+});
+
+test('FIX2: missing any single scope (tenant/organization/project/agent) blocks the class entirely', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  for (const missingIndex of [0, 1, 2, 3]) {
+    const partialQuotas = golden.quotas.filter((q, i) => i !== missingIndex);
+    const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_quota_references: partialQuotas });
+    const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+    assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
+    assert.equal(outcome.package.accepted_count, 0, `missing scope index ${missingIndex} should block admission`);
+    assert.ok(outcome.admissionEntryRefs.every((e) => e.reason_codes.includes('queue_quota_collection_incomplete')));
+  }
+});
+
+test('FIX2: a quota bound to a foreign identity blocks the class even though the scope slot is technically filled', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const foreignTenantQuota = buildRuntimeQueueQuotaReference({ ...golden.quotas[0], tenant_id: 'tenant-foreign' });
+  const request = buildRuntimeQueueAdmissionRequest({
+    ...golden.queueAdmissionRequest, runtime_queue_quota_references: [foreignTenantQuota, ...golden.quotas.slice(1)]
+  });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  assert.equal(outcome.package.accepted_count, 0);
+  assert.ok(outcome.admissionEntryRefs.every((e) => e.reason_codes.includes('queue_quota_collection_incomplete')));
+});
+
+test('FIX2: a genuinely complete quota collection carries all 4 ids on the Intent Binding and Admission Entry', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const accepted = outcome.admissionEntryRefs.filter((e) => e.admission_status === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION');
+  assert.ok(accepted.length > 0);
+  for (const entry of accepted) {
+    assert.equal(entry.runtime_queue_quota_reference_ids.length, 4);
+    const binding = outcome.intentBindingRefs.find((b) => b.queue_intent_binding_reference_id === entry.queue_intent_binding_reference_id);
+    assert.deepEqual(binding.runtime_queue_quota_reference_ids, entry.runtime_queue_quota_reference_ids);
+  }
+});
+
+// --- pr108fix FIX 3: only FIFO_WITHIN_PRIORITY_REFERENCE is implemented ----------------------------
+
+test('FIX3: FIFO_WITHIN_PRIORITY_REFERENCE is genuinely admitted (already the golden default)', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  assert.equal(golden.queueClass.queue_fairness_strategy, 'FIFO_WITHIN_PRIORITY_REFERENCE');
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  assert.equal(outcome.package.accepted_count, 2);
+});
+
+for (const unimplemented of ['STRICT_PRIORITY_WITH_TENANT_FAIRNESS', 'WEIGHTED_ROUND_ROBIN_REFERENCE', 'DETERMINISTIC_FAIR_SHARE_REFERENCE']) {
+  test(`FIX3: unimplemented fairness strategy ${unimplemented} blocks as QUEUE_ADMISSION_FAIRNESS_BLOCKED`, () => {
+    const golden = buildGoldenQueueAdmissionBundle();
+    const nonFifoClass = buildRuntimeQueueClassReference({ ...golden.queueClass, queue_fairness_strategy: unimplemented });
+    const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_class_references: [nonFifoClass] });
+    const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+    assert.equal(outcome.package.accepted_count, 0);
+    assert.ok(outcome.admissionEntryRefs.every((e) => e.admission_status === 'QUEUE_ADMISSION_FAIRNESS_BLOCKED'));
+    assert.ok(outcome.admissionEntryRefs.every((e) => e.reason_codes.includes(`queue_fairness_strategy_not_implemented::${unimplemented}`)));
+    assert.ok(outcome.admissionEntryRefs.every((e) => e.queue_admission_validated === false));
+  });
+}
+
+test('FIX3: unimplemented fairness strategy never mutates the deterministic global rank ordering', () => {
+  const golden = buildGoldenQueueAdmissionBundle('sequential-plan');
+  const nonFifoClass = buildRuntimeQueueClassReference({ ...golden.queueClass, queue_fairness_strategy: 'DETERMINISTIC_FAIR_SHARE_REFERENCE' });
+  const requestClean = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_class_references: [golden.queueClass] });
+  const requestBlocked = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_class_references: [nonFifoClass] });
+  const outcomeClean = evaluateRuntimeQueueAdmissionRequest(requestClean, {});
+  const outcomeBlocked = evaluateRuntimeQueueAdmissionRequest(requestBlocked, {});
+  const ranksClean = outcomeClean.fairnessRefs.map((f) => f.global_admission_rank);
+  const ranksBlocked = outcomeBlocked.fairnessRefs.map((f) => f.global_admission_rank);
+  assert.deepEqual(ranksClean, ranksBlocked);
+});
+
+// --- pr108fix FIX 4: Queue Capacity Snapshot freshness recomputed at admission sequence ------------
+
+test('FIX4: same sequence and a later sequence within the validity window both pass', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  for (const laterSequence of [0, 50]) {
+    const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, logical_sequence: laterSequence });
+    const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+    assert.equal(outcome.package.accepted_count, 2, `sequence ${laterSequence} should still admit`);
+  }
+});
+
+test('FIX4: expiration between the snapshot and this admission blocks with QUEUE_ADMISSION_CAPACITY_BLOCKED', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const tightSnapshot = buildRuntimeQueueCapacitySnapshotReference({ ...golden.capacitySnapshot, logical_sequence: 0, snapshot_valid_sequences: 10 });
+  const request = buildRuntimeQueueAdmissionRequest({
+    ...golden.queueAdmissionRequest, runtime_queue_capacity_snapshot_references: [tightSnapshot], logical_sequence: 500
+  });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  assert.equal(outcome.package.accepted_count, 0);
+  assert.ok(outcome.admissionEntryRefs.every((e) => e.admission_status === 'QUEUE_ADMISSION_CAPACITY_BLOCKED'));
+  assert.ok(outcome.admissionEntryRefs.every((e) => e.reason_codes.includes('queue_capacity_snapshot_not_valid_at_admission')));
+});
+
+test('FIX4: a regressive request sequence relative to the snapshot never passes', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const futureSnapshot = buildRuntimeQueueCapacitySnapshotReference({ ...golden.capacitySnapshot, logical_sequence: 100, snapshot_valid_sequences: 100000 });
+  const request = buildRuntimeQueueAdmissionRequest({
+    ...golden.queueAdmissionRequest, runtime_queue_capacity_snapshot_references: [futureSnapshot], logical_sequence: 0
+  });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  assert.equal(outcome.package.accepted_count, 0);
+  assert.ok(outcome.admissionEntryRefs.every((e) => e.admission_status === 'QUEUE_ADMISSION_CAPACITY_BLOCKED'));
+});
+
+test('FIX4: snapshot_expired_logically=false and capacity_validated=true on the snapshot itself never mask genuine expiration at this admission sequence', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  // The snapshot's own flags claim everything is fine -- only the request's own logical_sequence,
+  // compared against this snapshot's logical_sequence/snapshot_valid_sequences, decides freshness.
+  const staleButSelfReportedFine = buildRuntimeQueueCapacitySnapshotReference({
+    ...golden.capacitySnapshot, logical_sequence: 0, snapshot_valid_sequences: 5, capacity_validated: true
+  });
+  const request = buildRuntimeQueueAdmissionRequest({
+    ...golden.queueAdmissionRequest, runtime_queue_capacity_snapshot_references: [staleButSelfReportedFine], logical_sequence: 1000
+  });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  assert.equal(outcome.package.accepted_count, 0);
+});
+
 test('boundary: DISPATCH_STATUSES precedence covers QUEUE_ADMISSION_STATUSES exactly', () => {
   assert.deepEqual([...QUEUE_ADMISSION_STATUSES].sort(), [...QUEUE_ADMISSION_PRECEDENCE_ORDER].sort());
 });
 
 test('selectQueueClass: returns null when no class is compatible, deterministic pick when multiple are', () => {
   const canonical = { tenantId: 't-1', organizationId: 'o-1', projectId: 'p-1', agentId: 'a-1' };
-  const stage = { stage_type: 'DETERMINISTIC_STAGE', required_capabilities: [], required_modalities: [], optional: false, parallelizable: false, side_effect_classification: 'NONE', model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null };
-  assert.equal(selectQueueClass(stage, { queueClassRefs: [], canonical, capacitySnapshotByClassId: new Map(), quotaRefsByClassId: new Map() }), null);
+  const stage = { scheduler_stage_reference_id: 'stage-1', stage_type: 'DETERMINISTIC_STAGE', required_capabilities: [], required_modalities: [], optional: false, parallelizable: false, side_effect_classification: 'NONE', model_selection_reference_id: null, tool_reference_ids: [], workflow_reference_id: null };
+  const ctx = {
+    queueClassRefs: [], canonical, capacitySnapshotByClassId: new Map(), quotaCollectionByClassId: new Map(),
+    validCapacityClassIds: new Set(), stagePolicyRequirementsByStageId: new Map(), modelSelectionDecisionsById: new Map()
+  };
+  const result = selectQueueClass(stage, ctx);
+  assert.equal(result.selectedClass, null);
+  assert.deepEqual(result.rejectionReasons, []);
 });
 
 // --- Package integrity -----------------------------------------------------------------------------
@@ -385,6 +664,16 @@ test('package integrity: fingerprint/digest self-recompute detects tampering', (
   const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
   assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
   assertInvalid('tampered entry_count', validateRuntimeQueueAdmissionPackage({ ...outcome.package, entry_count: 999 }));
+});
+
+test('package integrity: official_model_selection_decision_fingerprints participates in the package fingerprint (pr108fix Package Integrity)', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  assert.ok('official_model_selection_decision_fingerprints' in outcome.package);
+  assert.deepEqual(outcome.package.official_model_selection_decision_fingerprints, []);
+  assertInvalid('tampered official_model_selection_decision_fingerprints', validateRuntimeQueueAdmissionPackage({
+    ...outcome.package, official_model_selection_decision_fingerprints: ['sha256:' + 'a'.repeat(64)]
+  }));
 });
 
 // --- Decision / Result / Audit --------------------------------------------------------------------

@@ -33,6 +33,12 @@ const { validateSecretReference } = require('./transcription-secret-resolution-b
 const { validateRuntimeWorkerStagePolicyRequirementReference } = require('./runtime-worker-stage-policy-requirement-reference');
 const { validateRuntimeSchedulerDependencyReference } = require('./runtime-scheduler-dependency-reference');
 const { validateRuntimeQueueAdmissionReplayReference } = require('./runtime-queue-admission-replay-reference');
+// pr108fix FIX 1: the genuine official Model Selection Decision objects a RESOLVED MODEL Stage
+// Policy Requirement's `source_reference_id`/`source_reference_fingerprint` must bind to -- the
+// Dispatch layer never re-carries these forward (it only proves the Stage Policy Requirement
+// fingerprint is unchanged), but Queue Class compatibility genuinely needs the real
+// `selected_model_id`/`selected_provider_id`, which no fingerprint alone can recover.
+const { validateModelSelectionDecision } = require('./model-selection-decision');
 
 // pr108: aggregates every reference runtime-queue-admission-boundary.js needs -- the already-
 // DISPATCH_PACKAGE_PREPARED_SIMULATION chain (Dispatch Request/Decision/Result/Package plus every
@@ -58,6 +64,7 @@ const RUNTIME_QUEUE_ADMISSION_REQUEST_FIELDS = Object.freeze([
   'runtime_freshness_reference', 'idempotency_reference', 'registry_snapshot_reference',
   'network_permission_policy_references', 'secret_resolution_policy_references',
   'runtime_worker_stage_policy_requirement_references', 'runtime_scheduler_dependency_references',
+  'official_model_selection_decision_references',
   'runtime_queue_admission_replay_reference',
   'correlation_id', 'causation_id', 'trace_id', 'logical_sequence', 'expected_queue_admission_registry_version',
   'simulation_context', 'validator_version'
@@ -101,7 +108,8 @@ const LIST_NESTED_REFERENCE_VALIDATORS = Object.freeze([
   ['network_permission_policy_references', validateDestinationReference],
   ['secret_resolution_policy_references', validateSecretReference],
   ['runtime_worker_stage_policy_requirement_references', validateRuntimeWorkerStagePolicyRequirementReference],
-  ['runtime_scheduler_dependency_references', validateRuntimeSchedulerDependencyReference]
+  ['runtime_scheduler_dependency_references', validateRuntimeSchedulerDependencyReference],
+  ['official_model_selection_decision_references', validateModelSelectionDecision]
 ]);
 
 const MAX_LIST_ITEMS = 200;
@@ -196,6 +204,7 @@ function buildRuntimeQueueAdmissionRequest(input = {}) {
     secret_resolution_policy_references: Array.isArray(input.secret_resolution_policy_references) ? input.secret_resolution_policy_references : [],
     runtime_worker_stage_policy_requirement_references: Array.isArray(input.runtime_worker_stage_policy_requirement_references) ? input.runtime_worker_stage_policy_requirement_references : [],
     runtime_scheduler_dependency_references: Array.isArray(input.runtime_scheduler_dependency_references) ? input.runtime_scheduler_dependency_references : [],
+    official_model_selection_decision_references: Array.isArray(input.official_model_selection_decision_references) ? input.official_model_selection_decision_references : [],
     runtime_queue_admission_replay_reference: input.runtime_queue_admission_replay_reference,
     correlation_id: input.correlation_id,
     causation_id: input.causation_id,
