@@ -52,7 +52,8 @@ const { validateRuntimeQueueAdmissionResult } = require('../src/core/runtime-que
 const { validateRuntimeQueueAdmissionAudit } = require('../src/core/runtime-queue-admission-audit');
 const { createRuntimeQueueAdmissionRegistry } = require('../src/core/runtime-queue-admission-registry');
 const {
-  evaluateRuntimeQueueAdmissionRequest, selectQueueClass, evaluateQueueClassCompatibility, classifyQuotaScope
+  evaluateRuntimeQueueAdmissionRequest, selectQueueClass, evaluateQueueClassCompatibility, classifyQuotaScope,
+  checkPriorityOrderPreserved, checkFairnessOrderPreserved
 } = require('../src/core/runtime-queue-admission-boundary');
 const { buildModelSelectionDecision } = require('../src/core/model-selection-decision');
 const { buildRuntimeWorkerStagePolicyRequirementReference } = require('../src/core/runtime-worker-stage-policy-requirement-reference');
@@ -639,6 +640,155 @@ test('FIX4: snapshot_expired_logically=false and capacity_validated=true on the 
   });
   const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
   assert.equal(outcome.package.accepted_count, 0);
+});
+
+// --- pr108fix2 FIX 1: all four per-identity policy limits participate -----------------------------
+
+const IDENTITY_LIMIT_CASES = Object.freeze([
+  ['tenant', 'maximum_per_tenant_admission_count', 'queue_admission_per_tenant_count_exceeds_policy_limit'],
+  ['organization', 'maximum_per_organization_admission_count', 'queue_admission_per_organization_count_exceeds_policy_limit'],
+  ['project', 'maximum_per_project_admission_count', 'queue_admission_per_project_count_exceeds_policy_limit'],
+  ['agent', 'maximum_per_agent_admission_count', 'queue_admission_per_agent_count_exceeds_policy_limit']
+]);
+
+for (const [label, policyField, reasonCode] of IDENTITY_LIMIT_CASES) {
+  test(`FIX1(pr108fix2): ${label} limit exactly at the accepted count passes`, () => {
+    const golden = buildGoldenQueueAdmissionBundle(undefined, { policy: { [policyField]: 2 } });
+    const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+    assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
+    assert.equal(outcome.package.accepted_count, 2);
+  });
+
+  test(`FIX1(pr108fix2): ${label} limit below the accepted count blocks QUEUE_ADMISSION_POLICY_BLOCKED`, () => {
+    const golden = buildGoldenQueueAdmissionBundle(undefined, { policy: { [policyField]: 1 } });
+    const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+    assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_POLICY_BLOCKED');
+    assert.ok(outcome.decision.blockers.includes(reasonCode));
+  });
+}
+
+test('FIX1(pr108fix2): different limits across identities -- the smallest effective limit blocks first', () => {
+  const golden = buildGoldenQueueAdmissionBundle(undefined, {
+    policy: {
+      maximum_per_tenant_admission_count: 10, maximum_per_organization_admission_count: 1,
+      maximum_per_project_admission_count: 10, maximum_per_agent_admission_count: 10
+    }
+  });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_POLICY_BLOCKED');
+  assert.ok(outcome.decision.blockers.includes('queue_admission_per_organization_count_exceeds_policy_limit'));
+});
+
+test('FIX1(pr108fix2): only genuinely accepted entries count against identity limits -- deferred/waiting/optional/blocked never do', () => {
+  const golden = buildGoldenQueueAdmissionBundle('sequential-plan', { policy: { maximum_per_tenant_admission_count: 1 } });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  // sequential-plan admits exactly 1 (the other intent stays WAITING_DEPENDENCY) -- the waiting one
+  // must never push the accepted count past the limit of 1.
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(outcome.package.accepted_count, 1);
+});
+
+test('FIX1(pr108fix2): a hostile context never alters identity limit enforcement', () => {
+  const golden = buildGoldenQueueAdmissionBundle(undefined, { policy: { maximum_per_tenant_admission_count: 1 } });
+  const outcomeClean = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const outcomeHostile = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, { maximum_per_tenant_admission_count: 999999 });
+  assert.deepEqual(outcomeClean.decision, outcomeHostile.decision);
+});
+
+// --- pr108fix2 FIX 2: unified decision order + genuinely recomputed order flags --------------------
+
+function fifoEntry(priorityClass, dispatchSequence) {
+  return { selectedClass: { queue_priority_class: priorityClass }, intent: { dispatch_sequence: dispatchSequence } };
+}
+
+test('checkPriorityOrderPreserved: non-decreasing priority ranks in canonical order pass', () => {
+  const ordered = [fifoEntry('CRITICAL_REFERENCE', 0), fifoEntry('CRITICAL_REFERENCE', 1), fifoEntry('NORMAL_REFERENCE', 2), fifoEntry('BACKGROUND_REFERENCE', 3)];
+  assert.equal(checkPriorityOrderPreserved(ordered), true);
+});
+
+test('checkPriorityOrderPreserved: a higher-priority intent appearing after a lower-priority one fails', () => {
+  const ordered = [fifoEntry('NORMAL_REFERENCE', 0), fifoEntry('CRITICAL_REFERENCE', 1)];
+  assert.equal(checkPriorityOrderPreserved(ordered), false);
+});
+
+test('checkPriorityOrderPreserved: an unselected class (null) is treated as BACKGROUND_REFERENCE, never masking a violation', () => {
+  const noClass = { selectedClass: null, intent: { dispatch_sequence: 1 } };
+  const ordered = [fifoEntry('CRITICAL_REFERENCE', 0), noClass, fifoEntry('CRITICAL_REFERENCE', 2)];
+  assert.equal(checkPriorityOrderPreserved(ordered), false);
+});
+
+test('checkFairnessOrderPreserved: strictly increasing dispatch_sequence within the same priority class passes', () => {
+  const ordered = [fifoEntry('NORMAL_REFERENCE', 0), fifoEntry('CRITICAL_REFERENCE', 1), fifoEntry('NORMAL_REFERENCE', 2)];
+  assert.equal(checkFairnessOrderPreserved(ordered), true);
+});
+
+test('checkFairnessOrderPreserved: a non-increasing dispatch_sequence within the same (scattered) priority class fails', () => {
+  const ordered = [fifoEntry('NORMAL_REFERENCE', 5), fifoEntry('CRITICAL_REFERENCE', 0), fifoEntry('NORMAL_REFERENCE', 3)];
+  assert.equal(checkFairnessOrderPreserved(ordered), false);
+});
+
+test('FIX2(pr108fix2): golden bundle recomputes all 4 order flags to genuinely true', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  assert.equal(outcome.orderRef.dispatch_order_preserved, true);
+  assert.equal(outcome.orderRef.priority_order_preserved, true);
+  assert.equal(outcome.orderRef.fairness_order_preserved, true);
+  assert.equal(outcome.orderRef.required_predecessor_order_preserved, true);
+});
+
+test('FIX2(pr108fix2): a required dependency edge reversed in the raw Scheduler Dependency References is never silently accepted', () => {
+  const golden = buildGoldenQueueAdmissionBundle('sequential-plan');
+  const rawDependencies = golden.queueAdmissionRequest.runtime_scheduler_dependency_references;
+  assert.ok(rawDependencies.length > 0, 'sequential-plan must carry at least one scheduler dependency');
+  const reversed = rawDependencies.map((d) => ({
+    ...d, from_scheduler_stage_reference_id: d.to_scheduler_stage_reference_id, to_scheduler_stage_reference_id: d.from_scheduler_stage_reference_id
+  }));
+  // Reversing from/to without recomputing dependency_fingerprint already makes the reference
+  // self-inconsistent -- the Scheduler Dependency Reference's own validator (reused verbatim, never
+  // re-derived by this layer) rejects it at construction, proving the edge can never be silently
+  // inverted without detection.
+  assert.throws(() => buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_scheduler_dependency_references: reversed }));
+});
+
+test('FIX2(pr108fix2): shuffled input reference arrays never alter the canonical admission order', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const shuffledRequest = buildRuntimeQueueAdmissionRequest({
+    ...golden.queueAdmissionRequest,
+    runtime_dispatch_stage_references: [...golden.queueAdmissionRequest.runtime_dispatch_stage_references].reverse(),
+    runtime_dispatch_intent_references: [...golden.queueAdmissionRequest.runtime_dispatch_intent_references].reverse(),
+    runtime_queue_quota_references: [...golden.queueAdmissionRequest.runtime_queue_quota_references].reverse()
+  });
+  const outcomeClean = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const outcomeShuffled = evaluateRuntimeQueueAdmissionRequest(shuffledRequest, {});
+  assert.deepEqual(outcomeClean.orderRef.ordered_queue_admission_entry_reference_ids, outcomeShuffled.orderRef.ordered_queue_admission_entry_reference_ids);
+  assert.deepEqual(outcomeClean.decision.status, outcomeShuffled.decision.status);
+});
+
+test('FIX2(pr108fix2): admission_sequence is unique per accepted entry, never reused', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const acceptedSequences = outcome.admissionEntryRefs
+    .filter((e) => e.admission_status === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION')
+    .map((e) => e.admission_sequence);
+  assert.equal(new Set(acceptedSequences).size, acceptedSequences.length);
+});
+
+test('package integrity(pr108fix2): the order fingerprint changes when the real admission order changes, blocking a forged flip', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const forgedOrder = { ...outcome.orderRef, ordered_queue_admission_entry_reference_ids: [...outcome.orderRef.ordered_queue_admission_entry_reference_ids].reverse() };
+  assertInvalid('forged reversed order', validateRuntimeQueueAdmissionOrderReference(forgedOrder));
+});
+
+test('package integrity(pr108fix2): queue_admission_order_validated is false whenever any single preserved flag is false, never true by default', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  assert.equal(outcome.orderRef.queue_admission_order_validated, true);
+  for (const flag of ['dispatch_order_preserved', 'priority_order_preserved', 'fairness_order_preserved', 'required_predecessor_order_preserved']) {
+    const forgedOrder = buildRuntimeQueueAdmissionOrderReference({ ...outcome.orderRef, [flag]: false });
+    assertValid(`order with ${flag}=false is still structurally valid`, validateRuntimeQueueAdmissionOrderReference(forgedOrder));
+    assert.equal(forgedOrder.queue_admission_order_validated, false, `${flag}=false must make queue_admission_order_validated false`);
+  }
 });
 
 test('boundary: DISPATCH_STATUSES precedence covers QUEUE_ADMISSION_STATUSES exactly', () => {

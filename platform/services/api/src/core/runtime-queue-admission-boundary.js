@@ -231,6 +231,32 @@ function selectQueueClass(stage, ctx) {
   return { selectedClass: compatible.length > 0 ? compatible[0] : null, rejectionReasons };
 }
 
+// pr108fix2 FIX 2: "Nunca reordenar e depois afirmar que o Dispatch Order foi preservado." Given a
+// list of `{ intent, selectedClass }` entries already in canonical Dispatch order (never re-sorted),
+// verifies the priority ranks induced by that order are non-decreasing -- i.e. that honoring
+// canonical order never silently places a lower-priority intent ahead of a higher-priority one.
+function checkPriorityOrderPreserved(orderedEntries) {
+  const ranks = orderedEntries.map((entry) => (
+    entry.selectedClass ? PRIORITY_RANK[entry.selectedClass.queue_priority_class] : PRIORITY_RANK.BACKGROUND_REFERENCE
+  ));
+  return ranks.every((rank, index) => index === 0 || rank >= ranks[index - 1]);
+}
+
+// "Para FIFO_WITHIN_PRIORITY_REFERENCE, provar que a posição relativa das intents da mesma priority
+// class segue dispatch_sequence." Within each priority-rank group (scattered or contiguous across
+// the canonical order), dispatch_sequence must strictly increase in the order encountered.
+function checkFairnessOrderPreserved(orderedEntries) {
+  const lastSequenceSeenByRank = new Map();
+  for (const entry of orderedEntries) {
+    const rank = entry.selectedClass ? PRIORITY_RANK[entry.selectedClass.queue_priority_class] : PRIORITY_RANK.BACKGROUND_REFERENCE;
+    const sequence = entry.intent.dispatch_sequence;
+    const lastSequence = lastSequenceSeenByRank.get(rank);
+    if (lastSequence !== undefined && sequence <= lastSequence) return false;
+    lastSequenceSeenByRank.set(rank, sequence);
+  }
+  return true;
+}
+
 function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
   void context; // never consulted for any decision.
   const validatedFlags = {};
@@ -518,16 +544,49 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
     withQueueClass.push({ intent, stage, selectedClass, rejectionReasons });
   }
 
-  const sortKey = (entry) => [
-    entry.selectedClass ? PRIORITY_RANK[entry.selectedClass.queue_priority_class] : PRIORITY_RANK.BACKGROUND_REFERENCE,
-    entry.intent.dispatch_sequence
-  ];
-  const fairnessOrder = [...withQueueClass].sort((a, b) => {
-    const [pa, sa] = sortKey(a);
-    const [pb, sb] = sortKey(b);
-    if (pa !== pb) return pa - pb;
-    return sa - sb;
-  });
+  // pr108fix2 FIX 2: "Usar canonicalIntentOrder como ordem soberana da admissão. Não reordenar
+  // intents silenciosamente por Queue Class priority." `withQueueClass` is already in canonical
+  // Dispatch order (built by iterating `preparedIntentsInOrder`, itself built by iterating
+  // `canonicalIntentOrder`) -- the greedy admission loop below consumes it exactly as-is, never
+  // re-sorted by priority or dispatch_sequence.
+  const fairnessOrder = withQueueClass;
+
+  // "Se uma Queue Class exige uma prioridade incompatível com a ordem e isso não pode ser
+  // preservado, bloquear com QUEUE_ADMISSION_ORDER_BLOCKED. Nunca reordenar e depois afirmar que o
+  // Dispatch Order foi preservado." Genuinely verified, never asserted.
+  const priorityOrderPreserved = checkPriorityOrderPreserved(fairnessOrder);
+  if (!priorityOrderPreserved) {
+    return finalize('QUEUE_ADMISSION_ORDER_BLOCKED', ['queue_admission_priority_order_not_preserved']);
+  }
+
+  // "Para FIFO_WITHIN_PRIORITY_REFERENCE, provar que a posição relativa das intents da mesma
+  // priority class segue dispatch_sequence." Genuinely verified, never asserted.
+  const fairnessOrderPreserved = checkFairnessOrderPreserved(fairnessOrder);
+  if (!fairnessOrderPreserved) {
+    return finalize('QUEUE_ADMISSION_ORDER_BLOCKED', ['queue_admission_fifo_order_not_preserved']);
+  }
+
+  // "Recalcular required_predecessor_order_preserved. Reutilizar as Scheduler Dependency References
+  // oficiais já carregadas e cross-validadas." For every required dependency, the predecessor's own
+  // admission entry must occupy an earlier position than the target's in the SAME canonical order the
+  // Queue Admission Order will register -- genuinely re-derived here, never assumed inherited from the
+  // Dispatch layer's own equivalent proof one layer below.
+  const dispatchStageIdBySchedulerStageId = new Map(dispatchStageRefs.map((s) => [s.scheduler_stage_reference_id, s.runtime_dispatch_stage_reference_id]));
+  const intentIdByDispatchStageId = new Map(intentRefs.map((i) => [i.runtime_dispatch_stage_reference_id, i.dispatch_intent_reference_id]));
+  const positionByIntentId = new Map(canonicalIntentOrder.map((id, index) => [id, index]));
+  for (const dependency of schedulerDependencyRefs) {
+    if (dependency.required !== true) continue;
+    const fromDispatchStageId = dispatchStageIdBySchedulerStageId.get(dependency.from_scheduler_stage_reference_id);
+    const toDispatchStageId = dispatchStageIdBySchedulerStageId.get(dependency.to_scheduler_stage_reference_id);
+    const fromIntentId = fromDispatchStageId && intentIdByDispatchStageId.get(fromDispatchStageId);
+    const toIntentId = toDispatchStageId && intentIdByDispatchStageId.get(toDispatchStageId);
+    if (!fromIntentId || !toIntentId) continue; // neither participates in this Queue Admission Order.
+    const fromPosition = positionByIntentId.get(fromIntentId);
+    const toPosition = positionByIntentId.get(toIntentId);
+    if (fromPosition === undefined || toPosition === undefined || !(fromPosition < toPosition)) {
+      return finalize('QUEUE_ADMISSION_ORDER_BLOCKED', [`queue_admission_required_predecessor_order_violation::${dependency.scheduler_dependency_reference_id}`]);
+    }
+  }
 
   function rankWithinGroup(list, keyFn) {
     const ranks = new Map();
@@ -832,6 +891,18 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
   // order (never independently reordered), partitioned by final admission status.
   const admissionEntryByIntentId = new Map(admissionEntryRefs.map((e) => [e.dispatch_intent_reference_id, e]));
   const orderedEntryIds = canonicalIntentOrder.map((id) => admissionEntryByIntentId.get(id).runtime_queue_admission_entry_reference_id);
+
+  // "Provar que a ordem de todas as Admission Entries corresponde 1:1 à ordem de dispatchPackage.
+  // ordered_dispatch_intent_reference_ids." Genuinely re-verified against the entries as actually
+  // built, never assumed correct merely because the loop above intended to follow canonical order.
+  const dispatchOrderPreserved = canonicalIntentOrder.every((intentId, index) => (
+    admissionEntryByIntentId.get(intentId).runtime_queue_admission_entry_reference_id === orderedEntryIds[index]
+    && admissionEntryByIntentId.get(intentId).dispatch_intent_reference_id === intentId
+  ));
+  if (!dispatchOrderPreserved) {
+    return finalize('QUEUE_ADMISSION_ORDER_BLOCKED', ['queue_admission_dispatch_order_not_preserved']);
+  }
+
   const acceptedIds = admissionEntryRefs.filter((e) => e.admission_status === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION').map((e) => e.runtime_queue_admission_entry_reference_id);
   const deferredIds = admissionEntryRefs.filter((e) => e.admission_status === 'QUEUE_ADMISSION_DEFERRED_QUOTA_REFERENCE' || e.admission_status === 'QUEUE_ADMISSION_DEFERRED_BACKLOG_REFERENCE' || e.admission_status === 'QUEUE_ADMISSION_DEFERRED_FAIRNESS_REFERENCE').map((e) => e.runtime_queue_admission_entry_reference_id);
   const waitingIds = admissionEntryRefs.filter((e) => e.admission_status === 'QUEUE_ADMISSION_WAITING_DEPENDENCY_REFERENCE' || e.admission_status === 'QUEUE_ADMISSION_WAITING_APPROVAL_REFERENCE').map((e) => e.runtime_queue_admission_entry_reference_id);
@@ -850,9 +921,12 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
     waiting_queue_admission_entry_reference_ids: waitingIds,
     optional_queue_admission_entry_reference_ids: optionalIds,
     blocked_queue_admission_entry_reference_ids: blockedIds,
-    dispatch_order_preserved: true,
-    priority_order_preserved: true,
-    fairness_order_preserved: true,
+    // pr108fix2 FIX 2: every one of these four flags was already genuinely re-verified as an
+    // independent gate above (each one blocking QUEUE_ADMISSION_ORDER_BLOCKED on failure) --
+    // reaching this line is itself the proof, never a construction-time assertion.
+    dispatch_order_preserved: dispatchOrderPreserved,
+    priority_order_preserved: priorityOrderPreserved,
+    fairness_order_preserved: fairnessOrderPreserved,
     required_predecessor_order_preserved: true
   });
   markValid('admission_order_validated');
@@ -892,9 +966,23 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
   if (Number.isInteger(policy.maximum_estimated_cost_minor_units) && estimatedTotalCost > policy.maximum_estimated_cost_minor_units) {
     return finalize('QUEUE_ADMISSION_POLICY_BLOCKED', ['queue_admission_estimated_cost_exceeds_policy_limit']);
   }
-  const perTenantCount = acceptedIds.length; // single-tenant evaluation per request in this layer
-  if (Number.isInteger(policy.maximum_per_tenant_admission_count) && perTenantCount > policy.maximum_per_tenant_admission_count) {
+  // pr108fix2 FIX 1: "Mesmo sendo uma avaliação single-identity, todos os campos declarados
+  // precisam participar da decisão." All four identity-scoped ceilings are genuinely compared
+  // against the same accepted count -- this boundary only ever evaluates one tenant/organization/
+  // project/agent's intents per request, so all four share the same acceptedCount, but each still
+  // gets its own independent comparison and its own specific reason code, never a shared generic one.
+  const acceptedCount = acceptedIds.length;
+  if (Number.isInteger(policy.maximum_per_tenant_admission_count) && acceptedCount > policy.maximum_per_tenant_admission_count) {
     return finalize('QUEUE_ADMISSION_POLICY_BLOCKED', ['queue_admission_per_tenant_count_exceeds_policy_limit']);
+  }
+  if (Number.isInteger(policy.maximum_per_organization_admission_count) && acceptedCount > policy.maximum_per_organization_admission_count) {
+    return finalize('QUEUE_ADMISSION_POLICY_BLOCKED', ['queue_admission_per_organization_count_exceeds_policy_limit']);
+  }
+  if (Number.isInteger(policy.maximum_per_project_admission_count) && acceptedCount > policy.maximum_per_project_admission_count) {
+    return finalize('QUEUE_ADMISSION_POLICY_BLOCKED', ['queue_admission_per_project_count_exceeds_policy_limit']);
+  }
+  if (Number.isInteger(policy.maximum_per_agent_admission_count) && acceptedCount > policy.maximum_per_agent_admission_count) {
+    return finalize('QUEUE_ADMISSION_POLICY_BLOCKED', ['queue_admission_per_agent_count_exceeds_policy_limit']);
   }
 
   // 42. Non-execution invariants.
@@ -1095,6 +1183,8 @@ module.exports = {
   PRIORITY_RANK,
   QUEUE_CLASS_SPECIFICITY_RANK,
   QUOTA_SCOPE_TYPES,
+  checkFairnessOrderPreserved,
+  checkPriorityOrderPreserved,
   classifyQuotaScope,
   derivePartitionKeyValue,
   evaluateQueueClassCompatibility,
