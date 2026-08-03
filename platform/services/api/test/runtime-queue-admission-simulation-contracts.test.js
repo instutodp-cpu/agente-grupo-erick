@@ -5,6 +5,8 @@ const assert = require('node:assert/strict');
 
 const { findAgentCoreOperationalMaterial } = require('../src/core/agent-identity-contract');
 const { runAllGates } = require('../src/core/architecture-gate-runner');
+const { buildOfficialRegistrySnapshot } = require('./helpers/runtime-worker-assignment-test-data');
+const { buildExecutionRegistrySnapshotReference, computeSnapshotFingerprint } = require('../src/core/execution-registry-snapshot-reference');
 
 const {
   validateRuntimeQueueAdmissionPolicy, buildRuntimeQueueAdmissionPolicy, RUNTIME_QUEUE_ADMISSION_POLICY_FIELDS
@@ -789,6 +791,162 @@ test('package integrity(pr108fix2): queue_admission_order_validated is false whe
     assertValid(`order with ${flag}=false is still structurally valid`, validateRuntimeQueueAdmissionOrderReference(forgedOrder));
     assert.equal(forgedOrder.queue_admission_order_validated, false, `${flag}=false must make queue_admission_order_validated false`);
   }
+});
+
+// --- pr108fix3 FIX 1: a Queue Class blocker must precede an Order blocker --------------------------
+
+test('FIX1(pr108fix3): only order-eligible (selectedClass !== null) entries participate in checkPriorityOrderPreserved', () => {
+  const noClassFirst = { selectedClass: null, intent: { dispatch_sequence: 0 } };
+  const highSecond = fifoEntry('HIGH_REFERENCE', 1);
+  const mixed = [noClassFirst, highSecond];
+  // Unfiltered, a synthetic BACKGROUND_REFERENCE (rank 4) followed by HIGH_REFERENCE (rank 1) would
+  // read as a priority violation (4 then 1 is decreasing). Filtered to order-eligible entries only
+  // (mirroring exactly what the boundary now does before calling this function), the no-class entry
+  // never participates, so a single HIGH entry alone can never violate anything.
+  assert.equal(checkPriorityOrderPreserved(mixed), false);
+  const eligible = mixed.filter((entry) => entry.selectedClass !== null);
+  assert.equal(checkPriorityOrderPreserved(eligible), true);
+});
+
+test('FIX1(pr108fix3): only order-eligible entries participate in checkFairnessOrderPreserved', () => {
+  const noClassFirst = { selectedClass: null, intent: { dispatch_sequence: 5 } };
+  const normalSecond = fifoEntry('NORMAL_REFERENCE', 0);
+  const mixed = [noClassFirst, normalSecond];
+  const eligible = mixed.filter((entry) => entry.selectedClass !== null);
+  assert.equal(checkFairnessOrderPreserved(eligible), true);
+});
+
+test('FIX1(pr108fix3): a genuinely absent Queue Class never masks itself as an order violation in the full boundary', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const incompatibleClass = buildRuntimeQueueClassReference({ ...golden.queueClass, supported_stage_types: ['MODEL_REFERENCE_STAGE'] });
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_class_references: [incompatibleClass] });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  // The whole evaluation still reaches PACKAGE_PREPARED_SIMULATION (order proofs never fired for
+  // these class-less entries); each entry surfaces its own genuine QUEUE_ADMISSION_QUEUE_CLASS_BLOCKED.
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
+  assert.ok(outcome.admissionEntryRefs.every((e) => e.admission_status === 'QUEUE_ADMISSION_QUEUE_CLASS_BLOCKED'));
+});
+
+test('FIX1(pr108fix3): two genuinely order-eligible entries with inverted priority still block QUEUE_ADMISSION_ORDER_BLOCKED', () => {
+  const low = fifoEntry('LOW_REFERENCE', 0);
+  const critical = fifoEntry('CRITICAL_REFERENCE', 1);
+  assert.equal(checkPriorityOrderPreserved([low, critical]), false);
+});
+
+test('FIX1(pr108fix3): fairness never masks a genuine Queue Class mismatch -- order-eligible filtering happens before either proof runs', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const nonFifoClass = buildRuntimeQueueClassReference({ ...golden.queueClass, queue_fairness_strategy: 'WEIGHTED_ROUND_ROBIN_REFERENCE' });
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_class_references: [nonFifoClass] });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
+  assert.ok(outcome.admissionEntryRefs.every((e) => e.admission_status === 'QUEUE_ADMISSION_FAIRNESS_BLOCKED'));
+});
+
+test('FIX1(pr108fix3): the order-eligible filter always drops every no-class entry, regardless of its position in canonical order', () => {
+  const a = fifoEntry('NORMAL_REFERENCE', 0);
+  const b = fifoEntry('NORMAL_REFERENCE', 1);
+  const noClassAtStart = { selectedClass: null, intent: { dispatch_sequence: -1 } };
+  const noClassAtEnd = { selectedClass: null, intent: { dispatch_sequence: 2 } };
+  const withNoClassFirst = [noClassAtStart, a, b].filter((entry) => entry.selectedClass !== null);
+  const withNoClassLast = [a, b, noClassAtEnd].filter((entry) => entry.selectedClass !== null);
+  assert.equal(checkPriorityOrderPreserved(withNoClassFirst), true);
+  assert.equal(checkPriorityOrderPreserved(withNoClassLast), true);
+  assert.equal(checkFairnessOrderPreserved(withNoClassFirst), true);
+  assert.equal(checkFairnessOrderPreserved(withNoClassLast), true);
+});
+
+test('FIX1(pr108fix3): a hostile context never alters Queue Class vs Order precedence', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const incompatibleClass = buildRuntimeQueueClassReference({ ...golden.queueClass, supported_stage_types: ['MODEL_REFERENCE_STAGE'] });
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_class_references: [incompatibleClass] });
+  const outcomeClean = evaluateRuntimeQueueAdmissionRequest(request, {});
+  const outcomeHostile = evaluateRuntimeQueueAdmissionRequest(request, { priority: 'CRITICAL_REFERENCE', reorder: true });
+  assert.deepEqual(outcomeClean.decision, outcomeHostile.decision);
+});
+
+// --- pr108fix3 FIX 2: Registry Snapshot mandatory on the PREPARED path -----------------------------
+
+test('FIX2(pr108fix3): a genuine official Registry Snapshot bound to the Dispatch Package passes and reaches PREPARED', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcome.package.registry_snapshot_fingerprint, 'fingerprint_not_available');
+});
+
+test('FIX2(pr108fix3): registry_snapshot_reference=null at this layer blocks even when the Dispatch Package has a genuine one', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, registry_snapshot_reference: null });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED');
+  assert.ok(outcome.decision.blockers.includes('queue_admission_registry_snapshot_missing'));
+});
+
+test('FIX2(pr108fix3): a Dispatch Package with no Registry Snapshot at all blocks queue_admission_registry_snapshot_missing', () => {
+  const golden = buildGoldenQueueAdmissionBundle(undefined, { registrySnapshotRef: null });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED');
+  assert.ok(outcome.decision.blockers.includes('queue_admission_registry_snapshot_missing'));
+});
+
+test('FIX2(pr108fix3): a Registry Snapshot ID/content divergent from the Dispatch Package binding blocks fingerprint mismatch', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const divergentSnapshot = buildOfficialRegistrySnapshot({ registry_snapshot_reference_id: 'snapshotref-divergent' });
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, registry_snapshot_reference: divergentSnapshot });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED');
+  assert.ok(outcome.decision.blockers.includes('queue_admission_registry_snapshot_not_bound_to_dispatch'));
+});
+
+test('FIX2(pr108fix3): a self-inconsistent (tampered) Registry Snapshot is never silently accepted', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const tamperedSnapshot = { ...golden.queueAdmissionRequest.registry_snapshot_reference, tenant_id: 'tenant-tampered' };
+  // Tampering a field without recomputing snapshot_fingerprint already makes the reference
+  // self-inconsistent -- the Registry Snapshot's own validator (reused verbatim, never re-derived by
+  // this layer) rejects it at Queue Admission Request construction, proving it can never be silently
+  // accepted with mismatched content.
+  assert.throws(() => buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, registry_snapshot_reference: tamperedSnapshot }));
+});
+
+for (const [field, wrongValue] of [['tenant_id', 'tenant-foreign'], ['organization_id', 'org-foreign'], ['project_id', 'project-foreign']]) {
+  test(`FIX2(pr108fix3): Registry Snapshot ${field} divergent from canonical identity blocks scope_mismatch`, () => {
+    const golden = buildGoldenQueueAdmissionBundle(undefined, {
+      registrySnapshotRef: buildOfficialRegistrySnapshot({ [field]: wrongValue })
+    });
+    const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+    assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED');
+    assert.ok(outcome.decision.blockers.includes('queue_admission_registry_snapshot_scope_mismatch'));
+  });
+}
+
+test('FIX2(pr108fix3): a Registry Snapshot logically ahead of this admission request blocks stale', () => {
+  const golden = buildGoldenQueueAdmissionBundle(undefined, { registrySnapshotRef: buildOfficialRegistrySnapshot({ logical_sequence: 100 }) });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED');
+  assert.ok(outcome.decision.blockers.includes('queue_admission_registry_snapshot_stale'));
+});
+
+test('package integrity(pr108fix3): registry_snapshot_fingerprint is never the fingerprint_not_available placeholder on a prepared package', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
+  assert.notEqual(outcome.package.registry_snapshot_fingerprint, 'fingerprint_not_available');
+  const forgedPlaceholder = { ...outcome.package, registry_snapshot_fingerprint: 'fingerprint_not_available' };
+  assertInvalid('placeholder registry_snapshot_fingerprint on a prepared package', validateRuntimeQueueAdmissionPackage(forgedPlaceholder));
+});
+
+test('package integrity(pr108fix3): a blocked outcome never fakes registry snapshot validation -- it uses the safe fingerprint_not_available placeholder honestly', () => {
+  const golden = buildGoldenQueueAdmissionBundle(undefined, { registrySnapshotRef: null });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED');
+  assert.equal(outcome.package.registry_snapshot_fingerprint, 'fingerprint_not_available');
+  assertValid('blocked package with honest placeholder', validateRuntimeQueueAdmissionPackage(outcome.package));
+});
+
+test('FIX2(pr108fix3): a hostile context never alters Registry Snapshot enforcement', () => {
+  const golden = buildGoldenQueueAdmissionBundle(undefined, { registrySnapshotRef: null });
+  const outcomeClean = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const outcomeHostile = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, { registrySnapshotValid: true, skipRegistryCheck: true });
+  assert.deepEqual(outcomeClean.decision, outcomeHostile.decision);
 });
 
 test('boundary: DISPATCH_STATUSES precedence covers QUEUE_ADMISSION_STATUSES exactly', () => {

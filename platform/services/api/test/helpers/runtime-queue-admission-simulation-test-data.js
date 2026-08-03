@@ -6,6 +6,14 @@
 // SHARED Queue Class compatible with the golden bundle's own (deterministic, no-LLM) stage
 // composition.
 const { buildGoldenDispatchBundle, evaluateRuntimeDispatchRequest } = require('./runtime-dispatch-simulation-test-data');
+// pr108fix3 FIX 2: the same canonical, reused-verbatim official Registry Snapshot the Worker
+// Assignment layer already builds for Stage Policy Requirement provenance (pr106fix5) -- now also
+// wired into the Worker Assignment Request's own `registry_snapshot_reference` AND the Dispatch
+// Request's own `registry_snapshot_reference` (two structurally independent slots one layer apart),
+// so the Dispatch Package's own `registry_snapshot_fingerprint` is genuinely populated, and the
+// Queue Admission layer's own newly-mandatory Registry Snapshot check has a real, bound snapshot to
+// validate -- never a placeholder.
+const { buildOfficialRegistrySnapshot } = require('./runtime-worker-assignment-test-data');
 const { buildRuntimeQueueAdmissionPolicy } = require('../../src/core/runtime-queue-admission-policy');
 const { buildRuntimeQueueClassReference } = require('../../src/core/runtime-queue-class-reference');
 const { buildRuntimeQueueCapacitySnapshotReference } = require('../../src/core/runtime-queue-capacity-snapshot-reference');
@@ -85,7 +93,19 @@ function buildGoldenQueueClassCatalog(baseId, canonical) {
 }
 
 function buildGoldenQueueAdmissionBundle(scenarioKey = 'prepared-no-llm-plan', overrides = {}) {
-  const dispatchGolden = buildGoldenDispatchBundle(scenarioKey, overrides.dispatch);
+  // pr108fix3 FIX 2: the SAME canonical official Registry Snapshot wired at both the Worker
+  // Assignment layer's own `registry_snapshot_reference` and the Dispatch layer's own
+  // `registry_snapshot_reference` (two independent slots one layer apart) -- the Dispatch boundary
+  // already requires both to agree ("mesmo snapshot que o Worker Assignment Package já vinculou, ou
+  // ausência consistente em ambas as camadas"), so both must carry the identical object for the
+  // Dispatch Package to end up with a genuine (non-placeholder) `registry_snapshot_fingerprint`.
+  const officialRegistrySnapshot = overrides.registrySnapshotRef === undefined ? buildOfficialRegistrySnapshot() : overrides.registrySnapshotRef;
+  const dispatchOverrides = {
+    registrySnapshotRef: officialRegistrySnapshot,
+    ...overrides.dispatch,
+    workerAssignment: { registrySnapshotRef: officialRegistrySnapshot, ...(overrides.dispatch && overrides.dispatch.workerAssignment) }
+  };
+  const dispatchGolden = buildGoldenDispatchBundle(scenarioKey, dispatchOverrides);
   const dispatchOutcome = evaluateRuntimeDispatchRequest(dispatchGolden.dispatchRequest, {});
   if (dispatchOutcome.decision.status !== 'DISPATCH_PACKAGE_PREPARED_SIMULATION') {
     throw new Error(`golden dispatch bundle for ${scenarioKey} did not reach DISPATCH_PACKAGE_PREPARED_SIMULATION: ${dispatchOutcome.decision.status}`);
@@ -115,7 +135,7 @@ function buildGoldenQueueAdmissionBundle(scenarioKey = 'prepared-no-llm-plan', o
 
   const { queueClass, capacitySnapshot, quota, quotas } = buildGoldenQueueClassCatalog(baseId, canonical);
 
-  const registrySnapshotRef = overrides.registrySnapshotRef === undefined ? null : overrides.registrySnapshotRef;
+  const registrySnapshotRef = officialRegistrySnapshot;
 
   function buildRequestWith(queueAdmissionReplayRef) {
     return buildRuntimeQueueAdmissionRequest({

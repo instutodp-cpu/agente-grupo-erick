@@ -420,19 +420,34 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
   }
   markValid('idempotency_validated');
 
-  // 22. Registry Snapshot -- same snapshot the Dispatch Package already proved bound (or a
-  // consistent absence in both layers).
+  // 22. Registry Snapshot -- pr108fix3 FIX 2: "Para qualquer resultado preparado, exigir Registry
+  // Snapshot oficial presente." Unlike the Dispatch layer one below (which still treats it as
+  // "quando existentes"), this terminal simulation gate makes a genuine, fully cross-validated
+  // Registry Snapshot mandatory -- matching `require_registry_snapshot_valid=true`, permanently
+  // forced on the Queue Admission Policy itself. "Não marcar registry_snapshot_validated=true em
+  // ausência."
   const dispatchHadSnapshot = isNonEmptyString(dispatchPackageRef.registry_snapshot_fingerprint) && dispatchPackageRef.registry_snapshot_fingerprint !== 'fingerprint_not_available';
-  if (dispatchHadSnapshot) {
-    if (
-      !isPlainObject(registrySnapshotRef)
-      || computeSnapshotFingerprint(registrySnapshotRef) !== registrySnapshotRef.snapshot_fingerprint
-      || registrySnapshotRef.snapshot_fingerprint !== dispatchPackageRef.registry_snapshot_fingerprint
-    ) {
-      return finalize('QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED', ['registry_snapshot_not_same_as_dispatch_layer']);
-    }
-  } else if (registrySnapshotRef !== null) {
-    return finalize('QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED', ['registry_snapshot_present_but_dispatch_layer_had_none']);
+  if (!dispatchHadSnapshot || !isPlainObject(registrySnapshotRef)) {
+    return finalize('QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED', ['queue_admission_registry_snapshot_missing']);
+  }
+  if (computeSnapshotFingerprint(registrySnapshotRef) !== registrySnapshotRef.snapshot_fingerprint) {
+    return finalize('QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED', ['queue_admission_registry_snapshot_fingerprint_mismatch']);
+  }
+  if (registrySnapshotRef.snapshot_fingerprint !== dispatchPackageRef.registry_snapshot_fingerprint) {
+    return finalize('QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED', ['queue_admission_registry_snapshot_not_bound_to_dispatch']);
+  }
+  if (
+    registrySnapshotRef.tenant_id !== canonical.tenantId
+    || registrySnapshotRef.organization_id !== canonical.organizationId
+    || registrySnapshotRef.project_id !== canonical.projectId
+  ) {
+    return finalize('QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED', ['queue_admission_registry_snapshot_scope_mismatch']);
+  }
+  if (request.logical_sequence < registrySnapshotRef.logical_sequence) {
+    return finalize('QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED', ['queue_admission_registry_snapshot_stale']);
+  }
+  if (registrySnapshotRef.snapshot_validated !== true || registrySnapshotRef.snapshot_consistent !== true) {
+    return finalize('QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED', ['queue_admission_registry_snapshot_not_validated']);
   }
   markValid('registry_snapshot_validated');
 
@@ -551,17 +566,28 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
   // re-sorted by priority or dispatch_sequence.
   const fairnessOrder = withQueueClass;
 
+  // pr108fix3 FIX 1: "Não incluir intents sem selectedClass nas provas de priority/FIFO." An intent
+  // with no compatible Queue Class has no genuine priority to compare -- BACKGROUND_REFERENCE was
+  // only ever a synthetic fallback, never the class's real decisional priority. Including it in the
+  // priority/FIFO proofs could produce QUEUE_ADMISSION_ORDER_BLOCKED ahead of the entry's own real
+  // QUEUE_ADMISSION_QUEUE_CLASS_BLOCKED/CAPACITY_BLOCKED/FAIRNESS_BLOCKED status, masking the true
+  // blocker and violating the declared precedence order. Only entries with a genuinely selected
+  // class participate; `dispatch_order_preserved` (already proven independently below, over every
+  // entry) and `required_predecessor_order_preserved` (already proven independently above, from
+  // canonical positions, not from `fairnessOrder`) are unaffected by this restriction.
+  const orderEligibleEntries = fairnessOrder.filter((entry) => entry.selectedClass !== null);
+
   // "Se uma Queue Class exige uma prioridade incompatível com a ordem e isso não pode ser
   // preservado, bloquear com QUEUE_ADMISSION_ORDER_BLOCKED. Nunca reordenar e depois afirmar que o
   // Dispatch Order foi preservado." Genuinely verified, never asserted.
-  const priorityOrderPreserved = checkPriorityOrderPreserved(fairnessOrder);
+  const priorityOrderPreserved = checkPriorityOrderPreserved(orderEligibleEntries);
   if (!priorityOrderPreserved) {
     return finalize('QUEUE_ADMISSION_ORDER_BLOCKED', ['queue_admission_priority_order_not_preserved']);
   }
 
   // "Para FIFO_WITHIN_PRIORITY_REFERENCE, provar que a posição relativa das intents da mesma
   // priority class segue dispatch_sequence." Genuinely verified, never asserted.
-  const fairnessOrderPreserved = checkFairnessOrderPreserved(fairnessOrder);
+  const fairnessOrderPreserved = checkFairnessOrderPreserved(orderEligibleEntries);
   if (!fairnessOrderPreserved) {
     return finalize('QUEUE_ADMISSION_ORDER_BLOCKED', ['queue_admission_fifo_order_not_preserved']);
   }
