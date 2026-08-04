@@ -949,6 +949,292 @@ test('FIX2(pr108fix3): a hostile context never alters Registry Snapshot enforcem
   assert.deepEqual(outcomeClean.decision, outcomeHostile.decision);
 });
 
+// --- pr108fix4: gate flags represent independent evaluations, never derived from admissionStatus --
+
+test('FIX(pr108fix4): every accepted entry carries all eight gates true', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const accepted = outcome.admissionEntryRefs.filter((e) => e.admission_status === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION');
+  assert.ok(accepted.length > 0);
+  for (const entry of accepted) {
+    for (const gate of ['queue_class_gate_passed', 'partition_gate_passed', 'quota_gate_passed', 'capacity_gate_passed', 'fairness_gate_passed', 'freshness_gate_passed', 'replay_gate_passed', 'idempotency_gate_passed']) {
+      assert.equal(entry[gate], true, `${gate} must be true for an accepted entry`);
+    }
+  }
+});
+
+test('FIX(pr108fix4): DEFERRED_QUOTA preserves class/partition/capacity/fairness/freshness true, only quota false', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const zeroQuotas = golden.quotas.map((q) => buildRuntimeQueueQuotaReference({
+    ...q, maximum_admission_count: 0, current_admission_count: 0, available_admission_count: 0
+  }));
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_quota_references: zeroQuotas });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  assert.ok(outcome.admissionEntryRefs.length > 0);
+  for (const entry of outcome.admissionEntryRefs) {
+    assert.equal(entry.admission_status, 'QUEUE_ADMISSION_DEFERRED_QUOTA_REFERENCE');
+    assert.equal(entry.queue_class_gate_passed, true);
+    assert.equal(entry.partition_gate_passed, true);
+    assert.equal(entry.quota_gate_passed, false);
+    assert.equal(entry.capacity_gate_passed, true);
+    assert.equal(entry.fairness_gate_passed, true);
+    assert.equal(entry.freshness_gate_passed, true);
+  }
+});
+
+test('FIX(pr108fix4): DEFERRED_BACKLOG preserves class/partition/quota/fairness/freshness true, only capacity false', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const zeroBacklog = buildRuntimeQueueCapacitySnapshotReference({
+    ...golden.capacitySnapshot, maximum_backlog_count: 0, current_backlog_count: 0, available_backlog_count: 0
+  });
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_capacity_snapshot_references: [zeroBacklog] });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  assert.ok(outcome.admissionEntryRefs.length > 0);
+  for (const entry of outcome.admissionEntryRefs) {
+    assert.equal(entry.admission_status, 'QUEUE_ADMISSION_DEFERRED_BACKLOG_REFERENCE');
+    assert.equal(entry.queue_class_gate_passed, true);
+    assert.equal(entry.partition_gate_passed, true);
+    assert.equal(entry.quota_gate_passed, true);
+    assert.equal(entry.capacity_gate_passed, false);
+    assert.equal(entry.fairness_gate_passed, true);
+    assert.equal(entry.freshness_gate_passed, true);
+  }
+});
+
+test('FIX(pr108fix4): QUEUE_CLASS_BLOCKED never fabricates fairness/freshness/partition/quota/capacity as true', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const incompatibleClass = buildRuntimeQueueClassReference({ ...golden.queueClass, supported_stage_types: ['MODEL_REFERENCE_STAGE'] });
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_class_references: [incompatibleClass] });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  for (const entry of outcome.admissionEntryRefs) {
+    assert.equal(entry.admission_status, 'QUEUE_ADMISSION_QUEUE_CLASS_BLOCKED');
+    assert.equal(entry.queue_class_gate_passed, false);
+    assert.equal(entry.partition_gate_passed, false);
+    assert.equal(entry.quota_gate_passed, false);
+    assert.equal(entry.capacity_gate_passed, false);
+    assert.equal(entry.fairness_gate_passed, false);
+    assert.equal(entry.freshness_gate_passed, false);
+  }
+});
+
+test('FIX(pr108fix4): FAIRNESS_BLOCKED registers fairness_gate_passed=false while class/partition/quota/capacity/freshness stay true', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const nonFifoClass = buildRuntimeQueueClassReference({ ...golden.queueClass, queue_fairness_strategy: 'DETERMINISTIC_FAIR_SHARE_REFERENCE' });
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_class_references: [nonFifoClass] });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  for (const entry of outcome.admissionEntryRefs) {
+    assert.equal(entry.admission_status, 'QUEUE_ADMISSION_FAIRNESS_BLOCKED');
+    assert.equal(entry.queue_class_gate_passed, true);
+    assert.equal(entry.partition_gate_passed, true);
+    assert.equal(entry.quota_gate_passed, true);
+    assert.equal(entry.capacity_gate_passed, true);
+    assert.equal(entry.fairness_gate_passed, false);
+    assert.equal(entry.freshness_gate_passed, true);
+  }
+});
+
+test('FIX(pr108fix4): an expired Capacity Snapshot registers freshness_gate_passed=false and capacity_gate_passed=false', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const staleSnapshot = buildRuntimeQueueCapacitySnapshotReference({ ...golden.capacitySnapshot, logical_sequence: 0, snapshot_valid_sequences: 10 });
+  const request = buildRuntimeQueueAdmissionRequest({
+    ...golden.queueAdmissionRequest, runtime_queue_capacity_snapshot_references: [staleSnapshot], logical_sequence: 500
+  });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  for (const entry of outcome.admissionEntryRefs) {
+    assert.equal(entry.admission_status, 'QUEUE_ADMISSION_CAPACITY_BLOCKED');
+    // The class remains structurally compatible in every OTHER dimension -- only capacity/freshness fail.
+    assert.equal(entry.queue_class_gate_passed, true);
+    assert.equal(entry.freshness_gate_passed, false);
+    assert.equal(entry.capacity_gate_passed, false);
+  }
+});
+
+test('FIX(pr108fix4): altering only quota availability changes only the quota gate/status, never capacity/fairness/freshness', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcomeClean = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const zeroQuotas = golden.quotas.map((q) => buildRuntimeQueueQuotaReference({
+    ...q, maximum_admission_count: 0, current_admission_count: 0, available_admission_count: 0
+  }));
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_quota_references: zeroQuotas });
+  const outcomeQuotaZeroed = evaluateRuntimeQueueAdmissionRequest(request, {});
+  for (let i = 0; i < outcomeClean.admissionEntryRefs.length; i += 1) {
+    const before = outcomeClean.admissionEntryRefs[i];
+    const after = outcomeQuotaZeroed.admissionEntryRefs[i];
+    assert.equal(before.capacity_gate_passed, after.capacity_gate_passed);
+    assert.equal(before.fairness_gate_passed, after.fairness_gate_passed);
+    assert.equal(before.freshness_gate_passed, after.freshness_gate_passed);
+    assert.equal(before.queue_class_gate_passed, after.queue_class_gate_passed);
+    assert.notEqual(before.quota_gate_passed, after.quota_gate_passed);
+  }
+});
+
+test('FIX(pr108fix4): altering only capacity availability changes only the capacity gate/status, never quota/fairness/freshness', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcomeClean = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const zeroBacklog = buildRuntimeQueueCapacitySnapshotReference({
+    ...golden.capacitySnapshot, maximum_backlog_count: 0, current_backlog_count: 0, available_backlog_count: 0
+  });
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_capacity_snapshot_references: [zeroBacklog] });
+  const outcomeCapacityZeroed = evaluateRuntimeQueueAdmissionRequest(request, {});
+  for (let i = 0; i < outcomeClean.admissionEntryRefs.length; i += 1) {
+    const before = outcomeClean.admissionEntryRefs[i];
+    const after = outcomeCapacityZeroed.admissionEntryRefs[i];
+    assert.equal(before.quota_gate_passed, after.quota_gate_passed);
+    assert.equal(before.fairness_gate_passed, after.fairness_gate_passed);
+    assert.equal(before.freshness_gate_passed, after.freshness_gate_passed);
+    assert.equal(before.queue_class_gate_passed, after.queue_class_gate_passed);
+    assert.notEqual(before.capacity_gate_passed, after.capacity_gate_passed);
+  }
+});
+
+test('FIX(pr108fix4): shuffled input reference arrays never alter which gates are true', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const shuffledRequest = buildRuntimeQueueAdmissionRequest({
+    ...golden.queueAdmissionRequest,
+    runtime_dispatch_stage_references: [...golden.queueAdmissionRequest.runtime_dispatch_stage_references].reverse(),
+    runtime_queue_quota_references: [...golden.queueAdmissionRequest.runtime_queue_quota_references].reverse()
+  });
+  const outcomeClean = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const outcomeShuffled = evaluateRuntimeQueueAdmissionRequest(shuffledRequest, {});
+  const gateSetClean = outcomeClean.admissionEntryRefs.map((e) => [e.queue_class_gate_passed, e.partition_gate_passed, e.quota_gate_passed, e.capacity_gate_passed, e.fairness_gate_passed, e.freshness_gate_passed]).sort();
+  const gateSetShuffled = outcomeShuffled.admissionEntryRefs.map((e) => [e.queue_class_gate_passed, e.partition_gate_passed, e.quota_gate_passed, e.capacity_gate_passed, e.fairness_gate_passed, e.freshness_gate_passed]).sort();
+  assert.deepEqual(gateSetClean, gateSetShuffled);
+});
+
+test('FIX(pr108fix4): a hostile context never alters any gate flag', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcomeClean = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const outcomeHostile = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {
+    quota_gate_passed: false, capacity_gate_passed: false, fairness_gate_passed: false, freshness_gate_passed: true
+  });
+  assert.deepEqual(outcomeClean.decision, outcomeHostile.decision);
+  assert.deepEqual(outcomeClean.admissionEntryRefs, outcomeHostile.admissionEntryRefs);
+});
+
+test('package integrity(pr108fix4): fingerprints change when a real gate value changes', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcomeClean = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const zeroQuotas = golden.quotas.map((q) => buildRuntimeQueueQuotaReference({
+    ...q, maximum_admission_count: 0, current_admission_count: 0, available_admission_count: 0
+  }));
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_quota_references: zeroQuotas });
+  const outcomeQuotaZeroed = evaluateRuntimeQueueAdmissionRequest(request, {});
+  assert.notEqual(outcomeClean.admissionEntryRefs[0].admission_entry_fingerprint, outcomeQuotaZeroed.admissionEntryRefs[0].admission_entry_fingerprint);
+  assert.notEqual(outcomeClean.intentBindingRefs[0].intent_binding_fingerprint, outcomeQuotaZeroed.intentBindingRefs[0].intent_binding_fingerprint);
+  assert.notEqual(outcomeClean.package.queue_admission_package_fingerprint, outcomeQuotaZeroed.package.queue_admission_package_fingerprint);
+});
+
+test('FIX(pr108fix4): no gate is ever confused with queue creation/enqueue -- every gate passing on an accepted entry still forces every operational flag false', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const accepted = outcome.admissionEntryRefs.filter((e) => e.admission_status === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION');
+  assert.ok(accepted.length > 0);
+  for (const entry of accepted) {
+    assert.equal(entry.queue_admission_applied, false);
+    assert.equal(entry.queue_created, false);
+    assert.equal(entry.queue_item_created, false);
+    assert.equal(entry.queue_item_enqueued, false);
+    assert.equal(entry.queue_position_reserved, false);
+  }
+});
+
+// --- pr108fix5: Queue Class/Capacity/Fairness failures never become ORDER_BLOCKED -----------------
+//
+// The audit at HEAD b5c407a (pre-dating pr108fix3) flagged this same precedence problem;
+// pr108fix3 FIX 1 already closed it (`orderEligibleEntries = fairnessOrder.filter(entry =>
+// entry.selectedClass !== null)`, still in place through pr108fix4). These tests solidify that fix
+// with the exact scenarios pr108fix5 requires, including two genuinely mixed-cause two-intent cases
+// built directly against `selectQueueClass`/the order-proof functions (the shared single-class-per-
+// request architecture makes it impossible to construct per-intent-differing Queue Class ELIGIBILITY
+// within one full boundary evaluation -- capacity/fairness validity is a property of the class, not
+// of any one intent -- so the mixed-cause scenarios are proven at this level instead, exactly
+// mirroring how the boundary itself derives `withQueueClass` then filters it).
+
+test('pr108fix5 scenario 1: first intent with no compatible class + second intent with a valid HIGH class -- QUEUE_CLASS_BLOCKED never becomes ORDER_BLOCKED', () => {
+  const noClass = { selectedClass: null, structurallyCompatibleClass: null, intent: { dispatch_sequence: 0 } };
+  const highValid = fifoEntry('HIGH_REFERENCE', 1);
+  const orderEligible = [noClass, highValid].filter((entry) => entry.selectedClass !== null);
+  assert.deepEqual(orderEligible, [highValid]);
+  assert.equal(checkPriorityOrderPreserved(orderEligible), true);
+  assert.equal(checkFairnessOrderPreserved(orderEligible), true);
+});
+
+test('pr108fix5 scenario 2: first intent with an expired Capacity Snapshot (no genuinely selected class) + second HIGH -- CAPACITY_BLOCKED never becomes ORDER_BLOCKED', () => {
+  // A capacity-expired class is only ever a `structurallyCompatibleClass`, never a `selectedClass`
+  // (evaluateQueueClassCompatibility rejects it) -- so it is excluded from order-eligibility exactly
+  // like a fully absent class, by the same `selectedClass !== null` filter.
+  const capacityExpired = { selectedClass: null, structurallyCompatibleClass: fifoEntry('HIGH_REFERENCE', 0).selectedClass, intent: { dispatch_sequence: 0 } };
+  const highValid = fifoEntry('HIGH_REFERENCE', 1);
+  const orderEligible = [capacityExpired, highValid].filter((entry) => entry.selectedClass !== null);
+  assert.deepEqual(orderEligible, [highValid]);
+  assert.equal(checkPriorityOrderPreserved(orderEligible), true);
+  assert.equal(checkFairnessOrderPreserved(orderEligible), true);
+});
+
+test('pr108fix5 scenario 3: first intent with unimplemented fairness (no genuinely selected class) + second HIGH -- FAIRNESS_BLOCKED never becomes ORDER_BLOCKED', () => {
+  const fairnessBlocked = { selectedClass: null, structurallyCompatibleClass: { queue_priority_class: 'HIGH_REFERENCE', queue_fairness_strategy: 'WEIGHTED_ROUND_ROBIN_REFERENCE' }, intent: { dispatch_sequence: 0 } };
+  const highValid = fifoEntry('HIGH_REFERENCE', 1);
+  const orderEligible = [fairnessBlocked, highValid].filter((entry) => entry.selectedClass !== null);
+  assert.deepEqual(orderEligible, [highValid]);
+  assert.equal(checkPriorityOrderPreserved(orderEligible), true);
+});
+
+test('pr108fix5 scenario 4: two genuinely order-eligible intents with real inverted priority still block QUEUE_ADMISSION_ORDER_BLOCKED', () => {
+  const lowFirst = fifoEntry('LOW_REFERENCE', 0);
+  const criticalSecond = fifoEntry('CRITICAL_REFERENCE', 1);
+  assert.equal(checkPriorityOrderPreserved([lowFirst, criticalSecond]), false);
+});
+
+test('pr108fix5 scenario 5/6: an entry with no genuinely selected class never participates in either priority or FIFO order proofs, regardless of its own dispatch_sequence', () => {
+  const noClassWithMisleadingSequence = { selectedClass: null, intent: { dispatch_sequence: 999 } };
+  const normalA = fifoEntry('NORMAL_REFERENCE', 0);
+  const normalB = fifoEntry('NORMAL_REFERENCE', 1);
+  const orderEligible = [normalA, noClassWithMisleadingSequence, normalB].filter((entry) => entry.selectedClass !== null);
+  assert.deepEqual(orderEligible, [normalA, normalB]);
+  assert.equal(checkPriorityOrderPreserved(orderEligible), true);
+  assert.equal(checkFairnessOrderPreserved(orderEligible), true);
+});
+
+test('pr108fix5 scenario 10: the original blocking reason code is never replaced by an order-related reason on a QUEUE_CLASS_BLOCKED entry', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const incompatibleClass = buildRuntimeQueueClassReference({ ...golden.queueClass, supported_stage_types: ['MODEL_REFERENCE_STAGE'] });
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_class_references: [incompatibleClass] });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
+  for (const entry of outcome.admissionEntryRefs) {
+    assert.equal(entry.admission_status, 'QUEUE_ADMISSION_QUEUE_CLASS_BLOCKED');
+    assert.ok(entry.reason_codes.includes('no_compatible_queue_class_reference'));
+    assert.ok(entry.reason_codes.every((code) => !code.startsWith('queue_admission_priority_order') && !code.startsWith('queue_admission_fifo_order')));
+  }
+});
+
+test('pr108fix5 scenario 10b: the original blocking reason code is never replaced by an order-related reason on a FAIRNESS_BLOCKED entry', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const nonFifoClass = buildRuntimeQueueClassReference({ ...golden.queueClass, queue_fairness_strategy: 'WEIGHTED_ROUND_ROBIN_REFERENCE' });
+  const request = buildRuntimeQueueAdmissionRequest({ ...golden.queueAdmissionRequest, runtime_queue_class_references: [nonFifoClass] });
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
+  for (const entry of outcome.admissionEntryRefs) {
+    assert.equal(entry.admission_status, 'QUEUE_ADMISSION_FAIRNESS_BLOCKED');
+    assert.ok(entry.reason_codes.some((code) => code.startsWith('queue_fairness_strategy_not_implemented')));
+    assert.ok(entry.reason_codes.every((code) => !code.startsWith('queue_admission_priority_order') && !code.startsWith('queue_admission_fifo_order')));
+  }
+});
+
+test('pr108fix5: admission_sequence documented semantics -- accepted entries get unique increasing sequences, non-accepted entries reuse the current accepted-so-far count (never a reserved position)', () => {
+  const golden = buildGoldenQueueAdmissionBundle('sequential-plan');
+  const outcome = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const accepted = outcome.admissionEntryRefs.filter((e) => e.admission_status === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION');
+  const nonAccepted = outcome.admissionEntryRefs.filter((e) => e.admission_status !== 'QUEUE_ADMISSION_ACCEPTED_SIMULATION');
+  assert.ok(accepted.length > 0 && nonAccepted.length > 0, 'sequential-plan must produce both an accepted and a non-accepted entry');
+  const acceptedSequences = accepted.map((e) => e.admission_sequence);
+  assert.equal(new Set(acceptedSequences).size, acceptedSequences.length, 'accepted sequences must be unique');
+  assert.deepEqual([...acceptedSequences].sort((a, b) => a - b), acceptedSequences, 'accepted sequences must be increasing in evaluation order');
+  for (const entry of nonAccepted) {
+    assert.equal(entry.admission_sequence, accepted.length, 'a non-accepted entry never appears to have consumed a reserved position');
+  }
+});
+
 test('boundary: DISPATCH_STATUSES precedence covers QUEUE_ADMISSION_STATUSES exactly', () => {
   assert.deepEqual([...QUEUE_ADMISSION_STATUSES].sort(), [...QUEUE_ADMISSION_PRECEDENCE_ORDER].sort());
 });

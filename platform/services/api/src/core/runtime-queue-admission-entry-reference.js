@@ -102,6 +102,20 @@ function validateRuntimeQueueAdmissionEntryReference(reference) {
       && GATE_PASSED_FIELDS.every((field) => reference[field] === true);
     if (reference.queue_admission_validated !== expectedValidated) errors.push('queue_admission_validated_inconsistent_with_status_and_gates');
   }
+  // pr108fix4: "Gate flags registram resultados independentes." Each status that names a specific
+  // failed dimension requires THAT gate to be genuinely false -- but never requires every other gate
+  // to be false too, since a DEFERRED/BLOCKED entry can still carry genuine evidence of every other
+  // dimension that already passed.
+  const REQUIRED_FALSE_GATE_BY_STATUS = Object.freeze({
+    QUEUE_ADMISSION_DEFERRED_QUOTA_REFERENCE: 'quota_gate_passed',
+    QUEUE_ADMISSION_DEFERRED_BACKLOG_REFERENCE: 'capacity_gate_passed',
+    QUEUE_ADMISSION_FAIRNESS_BLOCKED: 'fairness_gate_passed',
+    QUEUE_ADMISSION_QUEUE_CLASS_BLOCKED: 'queue_class_gate_passed'
+  });
+  const requiredFalseGate = REQUIRED_FALSE_GATE_BY_STATUS[reference.admission_status];
+  if (requiredFalseGate && reference[requiredFalseGate] !== false) {
+    errors.push(`${requiredFalseGate}_must_be_false_for_${reference.admission_status}`);
+  }
   if (!isSanitizedList(reference.reason_codes, MAX_REASON_CODES)) errors.push('reason_codes_invalid');
   for (const [field, expected] of Object.entries(RUNTIME_QUEUE_ADMISSION_ENTRY_REFERENCE_SAFE_FLAGS)) {
     if (reference[field] !== expected) errors.push(`${field}_must_be_${String(expected)}`);

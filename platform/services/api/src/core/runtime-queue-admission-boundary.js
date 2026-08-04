@@ -206,13 +206,8 @@ function evaluateQueueClassCompatibility(qc, stage, ctx) {
 // this stage, then sorts the survivors deterministically. Also returns every rejection reason
 // collected across every candidate, so the boundary can distinguish "blocked only because no
 // implemented fairness strategy was available" from every other blocking reason.
-function selectQueueClass(stage, ctx) {
-  const { queueClassRefs, capacitySnapshotByClassId } = ctx;
-  const evaluated = queueClassRefs.map((qc) => ({ qc, reasons: evaluateQueueClassCompatibility(qc, stage, ctx) }));
-  const compatible = evaluated.filter((entry) => entry.reasons.length === 0).map((entry) => entry.qc);
-  const rejectionReasons = uniqueSorted(evaluated.flatMap((entry) => entry.reasons));
-
-  compatible.sort((a, b) => {
+function sortQueueClassCandidates(candidates, capacitySnapshotByClassId) {
+  return [...candidates].sort((a, b) => {
     const specificityDiff = QUEUE_CLASS_SPECIFICITY_RANK[a.queue_class_type] - QUEUE_CLASS_SPECIFICITY_RANK[b.queue_class_type];
     if (specificityDiff !== 0) return specificityDiff;
     const priorityDiff = PRIORITY_RANK[a.queue_priority_class] - PRIORITY_RANK[b.queue_priority_class];
@@ -227,8 +222,50 @@ function selectQueueClass(stage, ctx) {
     if (capA.current_backlog_count !== capB.current_backlog_count) return capA.current_backlog_count - capB.current_backlog_count;
     return a.runtime_queue_class_reference_id < b.runtime_queue_class_reference_id ? -1 : 1;
   });
+}
 
-  return { selectedClass: compatible.length > 0 ? compatible[0] : null, rejectionReasons };
+// pr108fix4: reasons `evaluateQueueClassCompatibility` can produce that describe a RESOURCE-STATE
+// disqualification (capacity/freshness, fairness strategy) rather than a genuine STRUCTURAL
+// incompatibility (scope, stage type, capabilities, modalities, real provider/model/tool/workflow
+// IDs, quota collection completeness). Capacity/freshness/fairness each have their own dedicated
+// gate (`capacity_gate_passed`/`freshness_gate_passed`/`fairness_gate_passed`), so a candidate
+// disqualified ONLY by these must still count as structurally compatible for
+// `queue_class_gate_passed` -- "queue_class_gate_passed pode permanecer true quanto à
+// compatibilidade estrutural" even when capacity/freshness/fairness independently fail. Quota
+// collection completeness has no equivalent independence from the class itself (a class without a
+// complete tenant+organization+project+agent quota collection is never a usable candidate for
+// anything), so it stays structural -- matching the spec's own QUEUE_CLASS_BLOCKED example where
+// every gate, including quota, is false.
+const RESOURCE_STATE_REASON_EXACT = Object.freeze([
+  'queue_capacity_snapshot_missing_for_class', 'queue_capacity_snapshot_not_valid_at_admission'
+]);
+function isResourceStateReason(reason) {
+  return RESOURCE_STATE_REASON_EXACT.includes(reason) || reason.startsWith('queue_fairness_strategy_not_implemented');
+}
+
+// pr108fix4: "Gate flags devem representar avaliações independentes." Besides the strict
+// `selectedClass` (genuinely usable for admission -- every dimension, structural and resource-state
+// alike), also derive `structurallyCompatibleClass`: the best candidate disqualified only by
+// resource-state reasons (fairness/capacity/freshness/quota), never a structural one. Used purely as
+// evidence for `queue_class_gate_passed`/`partition_gate_passed` when no class was genuinely
+// selected -- never for actual admission, which always requires the strict `selectedClass`.
+function selectQueueClass(stage, ctx) {
+  const { queueClassRefs, capacitySnapshotByClassId } = ctx;
+  const evaluated = queueClassRefs.map((qc) => ({ qc, reasons: evaluateQueueClassCompatibility(qc, stage, ctx) }));
+  const compatible = evaluated.filter((entry) => entry.reasons.length === 0).map((entry) => entry.qc);
+  const structurallyCompatible = evaluated
+    .filter((entry) => entry.reasons.every(isResourceStateReason))
+    .map((entry) => entry.qc);
+  const rejectionReasons = uniqueSorted(evaluated.flatMap((entry) => entry.reasons));
+
+  const sortedCompatible = sortQueueClassCandidates(compatible, capacitySnapshotByClassId);
+  const sortedStructurallyCompatible = sortQueueClassCandidates(structurallyCompatible, capacitySnapshotByClassId);
+
+  return {
+    selectedClass: sortedCompatible.length > 0 ? sortedCompatible[0] : null,
+    structurallyCompatibleClass: sortedStructurallyCompatible.length > 0 ? sortedStructurallyCompatible[0] : null,
+    rejectionReasons
+  };
 }
 
 // pr108fix2 FIX 2: "Nunca reordenar e depois afirmar que o Dispatch Order foi preservado." Given a
@@ -552,11 +589,11 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
   for (const intent of preparedIntentsInOrder) {
     const stage = stageById.get(intent.runtime_dispatch_stage_reference_id);
     if (!stage) return finalize('QUEUE_ADMISSION_QUEUE_CLASS_BLOCKED', ['dispatch_stage_missing_for_prepared_intent']);
-    const { selectedClass, rejectionReasons } = selectQueueClass(stage, {
+    const { selectedClass, structurallyCompatibleClass, rejectionReasons } = selectQueueClass(stage, {
       queueClassRefs: queueClassRefsRaw, canonical, capacitySnapshotByClassId, quotaCollectionByClassId,
       validCapacityClassIds, stagePolicyRequirementsByStageId, modelSelectionDecisionsById
     });
-    withQueueClass.push({ intent, stage, selectedClass, rejectionReasons });
+    withQueueClass.push({ intent, stage, selectedClass, structurallyCompatibleClass, rejectionReasons });
   }
 
   // pr108fix2 FIX 2: "Usar canonicalIntentOrder como ordem soberana da admissão. Não reordenar
@@ -663,6 +700,34 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
     return collection ? QUOTA_SCOPE_TYPES.map((scopeType) => collection[scopeType]) : [];
   }
 
+  // pr108fix4: pure, read-only fit checks against the CURRENT working state -- shared between the
+  // real (mutating) admission attempt against `selectedClass` and the (never-mutating) gate-evidence
+  // peek against `structurallyCompatibleClass`, so both use the exact same arithmetic.
+  function peekCapacityFits(classId, requested) {
+    const working = workingCapacity.get(classId);
+    if (!working) return false;
+    return working.backlog >= requested.backlog && working.inflight >= requested.inflight
+      && (requested.parallel === 0 || working.parallel >= requested.parallel)
+      && (requested.model === 0 || working.model >= requested.model)
+      && (requested.tool === 0 || working.tool >= requested.tool)
+      && (requested.workflow === 0 || working.workflow >= requested.workflow)
+      && working.tokens >= requested.tokens && working.cost >= requested.cost;
+  }
+  function peekQuotaFits(classId, requested) {
+    const relevant = relevantQuotas(classId);
+    if (relevant.length === 0) return quotaCollectionByClassId.has(classId);
+    return relevant.every((q) => {
+      const w = workingQuota.get(q.runtime_queue_quota_reference_id);
+      if (!w) return false;
+      return w.admission >= 1 && w.backlog >= requested.backlog
+        && (requested.parallel === 0 || w.parallel >= requested.parallel)
+        && (requested.model === 0 || w.model >= requested.model)
+        && (requested.tool === 0 || w.tool >= requested.tool)
+        && (requested.workflow === 0 || w.workflow >= requested.workflow)
+        && w.tokens >= requested.tokens && w.cost >= requested.cost;
+    });
+  }
+
   const partitionRefs = [];
   const fairnessRefs = [];
   const intentBindingRefs = [];
@@ -670,7 +735,7 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
   let admissionSequence = 0;
 
   for (const entry of fairnessOrder) {
-    const { intent, stage, selectedClass, rejectionReasons } = entry;
+    const { intent, stage, selectedClass, structurallyCompatibleClass, rejectionReasons } = entry;
     const dispatchStageId = intent.runtime_dispatch_stage_reference_id;
     const priorityClass = selectedClass ? selectedClass.queue_priority_class : 'BACKGROUND_REFERENCE';
 
@@ -691,6 +756,45 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
       global_admission_rank: globalRanks.get(entry)
     });
     fairnessRefs.push(fairnessRef);
+
+    // pr108fix4: "Gate flags devem representar avaliações independentes." Computed once per intent,
+    // against `structurallyCompatibleClass` (every dimension except possibly fairness strategy) --
+    // never derived from the final `admissionStatus`, so a DEFERRED/BLOCKED entry still shows
+    // genuine evidence of what actually passed.
+    const requested = {
+      backlog: 1, inflight: 1,
+      parallel: stage.parallelizable === true ? 1 : 0,
+      model: stage.model_selection_reference_id !== null ? 1 : 0,
+      tool: Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0 ? 1 : 0,
+      workflow: stage.workflow_reference_id !== null ? 1 : 0,
+      tokens: stage.estimated_total_tokens, cost: stage.estimated_cost_minor_units
+    };
+    // When a class was genuinely selected (fairness-compliant and every other dimension), gate
+    // evidence is computed against THAT SAME class -- never a differently-ranked
+    // `structurallyCompatibleClass` that could disagree with what admission actually used. Only when
+    // no class was genuinely selected does the fairness-agnostic candidate stand in, purely as
+    // evidence for the entry that never got a real one.
+    const gateClass = selectedClass || structurallyCompatibleClass;
+    const queueClassGatePassed = gateClass !== null;
+    const gatePartitionKeyValue = queueClassGatePassed
+      ? derivePartitionKeyValue(gateClass.queue_partition_strategy, { canonical, stage })
+      : null;
+    const partitionGatePassed = queueClassGatePassed && isNonEmptyString(gatePartitionKeyValue);
+    const gateClassId = queueClassGatePassed ? gateClass.runtime_queue_class_reference_id : null;
+    const freshnessGatePassed = queueClassGatePassed && validCapacityClassIds.has(gateClassId);
+    // An expired Capacity Snapshot can never be trusted for a capacity determination, however
+    // generous its raw numbers still look -- capacity_gate_passed requires freshness_gate_passed too.
+    const capacityGatePassed = partitionGatePassed && freshnessGatePassed && peekCapacityFits(gateClassId, requested);
+    const quotaGatePassed = partitionGatePassed && peekQuotaFits(gateClassId, requested);
+    // "Não marcar fairness true quando nenhuma Queue Class foi selecionada." `gateClass` may carry
+    // ANY fairness strategy when it falls back to `structurallyCompatibleClass` (the one dimension
+    // that candidate's own selection deliberately ignored) -- this is the one genuine place that
+    // strategy is actually consulted for gate evidence.
+    const fairnessGatePassed = queueClassGatePassed && FAIRNESS_STRATEGIES_IMPLEMENTED.includes(gateClass.queue_fairness_strategy);
+    // Replay/Idempotency are global gates already validated (and returned early on failure) before
+    // any per-intent derivation begins -- genuinely true here, never fabricated.
+    const replayGatePassed = validatedFlags.replay_validated === true;
+    const idempotencyGatePassed = validatedFlags.idempotency_validated === true;
 
     let partitionRef = null;
     let admissionStatus;
@@ -724,34 +828,10 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
         });
         partitionRefs.push(partitionRef);
 
-        const requestedBacklog = 1;
-        const requestedInflight = 1;
-        const requestedParallel = stage.parallelizable === true ? 1 : 0;
-        const requestedModel = stage.model_selection_reference_id !== null ? 1 : 0;
-        const requestedTool = Array.isArray(stage.tool_reference_ids) && stage.tool_reference_ids.length > 0 ? 1 : 0;
-        const requestedWorkflow = stage.workflow_reference_id !== null ? 1 : 0;
-        const requestedTokens = stage.estimated_total_tokens;
-        const requestedCost = stage.estimated_cost_minor_units;
-
         const classId = selectedClass.runtime_queue_class_reference_id;
-        const working = workingCapacity.get(classId);
-        const capacityFits = working.backlog >= requestedBacklog && working.inflight >= requestedInflight
-          && (requestedParallel === 0 || working.parallel >= requestedParallel)
-          && (requestedModel === 0 || working.model >= requestedModel)
-          && (requestedTool === 0 || working.tool >= requestedTool)
-          && (requestedWorkflow === 0 || working.workflow >= requestedWorkflow)
-          && working.tokens >= requestedTokens && working.cost >= requestedCost;
-
+        const capacityFits = peekCapacityFits(classId, requested);
+        const quotaFits = peekQuotaFits(classId, requested);
         const relevant = relevantQuotas(classId);
-        const quotaFits = relevant.every((q) => {
-          const w = workingQuota.get(q.runtime_queue_quota_reference_id);
-          return w.admission >= 1 && w.backlog >= requestedBacklog
-            && (requestedParallel === 0 || w.parallel >= requestedParallel)
-            && (requestedModel === 0 || w.model >= requestedModel)
-            && (requestedTool === 0 || w.tool >= requestedTool)
-            && (requestedWorkflow === 0 || w.workflow >= requestedWorkflow)
-            && w.tokens >= requestedTokens && w.cost >= requestedCost;
-        });
 
         if (!quotaFits) {
           admissionStatus = 'QUEUE_ADMISSION_DEFERRED_QUOTA_REFERENCE';
@@ -761,24 +841,25 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
           reasonCodes.push('queue_capacity_insufficient_for_intent');
         } else {
           admissionStatus = 'QUEUE_ADMISSION_ACCEPTED_SIMULATION';
-          working.backlog -= requestedBacklog;
-          working.inflight -= requestedInflight;
-          working.parallel -= requestedParallel;
-          working.model -= requestedModel;
-          working.tool -= requestedTool;
-          working.workflow -= requestedWorkflow;
-          working.tokens -= requestedTokens;
-          working.cost -= requestedCost;
+          const working = workingCapacity.get(classId);
+          working.backlog -= requested.backlog;
+          working.inflight -= requested.inflight;
+          working.parallel -= requested.parallel;
+          working.model -= requested.model;
+          working.tool -= requested.tool;
+          working.workflow -= requested.workflow;
+          working.tokens -= requested.tokens;
+          working.cost -= requested.cost;
           for (const q of relevant) {
             const w = workingQuota.get(q.runtime_queue_quota_reference_id);
             w.admission -= 1;
-            w.backlog -= requestedBacklog;
-            w.parallel -= requestedParallel;
-            w.model -= requestedModel;
-            w.tool -= requestedTool;
-            w.workflow -= requestedWorkflow;
-            w.tokens -= requestedTokens;
-            w.cost -= requestedCost;
+            w.backlog -= requested.backlog;
+            w.parallel -= requested.parallel;
+            w.model -= requested.model;
+            w.tool -= requested.tool;
+            w.workflow -= requested.workflow;
+            w.tokens -= requested.tokens;
+            w.cost -= requested.cost;
           }
         }
       }
@@ -802,12 +883,12 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
       runtime_queue_quota_reference_ids: selectedClass ? relevantQuotas(selectedClass.runtime_queue_class_reference_id).map((q) => q.runtime_queue_quota_reference_id) : [],
       runtime_queue_capacity_snapshot_reference_id: selectedClass ? capacitySnapshotByClassId.get(selectedClass.runtime_queue_class_reference_id).runtime_queue_capacity_snapshot_reference_id : 'runtime_queue_capacity_snapshot_not_available',
       dispatch_intent_status: intent.dispatch_intent_status,
-      queue_class_match: selectedClass !== null,
-      partition_match: partitionRef !== null,
-      quota_match: admissionStatus !== 'QUEUE_ADMISSION_DEFERRED_QUOTA_REFERENCE' && selectedClass !== null && partitionRef !== null,
-      capacity_match: admissionStatus === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION',
-      fairness_match: true,
-      freshness_match: true,
+      queue_class_match: queueClassGatePassed,
+      partition_match: partitionGatePassed,
+      quota_match: quotaGatePassed,
+      capacity_match: capacityGatePassed,
+      fairness_match: fairnessGatePassed,
+      freshness_match: freshnessGatePassed,
       reason_codes: reasonCodes
     });
     intentBindingRefs.push(intentBindingRef);
@@ -828,14 +909,14 @@ function evaluateRuntimeQueueAdmissionRequest(request, context = {}) {
       admission_sequence: admissionStatus === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION' ? admissionSequence++ : admissionSequence,
       queue_priority_class: priorityClass,
       admission_status: admissionStatus,
-      queue_class_gate_passed: admissionStatus === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION' ? intentBindingRef.queue_class_match : false,
-      partition_gate_passed: admissionStatus === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION' ? intentBindingRef.partition_match : false,
-      quota_gate_passed: admissionStatus === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION',
-      capacity_gate_passed: admissionStatus === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION',
-      fairness_gate_passed: admissionStatus === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION',
-      freshness_gate_passed: admissionStatus === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION',
-      replay_gate_passed: admissionStatus === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION',
-      idempotency_gate_passed: admissionStatus === 'QUEUE_ADMISSION_ACCEPTED_SIMULATION',
+      queue_class_gate_passed: queueClassGatePassed,
+      partition_gate_passed: partitionGatePassed,
+      quota_gate_passed: quotaGatePassed,
+      capacity_gate_passed: capacityGatePassed,
+      fairness_gate_passed: fairnessGatePassed,
+      freshness_gate_passed: freshnessGatePassed,
+      replay_gate_passed: replayGatePassed,
+      idempotency_gate_passed: idempotencyGatePassed,
       reason_codes: reasonCodes
     });
     admissionEntryRefs.push(admissionEntryRef);
