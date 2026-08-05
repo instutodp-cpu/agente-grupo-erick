@@ -9,7 +9,7 @@ const { runAllGates } = require('../src/core/architecture-gate-runner');
 function main() {
   const findings = runAllGates();
   if (findings.length === 0) {
-    console.log('run-architecture-gates: OK -- 21 gates checked, zero findings');
+    console.log('run-architecture-gates: OK -- 22 gates checked, zero findings');
     return;
   }
   console.error(`run-architecture-gates: ${findings.length} finding(s):`);

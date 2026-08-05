@@ -136,7 +136,14 @@ const AUDITED_CONTRACTS_MANIFEST = Object.freeze([
   { module: './runtime-queue-admission-request', fieldsExport: 'RUNTIME_QUEUE_ADMISSION_REQUEST_FIELDS', hasVersion: true, versionField: 'runtime_queue_admission_request_version', hasFingerprint: false },
   { module: './runtime-queue-admission-package', fieldsExport: 'RUNTIME_QUEUE_ADMISSION_PACKAGE_FIELDS', safeFlagsExport: 'RUNTIME_QUEUE_ADMISSION_PACKAGE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_queue_admission_package_version', hasFingerprint: true, fingerprintField: 'queue_admission_package_fingerprint' },
   { module: './runtime-queue-admission-decision', fieldsExport: 'RUNTIME_QUEUE_ADMISSION_DECISION_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
-  { module: './runtime-queue-admission-result', fieldsExport: 'RUNTIME_QUEUE_ADMISSION_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false }
+  { module: './runtime-queue-admission-result', fieldsExport: 'RUNTIME_QUEUE_ADMISSION_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
+  // pr109: Runtime Queue Materialization Simulation Contracts' own new contracts.
+  { module: './runtime-queue-materialization-entry-reference', fieldsExport: 'RUNTIME_QUEUE_MATERIALIZATION_ENTRY_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_QUEUE_MATERIALIZATION_ENTRY_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_queue_materialization_entry_reference_version', hasFingerprint: true, fingerprintField: 'materialization_entry_fingerprint' },
+  { module: './runtime-queue-materialization-order-reference', fieldsExport: 'RUNTIME_QUEUE_MATERIALIZATION_ORDER_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_QUEUE_MATERIALIZATION_ORDER_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_queue_materialization_order_reference_version', hasFingerprint: true, fingerprintField: 'materialization_order_fingerprint' },
+  { module: './runtime-queue-materialization-request', fieldsExport: 'RUNTIME_QUEUE_MATERIALIZATION_REQUEST_FIELDS', hasVersion: true, versionField: 'runtime_queue_materialization_request_version', hasFingerprint: false },
+  { module: './runtime-queue-materialization-package', fieldsExport: 'RUNTIME_QUEUE_MATERIALIZATION_PACKAGE_FIELDS', safeFlagsExport: 'RUNTIME_QUEUE_MATERIALIZATION_PACKAGE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_queue_materialization_package_version', hasFingerprint: true, fingerprintField: 'queue_materialization_package_fingerprint' },
+  { module: './runtime-queue-materialization-decision', fieldsExport: 'RUNTIME_QUEUE_MATERIALIZATION_DECISION_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
+  { module: './runtime-queue-materialization-result', fieldsExport: 'RUNTIME_QUEUE_MATERIALIZATION_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false }
 ]);
 
 function readDirFiles(dir, extension) {

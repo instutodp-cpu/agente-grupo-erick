@@ -65,6 +65,10 @@ jobs:
         working-directory: platform/services/api
         run: npm run test:runtime-queue-admission
 
+      - name: Queue materialization contract tests
+        working-directory: platform/services/api
+        run: npm run test:runtime-queue-materialization
+
       - name: API tests
         working-directory: platform/services/api
         run: npm test

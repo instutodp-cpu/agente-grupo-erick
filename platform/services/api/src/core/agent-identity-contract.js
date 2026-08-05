@@ -322,7 +322,21 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'runtime_queue_admission_package_fingerprint', 'runtime_queue_admission_package_digest',
   // pr108fix: FIX 1's official Model Selection Decision reuse plus FIX 4's capacity-snapshot
   // freshness recomputation reason codes.
-  'official_model_selection_decision_references', 'official_model_selection_decision_fingerprints'
+  'official_model_selection_decision_references', 'official_model_selection_decision_fingerprints',
+  // pr109: Runtime Queue Materialization Simulation Contracts' own new fields, plus the two upstream
+  // Queue Admission fingerprint fields this layer newly reuses verbatim (entry/order) that PR108
+  // itself never needed to name directly.
+  'runtime_queue_admission_entry_fingerprint', 'runtime_queue_admission_order_fingerprint',
+  'runtime_queue_admission_entry_references', 'runtime_queue_admission_order_reference',
+  'runtime_queue_admission_package_reference',
+  'runtime_queue_materialization_entry_reference_id', 'runtime_queue_materialization_entry_reference_version',
+  'runtime_queue_materialization_package_id', 'runtime_queue_materialization_package_version',
+  'runtime_queue_materialization_order_reference_id', 'runtime_queue_materialization_order_reference_version',
+  'runtime_queue_materialization_request_id', 'runtime_queue_materialization_request_version',
+  'runtime_queue_materialization_request_fingerprint',
+  'runtime_queue_materialization_package_fingerprint', 'runtime_queue_materialization_package_digest',
+  'runtime_queue_materialization_decision_id', 'runtime_queue_materialization_decision_fingerprint',
+  'runtime_queue_materialization_result_id'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept

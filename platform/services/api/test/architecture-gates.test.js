@@ -18,9 +18,9 @@ const { discoverTestFiles, auditRegistration } = require('../scripts/discover-te
 // Gate catalog
 // ---------------------------------------------------------------------------
 
-test('architecture-gate-rules: 21 gates total, split into 12 pattern gates and 9 structural gates', () => {
-  assert.equal(GATE_IDS.length, 21);
-  assert.equal(PATTERN_GATE_IDS.length, 12);
+test('architecture-gate-rules: 22 gates total, split into 13 pattern gates and 9 structural gates', () => {
+  assert.equal(GATE_IDS.length, 22);
+  assert.equal(PATTERN_GATE_IDS.length, 13);
   assert.equal(STRUCTURAL_GATE_IDS.length, 9);
   assert.deepEqual([...PATTERN_GATE_IDS, ...STRUCTURAL_GATE_IDS].sort(), [...GATE_IDS].sort());
   assert.equal(new Set(GATE_IDS).size, GATE_IDS.length, 'no duplicate gate ids');
@@ -58,6 +58,7 @@ const SYNTHETIC_VIOLATIONS = {
   FORBIDDEN_TIMER: 'setTimeout(doSomething, 1000);',
   FORBIDDEN_MUTABLE_GLOBAL: 'let sharedState = {};',
   FORBIDDEN_ENDPOINT_IN_CORE: "app.get('/health', handler);",
+  FORBIDDEN_QUEUE_CLIENT_IMPORT: "const Redis = require('ioredis');",
   NO_SIDE_CHANNEL_CONTEXT: 'if (context.currentRegistryVersion === expectedVersion) { doSomething(); }'
 };
 
