@@ -1,12 +1,12 @@
 'use strict';
 
-// The 21 mandatory architecture gates. This module defines two different kinds of rule, because a
+// The 22 mandatory architecture gates. This module defines two different kinds of rule, because a
 // naive full-directory text scan turned out to be too fragile against 280+ pre-existing files
 // spanning many PRs' worth of varying conventions (verified directly while building this file --
 // see HERMES_VALIDATION_SEMANTICS_ARCHITECTURE_GATES.md "Limitações" for the false positives this
 // caught and how each was resolved):
 //
-// - 12 PATTERN gates (the 11 FORBIDDEN_* rules plus NO_SIDE_CHANNEL_CONTEXT) are genuinely safe to
+// - 13 PATTERN gates (the 12 FORBIDDEN_* rules plus NO_SIDE_CHANNEL_CONTEXT) are genuinely safe to
 //   scan across the whole directory: a real match is unambiguous, and comment lines are skipped so
 //   documentation that merely *mentions* a forbidden construct (e.g. this very file's own rule
 //   descriptions) is never a false positive.
@@ -27,6 +27,7 @@ const GATE_IDS = Object.freeze([
   'FORBIDDEN_NETWORK_IMPORT', 'FORBIDDEN_FILESYSTEM_WRITE', 'FORBIDDEN_CHILD_PROCESS', 'FORBIDDEN_EVAL',
   'FORBIDDEN_DYNAMIC_IMPORT', 'FORBIDDEN_RUNTIME_IMPORT', 'FORBIDDEN_PROVIDER_SDK',
   'FORBIDDEN_PROCESS_ENV_OPERATIONAL', 'FORBIDDEN_TIMER', 'FORBIDDEN_MUTABLE_GLOBAL', 'FORBIDDEN_ENDPOINT_IN_CORE',
+  'FORBIDDEN_QUEUE_CLIENT_IMPORT',
   'SIMULATION_FLAG_REQUIRED', 'PRODUCTION_BLOCKED_REQUIRED', 'ROLLOUT_ZERO_REQUIRED', 'TEST_REGISTRATION_REQUIRED',
   'VALIDATOR_REGISTRATION_REQUIRED', 'STATUS_TAXONOMY_REQUIRED', 'FINGERPRINT_COVERAGE_REQUIRED',
   'VERSION_COVERAGE_REQUIRED', 'EXACT_FIELDS_REQUIRED', 'NO_SIDE_CHANNEL_CONTEXT'
@@ -36,6 +37,7 @@ const PATTERN_GATE_IDS = Object.freeze([
   'FORBIDDEN_NETWORK_IMPORT', 'FORBIDDEN_FILESYSTEM_WRITE', 'FORBIDDEN_CHILD_PROCESS', 'FORBIDDEN_EVAL',
   'FORBIDDEN_DYNAMIC_IMPORT', 'FORBIDDEN_RUNTIME_IMPORT', 'FORBIDDEN_PROVIDER_SDK',
   'FORBIDDEN_PROCESS_ENV_OPERATIONAL', 'FORBIDDEN_TIMER', 'FORBIDDEN_MUTABLE_GLOBAL', 'FORBIDDEN_ENDPOINT_IN_CORE',
+  'FORBIDDEN_QUEUE_CLIENT_IMPORT',
   'NO_SIDE_CHANNEL_CONTEXT'
 ]);
 
@@ -96,6 +98,11 @@ const PATTERN_GATES = Object.freeze([
   { id: 'FORBIDDEN_TIMER', pattern: /\b(setTimeout|setInterval|setImmediate)\s*\(/, description: 'real scheduling timer' },
   { id: 'FORBIDDEN_MUTABLE_GLOBAL', pattern: /^(let|var)\s+[A-Za-z_$][\w$]*\s*=\s*(\{|\[)/, description: 'module-level mutable singleton (use const + Object.freeze)' },
   { id: 'FORBIDDEN_ENDPOINT_IN_CORE', pattern: /app\.(get|post|put|patch|delete)\s*\(\s*['"]\//, description: 'HTTP endpoint registration in core' },
+  {
+    id: 'FORBIDDEN_QUEUE_CLIENT_IMPORT',
+    pattern: /require\(\s*['"](ioredis|redis|amqplib|amqp-connection-manager|kafkajs|node-rdkafka|bull|bullmq|bee-queue|@aws-sdk\/client-sqs|sqs-consumer|sqs-producer)['"]\s*\)/,
+    description: 'real queue/broker client SDK dependency (pr109: this layer only ever declares queue materialization intent, never a live queue/broker connection)'
+  },
   { id: 'NO_SIDE_CHANNEL_CONTEXT', pattern: /context\.(currentRegistryVersion|authorizationScope|bindingRecords|dependencyRecords)\b/, description: 'known decisional side-channel read off context' }
 ]);
 
