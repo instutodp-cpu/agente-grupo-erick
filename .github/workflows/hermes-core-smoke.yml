@@ -251,14 +251,14 @@ jobs:
   # branch protection settings. Runs with `if: always()` specifically so it still executes
   # (and fails) when a dependency failed or was cancelled, instead of being skipped itself.
   #
-  # Uses the `failure()`/`success()` job-status functions rather than hand-parsing
-  # `needs.*.result` strings: a live run of this workflow proved the string-matching
-  # approach unreliable -- an infra-level "Set up job" failure (GitHub Actions action-cache
-  # unavailability, unrelated to this repo) on 4 of the 10 dependency jobs was NOT caught by
-  # `contains(needs.*.result, 'failure')`, and this job reported success anyway.
-  # `failure()`/`success()` are GitHub's own documented mechanism for exactly this
-  # aggregation pattern and correctly account for every way a needed job can end up
-  # non-successful, not just an enumerated set of string literals.
+  # Checks needs.<job>.result via `jq` over `toJSON(needs)` inside a `run:` step, NOT a
+  # GitHub Actions `if:` expression. Two prior attempts got this wrong on live runs of this
+  # very workflow: `contains(needs.*.result, 'failure')` silently failed to catch 4 failed
+  # dependency jobs, and `success()`/`failure()` used at STEP level check this job's own
+  # prior steps (trivially true here -- there's nothing before it to fail), not the `needs:`
+  # jobs at all; that distinction only holds at JOB-level `if:`. jq over the literal needs
+  # JSON sidesteps both pitfalls: it is unambiguous, and it does not depend on which
+  # evaluation context a particular expression syntax happens to work in.
   hermes-required-ci:
     name: Hermes Required CI
     runs-on: ubuntu-latest
@@ -275,11 +275,13 @@ jobs:
       - docker-e2e
     if: always()
     steps:
-      - name: Require every job succeeded
-        if: ${{ success() }}
-        run: echo "All required jobs passed."
-      - name: Fail if any required job did not succeed
-        if: ${{ !success() }}
+      - name: Verify every required job succeeded
         run: |
-          echo "One or more required jobs failed, were cancelled, or were skipped."
-          exit 1
+          echo '${{ toJSON(needs) }}' > /tmp/needs.json
+          cat /tmp/needs.json
+          if jq -e '(length > 0) and all(.[]; .result == "success")' /tmp/needs.json > /dev/null; then
+            echo "All required jobs passed."
+          else
+            echo "One or more required jobs did not succeed (see needs.json above)."
+            exit 1
+          fi
