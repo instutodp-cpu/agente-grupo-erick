@@ -9,14 +9,24 @@ on:
 permissions:
   contents: read
 
+# A push to the same PR (or the same branch on `push`) cancels whatever CI run is already
+# in flight for it -- only the latest commit's result matters. Different PRs never share a
+# group, so they never cancel each other; `github.ref` (not the PR number) is used for the
+# `push` event, so `main` groups only with itself, never with a PR branch.
+concurrency:
+  group: hermes-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  smoke:
+  # Fast, cheap checks: syntax, test-registration audit, architecture gates, and the two
+  # small validation/taxonomy test files. Mirrors the old first four workflow steps 1:1.
+  fast-gates:
+    name: Fast gates
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: platform
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,47 +55,222 @@ jobs:
         working-directory: platform/services/api
         run: node --test test/validation-semantics-architecture-gates.test.js test/validation-trace.test.js
 
+  runtime-contracts:
+    name: Runtime contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
       - name: Runtime simulation contract tests
         working-directory: platform/services/api
         run: node --test test/runtime-execution-simulation-contracts.test.js
 
+  readiness-admission:
+    name: Readiness / admission
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
       - name: Runtime readiness/admission tests
         working-directory: platform/services/api
         run: npm run test:runtime-readiness-admission
 
+  scheduler:
+    name: Scheduler
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
       - name: Runtime scheduler contract tests
         working-directory: platform/services/api
         run: npm run test:runtime-scheduler
 
+  worker-assignment:
+    name: Worker assignment
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
       - name: Worker assignment contract tests
         working-directory: platform/services/api
         run: npm run test:runtime-worker-assignment
 
+  queue-admission:
+    name: Queue admission
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
       - name: Queue admission contract tests
         working-directory: platform/services/api
         run: npm run test:runtime-queue-admission
 
+  queue-materialization:
+    name: Queue materialization
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
       - name: Queue materialization contract tests
         working-directory: platform/services/api
         run: npm run test:runtime-queue-materialization
 
+  queue-placement:
+    name: Queue placement
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
       - name: Queue placement contract tests
         working-directory: platform/services/api
         run: npm run test:runtime-queue-placement
 
-      - name: API tests
+  # Everything discover-tests.js finds that is NOT explicitly named in one of the jobs
+  # above (scripts/ci-test-groups.js is the single source of truth for that split). Local
+  # `npm test` is untouched -- it keeps discovering and running the full, undivided suite.
+  residual-suite:
+    name: Residual suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
         working-directory: platform/services/api
-        run: npm test
+        run: npm install
+      - name: Residual suite tests
+        working-directory: platform/services/api
+        run: npm run test:ci:residual
 
+  docker-e2e:
+    name: Docker end-to-end smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
       - name: Docker compose config
         run: docker compose config
-
       - name: Start local stack
         run: docker compose up --build -d
-
       - name: End-to-end smoke test
         run: bash scripts/hermes-smoke-test.sh
-
       - name: Stop local stack
         if: always()
         run: docker compose down
+
+  # Single stable check for branch protection. Depends on every job above via `needs:` --
+  # adding or removing a group only ever means editing this `needs:` list, never touching
+  # branch protection settings. Runs with `if: always()` specifically so it still executes
+  # (and fails) when a dependency failed or was cancelled, instead of being skipped itself.
+  hermes-required-ci:
+    name: Hermes Required CI
+    runs-on: ubuntu-latest
+    needs:
+      - fast-gates
+      - runtime-contracts
+      - readiness-admission
+      - scheduler
+      - worker-assignment
+      - queue-admission
+      - queue-materialization
+      - queue-placement
+      - residual-suite
+      - docker-e2e
+    if: always()
+    steps:
+      - name: Require every job succeeded
+        if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && !contains(needs.*.result, 'skipped') }}
+        run: echo "All required jobs passed."
+      - name: Fail if any required job did not succeed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: |
+          echo "One or more required jobs failed, were cancelled, or were skipped."
+          exit 1
