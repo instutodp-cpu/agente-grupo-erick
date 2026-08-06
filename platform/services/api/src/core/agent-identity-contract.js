@@ -336,7 +336,26 @@ const AGENT_CORE_ALLOWLISTED_KEY_NAMES = Object.freeze(new Set([
   'runtime_queue_materialization_request_fingerprint',
   'runtime_queue_materialization_package_fingerprint', 'runtime_queue_materialization_package_digest',
   'runtime_queue_materialization_decision_id', 'runtime_queue_materialization_decision_fingerprint',
-  'runtime_queue_materialization_result_id'
+  'runtime_queue_materialization_result_id',
+  // pr110: Runtime Queue Placement Simulation Contracts' own new fields, plus the upstream Queue
+  // Materialization fingerprint/reference fields this layer newly reuses verbatim (entry/order/
+  // package) that PR109 itself never needed to name directly. `placement_group_key` contains "key"
+  // as a segment (the forbidden-token scanner matches whole underscore-delimited segments) -- it is
+  // a deterministic, canonical-digest-derived grouping key, never a credential, mirroring PR108's
+  // own already-allowlisted `partition_key_type`/`partition_key_value`.
+  'runtime_queue_materialization_entry_fingerprint', 'runtime_queue_materialization_order_fingerprint',
+  'runtime_queue_materialization_package_reference', 'runtime_queue_materialization_entry_references',
+  'runtime_queue_materialization_order_reference',
+  'placement_group_key',
+  'runtime_queue_placement_entry_reference_id', 'runtime_queue_placement_entry_reference_version',
+  'runtime_queue_placement_group_reference_id', 'runtime_queue_placement_group_reference_version',
+  'runtime_queue_placement_order_reference_id', 'runtime_queue_placement_order_reference_version',
+  'runtime_queue_placement_package_id', 'runtime_queue_placement_package_version',
+  'runtime_queue_placement_request_id', 'runtime_queue_placement_request_version',
+  'runtime_queue_placement_request_fingerprint',
+  'runtime_queue_placement_package_fingerprint', 'runtime_queue_placement_package_digest',
+  'runtime_queue_placement_decision_id', 'runtime_queue_placement_decision_fingerprint',
+  'runtime_queue_placement_result_id'
 ]));
 // Field *values* that are legitimate, closed-enum identifiers rather than operational material --
 // mirrors AGENT_CORE_ALLOWLISTED_KEY_NAMES above, but for values instead of keys. Kept

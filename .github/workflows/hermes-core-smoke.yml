@@ -12,7 +12,7 @@ permissions:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 100
+    timeout-minutes: 150
     defaults:
       run:
         working-directory: platform
@@ -68,6 +68,10 @@ jobs:
       - name: Queue materialization contract tests
         working-directory: platform/services/api
         run: npm run test:runtime-queue-materialization
+
+      - name: Queue placement contract tests
+        working-directory: platform/services/api
+        run: npm run test:runtime-queue-placement
 
       - name: API tests
         working-directory: platform/services/api

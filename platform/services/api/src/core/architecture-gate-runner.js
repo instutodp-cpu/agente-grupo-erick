@@ -143,7 +143,15 @@ const AUDITED_CONTRACTS_MANIFEST = Object.freeze([
   { module: './runtime-queue-materialization-request', fieldsExport: 'RUNTIME_QUEUE_MATERIALIZATION_REQUEST_FIELDS', hasVersion: true, versionField: 'runtime_queue_materialization_request_version', hasFingerprint: false },
   { module: './runtime-queue-materialization-package', fieldsExport: 'RUNTIME_QUEUE_MATERIALIZATION_PACKAGE_FIELDS', safeFlagsExport: 'RUNTIME_QUEUE_MATERIALIZATION_PACKAGE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_queue_materialization_package_version', hasFingerprint: true, fingerprintField: 'queue_materialization_package_fingerprint' },
   { module: './runtime-queue-materialization-decision', fieldsExport: 'RUNTIME_QUEUE_MATERIALIZATION_DECISION_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
-  { module: './runtime-queue-materialization-result', fieldsExport: 'RUNTIME_QUEUE_MATERIALIZATION_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false }
+  { module: './runtime-queue-materialization-result', fieldsExport: 'RUNTIME_QUEUE_MATERIALIZATION_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
+  // pr110: Runtime Queue Placement Simulation Contracts' own new contracts.
+  { module: './runtime-queue-placement-entry-reference', fieldsExport: 'RUNTIME_QUEUE_PLACEMENT_ENTRY_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_QUEUE_PLACEMENT_ENTRY_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_queue_placement_entry_reference_version', hasFingerprint: true, fingerprintField: 'placement_entry_fingerprint' },
+  { module: './runtime-queue-placement-group-reference', fieldsExport: 'RUNTIME_QUEUE_PLACEMENT_GROUP_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_QUEUE_PLACEMENT_GROUP_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_queue_placement_group_reference_version', hasFingerprint: true, fingerprintField: 'placement_group_fingerprint' },
+  { module: './runtime-queue-placement-order-reference', fieldsExport: 'RUNTIME_QUEUE_PLACEMENT_ORDER_REFERENCE_FIELDS', safeFlagsExport: 'RUNTIME_QUEUE_PLACEMENT_ORDER_REFERENCE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_queue_placement_order_reference_version', hasFingerprint: true, fingerprintField: 'placement_order_fingerprint' },
+  { module: './runtime-queue-placement-request', fieldsExport: 'RUNTIME_QUEUE_PLACEMENT_REQUEST_FIELDS', hasVersion: true, versionField: 'runtime_queue_placement_request_version', hasFingerprint: false },
+  { module: './runtime-queue-placement-package', fieldsExport: 'RUNTIME_QUEUE_PLACEMENT_PACKAGE_FIELDS', safeFlagsExport: 'RUNTIME_QUEUE_PLACEMENT_PACKAGE_SAFE_FLAGS', hasVersion: true, versionField: 'runtime_queue_placement_package_version', hasFingerprint: true, fingerprintField: 'queue_placement_package_fingerprint' },
+  { module: './runtime-queue-placement-decision', fieldsExport: 'RUNTIME_QUEUE_PLACEMENT_DECISION_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false },
+  { module: './runtime-queue-placement-result', fieldsExport: 'RUNTIME_QUEUE_PLACEMENT_RESULT_FIELDS', safeFlagsExport: 'OPERATIONAL_SAFE_FLAGS', hasVersion: false, hasFingerprint: false }
 ]);
 
 function readDirFiles(dir, extension) {
