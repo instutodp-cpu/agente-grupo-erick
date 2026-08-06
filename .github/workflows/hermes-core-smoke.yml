@@ -250,6 +250,15 @@ jobs:
   # adding or removing a group only ever means editing this `needs:` list, never touching
   # branch protection settings. Runs with `if: always()` specifically so it still executes
   # (and fails) when a dependency failed or was cancelled, instead of being skipped itself.
+  #
+  # Uses the `failure()`/`success()` job-status functions rather than hand-parsing
+  # `needs.*.result` strings: a live run of this workflow proved the string-matching
+  # approach unreliable -- an infra-level "Set up job" failure (GitHub Actions action-cache
+  # unavailability, unrelated to this repo) on 4 of the 10 dependency jobs was NOT caught by
+  # `contains(needs.*.result, 'failure')`, and this job reported success anyway.
+  # `failure()`/`success()` are GitHub's own documented mechanism for exactly this
+  # aggregation pattern and correctly account for every way a needed job can end up
+  # non-successful, not just an enumerated set of string literals.
   hermes-required-ci:
     name: Hermes Required CI
     runs-on: ubuntu-latest
@@ -267,10 +276,10 @@ jobs:
     if: always()
     steps:
       - name: Require every job succeeded
-        if: ${{ !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && !contains(needs.*.result, 'skipped') }}
+        if: ${{ success() }}
         run: echo "All required jobs passed."
       - name: Fail if any required job did not succeed
-        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        if: ${{ !success() }}
         run: |
           echo "One or more required jobs failed, were cancelled, or were skipped."
           exit 1
