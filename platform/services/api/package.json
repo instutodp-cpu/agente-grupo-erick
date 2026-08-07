@@ -16,6 +16,7 @@
     "test:runtime-queue-admission": "node --test test/runtime-queue-admission-simulation-contracts.test.js",
     "test:runtime-queue-materialization": "node --test test/runtime-queue-materialization-simulation-contracts.test.js",
     "test:runtime-queue-placement": "node --test test/runtime-queue-placement-simulation-contracts.test.js",
+    "test:ci:residual": "node scripts/run-residual-tests.js",
     "gates": "node scripts/run-architecture-gates.js"
   }
 }
