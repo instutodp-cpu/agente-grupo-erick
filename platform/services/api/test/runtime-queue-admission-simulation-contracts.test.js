@@ -62,6 +62,14 @@ const { buildRuntimeWorkerStagePolicyRequirementReference } = require('../src/co
 const { stablePayload } = require('../src/core/transcription-provider-contract-registry');
 
 const { buildGoldenQueueAdmissionBundle } = require('./helpers/runtime-queue-admission-simulation-test-data');
+const {
+  assertFrozenMutationRejected,
+  assertInheritedRequiredFieldRejected,
+  assertPollutionFieldsRejected,
+  canonicalSnapshot,
+  deepFreeze,
+  tryMutation
+} = require('./helpers/queue-simulation-hardening-test-helpers');
 
 function assertValid(label, validation) {
   assert.equal(validation.valid, true, `${label}: ${JSON.stringify(validation.errors)}`);
@@ -1352,6 +1360,92 @@ test('adversarial types: NaN/Infinity/bigint/symbol/function/undefined/Buffer/cy
     const tampered = { ...golden.queueAdmissionRequest, correlation_id: value };
     assertInvalid(`adversarial value ${String(value)}`, validateRuntimeQueueAdmissionRequest(tampered));
   }
+});
+
+// --- Hardening ----------------------------------------------------------------------------------
+
+test('hardening: a deeply frozen queue admission request is evaluated without input mutation', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const request = golden.queueAdmissionRequest;
+  const before = canonicalSnapshot(request);
+
+  deepFreeze(request);
+  const outcome = evaluateRuntimeQueueAdmissionRequest(request, {});
+
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
+  assertValid('decision', validateRuntimeQueueAdmissionDecision(outcome.decision));
+  assert.equal(canonicalSnapshot(request), before);
+});
+
+test('hardening: repeated queue admission evaluation is deterministic across status, ids, order, fingerprints, digests, and safe flags', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const first = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const second = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+
+  assert.equal(first.decision.status, second.decision.status);
+  assert.deepEqual(first.decision.reason_codes, second.decision.reason_codes);
+  assert.equal(first.package.runtime_queue_admission_package_id, second.package.runtime_queue_admission_package_id);
+  assert.equal(first.package.queue_admission_package_fingerprint, second.package.queue_admission_package_fingerprint);
+  assert.equal(first.package.queue_admission_package_digest, second.package.queue_admission_package_digest);
+  assert.deepEqual(first.orderRef.ordered_queue_admission_entry_reference_ids, second.orderRef.ordered_queue_admission_entry_reference_ids);
+  assert.equal(first.admissionEntryRefs.length, second.admissionEntryRefs.length);
+  assert.equal(first.result.queue_created, false);
+  assert.equal(second.result.queue_created, false);
+  assert.equal(first.result.executed, false);
+  assert.equal(second.result.executed, false);
+  assert.equal(canonicalSnapshot(first), canonicalSnapshot(second));
+});
+
+test('hardening: external mutation attempts cannot alter queue admission contracts or later evaluations', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const first = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  const fullSnapshot = canonicalSnapshot(first);
+  const protectedSnapshot = canonicalSnapshot({
+    decision: first.decision,
+    result: first.result,
+    audit: first.audit,
+    package: first.package,
+    orderRef: first.orderRef
+  });
+
+  assertFrozenMutationRejected('package rejects entry_count mutation', first.package, (pkg) => { pkg.entry_count = 999; });
+  assertFrozenMutationRejected('entry rejects status mutation', first.admissionEntryRefs[0], (entry) => { entry.admission_status = 'CORRUPTED'; });
+  tryMutation(() => first.admissionEntryRefs.reverse());
+  tryMutation(() => first.admissionEntryRefs.push(first.admissionEntryRefs[0]));
+
+  assert.equal(canonicalSnapshot({
+    decision: first.decision,
+    result: first.result,
+    audit: first.audit,
+    package: first.package,
+    orderRef: first.orderRef
+  }), protectedSnapshot);
+
+  const second = evaluateRuntimeQueueAdmissionRequest(golden.queueAdmissionRequest, {});
+  assert.equal(canonicalSnapshot(second), fullSnapshot);
+});
+
+test('hardening: queue admission rejects prototype-pollution fields and inherited required fields', () => {
+  const golden = buildGoldenQueueAdmissionBundle();
+  const sentinel = 'queue_admission_pollution_sentinel';
+
+  assertInheritedRequiredFieldRejected({
+    label: 'queue admission request',
+    request: golden.queueAdmissionRequest,
+    field: 'runtime_queue_admission_request_id',
+    sentinel,
+    validate: validateRuntimeQueueAdmissionRequest,
+    evaluate: evaluateRuntimeQueueAdmissionRequest,
+    expectedStatus: 'QUEUE_ADMISSION_VALIDATION_FAILED'
+  });
+  assertPollutionFieldsRejected({
+    label: 'queue admission request',
+    request: golden.queueAdmissionRequest,
+    sentinel,
+    validate: validateRuntimeQueueAdmissionRequest,
+    evaluate: evaluateRuntimeQueueAdmissionRequest,
+    expectedStatus: 'QUEUE_ADMISSION_VALIDATION_FAILED'
+  });
 });
 
 // --- Regression -----------------------------------------------------------------------------------
