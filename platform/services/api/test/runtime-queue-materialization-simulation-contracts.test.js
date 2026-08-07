@@ -34,6 +34,14 @@ const { buildRuntimeQueueAdmissionReplayReference } = require('../src/core/runti
 const { buildRuntimeQueueClassReference } = require('../src/core/runtime-queue-class-reference');
 const { buildRuntimeQueueQuotaReference } = require('../src/core/runtime-queue-quota-reference');
 void buildRuntimeQueueAdmissionReplayReference;
+const {
+  assertFrozenMutationRejected,
+  assertInheritedRequiredFieldRejected,
+  assertPollutionFieldsRejected,
+  canonicalSnapshot,
+  deepFreeze,
+  tryMutation
+} = require('./helpers/queue-simulation-hardening-test-helpers');
 
 function assertValid(label, validation) {
   assert.equal(validation.valid, true, `${label}: ${JSON.stringify(validation.errors)}`);
@@ -512,24 +520,86 @@ test('regression: architecture gates report zero findings with every PR109 modul
 
 test('immutability: the input request is never mutated by evaluation', () => {
   const golden = buildGoldenQueueMaterializationBundle();
-  const before = JSON.stringify(golden.queueMaterializationRequest);
-  evaluateRuntimeQueueMaterializationRequest(golden.queueMaterializationRequest, {});
-  const after = JSON.stringify(golden.queueMaterializationRequest);
-  assert.equal(before, after);
+  const request = golden.queueMaterializationRequest;
+  const before = canonicalSnapshot(request);
+
+  deepFreeze(request);
+  const outcome = evaluateRuntimeQueueMaterializationRequest(request, {});
+
+  assert.equal(outcome.decision.status, 'QUEUE_MATERIALIZATION_PACKAGE_PREPARED_SIMULATION');
+  assertValid('decision', validateRuntimeQueueMaterializationDecision(outcome.decision));
+  assert.equal(canonicalSnapshot(request), before);
 });
 
-test('immutability: repeated evaluation of the same request produces byte-identical output', () => {
+test('immutability: repeated evaluation of the same request preserves status, ids, order, fingerprints, digests, and safe flags', () => {
   const golden = buildGoldenQueueMaterializationBundle();
   const first = evaluateRuntimeQueueMaterializationRequest(golden.queueMaterializationRequest, {});
   const second = evaluateRuntimeQueueMaterializationRequest(golden.queueMaterializationRequest, {});
-  assert.deepEqual(JSON.parse(JSON.stringify(first)), JSON.parse(JSON.stringify(second)));
+
+  assert.equal(first.decision.status, second.decision.status);
+  assert.deepEqual(first.decision.reason_codes, second.decision.reason_codes);
+  assert.equal(first.package.runtime_queue_materialization_package_id, second.package.runtime_queue_materialization_package_id);
+  assert.equal(first.package.queue_materialization_package_fingerprint, second.package.queue_materialization_package_fingerprint);
+  assert.equal(first.package.queue_materialization_package_digest, second.package.queue_materialization_package_digest);
+  assert.deepEqual(first.orderRef.ordered_queue_materialization_entry_reference_ids, second.orderRef.ordered_queue_materialization_entry_reference_ids);
+  assert.equal(first.materializationEntryRefs.length, second.materializationEntryRefs.length);
+  assert.equal(first.result.queue_created, false);
+  assert.equal(second.result.queue_created, false);
+  assert.equal(first.result.executed, false);
+  assert.equal(second.result.executed, false);
+  assert.equal(canonicalSnapshot(first), canonicalSnapshot(second));
 });
 
-test('immutability: constructed contracts are frozen and reject direct mutation attempts', () => {
+test('immutability: external mutation attempts cannot alter materialization contracts or later evaluations', () => {
   const golden = buildGoldenQueueMaterializationBundle();
-  const outcome = evaluateRuntimeQueueMaterializationRequest(golden.queueMaterializationRequest, {});
-  assert.throws(() => { outcome.package.entry_count = 999; }, TypeError);
-  assert.throws(() => { outcome.materializationEntryRefs[0].materialization_position = 999; }, TypeError);
+  const first = evaluateRuntimeQueueMaterializationRequest(golden.queueMaterializationRequest, {});
+  const fullSnapshot = canonicalSnapshot(first);
+  const protectedSnapshot = canonicalSnapshot({
+    decision: first.decision,
+    result: first.result,
+    audit: first.audit,
+    package: first.package,
+    orderRef: first.orderRef
+  });
+
+  assertFrozenMutationRejected('package rejects entry_count mutation', first.package, (pkg) => { pkg.entry_count = 999; });
+  assertFrozenMutationRejected('entry rejects position mutation', first.materializationEntryRefs[0], (entry) => { entry.materialization_position = 999; });
+  tryMutation(() => first.materializationEntryRefs.reverse());
+  tryMutation(() => first.materializationEntryRefs.push(first.materializationEntryRefs[0]));
+
+  assert.equal(canonicalSnapshot({
+    decision: first.decision,
+    result: first.result,
+    audit: first.audit,
+    package: first.package,
+    orderRef: first.orderRef
+  }), protectedSnapshot);
+
+  const second = evaluateRuntimeQueueMaterializationRequest(golden.queueMaterializationRequest, {});
+  assert.equal(canonicalSnapshot(second), fullSnapshot);
+});
+
+test('immutability: materialization rejects prototype-pollution fields and inherited required fields', () => {
+  const golden = buildGoldenQueueMaterializationBundle();
+  const sentinel = 'queue_materialization_pollution_sentinel';
+
+  assertInheritedRequiredFieldRejected({
+    label: 'queue materialization request',
+    request: golden.queueMaterializationRequest,
+    field: 'runtime_queue_materialization_request_id',
+    sentinel,
+    validate: validateRuntimeQueueMaterializationRequest,
+    evaluate: evaluateRuntimeQueueMaterializationRequest,
+    expectedStatus: 'QUEUE_MATERIALIZATION_VALIDATION_FAILED'
+  });
+  assertPollutionFieldsRejected({
+    label: 'queue materialization request',
+    request: golden.queueMaterializationRequest,
+    sentinel,
+    validate: validateRuntimeQueueMaterializationRequest,
+    evaluate: evaluateRuntimeQueueMaterializationRequest,
+    expectedStatus: 'QUEUE_MATERIALIZATION_VALIDATION_FAILED'
+  });
 });
 
 // --- Registry -----------------------------------------------------------------------------------

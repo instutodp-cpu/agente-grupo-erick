@@ -38,6 +38,14 @@ const { buildGoldenQueuePlacementBundle } = require('./helpers/runtime-queue-pla
 const { buildRuntimeQueueMaterializationEntryReference } = require('../src/core/runtime-queue-materialization-entry-reference');
 const { buildRuntimeQueueMaterializationPackage } = require('../src/core/runtime-queue-materialization-package');
 const { buildRuntimeQueueClassReference } = require('../src/core/runtime-queue-class-reference');
+const {
+  assertFrozenMutationRejected,
+  assertInheritedRequiredFieldRejected,
+  assertPollutionFieldsRejected,
+  canonicalSnapshot,
+  deepFreeze,
+  tryMutation
+} = require('./helpers/queue-simulation-hardening-test-helpers');
 
 function assertValid(label, validation) {
   assert.equal(validation.valid, true, `${label}: ${JSON.stringify(validation.errors)}`);
@@ -632,24 +640,90 @@ test('regression: architecture gates report zero findings with every PR110 modul
 
 test('immutability: the input request is never mutated by evaluation', () => {
   const golden = buildGoldenQueuePlacementBundle();
-  const before = JSON.stringify(golden.queuePlacementRequest);
-  evaluateRuntimeQueuePlacementRequest(golden.queuePlacementRequest, {});
-  const after = JSON.stringify(golden.queuePlacementRequest);
-  assert.equal(before, after);
+  const request = golden.queuePlacementRequest;
+  const before = canonicalSnapshot(request);
+
+  deepFreeze(request);
+  const outcome = evaluateRuntimeQueuePlacementRequest(request, {});
+
+  assert.equal(outcome.decision.status, 'QUEUE_PLACEMENT_PACKAGE_PREPARED_SIMULATION');
+  assertValid('decision', validateRuntimeQueuePlacementDecision(outcome.decision));
+  assert.equal(canonicalSnapshot(request), before);
 });
 
-test('immutability: repeated evaluation of the same request produces byte-identical output', () => {
+test('immutability: repeated evaluation of the same request preserves status, ids, order, fingerprints, digests, and safe flags', () => {
   const golden = buildGoldenQueuePlacementBundle();
   const first = evaluateRuntimeQueuePlacementRequest(golden.queuePlacementRequest, {});
   const second = evaluateRuntimeQueuePlacementRequest(golden.queuePlacementRequest, {});
-  assert.deepEqual(JSON.parse(JSON.stringify(first)), JSON.parse(JSON.stringify(second)));
+
+  assert.equal(first.decision.status, second.decision.status);
+  assert.deepEqual(first.decision.reason_codes, second.decision.reason_codes);
+  assert.equal(first.package.runtime_queue_placement_package_id, second.package.runtime_queue_placement_package_id);
+  assert.equal(first.package.queue_placement_package_fingerprint, second.package.queue_placement_package_fingerprint);
+  assert.equal(first.package.queue_placement_package_digest, second.package.queue_placement_package_digest);
+  assert.deepEqual(first.orderRef.ordered_queue_placement_entry_reference_ids, second.orderRef.ordered_queue_placement_entry_reference_ids);
+  assert.deepEqual(first.orderRef.ordered_queue_placement_group_reference_ids, second.orderRef.ordered_queue_placement_group_reference_ids);
+  assert.equal(first.placementEntryRefs.length, second.placementEntryRefs.length);
+  assert.equal(first.placementGroupRefs.length, second.placementGroupRefs.length);
+  assert.equal(first.result.queue_created, false);
+  assert.equal(second.result.queue_created, false);
+  assert.equal(first.result.executed, false);
+  assert.equal(second.result.executed, false);
+  assert.equal(canonicalSnapshot(first), canonicalSnapshot(second));
 });
 
-test('immutability: constructed contracts are frozen and reject direct mutation attempts', () => {
+test('immutability: external mutation attempts cannot alter placement contracts or later evaluations', () => {
   const golden = buildGoldenQueuePlacementBundle();
-  const outcome = evaluateRuntimeQueuePlacementRequest(golden.queuePlacementRequest, {});
-  assert.throws(() => { outcome.package.entry_count = 999; }, TypeError);
-  assert.throws(() => { outcome.placementEntryRefs[0].placement_position = 999; }, TypeError);
+  const first = evaluateRuntimeQueuePlacementRequest(golden.queuePlacementRequest, {});
+  const fullSnapshot = canonicalSnapshot(first);
+  const protectedSnapshot = canonicalSnapshot({
+    decision: first.decision,
+    result: first.result,
+    audit: first.audit,
+    package: first.package,
+    orderRef: first.orderRef
+  });
+
+  assertFrozenMutationRejected('package rejects entry_count mutation', first.package, (pkg) => { pkg.entry_count = 999; });
+  assertFrozenMutationRejected('entry rejects position mutation', first.placementEntryRefs[0], (entry) => { entry.placement_position = 999; });
+  assertFrozenMutationRejected('group rejects member-list replacement', first.placementGroupRefs[0], (group) => { group.ordered_queue_placement_entry_reference_ids = []; });
+  tryMutation(() => first.placementEntryRefs.reverse());
+  tryMutation(() => first.placementEntryRefs.push(first.placementEntryRefs[0]));
+  tryMutation(() => first.placementGroupRefs.reverse());
+
+  assert.equal(canonicalSnapshot({
+    decision: first.decision,
+    result: first.result,
+    audit: first.audit,
+    package: first.package,
+    orderRef: first.orderRef
+  }), protectedSnapshot);
+
+  const second = evaluateRuntimeQueuePlacementRequest(golden.queuePlacementRequest, {});
+  assert.equal(canonicalSnapshot(second), fullSnapshot);
+});
+
+test('immutability: placement rejects prototype-pollution fields and inherited required fields', () => {
+  const golden = buildGoldenQueuePlacementBundle();
+  const sentinel = 'queue_placement_pollution_sentinel';
+
+  assertInheritedRequiredFieldRejected({
+    label: 'queue placement request',
+    request: golden.queuePlacementRequest,
+    field: 'runtime_queue_placement_request_id',
+    sentinel,
+    validate: validateRuntimeQueuePlacementRequest,
+    evaluate: evaluateRuntimeQueuePlacementRequest,
+    expectedStatus: 'QUEUE_PLACEMENT_VALIDATION_FAILED'
+  });
+  assertPollutionFieldsRejected({
+    label: 'queue placement request',
+    request: golden.queuePlacementRequest,
+    sentinel,
+    validate: validateRuntimeQueuePlacementRequest,
+    evaluate: evaluateRuntimeQueuePlacementRequest,
+    expectedStatus: 'QUEUE_PLACEMENT_VALIDATION_FAILED'
+  });
 });
 
 // --- Registry -----------------------------------------------------------------------------------
