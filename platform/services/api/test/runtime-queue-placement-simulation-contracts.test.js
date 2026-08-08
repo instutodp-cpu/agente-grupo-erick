@@ -34,7 +34,11 @@ const {
   idSetMatches, fingerprintSetMatches
 } = require('../src/core/runtime-queue-placement-boundary');
 
-const { buildGoldenQueuePlacementBundle } = require('./helpers/runtime-queue-placement-simulation-test-data');
+const { buildGoldenQueuePlacementBundle: buildUncachedGoldenQueuePlacementBundle } = require('./helpers/runtime-queue-placement-simulation-test-data');
+const {
+  createRuntimeQueuePlacementGoldenFixtureCache,
+  getRuntimeQueuePlacementGoldenFixtureCacheKey
+} = require('./helpers/runtime-queue-placement-fixture-cache-test-helper');
 const { buildRuntimeQueueMaterializationEntryReference } = require('../src/core/runtime-queue-materialization-entry-reference');
 const { buildRuntimeQueueMaterializationPackage } = require('../src/core/runtime-queue-materialization-package');
 const { buildRuntimeQueueClassReference } = require('../src/core/runtime-queue-class-reference');
@@ -46,6 +50,9 @@ const {
   deepFreeze,
   tryMutation
 } = require('./helpers/queue-simulation-hardening-test-helpers');
+
+const queuePlacementGoldenFixtureCache = createRuntimeQueuePlacementGoldenFixtureCache(buildUncachedGoldenQueuePlacementBundle);
+const buildGoldenQueuePlacementBundle = queuePlacementGoldenFixtureCache.build;
 
 function assertValid(label, validation) {
   assert.equal(validation.valid, true, `${label}: ${JSON.stringify(validation.errors)}`);
@@ -61,6 +68,117 @@ const PACKAGE_OPERATIONAL_FLAGS = [
   'lease_created', 'lock_created', 'job_created', 'dispatch_authorized', 'dispatch_executed', 'network_used',
   'secret_resolved', 'executed'
 ];
+
+// --- Test harness: golden fixture cache -----------------------------------------------------------
+
+test('fixture cache PCACHE-01: repeated same-key placement requests rebuild upstream once and still evaluate through the real boundary', () => {
+  const buildCalls = [];
+  const isolatedCache = createRuntimeQueuePlacementGoldenFixtureCache((...args) => {
+    buildCalls.push(args);
+    return buildUncachedGoldenQueuePlacementBundle(...args);
+  });
+
+  const first = isolatedCache.build();
+  const second = isolatedCache.build();
+  const firstOutcome = evaluateRuntimeQueuePlacementRequest(first.queuePlacementRequest, {});
+  const secondOutcome = evaluateRuntimeQueuePlacementRequest(second.queuePlacementRequest, {});
+
+  assert.equal(buildCalls.length, 1);
+  assert.equal(isolatedCache.getStats().cachedBuilds, 1);
+  assert.equal(isolatedCache.getStats().cacheHits, 1);
+  assert.notEqual(first, second);
+  assert.notEqual(first.queuePlacementRequest, second.queuePlacementRequest);
+  assert.equal(canonicalSnapshot(first.queuePlacementRequest), canonicalSnapshot(second.queuePlacementRequest));
+  assert.equal(firstOutcome.decision.status, 'QUEUE_PLACEMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(secondOutcome.decision.status, 'QUEUE_PLACEMENT_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(firstOutcome.package.queue_placement_package_fingerprint, secondOutcome.package.queue_placement_package_fingerprint);
+});
+
+test('fixture cache PCACHE-02: deep mutation attempts in one consumer do not appear in another consumer', () => {
+  const first = buildGoldenQueuePlacementBundle();
+  const second = buildGoldenQueuePlacementBundle();
+  const secondSnapshot = canonicalSnapshot(second.queuePlacementRequest);
+
+  assertFrozenMutationRejected('cached placement request trace mutation', first.queuePlacementRequest, (request) => {
+    request.trace_id = 'mutated-trace';
+  });
+
+  const mutableCopy = structuredClone(first);
+  mutableCopy.queuePlacementRequest.trace_id = 'mutable-copy-trace';
+  mutableCopy.materializationOutcome.package.entry_count = 999;
+
+  const third = buildGoldenQueuePlacementBundle();
+  assert.equal(canonicalSnapshot(second.queuePlacementRequest), secondSnapshot);
+  assert.equal(canonicalSnapshot(third.queuePlacementRequest), secondSnapshot);
+  assert.notEqual(mutableCopy.queuePlacementRequest.trace_id, third.queuePlacementRequest.trace_id);
+  assert.notEqual(mutableCopy.materializationOutcome.package.entry_count, third.materializationOutcome.package.entry_count);
+});
+
+test('fixture cache PCACHE-03: nested arrays remain isolated and frozen per placement consumer', () => {
+  const first = buildGoldenQueuePlacementBundle();
+  const second = buildGoldenQueuePlacementBundle();
+  const firstEntries = first.queuePlacementRequest.runtime_queue_materialization_entry_references;
+  const secondEntries = second.queuePlacementRequest.runtime_queue_materialization_entry_references;
+  const secondSnapshot = canonicalSnapshot(secondEntries);
+
+  assert.notEqual(firstEntries, secondEntries);
+  assertFrozenMutationRejected('cached placement entry array reverse', firstEntries, (entries) => {
+    entries.reverse();
+  });
+
+  assert.equal(canonicalSnapshot(secondEntries), secondSnapshot);
+});
+
+test('fixture cache PCACHE-04: inverse consumer order preserves deterministic placement outcomes', () => {
+  function buildLightweightFixture(scenarioKey = 'prepared-no-llm-plan') {
+    return { scenarioKey, queuePlacementRequest: { runtime_queue_placement_request_id: `${scenarioKey}-request` } };
+  }
+  const firstOrderCache = createRuntimeQueuePlacementGoldenFixtureCache(buildLightweightFixture);
+  const secondOrderCache = createRuntimeQueuePlacementGoldenFixtureCache(buildLightweightFixture);
+
+  const defaultFirst = firstOrderCache.build();
+  const sequentialSecond = firstOrderCache.build('sequential-plan');
+  const sequentialFirst = secondOrderCache.build('sequential-plan');
+  const defaultSecond = secondOrderCache.build();
+
+  assert.equal(canonicalSnapshot(defaultFirst), canonicalSnapshot(defaultSecond));
+  assert.equal(canonicalSnapshot(sequentialFirst), canonicalSnapshot(sequentialSecond));
+  assert.deepEqual(firstOrderCache.getStats().cachedKeys, secondOrderCache.getStats().cachedKeys);
+});
+
+test('fixture cache PCACHE-05: different placement golden keys never collide', () => {
+  const defaultKey = getRuntimeQueuePlacementGoldenFixtureCacheKey([]);
+  const sequentialKey = getRuntimeQueuePlacementGoldenFixtureCacheKey(['sequential-plan']);
+  const unsupportedOverrideKey = getRuntimeQueuePlacementGoldenFixtureCacheKey([undefined, { request: { trace_id: 'variant' } }]);
+
+  assert.notEqual(defaultKey, sequentialKey);
+  assert.equal(unsupportedOverrideKey, null);
+
+  const isolatedCache = createRuntimeQueuePlacementGoldenFixtureCache((scenarioKey = 'prepared-no-llm-plan') => ({
+    scenarioKey,
+    queuePlacementRequest: { runtime_queue_placement_request_id: `${scenarioKey}-request` }
+  }));
+  const defaultFixture = isolatedCache.build();
+  const sequentialFixture = isolatedCache.build('sequential-plan');
+  const stats = isolatedCache.getStats();
+
+  assert.equal(stats.cachedBuilds, 2);
+  assert.deepEqual(stats.cachedKeys, [defaultKey, sequentialKey].sort());
+  assert.notEqual(canonicalSnapshot(defaultFixture.queuePlacementRequest), canonicalSnapshot(sequentialFixture.queuePlacementRequest));
+});
+
+test('fixture cache PCACHE-06: cached placement evaluation is identical to uncached baseline', () => {
+  const uncached = buildUncachedGoldenQueuePlacementBundle();
+  const cached = buildGoldenQueuePlacementBundle();
+  const repeatedCached = buildGoldenQueuePlacementBundle();
+  const uncachedOutcome = evaluateRuntimeQueuePlacementRequest(uncached.queuePlacementRequest, {});
+  const cachedOutcome = evaluateRuntimeQueuePlacementRequest(cached.queuePlacementRequest, {});
+  const repeatedCachedOutcome = evaluateRuntimeQueuePlacementRequest(repeatedCached.queuePlacementRequest, {});
+
+  assert.equal(canonicalSnapshot(cached.queuePlacementRequest), canonicalSnapshot(uncached.queuePlacementRequest));
+  assert.equal(canonicalSnapshot(cachedOutcome), canonicalSnapshot(uncachedOutcome));
+  assert.equal(canonicalSnapshot(repeatedCachedOutcome), canonicalSnapshot(cachedOutcome));
+});
 
 // Builds a second, independent placement group by reassigning one of the two golden materialization
 // entries to a synthetic second Queue Class -- proves multi-group placement genuinely works, never
