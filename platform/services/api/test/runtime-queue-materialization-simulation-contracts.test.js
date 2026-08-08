@@ -29,7 +29,11 @@ const {
   evaluateRuntimeQueueMaterializationRequest, checkPredecessorOrderPreserved, idSetMatches, fingerprintSetMatches
 } = require('../src/core/runtime-queue-materialization-boundary');
 
-const { buildGoldenQueueMaterializationBundle } = require('./helpers/runtime-queue-materialization-simulation-test-data');
+const { buildGoldenQueueMaterializationBundle: buildUncachedGoldenQueueMaterializationBundle } = require('./helpers/runtime-queue-materialization-simulation-test-data');
+const {
+  createRuntimeQueueMaterializationGoldenFixtureCache,
+  getRuntimeQueueMaterializationGoldenFixtureCacheKey
+} = require('./helpers/runtime-queue-materialization-fixture-cache-test-helper');
 const { buildRuntimeQueueAdmissionReplayReference } = require('../src/core/runtime-queue-admission-replay-reference');
 const { buildRuntimeQueueClassReference } = require('../src/core/runtime-queue-class-reference');
 const { buildRuntimeQueueQuotaReference } = require('../src/core/runtime-queue-quota-reference');
@@ -42,6 +46,9 @@ const {
   deepFreeze,
   tryMutation
 } = require('./helpers/queue-simulation-hardening-test-helpers');
+
+const queueMaterializationGoldenFixtureCache = createRuntimeQueueMaterializationGoldenFixtureCache(buildUncachedGoldenQueueMaterializationBundle);
+const buildGoldenQueueMaterializationBundle = queueMaterializationGoldenFixtureCache.build;
 
 function assertValid(label, validation) {
   assert.equal(validation.valid, true, `${label}: ${JSON.stringify(validation.errors)}`);
@@ -57,6 +64,238 @@ const PACKAGE_OPERATIONAL_FLAGS = [
   'lease_created', 'lock_created', 'job_created', 'dispatch_authorized', 'dispatch_executed', 'network_used',
   'secret_resolved', 'executed'
 ];
+
+function collectInstances(value, Type, seen = new WeakSet(), found = []) {
+  if (!value || typeof value !== 'object' || seen.has(value)) return found;
+  seen.add(value);
+  if (value instanceof Type) found.push(value);
+  if (value instanceof Map) {
+    for (const [key, nested] of value.entries()) {
+      collectInstances(key, Type, seen, found);
+      collectInstances(nested, Type, seen, found);
+    }
+    return found;
+  }
+  if (value instanceof Set) {
+    for (const nested of value.values()) collectInstances(nested, Type, seen, found);
+    return found;
+  }
+  for (const nested of Object.values(value)) collectInstances(nested, Type, seen, found);
+  return found;
+}
+
+function buildLightweightMaterializationFixture(scenarioKey = 'prepared-no-llm-plan') {
+  return {
+    scenarioKey,
+    queueMaterializationRequest: {
+      runtime_queue_materialization_request_id: `${scenarioKey}-request`,
+      nested: { marker: scenarioKey },
+      entries: [`${scenarioKey}-entry`]
+    }
+  };
+}
+
+// --- Test harness: golden fixture cache -----------------------------------------------------------
+
+test('fixture cache MCACHE-01: repeated same-key materialization requests rebuild upstream once and still evaluate through the real boundary', () => {
+  const buildCalls = [];
+  const isolatedCache = createRuntimeQueueMaterializationGoldenFixtureCache((...args) => {
+    buildCalls.push(args);
+    return buildUncachedGoldenQueueMaterializationBundle(...args);
+  });
+
+  const first = isolatedCache.build();
+  const second = isolatedCache.build();
+  const firstOutcome = evaluateRuntimeQueueMaterializationRequest(first.queueMaterializationRequest, {});
+  const secondOutcome = evaluateRuntimeQueueMaterializationRequest(second.queueMaterializationRequest, {});
+
+  assert.equal(buildCalls.length, 1);
+  assert.equal(isolatedCache.getStats().cachedBuilds, 1);
+  assert.equal(isolatedCache.getStats().cacheHits, 1);
+  assert.notEqual(first, second);
+  assert.notEqual(first.queueMaterializationRequest, second.queueMaterializationRequest);
+  assert.equal(canonicalSnapshot(first.queueMaterializationRequest), canonicalSnapshot(second.queueMaterializationRequest));
+  assert.equal(firstOutcome.decision.status, 'QUEUE_MATERIALIZATION_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(secondOutcome.decision.status, 'QUEUE_MATERIALIZATION_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(firstOutcome.package.queue_materialization_package_fingerprint, secondOutcome.package.queue_materialization_package_fingerprint);
+});
+
+test('fixture cache MCACHE-02: two consumers receive independent materialization objects and references', () => {
+  const first = buildGoldenQueueMaterializationBundle();
+  const second = buildGoldenQueueMaterializationBundle();
+
+  assert.notEqual(first, second);
+  assert.notEqual(first.queueMaterializationRequest, second.queueMaterializationRequest);
+  assert.notEqual(first.queueMaterializationRequest.runtime_queue_admission_entry_references, second.queueMaterializationRequest.runtime_queue_admission_entry_references);
+  assert.notEqual(first.queueMaterializationRequest.runtime_queue_admission_entry_references[0], second.queueMaterializationRequest.runtime_queue_admission_entry_references[0]);
+});
+
+test('fixture cache MCACHE-03: deep mutation in one materialization consumer does not alter another consumer', () => {
+  const first = buildGoldenQueueMaterializationBundle();
+  const second = buildGoldenQueueMaterializationBundle();
+  const secondSnapshot = canonicalSnapshot(second.queueMaterializationRequest);
+
+  first.queueMaterializationRequest.trace_id = 'mutated-materialization-trace';
+  first.admissionOutcome.package.entry_count = 999;
+
+  const third = buildGoldenQueueMaterializationBundle();
+  assert.equal(canonicalSnapshot(second.queueMaterializationRequest), secondSnapshot);
+  assert.equal(canonicalSnapshot(third.queueMaterializationRequest), secondSnapshot);
+  assert.notEqual(first.queueMaterializationRequest.trace_id, third.queueMaterializationRequest.trace_id);
+  assert.notEqual(first.admissionOutcome.package.entry_count, third.admissionOutcome.package.entry_count);
+});
+
+test('fixture cache MCACHE-04: nested materialization arrays do not share references', () => {
+  const first = buildGoldenQueueMaterializationBundle();
+  const second = buildGoldenQueueMaterializationBundle();
+  const firstEntries = first.queueMaterializationRequest.runtime_queue_admission_entry_references;
+  const secondEntries = second.queueMaterializationRequest.runtime_queue_admission_entry_references;
+  const secondSnapshot = canonicalSnapshot(secondEntries);
+
+  assert.notEqual(firstEntries, secondEntries);
+  firstEntries.reverse();
+
+  const third = buildGoldenQueueMaterializationBundle();
+  assert.equal(canonicalSnapshot(secondEntries), secondSnapshot);
+  assert.equal(canonicalSnapshot(third.queueMaterializationRequest.runtime_queue_admission_entry_references), secondSnapshot);
+});
+
+test('fixture cache MCACHE-05: nested materialization objects, Maps, and Sets are isolated', () => {
+  const first = buildGoldenQueueMaterializationBundle();
+  const second = buildGoldenQueueMaterializationBundle();
+  const secondPackageSnapshot = canonicalSnapshot(second.admissionOutcome.package);
+  const secondSnapshot = canonicalSnapshot(second);
+
+  assert.notEqual(first.admissionOutcome.package, second.admissionOutcome.package);
+  first.admissionOutcome.package.entry_count = 999;
+
+  const firstMaps = collectInstances(first, Map);
+  const secondMaps = collectInstances(second, Map);
+  const firstSets = collectInstances(first, Set);
+  const secondSets = collectInstances(second, Set);
+  assert.equal(firstMaps.length, secondMaps.length);
+  assert.equal(firstSets.length, secondSets.length);
+  firstMaps.forEach((map, index) => assert.notEqual(map, secondMaps[index]));
+  firstSets.forEach((set, index) => assert.notEqual(set, secondSets[index]));
+  if (firstMaps.length > 0) firstMaps[0].set('materialization-cache-sentinel', 'mutated');
+  if (firstSets.length > 0) firstSets[0].add('materialization-cache-sentinel');
+
+  assert.equal(canonicalSnapshot(second.admissionOutcome.package), secondPackageSnapshot);
+  assert.equal(canonicalSnapshot(second), secondSnapshot);
+});
+
+test('fixture cache MCACHE-06: prepared-no-llm-plan and sequential-plan keys never collide', () => {
+  const preparedKey = getRuntimeQueueMaterializationGoldenFixtureCacheKey([]);
+  const sequentialKey = getRuntimeQueueMaterializationGoldenFixtureCacheKey(['sequential-plan']);
+  const isolatedCache = createRuntimeQueueMaterializationGoldenFixtureCache(buildLightweightMaterializationFixture);
+
+  assert.notEqual(preparedKey, sequentialKey);
+  assert.notEqual(canonicalSnapshot(isolatedCache.build().queueMaterializationRequest), canonicalSnapshot(isolatedCache.build('sequential-plan').queueMaterializationRequest));
+  assert.deepEqual(isolatedCache.getStats().cachedKeys, [preparedKey, sequentialKey].sort());
+});
+
+test('fixture cache MCACHE-07: sequential-plan and parallel-plan keys never collide', () => {
+  const sequentialKey = getRuntimeQueueMaterializationGoldenFixtureCacheKey(['sequential-plan']);
+  const parallelKey = getRuntimeQueueMaterializationGoldenFixtureCacheKey(['parallel-plan']);
+  const isolatedCache = createRuntimeQueueMaterializationGoldenFixtureCache(buildLightweightMaterializationFixture);
+
+  assert.notEqual(sequentialKey, parallelKey);
+  assert.notEqual(canonicalSnapshot(isolatedCache.build('sequential-plan').queueMaterializationRequest), canonicalSnapshot(isolatedCache.build('parallel-plan').queueMaterializationRequest));
+  assert.deepEqual(isolatedCache.getStats().cachedKeys, [parallelKey, sequentialKey].sort());
+});
+
+test('fixture cache MCACHE-08: prepared-no-llm-plan and parallel-plan keys never collide', () => {
+  const preparedKey = getRuntimeQueueMaterializationGoldenFixtureCacheKey([]);
+  const parallelKey = getRuntimeQueueMaterializationGoldenFixtureCacheKey(['parallel-plan']);
+  const isolatedCache = createRuntimeQueueMaterializationGoldenFixtureCache(buildLightweightMaterializationFixture);
+
+  assert.notEqual(preparedKey, parallelKey);
+  assert.notEqual(canonicalSnapshot(isolatedCache.build().queueMaterializationRequest), canonicalSnapshot(isolatedCache.build('parallel-plan').queueMaterializationRequest));
+  assert.deepEqual(isolatedCache.getStats().cachedKeys, [parallelKey, preparedKey].sort());
+});
+
+test('fixture cache MCACHE-09: invalid materialization cache keys fail closed', () => {
+  assert.throws(() => getRuntimeQueueMaterializationGoldenFixtureCacheKey(['unknown-plan']), /unsupported_queue_materialization_fixture_cache_key/);
+  assert.throws(() => buildGoldenQueueMaterializationBundle('unknown-plan'), /unsupported_queue_materialization_fixture_cache_key/);
+});
+
+test('fixture cache MCACHE-10: builder failure is not cached as a valid materialization fixture', () => {
+  let attempts = 0;
+  const isolatedCache = createRuntimeQueueMaterializationGoldenFixtureCache(() => {
+    attempts += 1;
+    throw new Error('synthetic_materialization_builder_failure');
+  });
+
+  assert.throws(() => isolatedCache.build(), /synthetic_materialization_builder_failure/);
+  assert.throws(() => isolatedCache.build(), /synthetic_materialization_builder_failure/);
+  assert.equal(attempts, 2);
+  assert.deepEqual(isolatedCache.getStats(), { cachedBuilds: 0, cacheHits: 0, uncachedBuilds: 0, cachedKeys: [] });
+});
+
+test('fixture cache MCACHE-11: after a builder failure, the next materialization attempt rebuilds', () => {
+  let attempts = 0;
+  const isolatedCache = createRuntimeQueueMaterializationGoldenFixtureCache((...args) => {
+    attempts += 1;
+    if (attempts === 1) throw new Error('first_materialization_builder_failure');
+    return buildUncachedGoldenQueueMaterializationBundle(...args);
+  });
+
+  assert.throws(() => isolatedCache.build(), /first_materialization_builder_failure/);
+  const recovered = isolatedCache.build();
+  const outcome = evaluateRuntimeQueueMaterializationRequest(recovered.queueMaterializationRequest, {});
+
+  assert.equal(attempts, 2);
+  assert.equal(outcome.decision.status, 'QUEUE_MATERIALIZATION_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(isolatedCache.getStats().cachedBuilds, 1);
+});
+
+test('fixture cache MCACHE-12: cached materialization evaluation is identical to uncached baselines', () => {
+  for (const scenarioKey of [undefined, 'sequential-plan', 'parallel-plan']) {
+    const uncached = buildUncachedGoldenQueueMaterializationBundle(scenarioKey);
+    const cached = buildGoldenQueueMaterializationBundle(scenarioKey);
+    const repeatedCached = buildGoldenQueueMaterializationBundle(scenarioKey);
+    const uncachedOutcome = evaluateRuntimeQueueMaterializationRequest(uncached.queueMaterializationRequest, {});
+    const cachedOutcome = evaluateRuntimeQueueMaterializationRequest(cached.queueMaterializationRequest, {});
+    const repeatedCachedOutcome = evaluateRuntimeQueueMaterializationRequest(repeatedCached.queueMaterializationRequest, {});
+
+    assert.equal(canonicalSnapshot(cached.queueMaterializationRequest), canonicalSnapshot(uncached.queueMaterializationRequest), `request ${scenarioKey || 'default'}`);
+    assert.equal(canonicalSnapshot(cachedOutcome), canonicalSnapshot(uncachedOutcome), `outcome ${scenarioKey || 'default'}`);
+    assert.equal(canonicalSnapshot(repeatedCachedOutcome), canonicalSnapshot(cachedOutcome), `repeated ${scenarioKey || 'default'}`);
+  }
+});
+
+test('fixture cache MCACHE-13: inverse materialization consumer order preserves deterministic cache results', () => {
+  const firstOrderCache = createRuntimeQueueMaterializationGoldenFixtureCache(buildLightweightMaterializationFixture);
+  const secondOrderCache = createRuntimeQueueMaterializationGoldenFixtureCache(buildLightweightMaterializationFixture);
+
+  const preparedFirst = firstOrderCache.build();
+  const sequentialSecond = firstOrderCache.build('sequential-plan');
+  const parallelThird = firstOrderCache.build('parallel-plan');
+  const parallelFirst = secondOrderCache.build('parallel-plan');
+  const sequentialSecondAgain = secondOrderCache.build('sequential-plan');
+  const preparedThird = secondOrderCache.build();
+
+  assert.equal(canonicalSnapshot(preparedFirst), canonicalSnapshot(preparedThird));
+  assert.equal(canonicalSnapshot(sequentialSecond), canonicalSnapshot(sequentialSecondAgain));
+  assert.equal(canonicalSnapshot(parallelThird), canonicalSnapshot(parallelFirst));
+  assert.deepEqual(firstOrderCache.getStats().cachedKeys, secondOrderCache.getStats().cachedKeys);
+});
+
+test('fixture cache MCACHE-14: a previous materialization mutation never contaminates a later consumer', () => {
+  const first = buildGoldenQueueMaterializationBundle();
+  first.queueMaterializationRequest.runtime_queue_admission_entry_references.length = 0;
+  first.admissionOutcome.orderRef.ordered_queue_admission_entry_reference_ids.reverse();
+
+  const next = buildGoldenQueueMaterializationBundle();
+  const outcome = evaluateRuntimeQueueMaterializationRequest(next.queueMaterializationRequest, {});
+
+  assert.equal(outcome.decision.status, 'QUEUE_MATERIALIZATION_PACKAGE_PREPARED_SIMULATION');
+  assert.ok(next.queueMaterializationRequest.runtime_queue_admission_entry_references.length > 0);
+  assert.deepEqual(
+    next.queueMaterializationRequest.runtime_queue_admission_entry_references.map((entry) => entry.runtime_queue_admission_entry_reference_id),
+    next.admissionOutcome.orderRef.ordered_queue_admission_entry_reference_ids
+  );
+});
 
 // --- Entry Reference ------------------------------------------------------------------------------
 
