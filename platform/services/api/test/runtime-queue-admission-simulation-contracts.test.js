@@ -61,8 +61,13 @@ const { buildModelSelectionDecision } = require('../src/core/model-selection-dec
 const { buildRuntimeWorkerStagePolicyRequirementReference } = require('../src/core/runtime-worker-stage-policy-requirement-reference');
 const { stablePayload } = require('../src/core/transcription-provider-contract-registry');
 
-const { buildGoldenQueueAdmissionBundle } = require('./helpers/runtime-queue-admission-simulation-test-data');
+const { buildGoldenQueueAdmissionBundle: buildUncachedGoldenQueueAdmissionBundle } = require('./helpers/runtime-queue-admission-simulation-test-data');
 const {
+  createRuntimeQueueAdmissionGoldenFixtureCache,
+  getRuntimeQueueAdmissionGoldenFixtureCacheKey
+} = require('./helpers/runtime-queue-admission-fixture-cache-test-helper');
+const {
+  assertNoPrototypePollution,
   assertFrozenMutationRejected,
   assertInheritedRequiredFieldRejected,
   assertPollutionFieldsRejected,
@@ -70,6 +75,9 @@ const {
   deepFreeze,
   tryMutation
 } = require('./helpers/queue-simulation-hardening-test-helpers');
+
+const queueAdmissionGoldenFixtureCache = createRuntimeQueueAdmissionGoldenFixtureCache(buildUncachedGoldenQueueAdmissionBundle);
+const buildGoldenQueueAdmissionBundle = queueAdmissionGoldenFixtureCache.build;
 
 function assertValid(label, validation) {
   assert.equal(validation.valid, true, `${label}: ${JSON.stringify(validation.errors)}`);
@@ -87,6 +95,146 @@ const OPERATIONAL_FLAG_FIELDS = [
   'stage_dispatched', 'stage_started', 'stage_completed', 'stage_failed', 'runtime_enabled', 'execution_authorized',
   'execution_started', 'network_used', 'secret_resolved', 'executed'
 ];
+
+// --- Test harness: golden fixture cache ---------------------------------------------------------
+
+test('fixture cache CACHE-01: repeated same-key golden requests rebuild upstream once and still evaluate through the real boundary', () => {
+  const buildCalls = [];
+  const isolatedCache = createRuntimeQueueAdmissionGoldenFixtureCache((...args) => {
+    buildCalls.push(args);
+    return buildUncachedGoldenQueueAdmissionBundle(...args);
+  });
+
+  const first = isolatedCache.build();
+  const second = isolatedCache.build();
+  const firstOutcome = evaluateRuntimeQueueAdmissionRequest(first.queueAdmissionRequest, {});
+  const secondOutcome = evaluateRuntimeQueueAdmissionRequest(second.queueAdmissionRequest, {});
+
+  assert.equal(buildCalls.length, 1);
+  assert.equal(isolatedCache.getStats().cachedBuilds, 1);
+  assert.equal(isolatedCache.getStats().cacheHits, 1);
+  assert.notEqual(first, second);
+  assert.deepEqual(canonicalSnapshot(first.queueAdmissionRequest), canonicalSnapshot(second.queueAdmissionRequest));
+  assert.equal(firstOutcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(secondOutcome.decision.status, firstOutcome.decision.status);
+  assert.equal(secondOutcome.package.queue_admission_package_fingerprint, firstOutcome.package.queue_admission_package_fingerprint);
+});
+
+test('fixture cache CACHE-02: deep mutation attempts in one consumer do not appear in another consumer', () => {
+  const first = buildGoldenQueueAdmissionBundle();
+  const second = buildGoldenQueueAdmissionBundle();
+  const before = canonicalSnapshot(second.queueAdmissionRequest.runtime_dispatch_stage_references[0]);
+
+  const mutation = tryMutation(() => {
+    first.queueAdmissionRequest.runtime_dispatch_stage_references[0].stage_status = 'CONTAMINATED_BY_TEST';
+  });
+
+  assertFrozenMutationRejected('cached fixture stage mutation', mutation);
+  assert.deepEqual(canonicalSnapshot(second.queueAdmissionRequest.runtime_dispatch_stage_references[0]), before);
+  assert.equal(second.queueAdmissionRequest.runtime_dispatch_stage_references[0].stage_status, before.stage_status);
+});
+
+test('fixture cache CACHE-03: nested arrays are isolated when a consumer attempts array mutation', () => {
+  const first = buildGoldenQueueAdmissionBundle();
+  const second = buildGoldenQueueAdmissionBundle();
+  const before = canonicalSnapshot(second.queueAdmissionRequest.runtime_queue_quota_references);
+
+  assert.notEqual(
+    first.queueAdmissionRequest.runtime_queue_quota_references,
+    second.queueAdmissionRequest.runtime_queue_quota_references
+  );
+  const mutation = tryMutation(() => {
+    first.queueAdmissionRequest.runtime_queue_quota_references.reverse();
+  });
+
+  assertFrozenMutationRejected('cached fixture quota array mutation', mutation);
+  assert.deepEqual(canonicalSnapshot(second.queueAdmissionRequest.runtime_queue_quota_references), before);
+});
+
+test('fixture cache CACHE-04: nested reference objects are isolated and remain frozen per consumer', () => {
+  const first = buildGoldenQueueAdmissionBundle();
+  const second = buildGoldenQueueAdmissionBundle();
+  const before = canonicalSnapshot(second.queueClass);
+
+  assert.notEqual(first.queueClass, second.queueClass);
+  const mutation = tryMutation(() => {
+    first.queueClass.queue_priority_class = 'CRITICAL_REFERENCE';
+  });
+
+  assertFrozenMutationRejected('cached fixture queue class mutation', mutation);
+  assert.deepEqual(canonicalSnapshot(second.queueClass), before);
+});
+
+test('fixture cache CACHE-05: prototype pollution attempted against one fixture does not contaminate the next fixture', () => {
+  assertNoPrototypePollution('before fixture cache pollution attempt');
+  const polluted = buildGoldenQueueAdmissionBundle();
+
+  const mutation = tryMutation(() => {
+    polluted.queueAdmissionRequest.__proto__ = { polluted_queue_admission_fixture_cache: true };
+  });
+  assertFrozenMutationRejected('cached fixture prototype mutation', mutation);
+
+  const next = buildGoldenQueueAdmissionBundle();
+  assertNoPrototypePollution('after fixture cache pollution attempt');
+  assert.equal(Object.prototype.hasOwnProperty.call(next.queueAdmissionRequest, 'polluted_queue_admission_fixture_cache'), false);
+  assert.equal(next.queueAdmissionRequest.polluted_queue_admission_fixture_cache, undefined);
+});
+
+test('fixture cache CACHE-06: inverse consumer order produces the same deterministic boundary results', () => {
+  const firstOrderCache = createRuntimeQueueAdmissionGoldenFixtureCache(buildUncachedGoldenQueueAdmissionBundle);
+  const firstDefault = firstOrderCache.build();
+  const firstSequential = firstOrderCache.build('sequential-plan');
+  const secondOrderCache = createRuntimeQueueAdmissionGoldenFixtureCache(buildUncachedGoldenQueueAdmissionBundle);
+  const secondSequential = secondOrderCache.build('sequential-plan');
+  const secondDefault = secondOrderCache.build();
+
+  const firstDefaultOutcome = evaluateRuntimeQueueAdmissionRequest(firstDefault.queueAdmissionRequest, {});
+  const secondDefaultOutcome = evaluateRuntimeQueueAdmissionRequest(secondDefault.queueAdmissionRequest, {});
+  const firstSequentialOutcome = evaluateRuntimeQueueAdmissionRequest(firstSequential.queueAdmissionRequest, {});
+  const secondSequentialOutcome = evaluateRuntimeQueueAdmissionRequest(secondSequential.queueAdmissionRequest, {});
+
+  assert.equal(secondDefaultOutcome.decision.status, firstDefaultOutcome.decision.status);
+  assert.equal(secondDefaultOutcome.package.queue_admission_package_fingerprint, firstDefaultOutcome.package.queue_admission_package_fingerprint);
+  assert.equal(secondSequentialOutcome.decision.status, firstSequentialOutcome.decision.status);
+  assert.equal(secondSequentialOutcome.package.queue_admission_package_fingerprint, firstSequentialOutcome.package.queue_admission_package_fingerprint);
+});
+
+test('fixture cache CACHE-07: different golden keys never collide', () => {
+  const defaultKey = getRuntimeQueueAdmissionGoldenFixtureCacheKey([]);
+  const sequentialKey = getRuntimeQueueAdmissionGoldenFixtureCacheKey(['sequential-plan']);
+  const registryNullKey = getRuntimeQueueAdmissionGoldenFixtureCacheKey([undefined, { registrySnapshotRef: null }]);
+
+  assert.notEqual(defaultKey, sequentialKey);
+  assert.notEqual(defaultKey, registryNullKey);
+  assert.notEqual(sequentialKey, registryNullKey);
+
+  const isolatedCache = createRuntimeQueueAdmissionGoldenFixtureCache(buildUncachedGoldenQueueAdmissionBundle);
+  const defaultGolden = isolatedCache.build();
+  const sequentialGolden = isolatedCache.build('sequential-plan');
+  const registryNullGolden = isolatedCache.build(undefined, { registrySnapshotRef: null });
+  const stats = isolatedCache.getStats();
+
+  assert.equal(stats.cachedBuilds, 3);
+  assert.deepEqual(stats.cachedKeys, [defaultKey, registryNullKey, sequentialKey].sort());
+  assert.notDeepEqual(canonicalSnapshot(defaultGolden.queueAdmissionRequest), canonicalSnapshot(sequentialGolden.queueAdmissionRequest));
+  assert.equal(evaluateRuntimeQueueAdmissionRequest(defaultGolden.queueAdmissionRequest, {}).decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(evaluateRuntimeQueueAdmissionRequest(registryNullGolden.queueAdmissionRequest, {}).decision.status, 'QUEUE_ADMISSION_REGISTRY_SNAPSHOT_BLOCKED');
+});
+
+test('fixture cache CACHE-08: cached boundary evaluation remains deterministic and identical to uncached baseline', () => {
+  const uncached = buildUncachedGoldenQueueAdmissionBundle();
+  const cached = buildGoldenQueueAdmissionBundle();
+  const uncachedOutcome = evaluateRuntimeQueueAdmissionRequest(uncached.queueAdmissionRequest, {});
+  const cachedOutcome = evaluateRuntimeQueueAdmissionRequest(cached.queueAdmissionRequest, {});
+  const cachedRepeatedOutcome = evaluateRuntimeQueueAdmissionRequest(cached.queueAdmissionRequest, {});
+
+  assert.deepEqual(canonicalSnapshot(cached.queueAdmissionRequest), canonicalSnapshot(uncached.queueAdmissionRequest));
+  assert.deepEqual(canonicalSnapshot(cachedOutcome.decision), canonicalSnapshot(uncachedOutcome.decision));
+  assert.deepEqual(canonicalSnapshot(cachedOutcome.result), canonicalSnapshot(uncachedOutcome.result));
+  assert.deepEqual(canonicalSnapshot(cachedOutcome.package), canonicalSnapshot(uncachedOutcome.package));
+  assert.deepEqual(canonicalSnapshot(cachedRepeatedOutcome.decision), canonicalSnapshot(cachedOutcome.decision));
+  assert.deepEqual(canonicalSnapshot(cachedRepeatedOutcome.package), canonicalSnapshot(cachedOutcome.package));
+});
 
 // --- Policy -----------------------------------------------------------------------------------
 
