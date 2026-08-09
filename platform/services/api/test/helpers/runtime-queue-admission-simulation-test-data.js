@@ -24,8 +24,20 @@ const { evaluateRuntimeQueueAdmissionRequest } = require('../../src/core/runtime
 const { computeCanonicalContentDigest } = require('../../src/core/canonical-content-digest');
 
 const UPSTREAM_CACHEABLE_OVERRIDE_KEYS = Object.freeze(new Set(['policy', 'request', 'registrySnapshotRef']));
+const GOLDEN_BUNDLE_CACHEABLE_KEYS = Object.freeze(new Set([
+  'scenario:prepared-no-llm-plan|registry:default',
+  'scenario:prepared-no-llm-plan|registry:null',
+  'scenario:sequential-plan|registry:default'
+]));
 const upstreamFixtureCache = new Map();
 const upstreamFixtureCacheStats = {
+  cachedBuilds: 0,
+  cacheHits: 0,
+  uncachedBuilds: 0,
+  cachedKeys: new Set()
+};
+const goldenBundleCache = new Map();
+const goldenBundleCacheStats = {
   cachedBuilds: 0,
   cacheHits: 0,
   uncachedBuilds: 0,
@@ -77,21 +89,54 @@ function getQueueAdmissionUpstreamFixtureCacheKey(scenarioKey, overrides = {}) {
   return `scenario:${normalizedScenarioKey}|registry:default`;
 }
 
-function snapshotUpstreamFixtureCacheStats() {
+function getQueueAdmissionGoldenBundleCacheKey(scenarioKey, overrides = {}) {
+  const upstreamKey = getQueueAdmissionUpstreamFixtureCacheKey(scenarioKey, overrides);
+  if (upstreamKey === null) return null;
+  if (!isPlainObject(overrides)) return null;
+  const overrideKeys = Object.keys(overrides);
+  if (overrideKeys.length === 0 || (overrideKeys.length === 1 && Object.prototype.hasOwnProperty.call(overrides, 'registrySnapshotRef') && overrides.registrySnapshotRef === null)) {
+    return GOLDEN_BUNDLE_CACHEABLE_KEYS.has(upstreamKey) ? upstreamKey : null;
+  }
+  return null;
+}
+
+function cloneFrozenFixture(value) {
+  return deepFreeze(cloneFixture(value));
+}
+
+function snapshotCacheStats(stats) {
   return {
-    cachedBuilds: upstreamFixtureCacheStats.cachedBuilds,
-    cacheHits: upstreamFixtureCacheStats.cacheHits,
-    uncachedBuilds: upstreamFixtureCacheStats.uncachedBuilds,
-    cachedKeys: [...upstreamFixtureCacheStats.cachedKeys].sort()
+    cachedBuilds: stats.cachedBuilds,
+    cacheHits: stats.cacheHits,
+    uncachedBuilds: stats.uncachedBuilds,
+    cachedKeys: [...stats.cachedKeys].sort()
   };
+}
+
+function snapshotUpstreamFixtureCacheStats() {
+  return snapshotCacheStats(upstreamFixtureCacheStats);
+}
+
+function snapshotGoldenBundleCacheStats() {
+  return snapshotCacheStats(goldenBundleCacheStats);
+}
+
+function resetCacheStats(stats) {
+  stats.cachedBuilds = 0;
+  stats.cacheHits = 0;
+  stats.uncachedBuilds = 0;
+  stats.cachedKeys.clear();
+}
+
+function resetQueueAdmissionGoldenBundleCacheForTests() {
+  goldenBundleCache.clear();
+  resetCacheStats(goldenBundleCacheStats);
 }
 
 function resetQueueAdmissionUpstreamFixtureCacheForTests() {
   upstreamFixtureCache.clear();
-  upstreamFixtureCacheStats.cachedBuilds = 0;
-  upstreamFixtureCacheStats.cacheHits = 0;
-  upstreamFixtureCacheStats.uncachedBuilds = 0;
-  upstreamFixtureCacheStats.cachedKeys.clear();
+  resetCacheStats(upstreamFixtureCacheStats);
+  resetQueueAdmissionGoldenBundleCacheForTests();
 }
 
 function buildGoldenQueueClassCatalog(baseId, canonical) {
@@ -352,17 +397,37 @@ function buildGoldenQueueAdmissionBundleUncached(scenarioKey = 'prepared-no-llm-
 }
 
 function buildGoldenQueueAdmissionBundle(scenarioKey = 'prepared-no-llm-plan', overrides = {}) {
-  const upstreamFixture = getQueueAdmissionUpstreamFixture(scenarioKey, overrides);
-  if (upstreamFixture === null) return buildGoldenQueueAdmissionBundleUncached(scenarioKey, overrides);
-  return buildGoldenQueueAdmissionBundleFromUpstream(upstreamFixture, overrides);
+  const key = getQueueAdmissionGoldenBundleCacheKey(scenarioKey, overrides);
+  if (key === null) {
+    goldenBundleCacheStats.uncachedBuilds += 1;
+    const upstreamFixture = getQueueAdmissionUpstreamFixture(scenarioKey, overrides);
+    if (upstreamFixture === null) return buildGoldenQueueAdmissionBundleUncached(scenarioKey, overrides);
+    return buildGoldenQueueAdmissionBundleFromUpstream(upstreamFixture, overrides);
+  }
+
+  if (!goldenBundleCache.has(key)) {
+    const upstreamFixture = getQueueAdmissionUpstreamFixture(scenarioKey, overrides);
+    if (upstreamFixture === null) return buildGoldenQueueAdmissionBundleUncached(scenarioKey, overrides);
+    const bundle = deepFreeze(buildGoldenQueueAdmissionBundleFromUpstream(upstreamFixture, overrides));
+    goldenBundleCache.set(key, bundle);
+    goldenBundleCacheStats.cachedBuilds += 1;
+    goldenBundleCacheStats.cachedKeys.add(key);
+  } else {
+    goldenBundleCacheStats.cacheHits += 1;
+  }
+
+  return cloneFrozenFixture(goldenBundleCache.get(key));
 }
 
 module.exports = {
   buildGoldenQueueAdmissionBundle,
   buildGoldenQueueAdmissionBundleUncached,
   buildGoldenQueueClassCatalog,
+  getQueueAdmissionGoldenBundleCacheKey,
+  getQueueAdmissionGoldenBundleCacheStats: snapshotGoldenBundleCacheStats,
   getQueueAdmissionUpstreamFixtureCacheKey,
   getQueueAdmissionUpstreamFixtureCacheStats: snapshotUpstreamFixtureCacheStats,
+  resetQueueAdmissionGoldenBundleCacheForTests,
   resetQueueAdmissionUpstreamFixtureCacheForTests,
   evaluateRuntimeQueueAdmissionRequest
 };
