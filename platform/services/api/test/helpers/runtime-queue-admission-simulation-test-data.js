@@ -22,6 +22,7 @@ const { buildRuntimeQueueAdmissionReplayReference } = require('../../src/core/ru
 const { buildRuntimeQueueAdmissionRequest, omitQueueAdmissionReplayReference } = require('../../src/core/runtime-queue-admission-request');
 const { evaluateRuntimeQueueAdmissionRequest } = require('../../src/core/runtime-queue-admission-boundary');
 const { computeCanonicalContentDigest } = require('../../src/core/canonical-content-digest');
+const queueAdmissionProfile = require('./runtime-queue-admission-profile-test-helper');
 
 const UPSTREAM_CACHEABLE_OVERRIDE_KEYS = Object.freeze(new Set(['policy', 'request', 'registrySnapshotRef']));
 const upstreamFixtureCache = new Map();
@@ -56,7 +57,7 @@ function cloneFixture(value) {
   if (typeof structuredClone !== 'function') {
     throw new Error('structured_clone_required_for_queue_admission_upstream_fixture_cache');
   }
-  return structuredClone(value);
+  return queueAdmissionProfile.measure('cloneFreeze', queueAdmissionProfile.valueKey(value), () => structuredClone(value));
 }
 
 function normalizeScenarioKey(scenarioKey) {
@@ -206,12 +207,18 @@ function getQueueAdmissionUpstreamFixture(scenarioKey, overrides = {}) {
 
   if (!upstreamFixtureCache.has(key)) {
     const registrySnapshotRefOverride = overrides.registrySnapshotRef === null ? null : undefined;
-    const upstreamFixture = buildGoldenQueueAdmissionUpstreamFixture(normalizeScenarioKey(scenarioKey), registrySnapshotRefOverride);
-    upstreamFixtureCache.set(key, deepFreeze(cloneFixture(upstreamFixture)));
+    const upstreamFixture = queueAdmissionProfile.measure(
+      'queueAdmissionUpstreamFixture',
+      key,
+      () => buildGoldenQueueAdmissionUpstreamFixture(normalizeScenarioKey(scenarioKey), registrySnapshotRefOverride)
+    );
+    queueAdmissionProfile.recordField('buildGoldenQueueAdmissionBundle', 'actual_upstream_builds');
+    upstreamFixtureCache.set(key, queueAdmissionProfile.measure('cloneFreeze', queueAdmissionProfile.valueKey(upstreamFixture), () => deepFreeze(cloneFixture(upstreamFixture))));
     upstreamFixtureCacheStats.cachedBuilds += 1;
     upstreamFixtureCacheStats.cachedKeys.add(key);
   } else {
     upstreamFixtureCacheStats.cacheHits += 1;
+    queueAdmissionProfile.recordField('buildGoldenQueueAdmissionBundle', 'upstream_cache_hits');
   }
 
   return cloneFixture(upstreamFixtureCache.get(key));
@@ -354,6 +361,7 @@ function buildGoldenQueueAdmissionBundleUncached(scenarioKey = 'prepared-no-llm-
 function buildGoldenQueueAdmissionBundle(scenarioKey = 'prepared-no-llm-plan', overrides = {}) {
   const upstreamFixture = getQueueAdmissionUpstreamFixture(scenarioKey, overrides);
   if (upstreamFixture === null) return buildGoldenQueueAdmissionBundleUncached(scenarioKey, overrides);
+  queueAdmissionProfile.recordField('buildGoldenQueueAdmissionBundle', 'consumer_rebuilds_after_cache');
   return buildGoldenQueueAdmissionBundleFromUpstream(upstreamFixture, overrides);
 }
 

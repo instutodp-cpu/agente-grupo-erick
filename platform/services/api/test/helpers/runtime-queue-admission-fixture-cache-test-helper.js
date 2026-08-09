@@ -1,6 +1,7 @@
 'use strict';
 
 const { deepFreeze } = require('./queue-simulation-hardening-test-helpers');
+const queueAdmissionProfile = require('./runtime-queue-admission-profile-test-helper');
 
 const CACHEABLE_KEYS = Object.freeze(new Set([
   'scenario:prepared-no-llm-plan|overrides:none',
@@ -37,7 +38,7 @@ function cloneGoldenFixtureForConsumer(fixture) {
   if (typeof structuredClone !== 'function') {
     throw new Error('structured_clone_required_for_queue_admission_fixture_cache');
   }
-  return deepFreeze(structuredClone(fixture));
+  return queueAdmissionProfile.measure('cloneFreeze', queueAdmissionProfile.valueKey(fixture), () => deepFreeze(structuredClone(fixture)));
 }
 
 function snapshotStats(stats) {
@@ -64,20 +65,24 @@ function createRuntimeQueueAdmissionGoldenFixtureCache(buildGoldenQueueAdmission
 
   function build(...args) {
     const key = getRuntimeQueueAdmissionGoldenFixtureCacheKey(args);
-    if (key === null) {
-      stats.uncachedBuilds += 1;
-      return buildGoldenQueueAdmissionBundle(...args);
-    }
+    return queueAdmissionProfile.measure('buildGoldenQueueAdmissionBundle', key || queueAdmissionProfile.buildArgsKey(args), () => {
+      if (key === null) {
+        stats.uncachedBuilds += 1;
+        queueAdmissionProfile.recordField('buildGoldenQueueAdmissionBundle', 'uncached_builds');
+        return buildGoldenQueueAdmissionBundle(...args);
+      }
 
-    if (!cache.has(key)) {
-      const fixture = buildGoldenQueueAdmissionBundle(...args);
-      cache.set(key, deepFreeze(structuredClone(fixture)));
-      stats.cachedBuilds += 1;
-      stats.cachedKeys.add(key);
-    } else {
-      stats.cacheHits += 1;
-    }
-    return cloneGoldenFixtureForConsumer(cache.get(key));
+      if (!cache.has(key)) {
+        const fixture = buildGoldenQueueAdmissionBundle(...args);
+        cache.set(key, queueAdmissionProfile.measure('cloneFreeze', queueAdmissionProfile.valueKey(fixture), () => deepFreeze(structuredClone(fixture))));
+        stats.cachedBuilds += 1;
+        stats.cachedKeys.add(key);
+      } else {
+        stats.cacheHits += 1;
+        queueAdmissionProfile.recordField('buildGoldenQueueAdmissionBundle', 'existing_cache_hits');
+      }
+      return cloneGoldenFixtureForConsumer(cache.get(key));
+    });
   }
 
   return Object.freeze({

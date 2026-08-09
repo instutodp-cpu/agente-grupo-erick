@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+require('./helpers/runtime-queue-admission-profile-test-helper');
 
 const { findAgentCoreOperationalMaterial } = require('../src/core/agent-identity-contract');
 const { runAllGates } = require('../src/core/architecture-gate-runner');
