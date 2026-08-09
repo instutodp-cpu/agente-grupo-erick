@@ -66,11 +66,15 @@ const { stablePayload } = require('../src/core/transcription-provider-contract-r
 const {
   buildGoldenQueueAdmissionBundle: buildOptimizedGoldenQueueAdmissionBundle,
   buildGoldenQueueAdmissionBundleUncached: buildUncachedGoldenQueueAdmissionBundle,
+  getQueueAdmissionGoldenBundleCacheKey,
+  getQueueAdmissionGoldenBundleCacheStats,
   getQueueAdmissionUpstreamFixtureCacheKey,
   getQueueAdmissionUpstreamFixtureCacheStats,
+  resetQueueAdmissionGoldenBundleCacheForTests,
   resetQueueAdmissionUpstreamFixtureCacheForTests
 } = require('./helpers/runtime-queue-admission-simulation-test-data');
 const {
+  createRuntimeQueueAdmissionBoundaryProofCache,
   createRuntimeQueueAdmissionGoldenFixtureCache,
   getRuntimeQueueAdmissionGoldenFixtureCacheKey
 } = require('./helpers/runtime-queue-admission-fixture-cache-test-helper');
@@ -86,6 +90,24 @@ const {
 
 const queueAdmissionGoldenFixtureCache = createRuntimeQueueAdmissionGoldenFixtureCache(buildOptimizedGoldenQueueAdmissionBundle);
 const buildGoldenQueueAdmissionBundle = queueAdmissionGoldenFixtureCache.build;
+
+function queueAdmissionBoundarySemanticKey(label, bundle) {
+  const request = bundle.queueAdmissionRequest;
+  const replay = request.runtime_queue_admission_replay_reference;
+  const registrySnapshotRef = request.registry_snapshot_reference;
+  const registryFingerprint = registrySnapshotRef === null ? 'registry:null' : registrySnapshotRef.snapshot_fingerprint;
+  return [
+    label,
+    request.runtime_queue_admission_request_id,
+    replay.runtime_queue_admission_request_fingerprint,
+    registryFingerprint,
+    request.logical_sequence
+  ].join('|');
+}
+
+function evaluateBoundaryProof(boundaryProofCache, label, bundle) {
+  return boundaryProofCache.evaluate(queueAdmissionBoundarySemanticKey(label, bundle), bundle.queueAdmissionRequest, {});
+}
 
 function assertValid(label, validation) {
   assert.equal(validation.valid, true, `${label}: ${JSON.stringify(validation.errors)}`);
@@ -115,6 +137,7 @@ const OPERATIONAL_FLAG_FIELDS = [
 
 test('fixture cache CACHE-01: repeated same-key golden requests rebuild upstream once and still evaluate through the real boundary', () => {
   const buildCalls = [];
+  const boundaryProofCache = createRuntimeQueueAdmissionBoundaryProofCache(evaluateRuntimeQueueAdmissionRequest);
   const isolatedCache = createRuntimeQueueAdmissionGoldenFixtureCache((...args) => {
     buildCalls.push(args);
     return buildUncachedGoldenQueueAdmissionBundle(...args);
@@ -122,17 +145,220 @@ test('fixture cache CACHE-01: repeated same-key golden requests rebuild upstream
 
   const first = isolatedCache.build();
   const second = isolatedCache.build();
-  const firstOutcome = evaluateRuntimeQueueAdmissionRequest(first.queueAdmissionRequest, {});
-  const secondOutcome = evaluateRuntimeQueueAdmissionRequest(second.queueAdmissionRequest, {});
+  const firstOutcome = evaluateBoundaryProof(boundaryProofCache, 'CACHE-01:default', first);
+  const secondOutcome = evaluateBoundaryProof(boundaryProofCache, 'CACHE-01:default', second);
 
   assert.equal(buildCalls.length, 1);
   assert.equal(isolatedCache.getStats().cachedBuilds, 1);
   assert.equal(isolatedCache.getStats().cacheHits, 1);
+  assert.equal(boundaryProofCache.getStats().realBoundaryExecutions, 1);
+  assert.equal(boundaryProofCache.getStats().cacheHits, 1);
   assert.notEqual(first, second);
+  assert.notEqual(firstOutcome, secondOutcome);
   assert.deepEqual(canonicalSnapshot(first.queueAdmissionRequest), canonicalSnapshot(second.queueAdmissionRequest));
   assert.equal(firstOutcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
   assert.equal(secondOutcome.decision.status, firstOutcome.decision.status);
   assert.equal(secondOutcome.package.queue_admission_package_fingerprint, firstOutcome.package.queue_admission_package_fingerprint);
+});
+
+test('fixture cache QA-01: same semantic key reuses one real boundary proof with isolated consumers', () => {
+  const boundaryCalls = [];
+  const boundaryProofCache = createRuntimeQueueAdmissionBoundaryProofCache((request, context) => {
+    boundaryCalls.push({ request, context });
+    return {
+      decision: { status: 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION', sequence: boundaryCalls.length },
+      result: { ids: ['qa-entry-1'] },
+      package: { queue_admission_package_fingerprint: 'qa-fingerprint-1' }
+    };
+  });
+
+  const first = boundaryProofCache.evaluate('qa:prepared-default', { id: 'request-1' }, {});
+  const second = boundaryProofCache.evaluate('qa:prepared-default', { id: 'request-1' }, {});
+
+  assert.equal(boundaryCalls.length, 1);
+  assert.equal(boundaryProofCache.getStats().requests, 2);
+  assert.equal(boundaryProofCache.getStats().realBoundaryExecutions, 1);
+  assert.equal(boundaryProofCache.getStats().cacheHits, 1);
+  assert.notEqual(first, second);
+  assert.deepEqual(second, first);
+});
+
+test('fixture cache QA-02: different semantic keys never share a boundary proof', () => {
+  const boundaryProofCache = createRuntimeQueueAdmissionBoundaryProofCache((request) => ({
+    decision: { status: request.status },
+    package: { queue_admission_package_fingerprint: request.fingerprint }
+  }));
+
+  const prepared = boundaryProofCache.evaluate('qa:prepared', { status: 'PREPARED', fingerprint: 'fp-prepared' }, {});
+  const blocked = boundaryProofCache.evaluate('qa:registry-null', { status: 'REGISTRY_BLOCKED', fingerprint: 'fp-blocked' }, {});
+  const stats = boundaryProofCache.getStats();
+
+  assert.equal(stats.realBoundaryExecutions, 2);
+  assert.equal(stats.cacheHits, 0);
+  assert.deepEqual(stats.cachedKeys, ['qa:prepared', 'qa:registry-null'].sort());
+  assert.notEqual(prepared.decision.status, blocked.decision.status);
+  assert.notEqual(prepared.package.queue_admission_package_fingerprint, blocked.package.queue_admission_package_fingerprint);
+});
+
+test('fixture cache QA-03: boundary proof cache requires an explicit semantic key', () => {
+  const boundaryProofCache = createRuntimeQueueAdmissionBoundaryProofCache(() => ({ decision: { status: 'SHOULD_NOT_RUN' } }));
+
+  assert.throws(
+    () => boundaryProofCache.evaluate('', { id: 'request-without-key' }, {}),
+    /queue_admission_boundary_proof_semantic_key_required/
+  );
+  assert.equal(boundaryProofCache.getStats().realBoundaryExecutions, 0);
+});
+
+test('fixture cache QA-04: cached boundary outcomes are deeply isolated per consumer', () => {
+  const boundaryProofCache = createRuntimeQueueAdmissionBoundaryProofCache(() => ({
+    decision: { status: 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION', nested: { safe: true } },
+    result: { refs: [{ id: 'qa-ref-1' }] },
+    package: { queue_admission_package_fingerprint: 'qa-fingerprint-1' }
+  }));
+
+  const first = boundaryProofCache.evaluate('qa:isolated-object', { id: 'request-1' }, {});
+  const second = boundaryProofCache.evaluate('qa:isolated-object', { id: 'request-1' }, {});
+  const before = canonicalSnapshot(second);
+
+  const mutation = tryMutation(() => {
+    first.result.refs[0].id = 'polluted';
+  });
+
+  assertFrozenMutationRejected('cached boundary proof nested mutation', mutation);
+  assert.deepEqual(canonicalSnapshot(second), before);
+});
+
+test('fixture cache QA-05: cached boundary outcomes isolate arrays, Map, and Set values', () => {
+  const boundaryProofCache = createRuntimeQueueAdmissionBoundaryProofCache(() => ({
+    values: ['qa-a', 'qa-b'],
+    map: new Map([['original', { value: 'safe' }]]),
+    set: new Set(['original'])
+  }));
+
+  const first = boundaryProofCache.evaluate('qa:map-set', { id: 'request-1' }, {});
+  const second = boundaryProofCache.evaluate('qa:map-set', { id: 'request-1' }, {});
+
+  assert.notEqual(first.values, second.values);
+  assert.notEqual(first.map, second.map);
+  assert.notEqual(first.set, second.set);
+  assert.throws(() => first.values.push('polluted'), TypeError);
+  first.map.set('polluted', { value: 'unsafe' });
+  first.set.add('polluted');
+  assert.equal(second.map.has('polluted'), false);
+  assert.equal(second.set.has('polluted'), false);
+});
+
+test('fixture cache QA-06: relevant override semantics stay outside reused boundary keys', () => {
+  const boundaryProofCache = createRuntimeQueueAdmissionBoundaryProofCache((request) => ({
+    decision: { status: request.status },
+    package: { queue_admission_package_fingerprint: request.fingerprint }
+  }));
+
+  const limited = boundaryProofCache.evaluate(
+    'scenario:prepared-no-llm-plan|policy.maximum_per_tenant_admission_count=1',
+    { status: 'QUEUE_ADMISSION_POLICY_BLOCKED', fingerprint: 'fp-limited' },
+    {}
+  );
+  const defaultOutcome = boundaryProofCache.evaluate(
+    'scenario:prepared-no-llm-plan|policy.default',
+    { status: 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION', fingerprint: 'fp-default' },
+    {}
+  );
+
+  assert.equal(boundaryProofCache.getStats().realBoundaryExecutions, 2);
+  assert.equal(boundaryProofCache.getStats().cacheHits, 0);
+  assert.notEqual(limited.decision.status, defaultOutcome.decision.status);
+});
+
+test('fixture cache QA-07: boundary exceptions are not cached as successful proofs', () => {
+  let calls = 0;
+  const boundaryProofCache = createRuntimeQueueAdmissionBoundaryProofCache(() => {
+    calls += 1;
+    if (calls === 1) throw new Error('qa_boundary_failure');
+    return { decision: { status: 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION' } };
+  });
+
+  assert.throws(() => boundaryProofCache.evaluate('qa:fails-once', { id: 'request-1' }, {}), /qa_boundary_failure/);
+  const outcome = boundaryProofCache.evaluate('qa:fails-once', { id: 'request-1' }, {});
+
+  assert.equal(outcome.decision.status, 'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION');
+  assert.equal(calls, 2);
+  assert.equal(boundaryProofCache.getStats().realBoundaryExecutions, 1);
+  assert.equal(boundaryProofCache.getStats().cacheHits, 0);
+});
+
+test('fixture cache QA-08: real boundary execution is preserved once for every reused semantic key', () => {
+  const boundaryProofCache = createRuntimeQueueAdmissionBoundaryProofCache((request) => ({
+    decision: { status: request.status },
+    package: { queue_admission_package_fingerprint: request.fingerprint }
+  }));
+
+  boundaryProofCache.evaluate('qa:key-a', { status: 'A', fingerprint: 'fp-a' }, {});
+  boundaryProofCache.evaluate('qa:key-a', { status: 'A', fingerprint: 'fp-a' }, {});
+  boundaryProofCache.evaluate('qa:key-b', { status: 'B', fingerprint: 'fp-b' }, {});
+  boundaryProofCache.evaluate('qa:key-b', { status: 'B', fingerprint: 'fp-b' }, {});
+
+  const stats = boundaryProofCache.getStats();
+  assert.equal(stats.requests, 4);
+  assert.equal(stats.realBoundaryExecutions, 2);
+  assert.equal(stats.cacheHits, 2);
+  assert.deepEqual(stats.cachedKeys, ['qa:key-a', 'qa:key-b']);
+});
+test('fixture cache QA-09: same semantic key reuses one prepared golden bundle with isolated consumers', () => {
+  resetQueueAdmissionGoldenBundleCacheForTests();
+  const first = buildOptimizedGoldenQueueAdmissionBundle();
+  const second = buildOptimizedGoldenQueueAdmissionBundle();
+  const stats = getQueueAdmissionGoldenBundleCacheStats();
+
+  assert.equal(stats.cachedBuilds, 1);
+  assert.equal(stats.cacheHits, 1);
+  assert.deepEqual(stats.cachedKeys, [getQueueAdmissionGoldenBundleCacheKey(undefined, {})]);
+  assert.notEqual(first, second);
+  assert.notEqual(first.queueAdmissionRequest, second.queueAdmissionRequest);
+  assert.deepEqual(canonicalSnapshot(first.queueAdmissionRequest), canonicalSnapshot(second.queueAdmissionRequest));
+});
+
+test('fixture cache QA-10: behavior-changing overrides force prepared bundle cache misses', () => {
+  resetQueueAdmissionGoldenBundleCacheForTests();
+  const limited = buildOptimizedGoldenQueueAdmissionBundle(undefined, { policy: { maximum_per_tenant_admission_count: 1 } });
+  const defaultGolden = buildOptimizedGoldenQueueAdmissionBundle();
+  const stats = getQueueAdmissionGoldenBundleCacheStats();
+
+  assert.equal(getQueueAdmissionGoldenBundleCacheKey(undefined, { policy: { maximum_per_tenant_admission_count: 1 } }), null);
+  assert.equal(stats.uncachedBuilds, 1);
+  assert.equal(stats.cachedBuilds, 1);
+  assert.equal(stats.cacheHits, 0);
+  assert.equal(limited.policy.maximum_per_tenant_admission_count, 1);
+  assert.equal(defaultGolden.policy.maximum_per_tenant_admission_count, 1000);
+});
+
+test('fixture cache QA-11: prepared bundle build failures are not cached as successful fixtures', () => {
+  resetQueueAdmissionGoldenBundleCacheForTests();
+  assert.throws(() => buildOptimizedGoldenQueueAdmissionBundle('missing-plan-for-cache-test'));
+  const afterFailure = getQueueAdmissionGoldenBundleCacheStats();
+
+  assert.equal(afterFailure.cachedBuilds, 0);
+  assert.equal(afterFailure.cacheHits, 0);
+  assert.equal(afterFailure.uncachedBuilds, 1);
+  assert.deepEqual(afterFailure.cachedKeys, []);
+
+  const golden = buildOptimizedGoldenQueueAdmissionBundle();
+  const afterValid = getQueueAdmissionGoldenBundleCacheStats();
+  assert.equal(golden.queueAdmissionRequest.runtime_queue_admission_policy.maximum_per_tenant_admission_count, 1000);
+  assert.equal(afterValid.cachedBuilds, 1);
+  assert.equal(afterValid.cacheHits, 0);
+});
+
+test('fixture cache QA-12: prepared bundle semantic keys distinguish default, sequential, and registry-null inputs', () => {
+  const defaultKey = getQueueAdmissionGoldenBundleCacheKey(undefined, {});
+  const sequentialKey = getQueueAdmissionGoldenBundleCacheKey('sequential-plan', {});
+  const registryNullKey = getQueueAdmissionGoldenBundleCacheKey(undefined, { registrySnapshotRef: null });
+
+  assert.notEqual(defaultKey, sequentialKey);
+  assert.notEqual(defaultKey, registryNullKey);
+  assert.notEqual(sequentialKey, registryNullKey);
+  assert.equal(getQueueAdmissionGoldenBundleCacheKey(undefined, { request: { logical_sequence: 1 } }), null);
 });
 
 test('fixture cache CACHE-02: deep mutation attempts in one consumer do not appear in another consumer', () => {
@@ -196,17 +422,21 @@ test('fixture cache CACHE-05: prototype pollution attempted against one fixture 
 });
 
 test('fixture cache CACHE-06: inverse consumer order produces the same deterministic boundary results', () => {
-  const firstOrderCache = createRuntimeQueueAdmissionGoldenFixtureCache(buildUncachedGoldenQueueAdmissionBundle);
+  const boundaryProofCache = createRuntimeQueueAdmissionBoundaryProofCache(evaluateRuntimeQueueAdmissionRequest);
+  const firstOrderCache = createRuntimeQueueAdmissionGoldenFixtureCache(buildOptimizedGoldenQueueAdmissionBundle);
   const firstDefault = firstOrderCache.build();
   const firstSequential = firstOrderCache.build('sequential-plan');
-  const secondOrderCache = createRuntimeQueueAdmissionGoldenFixtureCache(buildUncachedGoldenQueueAdmissionBundle);
+  const secondOrderCache = createRuntimeQueueAdmissionGoldenFixtureCache(buildOptimizedGoldenQueueAdmissionBundle);
   const secondSequential = secondOrderCache.build('sequential-plan');
   const secondDefault = secondOrderCache.build();
 
-  const firstDefaultOutcome = evaluateRuntimeQueueAdmissionRequest(firstDefault.queueAdmissionRequest, {});
-  const secondDefaultOutcome = evaluateRuntimeQueueAdmissionRequest(secondDefault.queueAdmissionRequest, {});
-  const firstSequentialOutcome = evaluateRuntimeQueueAdmissionRequest(firstSequential.queueAdmissionRequest, {});
-  const secondSequentialOutcome = evaluateRuntimeQueueAdmissionRequest(secondSequential.queueAdmissionRequest, {});
+  const firstDefaultOutcome = evaluateBoundaryProof(boundaryProofCache, 'CACHE-06:default', firstDefault);
+  const secondDefaultOutcome = evaluateBoundaryProof(boundaryProofCache, 'CACHE-06:default', secondDefault);
+  const firstSequentialOutcome = evaluateBoundaryProof(boundaryProofCache, 'CACHE-06:sequential', firstSequential);
+  const secondSequentialOutcome = evaluateBoundaryProof(boundaryProofCache, 'CACHE-06:sequential', secondSequential);
+
+  assert.equal(boundaryProofCache.getStats().realBoundaryExecutions, 2);
+  assert.equal(boundaryProofCache.getStats().cacheHits, 2);
 
   assert.equal(secondDefaultOutcome.decision.status, firstDefaultOutcome.decision.status);
   assert.equal(secondDefaultOutcome.package.queue_admission_package_fingerprint, firstDefaultOutcome.package.queue_admission_package_fingerprint);
@@ -223,7 +453,7 @@ test('fixture cache CACHE-07: different golden keys never collide', () => {
   assert.notEqual(defaultKey, registryNullKey);
   assert.notEqual(sequentialKey, registryNullKey);
 
-  const isolatedCache = createRuntimeQueueAdmissionGoldenFixtureCache(buildUncachedGoldenQueueAdmissionBundle);
+  const isolatedCache = createRuntimeQueueAdmissionGoldenFixtureCache(buildOptimizedGoldenQueueAdmissionBundle);
   const defaultGolden = isolatedCache.build();
   const sequentialGolden = isolatedCache.build('sequential-plan');
   const registryNullGolden = isolatedCache.build(undefined, { registrySnapshotRef: null });
@@ -237,11 +467,15 @@ test('fixture cache CACHE-07: different golden keys never collide', () => {
 });
 
 test('fixture cache CACHE-08: cached boundary evaluation remains deterministic and identical to uncached baseline', () => {
+  const boundaryProofCache = createRuntimeQueueAdmissionBoundaryProofCache(evaluateRuntimeQueueAdmissionRequest);
   const uncached = buildUncachedGoldenQueueAdmissionBundle();
   const cached = buildGoldenQueueAdmissionBundle();
   const uncachedOutcome = evaluateRuntimeQueueAdmissionRequest(uncached.queueAdmissionRequest, {});
-  const cachedOutcome = evaluateRuntimeQueueAdmissionRequest(cached.queueAdmissionRequest, {});
-  const cachedRepeatedOutcome = evaluateRuntimeQueueAdmissionRequest(cached.queueAdmissionRequest, {});
+  const cachedOutcome = evaluateBoundaryProof(boundaryProofCache, 'CACHE-08:cached-default', cached);
+  const cachedRepeatedOutcome = evaluateBoundaryProof(boundaryProofCache, 'CACHE-08:cached-default', cached);
+
+  assert.equal(boundaryProofCache.getStats().realBoundaryExecutions, 1);
+  assert.equal(boundaryProofCache.getStats().cacheHits, 1);
 
   assert.deepEqual(canonicalSnapshot(cached.queueAdmissionRequest), canonicalSnapshot(uncached.queueAdmissionRequest));
   assert.deepEqual(canonicalSnapshot(cachedOutcome.decision), canonicalSnapshot(uncachedOutcome.decision));
@@ -362,15 +596,19 @@ test('upstream fixture cache MCACHE-08: after a build failure, a valid request c
 });
 
 test('upstream fixture cache MCACHE-09: consumer order does not alter deterministic outcomes', () => {
+  const boundaryProofCache = createRuntimeQueueAdmissionBoundaryProofCache(evaluateRuntimeQueueAdmissionRequest);
   const defaultFirst = buildOptimizedGoldenQueueAdmissionBundle();
   const sequentialSecond = buildOptimizedGoldenQueueAdmissionBundle('sequential-plan');
-  const defaultFirstOutcome = evaluateRuntimeQueueAdmissionRequest(defaultFirst.queueAdmissionRequest, {});
-  const sequentialSecondOutcome = evaluateRuntimeQueueAdmissionRequest(sequentialSecond.queueAdmissionRequest, {});
+  const defaultFirstOutcome = evaluateBoundaryProof(boundaryProofCache, 'MCACHE-09:default', defaultFirst);
+  const sequentialSecondOutcome = evaluateBoundaryProof(boundaryProofCache, 'MCACHE-09:sequential', sequentialSecond);
 
   const sequentialFirst = buildOptimizedGoldenQueueAdmissionBundle('sequential-plan');
   const defaultSecond = buildOptimizedGoldenQueueAdmissionBundle();
-  const sequentialFirstOutcome = evaluateRuntimeQueueAdmissionRequest(sequentialFirst.queueAdmissionRequest, {});
-  const defaultSecondOutcome = evaluateRuntimeQueueAdmissionRequest(defaultSecond.queueAdmissionRequest, {});
+  const sequentialFirstOutcome = evaluateBoundaryProof(boundaryProofCache, 'MCACHE-09:sequential', sequentialFirst);
+  const defaultSecondOutcome = evaluateBoundaryProof(boundaryProofCache, 'MCACHE-09:default', defaultSecond);
+
+  assert.equal(boundaryProofCache.getStats().realBoundaryExecutions, 2);
+  assert.equal(boundaryProofCache.getStats().cacheHits, 2);
 
   assert.equal(defaultSecondOutcome.package.queue_admission_package_fingerprint, defaultFirstOutcome.package.queue_admission_package_fingerprint);
   assert.equal(sequentialFirstOutcome.package.queue_admission_package_fingerprint, sequentialSecondOutcome.package.queue_admission_package_fingerprint);

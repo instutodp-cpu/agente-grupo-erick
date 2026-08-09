@@ -70,10 +70,12 @@ function createRuntimeQueueAdmissionGoldenFixtureCache(buildGoldenQueueAdmission
     }
 
     if (!cache.has(key)) {
-      const fixture = buildGoldenQueueAdmissionBundle(...args);
-      cache.set(key, deepFreeze(structuredClone(fixture)));
+      const fixture = deepFreeze(buildGoldenQueueAdmissionBundle(...args));
+      const consumerFixture = cloneGoldenFixtureForConsumer(fixture);
+      cache.set(key, fixture);
       stats.cachedBuilds += 1;
       stats.cachedKeys.add(key);
+      return consumerFixture;
     } else {
       stats.cacheHits += 1;
     }
@@ -86,7 +88,50 @@ function createRuntimeQueueAdmissionGoldenFixtureCache(buildGoldenQueueAdmission
   });
 }
 
+function createRuntimeQueueAdmissionBoundaryProofCache(evaluateRuntimeQueueAdmissionRequest) {
+  if (typeof evaluateRuntimeQueueAdmissionRequest !== 'function') {
+    throw new TypeError('evaluate_runtime_queue_admission_request_must_be_function');
+  }
+
+  const cache = new Map();
+  const stats = {
+    requests: 0,
+    realBoundaryExecutions: 0,
+    cacheHits: 0,
+    cachedKeys: new Set()
+  };
+
+  function evaluate(semanticKey, request, context = {}) {
+    if (typeof semanticKey !== 'string' || semanticKey.length === 0) {
+      throw new TypeError('queue_admission_boundary_proof_semantic_key_required');
+    }
+
+    stats.requests += 1;
+    if (!cache.has(semanticKey)) {
+      const outcome = evaluateRuntimeQueueAdmissionRequest(request, context);
+      cache.set(semanticKey, cloneGoldenFixtureForConsumer(outcome));
+      stats.realBoundaryExecutions += 1;
+      stats.cachedKeys.add(semanticKey);
+    } else {
+      stats.cacheHits += 1;
+    }
+
+    return cloneGoldenFixtureForConsumer(cache.get(semanticKey));
+  }
+
+  return Object.freeze({
+    evaluate,
+    getStats: () => ({
+      requests: stats.requests,
+      realBoundaryExecutions: stats.realBoundaryExecutions,
+      cacheHits: stats.cacheHits,
+      cachedKeys: [...stats.cachedKeys].sort()
+    })
+  });
+}
+
 module.exports = {
+  createRuntimeQueueAdmissionBoundaryProofCache,
   createRuntimeQueueAdmissionGoldenFixtureCache,
   getRuntimeQueueAdmissionGoldenFixtureCacheKey
 };
