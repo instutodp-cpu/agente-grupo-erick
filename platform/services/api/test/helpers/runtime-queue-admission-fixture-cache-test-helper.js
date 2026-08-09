@@ -71,7 +71,7 @@ function createRuntimeQueueAdmissionGoldenFixtureCache(buildGoldenQueueAdmission
 
     if (!cache.has(key)) {
       const fixture = buildGoldenQueueAdmissionBundle(...args);
-      cache.set(key, fixture);
+      cache.set(key, deepFreeze(structuredClone(fixture)));
       stats.cachedBuilds += 1;
       stats.cachedKeys.add(key);
     } else {
