@@ -326,11 +326,22 @@ function hasUnsafeAuthority(preparationResult) {
 function collectPreparationFailures(preparationResult, context) {
   const failures = [];
   if (!isPlainObject(preparationResult)) return ['preparation_result_missing'];
+  for (const field of [
+    'preparation_eligibility_id',
+    'preparation_eligibility_fingerprint',
+    'next_state',
+    'validator_version'
+  ]) {
+    if (!isNonEmptyString(preparationResult[field])) failures.push(`preparation_${field}_missing`);
+  }
   if (preparationResult.ok !== true) failures.push('preparation_not_eligible');
   if (preparationResult.status !== 'EXECUTION_PREPARATION_ELIGIBLE_SIMULATION') failures.push('preparation_status_not_eligible');
   if (preparationResult.decision !== 'ENTER_EXECUTION_PREPARATION_SIMULATION') failures.push('preparation_decision_not_entry');
+  if (preparationResult.next_state !== 'WAITING_EXECUTION_PREPARATION_REFERENCE') failures.push('preparation_next_state_not_entry');
   failures.push(...hasUnsafeAuthority(preparationResult));
-  if (isPlainObject(context) && isPlainObject(context.preparationValidationContext)) {
+  if (!isPlainObject(context) || !isPlainObject(context.preparationValidationContext)) {
+    failures.push('preparation_validation_context_required');
+  } else {
     const validation = validateExecutionPreparationEligibilityResult(
       preparationResult,
       context.preparationValidationContext
@@ -362,15 +373,28 @@ function collectTrialFailures(plan) {
   return failures;
 }
 
-function collectBindingFailures(preparationResult, plan) {
+function collectBindingFailures(preparationResult, plan, context = {}) {
   const failures = [];
   if (!isPlainObject(preparationResult) || !isPlainObject(plan)) return failures;
-  const binding = isPlainObject(preparationResult.binding) ? preparationResult.binding : {};
+  const validationContext = isPlainObject(context.preparationValidationContext)
+    ? context.preparationValidationContext
+    : {};
+  const canonicalBinding = isPlainObject(validationContext.admissionAuthorizationBinding)
+    ? validationContext.admissionAuthorizationBinding
+    : {};
+  const binding = Object.keys(canonicalBinding).length > 0
+    ? canonicalBinding
+    : isPlainObject(preparationResult.binding) ? preparationResult.binding : {};
   const source = isPlainObject(binding.source) ? binding.source : {};
-  const identity = isPlainObject(preparationResult.identity) ? preparationResult.identity : {};
+  const preparationIdentity = isPlainObject(preparationResult.identity) ? preparationResult.identity : {};
+  const identity = isPlainObject(binding.identity)
+    ? binding.identity
+    : preparationIdentity;
   if (source.trial_id !== plan.trial_id) failures.push('trial_id_binding_mismatch');
   if (source.plan_hash !== plan.plan_hash) failures.push('plan_hash_binding_mismatch');
-  if (identity.tenant_id !== plan.tenant_id) failures.push('tenant_binding_mismatch');
+  if (identity.tenant_id !== plan.tenant_id || preparationIdentity.tenant_id !== plan.tenant_id) {
+    failures.push('tenant_binding_mismatch');
+  }
   return failures;
 }
 
@@ -447,7 +471,7 @@ function buildResult({ ok, status, reasonCodes, preparationEligibilityResult, tr
 function evaluatePublicWebCanaryPreflightReadiness(preparationEligibilityResult, trialPlan, context = {}) {
   const preparationFailures = collectPreparationFailures(preparationEligibilityResult, context);
   const trialFailures = collectTrialFailures(trialPlan);
-  const bindingFailures = collectBindingFailures(preparationEligibilityResult, trialPlan);
+  const bindingFailures = collectBindingFailures(preparationEligibilityResult, trialPlan, context);
   const reasonCodes = uniqueSorted([...preparationFailures, ...trialFailures, ...bindingFailures]);
   const ok = reasonCodes.length === 0;
   return buildResult({
