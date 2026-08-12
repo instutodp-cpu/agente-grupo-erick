@@ -58,13 +58,14 @@ function validIso(value) {
 }
 
 function canonicalAttemptMaterial(entry) {
-  return {
+  const material = {
     contract_version: CONTRACT_VERSION,
     attempt_id: entry.attempt_id,
     authorization_id: entry.authorization_id,
     lifecycle_reference: {
       authorization_id: entry.lifecycle_reference.authorization_id,
-      reference_id: entry.lifecycle_reference.reference_id
+      reference_id: entry.lifecycle_reference.reference_id,
+      state: entry.lifecycle_reference.state
     },
     authorization_hash: entry.authorization_hash,
     plan_version: entry.plan_version,
@@ -84,6 +85,8 @@ function canonicalAttemptMaterial(entry) {
     idempotency_key: entry.idempotency_key,
     authorization_scope_key: entry.authorization_scope_key
   };
+  if (Object.prototype.hasOwnProperty.call(entry, 'admission_consumption')) material.admission_consumption = entry.admission_consumption;
+  return material;
 }
 
 function computeAttemptFingerprint(entry) {
@@ -181,7 +184,7 @@ function validateExecutorReference(value) {
 
 function validateAttemptEntry(entry, plan) {
   if (!isPlainObject(entry) || !isNonEmptyString(entry.attempt_id) || !isNonEmptyString(entry.authorization_id)) return false;
-  if (!isPlainObject(entry.lifecycle_reference) || entry.lifecycle_reference.authorization_id !== entry.authorization_id || !isNonEmptyString(entry.lifecycle_reference.reference_id)) return false;
+  if (!isPlainObject(entry.lifecycle_reference) || entry.lifecycle_reference.authorization_id !== entry.authorization_id || !isNonEmptyString(entry.lifecycle_reference.reference_id) || entry.lifecycle_reference.state !== 'CONSUMED') return false;
   if (!isCanonicalContentDigest(entry.authorization_hash) || !isCanonicalContentDigest(entry.plan_hash) || entry.plan_version !== plan.plan_version) return false;
   if (!isPlainObject(entry.execution_scope) || !validateExecutionScope(entry.execution_scope, plan, { execution_scope: { phase_ids: [entry.execution_scope.phase_id], step_ids: [entry.execution_scope.step_id] } })) return false;
   if (!validateExecutorReference(entry.executor_reference)) return false;
@@ -189,6 +192,10 @@ function validateAttemptEntry(entry, plan) {
   if (!ATTEMPT_STATES.includes(entry.state) || !Number.isInteger(entry.sequence) || entry.sequence < 0) return false;
   if (entry.owner_reference !== null && !validateExecutorReference(entry.owner_reference)) return false;
   if (!isNonEmptyString(entry.idempotency_key) || !isCanonicalContentDigest(entry.fingerprint)) return false;
+  if (Object.prototype.hasOwnProperty.call(entry, 'admission_consumption')) {
+    const consumption = entry.admission_consumption;
+    if (!isPlainObject(consumption) || consumption.state !== 'CONSUMED' || !isCanonicalContentDigest(consumption.handoff_fingerprint) || !isCanonicalContentDigest(consumption.admission_reference) || !validateExecutorReference(consumption.consumer_reference)) return false;
+  }
   if (entry.authorization_scope_key !== computeAuthorizationScopeKey(entry)) return false;
   return entry.fingerprint === computeAttemptFingerprint(entry);
 }
@@ -248,8 +255,26 @@ function createDeterministicExecutionAttemptOwnershipTestStore() {
     }
   });
 
+  const atomicConsumeExecutionAdmission = (request) => {
+    const failed = failure('ATOMIC_ADMISSION_FAILED');
+    if (failed) return failed;
+    const current = records.get(request.attempt_id);
+    if (!current || current.fingerprint !== request.expected_attempt_fingerprint || current.state !== request.expected_attempt_state || current.authorization_id !== request.authorization_id || current.lifecycle_reference.authorization_id !== request.authorization_id || current.lifecycle_reference.reference_id !== request.lifecycle_reference.reference_id || current.lifecycle_reference.state !== request.lifecycle_reference.state || current.owner_reference?.executor_id !== request.consumer_reference.executor_id || current.owner_reference?.executor_type !== request.consumer_reference.executor_type) return result({ ok: false, status: 'STALE' });
+    if (current.admission_consumption) {
+      const existing = current.admission_consumption;
+      if (existing.handoff_fingerprint === request.handoff_fingerprint && existing.consumer_reference.executor_id === request.consumer_reference.executor_id && existing.consumer_reference.executor_type === request.consumer_reference.executor_type && existing.admission_reference === request.admission_reference) return result({ ok: true, status: 'ADMITTED', entry: { ...existing, admission_status: 'SAME_RESULT_REPLAY' } });
+      return result({ ok: false, status: 'CONFLICT' });
+    }
+    const admission_consumption = { state: 'CONSUMED', handoff_fingerprint: request.handoff_fingerprint, admission_reference: request.admission_reference, consumer_reference: clone(request.consumer_reference) };
+    const next = { ...current, admission_consumption, sequence: current.sequence + 1, fingerprint: 'pending' };
+    next.fingerprint = computeAttemptFingerprint(next);
+    records.set(request.attempt_id, clone(next));
+    return result({ ok: true, status: 'ADMITTED', entry: { ...admission_consumption, admission_status: 'FIRST_ADMISSION' } });
+  };
+
   return Object.freeze({
     ...store,
+    atomicConsumeExecutionAdmission,
     configureFailure: (operation, enabled = true) => { if (enabled) failures.add(operation); else failures.delete(operation); },
     inspect: (attemptId) => records.has(attemptId) ? clone(records.get(attemptId)) : null
   });
@@ -266,7 +291,7 @@ function createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan, p
     const entry = {
       attempt_id: request.attempt_id,
       authorization_id: request.authorization.authorization_id,
-      lifecycle_reference: { authorization_id: request.authorization.authorization_id, reference_id: request.authorization_lifecycle.reference_id },
+      lifecycle_reference: { authorization_id: request.authorization.authorization_id, reference_id: request.authorization_lifecycle.reference_id, state: request.authorization_lifecycle.state },
       authorization_hash: request.authorization.authorization_hash,
       plan_version: provisioning_plan.plan_version,
       plan_hash: provisioning_plan.plan_hash,
@@ -359,6 +384,7 @@ module.exports = {
   TERMINAL_STATES,
   TRANSITIONS,
   computeAttemptFingerprint,
+  invokePersistence,
   createDeterministicExecutionAttemptOwnershipTestStore,
   createExecutionAttemptOwnershipPersistenceInterface,
   createHermesVpsExecutionAttemptOwnershipRegistry
