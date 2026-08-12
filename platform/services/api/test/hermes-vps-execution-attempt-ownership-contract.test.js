@@ -9,6 +9,7 @@ const {
   ATTEMPT_STATES,
   TERMINAL_STATES,
   TRANSITIONS,
+  createExecutionAttemptOwnershipPersistenceInterface,
   createDeterministicExecutionAttemptOwnershipTestStore,
   createHermesVpsExecutionAttemptOwnershipRegistry
 } = require('../src/core/hermes-vps-execution-attempt-ownership-contract');
@@ -85,6 +86,18 @@ function throwingPersistence(operation) {
 test('state machine is explicit and terminal states have no outgoing transitions', () => {
   assert.deepEqual(ATTEMPT_STATES, ['CLAIMABLE', 'CLAIMED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'UNKNOWN_OUTCOME', 'ABORTED', 'EXPIRED']);
   for (const state of TERMINAL_STATES) assert.deepEqual(TRANSITIONS[state], []);
+});
+
+test('persistence interface requires the atomic acquisition primitive', () => {
+  assert.throws(() => createExecutionAttemptOwnershipPersistenceInterface({
+    read: () => {},
+    compareAndClaim: () => {},
+    transition: () => {},
+    recover: () => {}
+  }), /persistence_interface_incomplete/);
+  const store = createDeterministicExecutionAttemptOwnershipTestStore();
+  assert.equal(typeof store.atomicAcquireActiveAttempt, 'function');
+  assert.equal(store.interface_version, 'hermes-vps-execution-attempt-ownership-persistence-v2');
 });
 
 test('valid authorization owns a claimable attempt', () => {
@@ -208,8 +221,8 @@ test('persistence failures deny without success receipts', () => {
   assert.equal(outcome.receipt, undefined);
 });
 
-test('adapter exceptions fail closed for insert, read, claim, transition and recovery', () => {
-  const insertRegistry = createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan: plan, persistence: throwingPersistence('insert') });
+test('adapter exceptions fail closed for atomic acquisition, read, claim, transition and recovery', () => {
+  const insertRegistry = createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan: plan, persistence: throwingPersistence('atomicAcquireActiveAttempt') });
   assert.doesNotThrow(() => assert.equal(insertRegistry.registerAttempt(request()).status, 'PERSISTENCE_FAILURE'));
   const readRegistry = createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan: plan, persistence: throwingPersistence('read') });
   assert.equal(readRegistry.registerAttempt(request()).status, 'PERSISTENCE_FAILURE');
@@ -238,7 +251,7 @@ test('adapter exceptions fail closed for insert, read, claim, transition and rec
 test('malformed adapter returns fail closed without false success', () => {
   const malformed = { ok: true, status: 'UNKNOWN', entry: {} };
   assert.equal(createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan: plan, persistence: malformedPersistence('read', malformed) }).registerAttempt(request()).status, 'PERSISTENCE_FAILURE');
-  assert.equal(createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan: plan, persistence: malformedPersistence('insert', malformed) }).registerAttempt(request()).status, 'PERSISTENCE_FAILURE');
+  assert.equal(createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan: plan, persistence: malformedPersistence('atomicAcquireActiveAttempt', malformed) }).registerAttempt(request()).status, 'PERSISTENCE_FAILURE');
 
   const claimBase = createDeterministicExecutionAttemptOwnershipTestStore();
   const claimSetup = createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan: plan, persistence: claimBase });

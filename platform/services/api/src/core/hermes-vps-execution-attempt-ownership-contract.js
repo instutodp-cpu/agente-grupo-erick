@@ -9,14 +9,14 @@ const {
 const { validateHermesVpsProvisioningPlan } = require('./hermes-vps-provisioning-plan');
 
 const CONTRACT_VERSION = 'hermes-vps-execution-attempt-ownership-contract-v1';
-const PERSISTENCE_INTERFACE_VERSION = 'hermes-vps-execution-attempt-ownership-persistence-v1';
+const PERSISTENCE_INTERFACE_VERSION = 'hermes-vps-execution-attempt-ownership-persistence-v2';
 const ATTEMPT_STATES = Object.freeze([
   'CLAIMABLE', 'CLAIMED', 'RUNNING', 'SUCCEEDED', 'FAILED',
   'UNKNOWN_OUTCOME', 'ABORTED', 'EXPIRED'
 ]);
 const TERMINAL_STATES = Object.freeze(['SUCCEEDED', 'FAILED', 'UNKNOWN_OUTCOME', 'ABORTED', 'EXPIRED']);
 const PERSISTENCE_FAILURE = 'PERSISTENCE_FAILURE';
-const FAILURE_STATUSES = Object.freeze(['READ_FAILED', 'CLAIM_FAILED', 'TRANSITION_FAILED', 'RECOVERY_FAILED']);
+const FAILURE_STATUSES = Object.freeze(['READ_FAILED', 'ATOMIC_ACQUISITION_FAILED', 'CLAIM_FAILED', 'TRANSITION_FAILED', 'RECOVERY_FAILED']);
 const TRANSITIONS = Object.freeze({
   CLAIMABLE: ['CLAIMED'],
   CLAIMED: ['RUNNING', 'UNKNOWN_OUTCOME', 'ABORTED', 'EXPIRED'],
@@ -193,9 +193,9 @@ function validateAttemptEntry(entry, plan) {
   return entry.fingerprint === computeAttemptFingerprint(entry);
 }
 
-function createExecutionAttemptOwnershipPersistenceInterface({ read, insert, compareAndClaim, transition, recover }) {
-  if (![read, insert, compareAndClaim, transition, recover].every((method) => typeof method === 'function')) throw new Error('persistence_interface_incomplete');
-  return Object.freeze({ interface_version: PERSISTENCE_INTERFACE_VERSION, read, insert, compareAndClaim, transition, recover });
+function createExecutionAttemptOwnershipPersistenceInterface({ read, atomicAcquireActiveAttempt, compareAndClaim, transition, recover }) {
+  if (![read, atomicAcquireActiveAttempt, compareAndClaim, transition, recover].every((method) => typeof method === 'function')) throw new Error('persistence_interface_incomplete');
+  return Object.freeze({ interface_version: PERSISTENCE_INTERFACE_VERSION, read, atomicAcquireActiveAttempt, compareAndClaim, transition, recover });
 }
 
 function createDeterministicExecutionAttemptOwnershipTestStore() {
@@ -213,14 +213,14 @@ function createDeterministicExecutionAttemptOwnershipTestStore() {
       if (failed) return failed;
       return result({ ok: true, status: 'READ', entry: records.has(attemptId) ? clone(records.get(attemptId)) : null });
     },
-    insert: (entry) => {
-      const failed = failure('INSERT_FAILED');
+    atomicAcquireActiveAttempt: (entry) => {
+      const failed = failure('ATOMIC_ACQUISITION_FAILED');
       if (failed) return failed;
       if (records.has(entry.attempt_id)) return result({ ok: false, status: 'CONFLICT', entry: clone(records.get(entry.attempt_id)) });
       if (authorizationScopeKeys.has(entry.authorization_scope_key)) return result({ ok: false, status: 'CONFLICT', entry: clone(records.get(authorizationScopeKeys.get(entry.authorization_scope_key))) });
       records.set(entry.attempt_id, clone(entry));
       authorizationScopeKeys.set(entry.authorization_scope_key, entry.attempt_id);
-      return result({ ok: true, status: 'INSERTED', entry: clone(entry) });
+      return result({ ok: true, status: 'ACQUIRED', entry: clone(entry) });
     },
     compareAndClaim: (attemptId, expectedFingerprint, claimedEntry) => {
       const failed = failure('CLAIM_FAILED');
@@ -289,8 +289,8 @@ function createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan, p
     const existing = invokePersistence('read', persistence.read, [entry.attempt_id], { successStatus: 'READ', failureStatuses: ['READ_FAILED'], allowsNullEntry: true });
     if (!existing.ok) return result({ ok: false, status: existing.status, reason: 'persistence_read_failed' });
     if (existing.entry) return existing.entry.fingerprint === entry.fingerprint ? result({ ok: true, status: 'REPLAY_ACCEPTED', receipt: canonicalReceipt(existing.entry, 'ATTEMPT_REGISTERED') }) : result({ ok: false, status: 'CONFLICT', reason: 'attempt_id_reuse_or_payload_mismatch' });
-    const inserted = invokePersistence('insert', persistence.insert, [entry], { successStatus: 'INSERTED', failureStatuses: ['INSERT_FAILED', 'CONFLICT'] });
-    if (!inserted.ok) return result({ ok: false, status: inserted.status, reason: 'persistence_insert_failed' });
+    const acquired = invokePersistence('atomicAcquireActiveAttempt', persistence.atomicAcquireActiveAttempt, [entry], { successStatus: 'ACQUIRED', failureStatuses: ['ATOMIC_ACQUISITION_FAILED', 'CONFLICT'] });
+    if (!acquired.ok) return result({ ok: false, status: acquired.status, reason: 'persistence_atomic_acquisition_failed' });
     return result({ ok: true, status: 'CLAIMABLE', attempt_id: entry.attempt_id, receipt: canonicalReceipt(entry, 'ATTEMPT_REGISTERED') });
   }
 

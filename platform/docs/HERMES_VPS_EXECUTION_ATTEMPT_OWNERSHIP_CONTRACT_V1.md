@@ -33,9 +33,15 @@ known. A running attempt that loses its lease is recovered to
 `UNKNOWN_OUTCOME`; a claimed but not-started attempt is recovered to
 `EXPIRED`. Neither state grants a new owner.
 
-The test adapter provides logical compare-and-claim semantics and survives a
-new registry instance while the adapter instance is retained. A production
-distributed persistence adapter is not implemented here.
+The persistence interface requires `atomicAcquireActiveAttempt` as the sole
+registration/acquisition primitive. A conforming adapter cannot satisfy the
+interface by exposing a public read/check/insert sequence for ownership
+acquisition. The operation must atomically enforce the canonical uniqueness
+key and return either `ACQUIRED` or a deterministic conflict/failure. The
+test adapter provides logical atomic acquisition and compare-and-claim
+semantics and survives a new registry instance while the adapter instance is
+retained. A production distributed persistence adapter is not implemented
+here.
 
 ## Binding and receipts
 
