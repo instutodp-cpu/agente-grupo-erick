@@ -19,15 +19,20 @@ An authorization is bound to the exact Provisioning Plan V1 version and
 window. `binding_hash` covers immutable authorization material; lifecycle
 state is validated separately by `authorization_hash`.
 
+Phase and step scope must be known members of the bound plan, and evaluation
+requires the exact requested phase/step pair. A different phase, step or
+phase/step relationship is denied.
+
 The only valid positive state is explicit `AUTHORIZED` with
 `execution_authorized: true`. Missing, malformed, unknown, mismatched,
 expired, revoked or already-consumed authorizations deny. V1 is staging-only,
 single-use, provider/network/shell-disabled and production-disabled.
 
-Consumption and revocation are represented as references and state only. This
-contract performs no persistence or atomic consume operation; a future
-executor must provide that separately before execution authorization can be
-used operationally.
+Consumption and revocation are represented as state plus records explicitly
+carrying the authorization ID they belong to. Missing, malformed or duplicate
+identities deny. This contract performs no persistence or atomic consume
+operation; a future executor must provide that separately before execution
+authorization can be used operationally.
 
 Canonical SHA-256 material uses the repository serializer. No secrets,
 credentials or volatile runtime values are included.

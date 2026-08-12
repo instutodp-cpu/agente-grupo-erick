@@ -69,6 +69,30 @@ function validIso(value) {
   return isNonEmptyString(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
 }
 
+function validateLifecycleRecords(records, kind) {
+  if (records === undefined) return { valid: true };
+  if (!Array.isArray(records)) return { valid: false, reason: `${kind}_records_must_be_array` };
+  const seen = new Set();
+  for (const record of records) {
+    if (!isPlainObject(record) || !isNonEmptyString(record.authorization_id) || !isNonEmptyString(record.reference_id)) return { valid: false, reason: `${kind}_record_invalid` };
+    if (seen.has(record.authorization_id)) return { valid: false, reason: `${kind}_records_ambiguous` };
+    seen.add(record.authorization_id);
+  }
+  return { valid: true };
+}
+
+function validateExecutionScopeAgainstPlan(scope, provisioningPlan) {
+  if (!provisioningPlan) return { valid: false, reason: 'provisioning_plan_required' };
+  if (!Array.isArray(provisioningPlan.phases) || !Array.isArray(provisioningPlan.ordered_steps)) return { valid: false, reason: 'provisioning_plan_malformed' };
+  const phaseIds = new Set(provisioningPlan.phases.map((phase) => phase.phase_id));
+  const steps = new Map(provisioningPlan.ordered_steps.map((step) => [step.id, step.phase]));
+  if (!Array.isArray(scope.phase_ids) || !Array.isArray(scope.step_ids) || scope.phase_ids.length === 0 || scope.step_ids.length === 0) return { valid: false, reason: 'execution_scope_must_be_non_empty' };
+  if (new Set(scope.phase_ids).size !== scope.phase_ids.length || new Set(scope.step_ids).size !== scope.step_ids.length) return { valid: false, reason: 'execution_scope_ambiguous' };
+  if (scope.phase_ids.some((id) => !phaseIds.has(id)) || scope.step_ids.some((id) => !steps.has(id))) return { valid: false, reason: 'execution_scope_unknown' };
+  if (scope.step_ids.some((id) => !scope.phase_ids.includes(steps.get(id)))) return { valid: false, reason: 'execution_scope_phase_step_mismatch' };
+  return { valid: true };
+}
+
 function validateHermesVpsExecutionAuthorizationContract(authorization, provisioningPlan = null) {
   const errors = [];
   if (!isPlainObject(authorization)) return { valid: false, errors: ['authorization_must_be_object'] };
@@ -95,8 +119,8 @@ function validateHermesVpsExecutionAuthorizationContract(authorization, provisio
   if (authorization.execution_scope?.operation !== 'provisioning_plan_handoff') errors.push('operation_invalid');
   if (!isNonEmptyString(authorization.target_reference?.target_id) || authorization.target_reference?.target_environment !== 'staging') errors.push('target_reference_invalid');
   if (authorization.single_use?.policy !== 'SINGLE_USE' || authorization.single_use?.required !== true) errors.push('single_use_required');
-  if (!CONSUMPTION_STATES.includes(authorization.consumption?.state) || authorization.consumption?.reference !== null && !isNonEmptyString(authorization.consumption?.reference)) errors.push('consumption_invalid');
-  if (!REVOCATION_STATES.includes(authorization.revocation?.state) || authorization.revocation?.reference !== null && !isNonEmptyString(authorization.revocation?.reference)) errors.push('revocation_invalid');
+  if (!CONSUMPTION_STATES.includes(authorization.consumption?.state) || authorization.consumption?.reference !== null && (!isPlainObject(authorization.consumption?.reference) || authorization.consumption.reference.authorization_id !== authorization.authorization_id || !isNonEmptyString(authorization.consumption.reference.reference_id))) errors.push('consumption_invalid');
+  if (!REVOCATION_STATES.includes(authorization.revocation?.state) || authorization.revocation?.reference !== null && (!isPlainObject(authorization.revocation?.reference) || authorization.revocation.reference.authorization_id !== authorization.authorization_id || !isNonEmptyString(authorization.revocation.reference.reference_id))) errors.push('revocation_invalid');
   if (authorization.authorization_state === 'AUTHORIZED' && authorization.execution_authorized !== true) errors.push('authorized_state_requires_explicit_flag');
   if (authorization.authorization_state !== 'AUTHORIZED' && authorization.execution_authorized === true) errors.push('execution_flag_requires_authorized_state');
   if (!AUTHORIZATION_STATES.includes(authorization.authorization_state)) errors.push('authorization_state_invalid');
@@ -106,6 +130,8 @@ function validateHermesVpsExecutionAuthorizationContract(authorization, provisio
   if (provisioningPlan) {
     const planValidation = validateHermesVpsProvisioningPlan(provisioningPlan);
     if (!planValidation.valid || provisioningPlan.plan_hash !== authorization.provisioning_plan_hash) errors.push('provisioning_plan_incompatible');
+    const scopeValidation = validateExecutionScopeAgainstPlan(authorization.execution_scope, provisioningPlan);
+    if (!scopeValidation.valid) errors.push(scopeValidation.reason);
   }
   try { stablePayload(authorization); } catch (error) { errors.push(`canonical_serialization_invalid::${error.message}`); }
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
@@ -155,13 +181,20 @@ function buildHermesVpsExecutionAuthorization({ provisioning_plan, authorization
 
 function evaluateHermesVpsExecutionAuthorization(authorization, context = {}) {
   if (!authorization) return { status: 'NOT_AUTHORIZED', execution_authorized: false, reason: 'authorization_missing' };
-  const validation = validateHermesVpsExecutionAuthorizationContract(authorization);
+  const validation = validateHermesVpsExecutionAuthorizationContract(authorization, context.provisioning_plan);
   if (!validation.valid) return { status: 'INVALID', execution_authorized: false, reason: 'authorization_invalid', errors: validation.errors };
-  if (context.provisioning_plan && (context.provisioning_plan.plan_hash !== authorization.provisioning_plan_hash || context.provisioning_plan.plan_version !== authorization.provisioning_plan_reference.plan_version)) return { status: 'PLAN_MISMATCH', execution_authorized: false, reason: 'provisioning_plan_mismatch' };
+  if (!context.provisioning_plan) return { status: 'INVALID', execution_authorized: false, reason: 'provisioning_plan_required' };
+  if (context.provisioning_plan.plan_hash !== authorization.provisioning_plan_hash || context.provisioning_plan.plan_version !== authorization.provisioning_plan_reference.plan_version) return { status: 'PLAN_MISMATCH', execution_authorized: false, reason: 'provisioning_plan_mismatch' };
+  const requestedScope = context.execution_scope;
+  if (!isPlainObject(requestedScope) || !isNonEmptyString(requestedScope.phase_id) || !isNonEmptyString(requestedScope.step_id)) return { status: 'INVALID', execution_authorized: false, reason: 'execution_scope_required' };
+  if (!authorization.execution_scope.phase_ids.includes(requestedScope.phase_id) || !authorization.execution_scope.step_ids.includes(requestedScope.step_id) || context.provisioning_plan.ordered_steps.find((step) => step.id === requestedScope.step_id)?.phase !== requestedScope.phase_id) return { status: 'PLAN_MISMATCH', execution_authorized: false, reason: 'execution_scope_mismatch' };
   if (!validIso(context.now)) return { status: 'INVALID', execution_authorized: false, reason: 'current_time_required' };
-  if (authorization.revocation.state === 'REVOKED' || context.revoked_authorization_ids?.includes(authorization.authorization_id)) return { status: 'REVOKED', execution_authorized: false, reason: 'authorization_revoked' };
+  const revocationRecords = validateLifecycleRecords(context.revocation_records, 'revocation');
+  const consumptionRecords = validateLifecycleRecords(context.consumption_records, 'consumption');
+  if (!revocationRecords.valid || !consumptionRecords.valid) return { status: 'INVALID', execution_authorized: false, reason: revocationRecords.reason || consumptionRecords.reason };
+  if (authorization.revocation.state === 'REVOKED' || context.revocation_records?.some((record) => record.authorization_id === authorization.authorization_id)) return { status: 'REVOKED', execution_authorized: false, reason: 'authorization_revoked' };
   if (Date.parse(authorization.expires_at) <= Date.parse(context.now || '')) return { status: 'EXPIRED', execution_authorized: false, reason: 'authorization_expired' };
-  if (authorization.single_use.required && (authorization.consumption.state === 'CONSUMED' || context.consumed_authorization_ids?.includes(authorization.authorization_id))) return { status: 'ALREADY_CONSUMED', execution_authorized: false, reason: 'single_use_already_consumed' };
+  if (authorization.single_use.required && (authorization.consumption.state === 'CONSUMED' || context.consumption_records?.some((record) => record.authorization_id === authorization.authorization_id))) return { status: 'ALREADY_CONSUMED', execution_authorized: false, reason: 'single_use_already_consumed' };
   if (authorization.authorization_state !== 'AUTHORIZED' || authorization.execution_authorized !== true) return { status: 'NOT_AUTHORIZED', execution_authorized: false, reason: 'explicit_authorization_not_valid' };
   return { status: 'AUTHORIZED', execution_authorized: true, reason: 'authorization_valid' };
 }
