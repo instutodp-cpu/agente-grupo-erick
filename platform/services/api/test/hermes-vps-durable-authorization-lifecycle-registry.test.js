@@ -40,6 +40,18 @@ function assertPersistenceFailure(call) {
   assert.equal(outcome.status, 'PERSISTENCE_FAILURE');
   assert.equal(outcome.receipt, undefined);
 }
+async function assertRejectedPersistenceFailure(call) {
+  let unhandled = false;
+  const onUnhandled = () => { unhandled = true; };
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    assertPersistenceFailure(call);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(unhandled, false);
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
+}
 
 test('valid durable-contract consume persists and survives a new registry instance', () => {
   const { store, registry } = setup();
@@ -74,3 +86,8 @@ test('compareAndConsume adapter exception fails closed', () => { const persisten
 test('compareAndConsume malformed result fails closed', () => { const persistence = overriddenPersistence('compareAndConsume', { ok: true, status: 'CONSUMED' }); const registry = registryWithPersistence(persistence); assert.equal(registry.registerAuthorization(authorization()).status, 'REGISTERED'); assertPersistenceFailure(() => registry.consumeAuthorization('authorization-A', context())); });
 test('revoke adapter exception fails closed', () => { const persistence = overriddenPersistence('revoke', () => { throw new Error('adapter failure'); }); const registry = registryWithPersistence(persistence); assert.equal(registry.registerAuthorization(authorization()).status, 'REGISTERED'); assertPersistenceFailure(() => registry.revokeAuthorization('authorization-A', 'revoke-A')); });
 test('revoke malformed result fails closed', () => { const persistence = overriddenPersistence('revoke', { ok: true, status: 'REVOKED' }); const registry = registryWithPersistence(persistence); assert.equal(registry.registerAuthorization(authorization()).status, 'REGISTERED'); assertPersistenceFailure(() => registry.revokeAuthorization('authorization-A', 'revoke-A')); });
+test('read rejected promise fails closed without unhandled rejection', async () => { const persistence = overriddenPersistence('read', () => Promise.reject(new Error('adapter failure'))); await assertRejectedPersistenceFailure(() => registryWithPersistence(persistence).registerAuthorization(authorization())); });
+test('insert rejected promise fails closed without unhandled rejection', async () => { const persistence = overriddenPersistence('insert', () => Promise.reject(new Error('adapter failure'))); await assertRejectedPersistenceFailure(() => registryWithPersistence(persistence).registerAuthorization(authorization())); });
+test('compareAndConsume rejected promise fails closed without unhandled rejection', async () => { const persistence = overriddenPersistence('compareAndConsume', () => Promise.reject(new Error('adapter failure'))); const registry = registryWithPersistence(persistence); assert.equal(registry.registerAuthorization(authorization()).status, 'REGISTERED'); await assertRejectedPersistenceFailure(() => registry.consumeAuthorization('authorization-A', context())); });
+test('revoke rejected promise fails closed without unhandled rejection', async () => { const persistence = overriddenPersistence('revoke', () => Promise.reject(new Error('adapter failure'))); const registry = registryWithPersistence(persistence); assert.equal(registry.registerAuthorization(authorization()).status, 'REGISTERED'); await assertRejectedPersistenceFailure(() => registry.revokeAuthorization('authorization-A', 'revoke-A')); });
+test('thenable inspection failure fails closed', () => { const thenable = {}; Object.defineProperty(thenable, 'then', { get: () => { throw new Error('malformed thenable'); } }); const persistence = overriddenPersistence('read', thenable); assertPersistenceFailure(() => registryWithPersistence(persistence).registerAuthorization(authorization())); });

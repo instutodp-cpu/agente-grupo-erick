@@ -21,12 +21,30 @@ function persistenceFailure(operation, reason) {
   return result({ ok: false, status: PERSISTENCE_FAILURE_STATUS, reason: `${operation}_${reason}` });
 }
 
+function containRejectedThenable(value) {
+  try {
+    Promise.resolve(value).catch(() => {});
+  } catch {
+    // A non-native thenable may throw while being assimilated; denial is already established.
+  }
+}
+
 function invokePersistence(operation, method, args, shape) {
   let raw;
   try {
     raw = method(...args);
   } catch {
     return persistenceFailure(operation, 'exception');
+  }
+  let then;
+  try {
+    then = raw !== null && (typeof raw === 'object' || typeof raw === 'function') ? raw.then : undefined;
+  } catch {
+    return persistenceFailure(operation, 'malformed_result');
+  }
+  if (typeof then === 'function') {
+    containRejectedThenable(raw);
+    return persistenceFailure(operation, 'async_result_not_supported');
   }
   if (!isPlainObject(raw) || typeof raw.ok !== 'boolean' || !isNonEmptyString(raw.status)) return persistenceFailure(operation, 'malformed_result');
   if (raw.ok) {
