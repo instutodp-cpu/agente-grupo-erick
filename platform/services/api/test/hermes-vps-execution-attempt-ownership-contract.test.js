@@ -28,6 +28,20 @@ const authorization = buildHermesVpsExecutionAuthorization({
   provenance
 });
 
+function alternateAuthorization(id) {
+  return buildHermesVpsExecutionAuthorization({
+    provisioning_plan: plan,
+    authorization_id: id,
+    issued_at: '2026-08-12T10:00:00.000Z',
+    expires_at: '2026-08-12T10:05:00.000Z',
+    issued_by: { authority_id: 'owner-1', authority_type: 'human_owner' },
+    target_id: 'approved-staging-host-reference',
+    phase_ids: ['P0_HOST_VALIDATION'],
+    step_ids: ['validate_host'],
+    provenance
+  });
+}
+
 const scope = { phase_id: 'P0_HOST_VALIDATION', step_id: 'validate_host' };
 const executor = { executor_id: 'executor-A', executor_type: 'synthetic_executor' };
 const now = '2026-08-12T10:01:00.000Z';
@@ -97,6 +111,32 @@ test('duplicate registration is replay-safe and payload changes conflict', () =>
   assert.equal(registry.registerAttempt(request({ idempotency_key: 'different' })).status, 'CONFLICT');
 });
 
+test('different attempt IDs for one authorization and scope have one atomic registration winner', () => {
+  const store = createDeterministicExecutionAttemptOwnershipTestStore();
+  const first = createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan: plan, persistence: store });
+  const second = createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan: plan, persistence: store });
+  const outcomes = [first.registerAttempt(request({ attempt_id: 'attempt-A' })), second.registerAttempt(request({ attempt_id: 'attempt-B' }))];
+  assert.equal(outcomes.filter((value) => value.ok).length, 1);
+  assert.equal(outcomes.filter((value) => value.status === 'CONFLICT').length, 1);
+});
+
+test('different valid authorizations remain independent', () => {
+  const store = createDeterministicExecutionAttemptOwnershipTestStore();
+  const registry = createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan: plan, persistence: store });
+  const other = alternateAuthorization('authorization-B');
+  assert.equal(registry.registerAttempt(request()).status, 'CLAIMABLE');
+  assert.equal(registry.registerAttempt(request({ attempt_id: 'attempt-B', authorization: other, authorization_lifecycle: { state: 'CONSUMED', authorization_id: other.authorization_id, reference_id: 'consume-B' } })).status, 'CLAIMABLE');
+});
+
+test('lifecycle consumption reference is persisted, immutable, and fingerprint-bound', () => {
+  const { store, registry } = setup();
+  const initial = store.inspect('attempt-A');
+  assert.deepEqual(initial.lifecycle_reference, { authorization_id: 'authorization-A', reference_id: 'consume-A' });
+  assert.equal(registry.registerAttempt(request({ authorization_lifecycle: { state: 'CONSUMED', authorization_id: 'authorization-A', reference_id: 'consume-B' } })).status, 'CONFLICT');
+  const recovered = createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan: plan, persistence: store });
+  assert.deepEqual(recovered.registerAttempt(request()).status, 'REPLAY_ACCEPTED');
+});
+
 test('authorization, plan, scope and executor mismatches deny', () => {
   const { registry } = setup();
   assert.equal(registry.registerAttempt(request({ authorization_lifecycle: { ...request().authorization_lifecycle, authorization_id: 'authorization-B' } })).status, 'DENY');
@@ -117,6 +157,7 @@ test('claim then running then unknown outcome is terminal and cannot retry', () 
   assert.equal(registry.transitionAttempt('attempt-A', { executor_reference: executor, next_state: 'RUNNING' }).status, 'RUNNING');
   assert.equal(registry.transitionAttempt('attempt-A', { executor_reference: executor, next_state: 'UNKNOWN_OUTCOME', reason: 'provider_result_lost' }).status, 'UNKNOWN_OUTCOME');
   assert.equal(claim(registry).status, 'UNKNOWN_OUTCOME');
+  assert.equal(registry.registerAttempt(request({ attempt_id: 'attempt-B' })).status, 'CONFLICT');
 });
 
 test('success requires explicit future-executor confirmation', () => {

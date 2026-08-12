@@ -40,6 +40,19 @@ function digest(value) {
   return computeCanonicalContentDigest(JSON.parse(stablePayload(value)));
 }
 
+function computeAuthorizationScopeKey({ authorization_id, plan_version, plan_hash, execution_scope }) {
+  return digest({
+    contract_version: CONTRACT_VERSION,
+    authorization_id,
+    plan_version,
+    plan_hash,
+    execution_scope: {
+      phase_id: execution_scope.phase_id,
+      step_id: execution_scope.step_id
+    }
+  });
+}
+
 function validIso(value) {
   return isNonEmptyString(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
 }
@@ -49,6 +62,10 @@ function canonicalAttemptMaterial(entry) {
     contract_version: CONTRACT_VERSION,
     attempt_id: entry.attempt_id,
     authorization_id: entry.authorization_id,
+    lifecycle_reference: {
+      authorization_id: entry.lifecycle_reference.authorization_id,
+      reference_id: entry.lifecycle_reference.reference_id
+    },
     authorization_hash: entry.authorization_hash,
     plan_version: entry.plan_version,
     plan_hash: entry.plan_hash,
@@ -64,7 +81,8 @@ function canonicalAttemptMaterial(entry) {
     state: entry.state,
     owner_reference: entry.owner_reference,
     sequence: entry.sequence,
-    idempotency_key: entry.idempotency_key
+    idempotency_key: entry.idempotency_key,
+    authorization_scope_key: entry.authorization_scope_key
   };
 }
 
@@ -163,6 +181,7 @@ function validateExecutorReference(value) {
 
 function validateAttemptEntry(entry, plan) {
   if (!isPlainObject(entry) || !isNonEmptyString(entry.attempt_id) || !isNonEmptyString(entry.authorization_id)) return false;
+  if (!isPlainObject(entry.lifecycle_reference) || entry.lifecycle_reference.authorization_id !== entry.authorization_id || !isNonEmptyString(entry.lifecycle_reference.reference_id)) return false;
   if (!isCanonicalContentDigest(entry.authorization_hash) || !isCanonicalContentDigest(entry.plan_hash) || entry.plan_version !== plan.plan_version) return false;
   if (!isPlainObject(entry.execution_scope) || !validateExecutionScope(entry.execution_scope, plan, { execution_scope: { phase_ids: [entry.execution_scope.phase_id], step_ids: [entry.execution_scope.step_id] } })) return false;
   if (!validateExecutorReference(entry.executor_reference)) return false;
@@ -170,6 +189,7 @@ function validateAttemptEntry(entry, plan) {
   if (!ATTEMPT_STATES.includes(entry.state) || !Number.isInteger(entry.sequence) || entry.sequence < 0) return false;
   if (entry.owner_reference !== null && !validateExecutorReference(entry.owner_reference)) return false;
   if (!isNonEmptyString(entry.idempotency_key) || !isCanonicalContentDigest(entry.fingerprint)) return false;
+  if (entry.authorization_scope_key !== computeAuthorizationScopeKey(entry)) return false;
   return entry.fingerprint === computeAttemptFingerprint(entry);
 }
 
@@ -180,6 +200,7 @@ function createExecutionAttemptOwnershipPersistenceInterface({ read, insert, com
 
 function createDeterministicExecutionAttemptOwnershipTestStore() {
   const records = new Map();
+  const authorizationScopeKeys = new Map();
   const failures = new Set();
 
   function failure(operation) {
@@ -196,7 +217,9 @@ function createDeterministicExecutionAttemptOwnershipTestStore() {
       const failed = failure('INSERT_FAILED');
       if (failed) return failed;
       if (records.has(entry.attempt_id)) return result({ ok: false, status: 'CONFLICT', entry: clone(records.get(entry.attempt_id)) });
+      if (authorizationScopeKeys.has(entry.authorization_scope_key)) return result({ ok: false, status: 'CONFLICT', entry: clone(records.get(authorizationScopeKeys.get(entry.authorization_scope_key))) });
       records.set(entry.attempt_id, clone(entry));
+      authorizationScopeKeys.set(entry.authorization_scope_key, entry.attempt_id);
       return result({ ok: true, status: 'INSERTED', entry: clone(entry) });
     },
     compareAndClaim: (attemptId, expectedFingerprint, claimedEntry) => {
@@ -243,6 +266,7 @@ function createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan, p
     const entry = {
       attempt_id: request.attempt_id,
       authorization_id: request.authorization.authorization_id,
+      lifecycle_reference: { authorization_id: request.authorization.authorization_id, reference_id: request.authorization_lifecycle.reference_id },
       authorization_hash: request.authorization.authorization_hash,
       plan_version: provisioning_plan.plan_version,
       plan_hash: provisioning_plan.plan_hash,
@@ -253,6 +277,12 @@ function createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan, p
       owner_reference: null,
       sequence: 0,
       idempotency_key: request.idempotency_key,
+      authorization_scope_key: computeAuthorizationScopeKey({
+        authorization_id: request.authorization.authorization_id,
+        plan_version: provisioning_plan.plan_version,
+        plan_hash: provisioning_plan.plan_hash,
+        execution_scope: request.execution_scope
+      }),
       fingerprint: 'pending'
     };
     entry.fingerprint = computeAttemptFingerprint(entry);

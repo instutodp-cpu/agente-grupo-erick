@@ -39,10 +39,13 @@ distributed persistence adapter is not implemented here.
 
 ## Binding and receipts
 
-Every attempt is bound to the authorization ID and hash, provisioning plan
-version and hash, exact phase/step scope, executor reference, attempt ID,
-lease ID, and idempotency key. Unknown or malformed states deny forward
-progress. Receipts contain lifecycle facts only and explicitly report
+Every attempt is bound to the authorization ID and hash, the exact consumed
+lifecycle reference, provisioning plan version and hash, exact phase/step
+scope, executor reference, attempt ID, lease ID, and idempotency key. The
+canonical active-attempt uniqueness key is the digest of authorization ID,
+plan version/hash, and exact execution scope. The persistence adapter must
+enforce that key atomically; terminal states never release it for automatic
+retry. Unknown or malformed states deny forward progress. Receipts contain lifecycle facts only and explicitly report
 `execution_observed: false` and `production_effect: ZERO`.
 
 ## Excluded capabilities
