@@ -28,6 +28,18 @@ function setup(id = 'authorization-A') {
   assert.equal(registry.registerAuthorization(authorization(id)).status, 'REGISTERED');
   return { store, registry };
 }
+function registryWithPersistence(persistence) { return createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_plan: plan, persistence }); }
+function overriddenPersistence(operation, value) {
+  const store = createDeterministicDurableLifecycleTestStore();
+  return { ...store, [operation]: (...args) => typeof value === 'function' ? value(...args) : value };
+}
+function assertPersistenceFailure(call) {
+  let outcome;
+  assert.doesNotThrow(() => { outcome = call(); });
+  assert.equal(outcome.ok, false);
+  assert.equal(outcome.status, 'PERSISTENCE_FAILURE');
+  assert.equal(outcome.receipt, undefined);
+}
 
 test('valid durable-contract consume persists and survives a new registry instance', () => {
   const { store, registry } = setup();
@@ -54,3 +66,11 @@ test('no secrets are persisted or exposed in receipts', () => { const { store, r
 test('interface rejects incomplete persistence adapters', () => assert.throws(() => createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_plan: plan, persistence: { interface_version: 'wrong' } }), /persistence_interface_invalid/));
 test('registration write failure denies', () => { const store = createDeterministicDurableLifecycleTestStore(); store.configureFailure('WRITE_FAILED'); const registry = createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_plan: plan, persistence: store }); assert.equal(registry.registerAuthorization(authorization()).status, 'WRITE_FAILED'); });
 test('recovery from persisted registered state remains consumable exactly once', () => { const { store } = setup(); const recovered = createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_plan: plan, persistence: store }); assert.equal(recovered.consumeAuthorization('authorization-A', context()).status, 'AUTHORIZED'); assert.equal(recovered.consumeAuthorization('authorization-A', context()).status, 'ALREADY_CONSUMED'); });
+test('read adapter exception fails closed', () => { const persistence = overriddenPersistence('read', () => { throw new Error('adapter failure'); }); assertPersistenceFailure(() => registryWithPersistence(persistence).registerAuthorization(authorization())); });
+test('read malformed result fails closed', () => { const persistence = overriddenPersistence('read', { ok: true, status: 'READ' }); assertPersistenceFailure(() => registryWithPersistence(persistence).registerAuthorization(authorization())); });
+test('insert adapter exception fails closed', () => { const persistence = overriddenPersistence('insert', () => { throw new Error('adapter failure'); }); assertPersistenceFailure(() => registryWithPersistence(persistence).registerAuthorization(authorization())); });
+test('insert malformed result fails closed', () => { const persistence = overriddenPersistence('insert', { ok: true, status: 'INSERTED' }); assertPersistenceFailure(() => registryWithPersistence(persistence).registerAuthorization(authorization())); });
+test('compareAndConsume adapter exception fails closed', () => { const persistence = overriddenPersistence('compareAndConsume', () => { throw new Error('adapter failure'); }); const registry = registryWithPersistence(persistence); assert.equal(registry.registerAuthorization(authorization()).status, 'REGISTERED'); assertPersistenceFailure(() => registry.consumeAuthorization('authorization-A', context())); });
+test('compareAndConsume malformed result fails closed', () => { const persistence = overriddenPersistence('compareAndConsume', { ok: true, status: 'CONSUMED' }); const registry = registryWithPersistence(persistence); assert.equal(registry.registerAuthorization(authorization()).status, 'REGISTERED'); assertPersistenceFailure(() => registry.consumeAuthorization('authorization-A', context())); });
+test('revoke adapter exception fails closed', () => { const persistence = overriddenPersistence('revoke', () => { throw new Error('adapter failure'); }); const registry = registryWithPersistence(persistence); assert.equal(registry.registerAuthorization(authorization()).status, 'REGISTERED'); assertPersistenceFailure(() => registry.revokeAuthorization('authorization-A', 'revoke-A')); });
+test('revoke malformed result fails closed', () => { const persistence = overriddenPersistence('revoke', { ok: true, status: 'REVOKED' }); const registry = registryWithPersistence(persistence); assert.equal(registry.registerAuthorization(authorization()).status, 'REGISTERED'); assertPersistenceFailure(() => registry.revokeAuthorization('authorization-A', 'revoke-A')); });

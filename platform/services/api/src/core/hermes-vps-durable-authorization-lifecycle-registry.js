@@ -15,6 +15,29 @@ const { validateHermesVpsProvisioningPlan } = require('./hermes-vps-provisioning
 const DURABLE_REGISTRY_VERSION = 'hermes-vps-durable-authorization-lifecycle-registry-v1';
 const PERSISTENCE_INTERFACE_VERSION = 'hermes-vps-authorization-lifecycle-persistence-v1';
 const PERSISTENCE_FAILURES = Object.freeze(['READ_FAILED', 'WRITE_FAILED', 'ATOMICITY_FAILED', 'RECOVERY_FAILED']);
+const PERSISTENCE_FAILURE_STATUS = 'PERSISTENCE_FAILURE';
+
+function persistenceFailure(operation, reason) {
+  return result({ ok: false, status: PERSISTENCE_FAILURE_STATUS, reason: `${operation}_${reason}` });
+}
+
+function invokePersistence(operation, method, args, shape) {
+  let raw;
+  try {
+    raw = method(...args);
+  } catch {
+    return persistenceFailure(operation, 'exception');
+  }
+  if (!isPlainObject(raw) || typeof raw.ok !== 'boolean' || !isNonEmptyString(raw.status)) return persistenceFailure(operation, 'malformed_result');
+  if (raw.ok) {
+    if (raw.status !== shape.successStatus || (shape.requiresEntry && !isPlainObject(raw.entry)) || (shape.allowsNullEntry && raw.entry !== null && !isPlainObject(raw.entry))) {
+      return persistenceFailure(operation, 'contradictory_result');
+    }
+    return raw;
+  }
+  if (!shape.failureStatuses.includes(raw.status) || (raw.entry !== undefined && raw.entry !== null && !isPlainObject(raw.entry))) return persistenceFailure(operation, 'contradictory_result');
+  return raw;
+}
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -162,16 +185,16 @@ function createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_pla
       fingerprint: 'pending'
     };
     initial.fingerprint = computeLifecycleFingerprint(initial);
-    const existing = persistence.read(initial.authorization_id);
+    const existing = invokePersistence('read', persistence.read, [initial.authorization_id], { successStatus: 'READ', failureStatuses: ['READ_FAILED'], allowsNullEntry: true });
     if (!existing.ok) return result({ ok: false, status: existing.status, reason: 'persistence_read_failed' });
     if (existing.entry) return existing.entry.fingerprint === initial.fingerprint ? result({ ok: true, status: 'REPLAY_ACCEPTED', receipt: receipt(existing.entry, 'REGISTER', null) }) : result({ ok: false, status: 'CONFLICT', reason: 'authorization_id_reuse_or_payload_mismatch' });
-    const inserted = persistence.insert(initial);
+    const inserted = invokePersistence('insert', persistence.insert, [initial], { successStatus: 'INSERTED', failureStatuses: ['WRITE_FAILED', 'CONFLICT'], requiresEntry: true });
     if (!inserted.ok) return result({ ok: false, status: inserted.status, reason: 'persistence_write_failed' });
     return result({ ok: true, status: 'REGISTERED', authorization_id: initial.authorization_id, receipt: receipt(initial, 'REGISTER', null) });
   }
 
   function consumeAuthorization(authorizationId, context = {}) {
-    const read = persistence.read(authorizationId);
+    const read = invokePersistence('read', persistence.read, [authorizationId], { successStatus: 'READ', failureStatuses: ['READ_FAILED'], allowsNullEntry: true });
     if (!read.ok) return result({ ok: false, status: read.status, reason: 'persistence_read_failed' });
     if (!read.entry) return result({ ok: false, status: 'NOT_AUTHORIZED', reason: 'authorization_missing' });
     const current = read.entry;
@@ -191,7 +214,7 @@ function createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_pla
       fingerprint: 'pending'
     };
     consumed.fingerprint = computeLifecycleFingerprint(consumed);
-    const written = persistence.compareAndConsume(authorizationId, current.fingerprint, consumed);
+    const written = invokePersistence('compareAndConsume', persistence.compareAndConsume, [authorizationId, current.fingerprint, consumed], { successStatus: 'CONSUMED', failureStatuses: ['ATOMICITY_FAILED', 'WRITE_FAILED', 'CONFLICT'], requiresEntry: true });
     if (!written.ok) {
       if (written.status === 'CONFLICT' && written.entry?.state === 'CONSUMED') return result({ ok: false, status: 'ALREADY_CONSUMED', reason: 'concurrent_consume_lost' });
       return result({ ok: false, status: written.status, reason: 'persistence_atomic_consume_failed' });
@@ -200,7 +223,7 @@ function createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_pla
   }
 
   function revokeAuthorization(authorizationId, referenceId) {
-    const read = persistence.read(authorizationId);
+    const read = invokePersistence('read', persistence.read, [authorizationId], { successStatus: 'READ', failureStatuses: ['READ_FAILED'], allowsNullEntry: true });
     if (!read.ok) return result({ ok: false, status: read.status, reason: 'persistence_read_failed' });
     if (!read.entry) return result({ ok: false, status: 'NOT_AUTHORIZED' });
     const current = read.entry;
@@ -210,7 +233,7 @@ function createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_pla
     if (!isNonEmptyString(referenceId)) return result({ ok: false, status: 'INVALID', reason: 'revocation_reference_required' });
     const revoked = { ...current, state: 'REVOKED', sequence: current.sequence + 1, revocation_reference: { authorization_id: authorizationId, reference_id: referenceId }, fingerprint: 'pending' };
     revoked.fingerprint = computeLifecycleFingerprint(revoked);
-    const written = persistence.revoke(authorizationId, current.fingerprint, revoked);
+    const written = invokePersistence('revoke', persistence.revoke, [authorizationId, current.fingerprint, revoked], { successStatus: 'REVOKED', failureStatuses: ['WRITE_FAILED', 'CONFLICT'], requiresEntry: true });
     if (!written.ok) return result({ ok: false, status: written.status, reason: 'persistence_write_failed' });
     return result({ ok: true, status: 'REVOKED', authorization_id: authorizationId, receipt: receipt(revoked, 'REVOKE', referenceId) });
   }
