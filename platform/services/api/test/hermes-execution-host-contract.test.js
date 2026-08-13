@@ -8,6 +8,9 @@ const {
   hashContract,
   validateHermesExecutionHostContract
 } = require('../src/core/hermes-execution-host-contract');
+const { buildHermesVpsBootstrapContract } = require('../src/core/hermes-vps-bootstrap-contract');
+const { buildHermesVpsProvisioningPlan } = require('../src/core/hermes-vps-provisioning-plan');
+const { buildHermesVpsExecutionAuthorization } = require('../src/core/hermes-vps-execution-authorization-contract');
 
 function valid() { return buildHermesExecutionHostContract(); }
 function mutable() { return JSON.parse(JSON.stringify(valid())); }
@@ -103,4 +106,93 @@ test('contract fingerprint changes with relevant content', () => {
   b.services.scheduler = false;
   b.contract_fingerprint = hashContract(b);
   assert.notEqual(a.contract_fingerprint, b.contract_fingerprint);
+});
+
+function canonicalEvidence() {
+  const provenance = {
+    repository: 'instutodp-cpu/agente-grupo-erick',
+    branch: 'hermes/execution-host-contract-v1',
+    commit_sha: 'e76a3d3a79196eb55e5d57e9ec97a7082b0bb869'
+  };
+  const bootstrap = buildHermesVpsBootstrapContract({ provenance });
+  const plan = buildHermesVpsProvisioningPlan({ bootstrap_contract: bootstrap });
+  const authorization = buildHermesVpsExecutionAuthorization({
+    provisioning_plan: plan,
+    authorization_id: 'host-auth-1',
+    issued_at: '2026-08-12T10:00:00.000Z',
+    expires_at: '2026-08-12T10:05:00.000Z',
+    issued_by: { authority_id: 'owner-1', authority_type: 'human_owner' },
+    target_id: 'staging-host-1',
+    phase_ids: ['P0_HOST_VALIDATION'],
+    step_ids: ['validate_host'],
+    provenance
+  });
+  return { plan, authorization };
+}
+
+function readyEvidence() {
+  const { plan, authorization } = canonicalEvidence();
+  return {
+    provisioning_plan: { state: 'VALIDATED', plan_version: plan.plan_version, plan_hash: plan.plan_hash },
+    authorization: {
+      state: 'AUTHORIZED', authorization_id: authorization.authorization_id,
+      authorization_hash: authorization.authorization_hash, plan_version: authorization.provisioning_plan_reference.plan_version,
+      plan_hash: authorization.provisioning_plan_hash
+    },
+    lifecycle: { state: 'CONSUMED', authorization_id: authorization.authorization_id, reference_id: 'consume-host-auth-1' },
+    durable_lifecycle: { state: 'CONSUMED', authorization_id: authorization.authorization_id, reference_id: 'consume-host-auth-1', persistence_contract: 'hermes-vps-durable-authorization-lifecycle-registry-v1' },
+    attempt_ownership: { state: 'CLAIMED', attempt_id: 'attempt-host-1', attempt_fingerprint: 'a'.repeat(64), owner_reference: { executor_id: 'executor-host-1', executor_type: 'synthetic_executor' } },
+    admission: { state: 'ADMITTED', admission_id: 'admission-host-1', admission_fingerprint: 'b'.repeat(64), handoff_fingerprint: 'c'.repeat(64), authorization_id: authorization.authorization_id, lifecycle_reference_id: 'consume-host-auth-1', attempt_id: 'attempt-host-1', owner_reference: { executor_id: 'executor-host-1', executor_type: 'synthetic_executor' } }
+  };
+}
+
+function readyContract() {
+  return buildHermesExecutionHostContract({
+    correlation_id: 'correlation-host-1',
+    readiness: { host: 'READY', runtime: 'READY', admission: 'READY', durable_audit_observability: 'READY', production_execution_authorized: false },
+    canonical_bindings: readyEvidence()
+  });
+}
+
+test('readiness records the canonical post-135 dependencies without authorizing execution', () => {
+  const value = readyContract();
+  assert.equal(validateHermesExecutionHostContract(value).valid, true);
+  assert.equal(value.readiness.production_execution_authorized, false);
+  assert.equal(value.canonical_bindings.admission.attempt_id, 'attempt-host-1');
+  assert.equal(value.canonical_bindings.durable_lifecycle.reference_id, 'consume-host-auth-1');
+});
+
+for (const [name, mutate, expected] of [
+  ['missing authorization', (v) => { delete v.canonical_bindings.authorization; }, 'canonical_binding::authorization_must_be_object'],
+  ['missing provisioning readiness', (v) => { v.canonical_bindings.provisioning_plan.state = 'NOT_ASSESSED'; v.readiness.runtime = 'READY'; }, 'runtime_readiness_dependency_missing'],
+  ['missing lifecycle readiness', (v) => { v.canonical_bindings.lifecycle.state = 'NOT_ASSESSED'; v.readiness.admission = 'READY'; }, 'admission_readiness_dependency_missing'],
+  ['missing durable lifecycle readiness', (v) => { v.canonical_bindings.durable_lifecycle.state = 'NOT_ASSESSED'; v.readiness.admission = 'READY'; }, 'admission_readiness_dependency_missing'],
+  ['owner mismatch', (v) => { v.canonical_bindings.admission.owner_reference.executor_id = 'other-owner'; }, 'admission_ownership_binding_mismatch'],
+  ['attempt mismatch', (v) => { v.canonical_bindings.admission.attempt_id = 'other-attempt'; }, 'admission_ownership_binding_mismatch'],
+  ['admission mismatch', (v) => { v.canonical_bindings.admission.lifecycle_reference_id = 'other-consumption'; }, 'admission_lifecycle_binding_mismatch'],
+  ['malformed evidence', (v) => { v.canonical_bindings.authorization.plan_hash = 'malformed'; }, 'canonical_digest_invalid']
+]) {
+  test(`fails closed for ${name}`, () => {
+    const value = JSON.parse(JSON.stringify(readyContract()));
+    mutate(value);
+    value.contract_fingerprint = hashContract(value);
+    assert.equal(validateHermesExecutionHostContract(value).valid, false);
+    assert.ok(validateHermesExecutionHostContract(value).errors.includes(expected));
+  });
+}
+
+test('replay identity remains deterministic across equivalent evidence', () => {
+  const a = readyContract();
+  const b = JSON.parse(JSON.stringify(readyContract()));
+  assert.equal(a.contract_fingerprint, b.contract_fingerprint);
+  b.canonical_bindings.admission.handoff_fingerprint = 'd'.repeat(64);
+  b.contract_fingerprint = hashContract(b);
+  assert.notEqual(a.contract_fingerprint, b.contract_fingerprint);
+});
+
+test('host contract has no execution side effects or operational capability', () => {
+  const value = readyContract();
+  assert.equal(value.production_allowed, false);
+  assert.equal(value.readiness.production_execution_authorized, false);
+  assert.deepEqual(Object.values(value.capabilities), CAPABILITIES.map(() => false));
 });
