@@ -144,7 +144,7 @@ test('different valid authorizations remain independent', () => {
 test('lifecycle consumption reference is persisted, immutable, and fingerprint-bound', () => {
   const { store, registry } = setup();
   const initial = store.inspect('attempt-A');
-  assert.deepEqual(initial.lifecycle_reference, { authorization_id: 'authorization-A', reference_id: 'consume-A' });
+  assert.deepEqual(initial.lifecycle_reference, { authorization_id: 'authorization-A', reference_id: 'consume-A', state: 'CONSUMED' });
   assert.equal(registry.registerAttempt(request({ authorization_lifecycle: { state: 'CONSUMED', authorization_id: 'authorization-A', reference_id: 'consume-B' } })).status, 'CONFLICT');
   const recovered = createHermesVpsExecutionAttemptOwnershipRegistry({ provisioning_plan: plan, persistence: store });
   assert.deepEqual(recovered.registerAttempt(request()).status, 'REPLAY_ACCEPTED');
