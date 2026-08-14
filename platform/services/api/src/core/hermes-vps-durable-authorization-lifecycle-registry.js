@@ -105,6 +105,14 @@ function receipt(entry, event, referenceId) {
   };
 }
 
+function validateDurableLifecycleEntry(entry, provisioning_plan) {
+  return validateEntry(entry, provisioning_plan);
+}
+
+function createDurableLifecycleReceipt(entry, event, referenceId) {
+  return receipt(entry, event, referenceId);
+}
+
 function validPlan(plan) {
   return Boolean(plan && validateHermesVpsProvisioningPlan(plan).valid && isCanonicalContentDigest(plan.plan_hash));
 }
@@ -307,6 +315,8 @@ module.exports = {
   PERSISTENCE_FAILURES,
   PERSISTENCE_INTERFACE_VERSION,
   createAuthorizationLifecyclePersistenceInterface,
+  createDurableLifecycleReceipt,
   createDeterministicDurableLifecycleTestStore,
-  createHermesVpsDurableAuthorizationLifecycleRegistry
+  createHermesVpsDurableAuthorizationLifecycleRegistry,
+  validateDurableLifecycleEntry
 };
