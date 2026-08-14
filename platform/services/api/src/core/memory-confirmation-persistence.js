@@ -18,11 +18,19 @@ function createMemoryConfirmationPersistence() {
       return cloneRecord(records.get(confirmation_id));
     },
 
-    update(record) {
-      if (!records.has(record.confirmation_id)) return null;
-      const stored = cloneRecord(record);
-      records.set(stored.confirmation_id, stored);
-      return cloneRecord(stored);
+    compareAndTransition({ confirmation_id, expected_status, next_status }) {
+      const current = records.get(confirmation_id);
+      if (!current) return { outcome: 'not_found', record: null };
+      if (current.status !== expected_status) {
+        return { outcome: 'state_mismatch', record: cloneRecord(current) };
+      }
+
+      const transitioned = { ...current, status: next_status };
+      records.set(confirmation_id, transitioned);
+      return {
+        outcome: next_status === expected_status ? 'unchanged' : 'transitioned',
+        record: cloneRecord(transitioned)
+      };
     },
 
     list() {

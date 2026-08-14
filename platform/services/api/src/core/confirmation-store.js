@@ -11,6 +11,12 @@ function isExpired(record, now = new Date()) {
   return new Date(record.expires_at).getTime() <= now.getTime();
 }
 
+function currentAfterTransition(result, persistence) {
+  if (result.outcome === 'not_found') return null;
+  if (result.record) return { ...result.record };
+  return persistence.get(result.confirmation_id);
+}
+
 function createConfirmationStore({ persistence = createMemoryConfirmationPersistence() } = {}) {
   assertConfirmationPersistence(persistence);
 
@@ -30,22 +36,37 @@ function createConfirmationStore({ persistence = createMemoryConfirmationPersist
     if (!record) return null;
 
     if (isExpired(record, now)) {
-      const expired = { ...record, status: 'expired' };
-      persistence.update(expired);
-      return { ...expired };
+      const result = persistence.compareAndTransition({
+        confirmation_id,
+        expected_status: record.status,
+        next_status: 'expired'
+      });
+      return currentAfterTransition(result, persistence);
     }
 
     return { ...record };
   }
 
   function resolvePendingConfirmation(confirmation_id, decision, now = new Date()) {
-    const record = getPendingConfirmation(confirmation_id, now);
-    if (!record || record.status === 'expired') return record;
+    const record = persistence.get(confirmation_id);
+    if (!record) return null;
+
+    if (isExpired(record, now)) {
+      const expiration = persistence.compareAndTransition({
+        confirmation_id,
+        expected_status: record.status,
+        next_status: 'expired'
+      });
+      return currentAfterTransition(expiration, persistence);
+    }
 
     if (decision === 'approved' || decision === 'rejected') {
-      const resolved = { ...record, status: decision };
-      persistence.update(resolved);
-      return { ...resolved };
+      const result = persistence.compareAndTransition({
+        confirmation_id,
+        expected_status: record.status,
+        next_status: decision
+      });
+      return currentAfterTransition(result, persistence);
     }
 
     return { ...record };
@@ -56,8 +77,14 @@ function createConfirmationStore({ persistence = createMemoryConfirmationPersist
 
     for (const record of persistence.list()) {
       if (isExpired(record, now)) {
-        persistence.update({ ...record, status: 'expired' });
-        pruned += 1;
+        const result = persistence.compareAndTransition({
+          confirmation_id: record.confirmation_id,
+          expected_status: record.status,
+          next_status: 'expired'
+        });
+        if (result.outcome === 'transitioned' || result.outcome === 'unchanged') {
+          pruned += 1;
+        }
       }
     }
 

@@ -1,7 +1,7 @@
 'use strict';
 
-const CONFIRMATION_PERSISTENCE_VERSION = 'confirmation-persistence-v1';
-const REQUIRED_METHODS = ['create', 'get', 'update', 'list', 'reset'];
+const CONFIRMATION_PERSISTENCE_VERSION = 'confirmation-persistence-v2';
+const REQUIRED_METHODS = ['create', 'get', 'compareAndTransition', 'list', 'reset'];
 
 function assertConfirmationPersistence(persistence) {
   if (!persistence || typeof persistence !== 'object') {
