@@ -13,7 +13,7 @@ const {
 const { validateHermesVpsProvisioningPlan } = require('./hermes-vps-provisioning-plan');
 
 const DURABLE_REGISTRY_VERSION = 'hermes-vps-durable-authorization-lifecycle-registry-v1';
-const PERSISTENCE_INTERFACE_VERSION = 'hermes-vps-authorization-lifecycle-persistence-v1';
+const PERSISTENCE_INTERFACE_VERSION = 'hermes-vps-authorization-lifecycle-persistence-v2';
 const PERSISTENCE_FAILURES = Object.freeze(['READ_FAILED', 'WRITE_FAILED', 'ATOMICITY_FAILED', 'RECOVERY_FAILED']);
 const PERSISTENCE_FAILURE_STATUS = 'PERSISTENCE_FAILURE';
 
@@ -27,6 +27,18 @@ function containRejectedThenable(value) {
   } catch {
     // A non-native thenable may throw while being assimilated; denial is already established.
   }
+}
+
+function validatePersistenceResult(operation, raw, shape) {
+  if (!isPlainObject(raw) || typeof raw.ok !== 'boolean' || !isNonEmptyString(raw.status)) return persistenceFailure(operation, 'malformed_result');
+  if (raw.ok) {
+    if (raw.status !== shape.successStatus || (shape.requiresEntry && !isPlainObject(raw.entry)) || (shape.allowsNullEntry && raw.entry !== null && !isPlainObject(raw.entry)) || (shape.requiresReceipt && ((raw.entry !== null && !isPlainObject(raw.receipt)) || (raw.entry === null && raw.receipt !== undefined && raw.receipt !== null)))) {
+      return persistenceFailure(operation, 'contradictory_result');
+    }
+    return raw;
+  }
+  if (!shape.failureStatuses.includes(raw.status) || (raw.entry !== undefined && raw.entry !== null && !isPlainObject(raw.entry)) || (raw.receipt !== undefined && raw.receipt !== null && !isPlainObject(raw.receipt))) return persistenceFailure(operation, 'contradictory_result');
+  return raw;
 }
 
 function invokePersistence(operation, method, args, shape) {
@@ -44,17 +56,13 @@ function invokePersistence(operation, method, args, shape) {
   }
   if (typeof then === 'function') {
     containRejectedThenable(raw);
-    return persistenceFailure(operation, 'async_result_not_supported');
+    return raw.then((resolved) => validatePersistenceResult(operation, resolved, shape), () => persistenceFailure(operation, 'exception'));
   }
-  if (!isPlainObject(raw) || typeof raw.ok !== 'boolean' || !isNonEmptyString(raw.status)) return persistenceFailure(operation, 'malformed_result');
-  if (raw.ok) {
-    if (raw.status !== shape.successStatus || (shape.requiresEntry && !isPlainObject(raw.entry)) || (shape.allowsNullEntry && raw.entry !== null && !isPlainObject(raw.entry))) {
-      return persistenceFailure(operation, 'contradictory_result');
-    }
-    return raw;
-  }
-  if (!shape.failureStatuses.includes(raw.status) || (raw.entry !== undefined && raw.entry !== null && !isPlainObject(raw.entry))) return persistenceFailure(operation, 'contradictory_result');
-  return raw;
+  return validatePersistenceResult(operation, raw, shape);
+}
+
+function chain(value, next) {
+  return value !== null && (typeof value === 'object' || typeof value === 'function') && typeof value.then === 'function' ? value.then(next) : next(value);
 }
 
 function clone(value) {
@@ -88,6 +96,8 @@ function receipt(entry, event, referenceId) {
     authorization_id: entry.authorization_id,
     lifecycle_state: entry.state,
     sequence: entry.sequence,
+    reference_id: referenceId,
+    receipt_reference: `${event.toLowerCase()}::${entry.authorization_id}::${entry.sequence}`,
     fingerprint: computeLifecycleFingerprint(entry),
     receipt_hash: digest(material),
     execution_performed: false,
@@ -131,8 +141,14 @@ function createAuthorizationLifecyclePersistenceInterface({ read, insert, compar
   });
 }
 
+function receiptMatches(expected, entry, event, referenceId) {
+  if (!isPlainObject(expected)) return false;
+  return stablePayload(expected) === stablePayload(receipt(entry, event, referenceId));
+}
+
 function createDeterministicDurableLifecycleTestStore() {
   const records = new Map();
+  const receipts = new Map();
   const failures = new Set();
   let loseResponseAfterCommit = false;
 
@@ -146,36 +162,42 @@ function createDeterministicDurableLifecycleTestStore() {
       const failure = failIfConfigured('READ_FAILED');
       if (failure) return failure;
       const entry = records.get(authorizationId);
-      return result({ ok: true, status: 'READ', entry: entry ? clone(entry) : null });
+      return result({ ok: true, status: 'READ', entry: entry ? clone(entry) : null, receipt: entry ? clone(receipts.get(authorizationId)) : null });
     },
-    insert: (entry) => {
+    insert: (entry, persistedReceipt) => {
       const failure = failIfConfigured('WRITE_FAILED');
       if (failure) return failure;
-      if (records.has(entry.authorization_id)) return result({ ok: false, status: 'CONFLICT', error: 'authorization_id_already_exists' });
+      if (!receiptMatches(persistedReceipt, entry, 'REGISTER', null)) return result({ ok: false, status: 'CONFLICT', error: 'receipt_mismatch' });
+      if (records.has(entry.authorization_id)) return result({ ok: false, status: 'CONFLICT', entry: clone(records.get(entry.authorization_id)), receipt: clone(receipts.get(entry.authorization_id)), error: 'authorization_id_already_exists' });
       records.set(entry.authorization_id, clone(entry));
-      return result({ ok: true, status: 'INSERTED', entry: clone(entry) });
+      receipts.set(entry.authorization_id, clone(persistedReceipt));
+      return result({ ok: true, status: 'INSERTED', entry: clone(entry), receipt: clone(persistedReceipt) });
     },
-    compareAndConsume: (authorizationId, expectedFingerprint, consumedEntry) => {
+    compareAndConsume: (authorizationId, expectedFingerprint, consumedEntry, persistedReceipt) => {
       const failure = failIfConfigured('ATOMICITY_FAILED');
       if (failure) return failure;
       const current = records.get(authorizationId);
       if (!current) return result({ ok: false, status: 'NOT_AUTHORIZED' });
       if (current.fingerprint !== expectedFingerprint) return result({ ok: false, status: 'CONFLICT', entry: clone(current) });
+      if (!receiptMatches(persistedReceipt, consumedEntry, 'CONSUME', consumedEntry?.consumption_reference?.reference_id)) return result({ ok: false, status: 'CONFLICT', entry: clone(current), error: 'receipt_mismatch' });
       records.set(authorizationId, clone(consumedEntry));
-      const committed = result({ ok: true, status: 'CONSUMED', entry: clone(consumedEntry) });
+      receipts.set(authorizationId, clone(persistedReceipt));
+      const committed = result({ ok: true, status: 'CONSUMED', entry: clone(consumedEntry), receipt: clone(persistedReceipt) });
       if (loseResponseAfterCommit) {
         loseResponseAfterCommit = false;
         return result({ ok: false, status: 'WRITE_FAILED', error: 'response_lost_after_commit' });
       }
       return committed;
     },
-    revoke: (authorizationId, expectedFingerprint, revokedEntry) => {
+    revoke: (authorizationId, expectedFingerprint, revokedEntry, persistedReceipt) => {
       const failure = failIfConfigured('WRITE_FAILED');
       if (failure) return failure;
       const current = records.get(authorizationId);
       if (!current || current.fingerprint !== expectedFingerprint) return result({ ok: false, status: 'CONFLICT', entry: current ? clone(current) : null });
+      if (!receiptMatches(persistedReceipt, revokedEntry, 'REVOKE', revokedEntry?.revocation_reference?.reference_id)) return result({ ok: false, status: 'CONFLICT', entry: clone(current), error: 'receipt_mismatch' });
       records.set(authorizationId, clone(revokedEntry));
-      return result({ ok: true, status: 'REVOKED', entry: clone(revokedEntry) });
+      receipts.set(authorizationId, clone(persistedReceipt));
+      return result({ ok: true, status: 'REVOKED', entry: clone(revokedEntry), receipt: clone(persistedReceipt) });
     }
   });
 
@@ -203,57 +225,69 @@ function createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_pla
       fingerprint: 'pending'
     };
     initial.fingerprint = computeLifecycleFingerprint(initial);
-    const existing = invokePersistence('read', persistence.read, [initial.authorization_id], { successStatus: 'READ', failureStatuses: ['READ_FAILED'], allowsNullEntry: true });
-    if (!existing.ok) return result({ ok: false, status: existing.status, reason: 'persistence_read_failed' });
-    if (existing.entry) return existing.entry.fingerprint === initial.fingerprint ? result({ ok: true, status: 'REPLAY_ACCEPTED', receipt: receipt(existing.entry, 'REGISTER', null) }) : result({ ok: false, status: 'CONFLICT', reason: 'authorization_id_reuse_or_payload_mismatch' });
-    const inserted = invokePersistence('insert', persistence.insert, [initial], { successStatus: 'INSERTED', failureStatuses: ['WRITE_FAILED', 'CONFLICT'], requiresEntry: true });
-    if (!inserted.ok) return result({ ok: false, status: inserted.status, reason: 'persistence_write_failed' });
-    return result({ ok: true, status: 'REGISTERED', authorization_id: initial.authorization_id, receipt: receipt(initial, 'REGISTER', null) });
+    return chain(invokePersistence('read', persistence.read, [initial.authorization_id], { successStatus: 'READ', failureStatuses: ['READ_FAILED'], allowsNullEntry: true }), (existing) => {
+      if (!existing.ok) return result({ ok: false, status: existing.status, reason: 'persistence_read_failed' });
+      if (existing.entry) {
+        if (!validateEntry(existing.entry, provisioning_plan) || !receiptMatches(existing.receipt, existing.entry, existing.entry.state === 'CONSUMED' ? 'CONSUME' : existing.entry.state === 'REVOKED' ? 'REVOKE' : 'REGISTER', existing.entry.state === 'CONSUMED' ? existing.entry.consumption_reference.reference_id : existing.entry.state === 'REVOKED' ? existing.entry.revocation_reference.reference_id : null)) return result({ ok: false, status: PERSISTENCE_FAILURE_STATUS, reason: 'read_receipt_mismatch' });
+        return existing.entry.fingerprint === initial.fingerprint ? result({ ok: true, status: 'REPLAY_ACCEPTED', receipt: receipt(existing.entry, 'REGISTER', null) }) : result({ ok: false, status: 'CONFLICT', reason: 'authorization_id_reuse_or_payload_mismatch' });
+      }
+      const initialReceipt = receipt(initial, 'REGISTER', null);
+      return chain(invokePersistence('insert', persistence.insert, [initial, initialReceipt], { successStatus: 'INSERTED', failureStatuses: ['WRITE_FAILED', 'CONFLICT'], requiresEntry: true, requiresReceipt: true }), (inserted) => {
+        if (!inserted.ok && inserted.status === 'CONFLICT' && inserted.entry && inserted.receipt) {
+          if (!validateEntry(inserted.entry, provisioning_plan) || !receiptMatches(inserted.receipt, inserted.entry, inserted.entry.state === 'CONSUMED' ? 'CONSUME' : inserted.entry.state === 'REVOKED' ? 'REVOKE' : 'REGISTER', inserted.entry.state === 'CONSUMED' ? inserted.entry.consumption_reference.reference_id : inserted.entry.state === 'REVOKED' ? inserted.entry.revocation_reference.reference_id : null)) return result({ ok: false, status: PERSISTENCE_FAILURE_STATUS, reason: 'insert_conflict_record_invalid' });
+          if (inserted.entry.fingerprint === initial.fingerprint) return result({ ok: true, status: 'REPLAY_ACCEPTED', receipt: receipt(inserted.entry, 'REGISTER', null) });
+        }
+        if (!inserted.ok) return result({ ok: false, status: inserted.status, reason: 'persistence_write_failed' });
+        return result({ ok: true, status: 'REGISTERED', authorization_id: initial.authorization_id, receipt: inserted.receipt });
+      });
+    });
   }
 
   function consumeAuthorization(authorizationId, context = {}) {
-    const read = invokePersistence('read', persistence.read, [authorizationId], { successStatus: 'READ', failureStatuses: ['READ_FAILED'], allowsNullEntry: true });
-    if (!read.ok) return result({ ok: false, status: read.status, reason: 'persistence_read_failed' });
-    if (!read.entry) return result({ ok: false, status: 'NOT_AUTHORIZED', reason: 'authorization_missing' });
-    const current = read.entry;
-    if (!validateEntry(current, provisioning_plan)) return result({ ok: false, status: 'INVALID', reason: 'persisted_entry_invalid' });
-    if (current.state === 'CONSUMED') return result({ ok: false, status: 'ALREADY_CONSUMED', receipt: receipt(current, 'REPLAY_BLOCKED', current.consumption_reference.reference_id) });
-    if (current.state === 'REVOKED') return result({ ok: false, status: 'REVOKED', reason: 'authorization_revoked' });
-    const logical = createHermesVpsAuthorizationLifecycleRegistry({ provisioning_plan });
-    const registration = logical.registerAuthorization(current.authorization);
-    if (!registration.ok) return result({ ok: false, status: 'INVALID', reason: 'authorization_invalid' });
-    const evaluated = logical.consumeAuthorization(authorizationId, context);
-    if (!evaluated.ok) return evaluated;
-    const consumed = {
-      ...current,
-      state: 'CONSUMED',
-      sequence: current.sequence + 1,
-      consumption_reference: { authorization_id: authorizationId, reference_id: context.reference_id || `consume::${authorizationId}::${current.sequence + 1}` },
-      fingerprint: 'pending'
-    };
-    consumed.fingerprint = computeLifecycleFingerprint(consumed);
-    const written = invokePersistence('compareAndConsume', persistence.compareAndConsume, [authorizationId, current.fingerprint, consumed], { successStatus: 'CONSUMED', failureStatuses: ['ATOMICITY_FAILED', 'WRITE_FAILED', 'CONFLICT'], requiresEntry: true });
-    if (!written.ok) {
-      if (written.status === 'CONFLICT' && written.entry?.state === 'CONSUMED') return result({ ok: false, status: 'ALREADY_CONSUMED', reason: 'concurrent_consume_lost' });
-      return result({ ok: false, status: written.status, reason: 'persistence_atomic_consume_failed' });
-    }
-    return result({ ok: true, status: 'AUTHORIZED', authorization_id: authorizationId, receipt: receipt(consumed, 'CONSUME', consumed.consumption_reference.reference_id) });
+    return chain(invokePersistence('read', persistence.read, [authorizationId], { successStatus: 'READ', failureStatuses: ['READ_FAILED'], allowsNullEntry: true }), (read) => {
+      if (!read.ok) return result({ ok: false, status: read.status, reason: 'persistence_read_failed' });
+      if (!read.entry) return result({ ok: false, status: 'NOT_AUTHORIZED', reason: 'authorization_missing' });
+      const current = read.entry;
+      if (!validateEntry(current, provisioning_plan)) return result({ ok: false, status: 'INVALID', reason: 'persisted_entry_invalid' });
+      if (current.state === 'CONSUMED') return result({ ok: false, status: 'ALREADY_CONSUMED', receipt: receipt(current, 'REPLAY_BLOCKED', current.consumption_reference.reference_id) });
+      if (current.state === 'REVOKED') return result({ ok: false, status: 'REVOKED', reason: 'authorization_revoked' });
+      if (!receiptMatches(read.receipt, current, 'REGISTER', null)) return result({ ok: false, status: PERSISTENCE_FAILURE_STATUS, reason: 'read_receipt_mismatch' });
+      const logical = createHermesVpsAuthorizationLifecycleRegistry({ provisioning_plan });
+      const registration = logical.registerAuthorization(current.authorization);
+      if (!registration.ok) return result({ ok: false, status: 'INVALID', reason: 'authorization_invalid' });
+      const evaluated = logical.consumeAuthorization(authorizationId, context);
+      if (!evaluated.ok) return evaluated;
+      const consumed = { ...current, state: 'CONSUMED', sequence: current.sequence + 1, consumption_reference: { authorization_id: authorizationId, reference_id: context.reference_id || `consume::${authorizationId}::${current.sequence + 1}` }, fingerprint: 'pending' };
+      consumed.fingerprint = computeLifecycleFingerprint(consumed);
+      const consumedReceipt = receipt(consumed, 'CONSUME', consumed.consumption_reference.reference_id);
+      return chain(invokePersistence('compareAndConsume', persistence.compareAndConsume, [authorizationId, current.fingerprint, consumed, consumedReceipt], { successStatus: 'CONSUMED', failureStatuses: ['ATOMICITY_FAILED', 'WRITE_FAILED', 'CONFLICT'], requiresEntry: true, requiresReceipt: true }), (written) => {
+        if (!written.ok) {
+          if (written.status === 'CONFLICT' && written.entry?.state === 'CONSUMED') return result({ ok: false, status: 'ALREADY_CONSUMED', reason: 'concurrent_consume_lost' });
+          return result({ ok: false, status: written.status, reason: 'persistence_atomic_consume_failed' });
+        }
+        return result({ ok: true, status: 'AUTHORIZED', authorization_id: authorizationId, receipt: written.receipt });
+      });
+    });
   }
 
   function revokeAuthorization(authorizationId, referenceId) {
-    const read = invokePersistence('read', persistence.read, [authorizationId], { successStatus: 'READ', failureStatuses: ['READ_FAILED'], allowsNullEntry: true });
-    if (!read.ok) return result({ ok: false, status: read.status, reason: 'persistence_read_failed' });
-    if (!read.entry) return result({ ok: false, status: 'NOT_AUTHORIZED' });
-    const current = read.entry;
-    if (!validateEntry(current, provisioning_plan)) return result({ ok: false, status: 'INVALID', reason: 'persisted_entry_invalid' });
-    if (current.state === 'CONSUMED') return result({ ok: false, status: 'ALREADY_CONSUMED' });
-    if (current.state === 'REVOKED') return result({ ok: false, status: 'REVOKED' });
-    if (!isNonEmptyString(referenceId)) return result({ ok: false, status: 'INVALID', reason: 'revocation_reference_required' });
-    const revoked = { ...current, state: 'REVOKED', sequence: current.sequence + 1, revocation_reference: { authorization_id: authorizationId, reference_id: referenceId }, fingerprint: 'pending' };
-    revoked.fingerprint = computeLifecycleFingerprint(revoked);
-    const written = invokePersistence('revoke', persistence.revoke, [authorizationId, current.fingerprint, revoked], { successStatus: 'REVOKED', failureStatuses: ['WRITE_FAILED', 'CONFLICT'], requiresEntry: true });
-    if (!written.ok) return result({ ok: false, status: written.status, reason: 'persistence_write_failed' });
-    return result({ ok: true, status: 'REVOKED', authorization_id: authorizationId, receipt: receipt(revoked, 'REVOKE', referenceId) });
+    return chain(invokePersistence('read', persistence.read, [authorizationId], { successStatus: 'READ', failureStatuses: ['READ_FAILED'], allowsNullEntry: true }), (read) => {
+      if (!read.ok) return result({ ok: false, status: read.status, reason: 'persistence_read_failed' });
+      if (!read.entry) return result({ ok: false, status: 'NOT_AUTHORIZED' });
+      const current = read.entry;
+      if (!validateEntry(current, provisioning_plan)) return result({ ok: false, status: 'INVALID', reason: 'persisted_entry_invalid' });
+      if (current.state === 'CONSUMED') return result({ ok: false, status: 'ALREADY_CONSUMED' });
+      if (current.state === 'REVOKED') return result({ ok: false, status: 'REVOKED' });
+      if (!receiptMatches(read.receipt, current, 'REGISTER', null)) return result({ ok: false, status: PERSISTENCE_FAILURE_STATUS, reason: 'read_receipt_mismatch' });
+      if (!isNonEmptyString(referenceId)) return result({ ok: false, status: 'INVALID', reason: 'revocation_reference_required' });
+      const revoked = { ...current, state: 'REVOKED', sequence: current.sequence + 1, revocation_reference: { authorization_id: authorizationId, reference_id: referenceId }, fingerprint: 'pending' };
+      revoked.fingerprint = computeLifecycleFingerprint(revoked);
+      const revokedReceipt = receipt(revoked, 'REVOKE', referenceId);
+      return chain(invokePersistence('revoke', persistence.revoke, [authorizationId, current.fingerprint, revoked, revokedReceipt], { successStatus: 'REVOKED', failureStatuses: ['WRITE_FAILED', 'CONFLICT'], requiresEntry: true, requiresReceipt: true }), (written) => {
+        if (!written.ok) return result({ ok: false, status: written.status, reason: 'persistence_write_failed' });
+        return result({ ok: true, status: 'REVOKED', authorization_id: authorizationId, receipt: written.receipt });
+      });
+    });
   }
 
   return Object.freeze({

@@ -59,13 +59,18 @@ for an authoritative decision or admission read.
 ## 3. Relationship to Existing Hermes Contracts
 
 PR #133 defines the existing `HermesVpsAuthorizationLifecyclePersistence`
-interface (`hermes-vps-authorization-lifecycle-persistence-v1`) with the
-operations `read`, `insert`, `compareAndConsume`, and `revoke`. Its
+interface with the operations `read`, `insert`, `compareAndConsume`, and
+`revoke`. PR-B.1 versions the compatibility-preserving interface as
+`hermes-vps-authorization-lifecycle-persistence-v2`: operations may return a
+plain result or a Promise of the same result, and mutating operations receive
+the deterministic lifecycle receipt they must persist atomically. Its
 deterministic Map-backed store remains `REFERENCE_TEST_ONLY` and is retained
 for semantic tests and restart simulations.
 
-PR-A does not alter or duplicate the #133 interface and does not implement
-its PostgreSQL adapter. PR-C is responsible for that production adapter.
+PR-A does not implement the PostgreSQL adapter. PR-B.1 is the minimal
+compatibility hardening required before PR-C: it preserves lifecycle meanings
+while making the persistence boundary usable by asynchronous database I/O
+and durable receipt storage. PR-C is responsible for the production adapter.
 The PR #136 shared durable coordination contract remains the authority for
 the later atomic coordination primitive; PR-A does not implement or replace
 it.

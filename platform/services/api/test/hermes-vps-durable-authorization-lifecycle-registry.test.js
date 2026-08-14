@@ -6,6 +6,7 @@ const { buildHermesVpsBootstrapContract } = require('../src/core/hermes-vps-boot
 const { buildHermesVpsProvisioningPlan } = require('../src/core/hermes-vps-provisioning-plan');
 const { buildHermesVpsExecutionAuthorization } = require('../src/core/hermes-vps-execution-authorization-contract');
 const {
+  PERSISTENCE_INTERFACE_VERSION,
   createDeterministicDurableLifecycleTestStore,
   createHermesVpsDurableAuthorizationLifecycleRegistry
 } = require('../src/core/hermes-vps-durable-authorization-lifecycle-registry');
@@ -40,12 +41,19 @@ function assertPersistenceFailure(call) {
   assert.equal(outcome.status, 'PERSISTENCE_FAILURE');
   assert.equal(outcome.receipt, undefined);
 }
+async function assertAsyncPersistenceFailure(call) {
+  let outcome;
+  await assert.doesNotReject(async () => { outcome = await call(); });
+  assert.equal(outcome.ok, false);
+  assert.equal(outcome.status, 'PERSISTENCE_FAILURE');
+  assert.equal(outcome.receipt, undefined);
+}
 async function assertRejectedPersistenceFailure(call) {
   let unhandled = false;
   const onUnhandled = () => { unhandled = true; };
   process.on('unhandledRejection', onUnhandled);
   try {
-    assertPersistenceFailure(call);
+    await assertAsyncPersistenceFailure(call);
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(unhandled, false);
   } finally {
@@ -53,11 +61,11 @@ async function assertRejectedPersistenceFailure(call) {
   }
 }
 
-test('valid durable-contract consume persists and survives a new registry instance', () => {
-  const { store, registry } = setup();
-  assert.equal(registry.consumeAuthorization('authorization-A', context()).status, 'AUTHORIZED');
+test('valid durable-contract consume persists and survives a new registry instance', async () => {
+  const { store, registry } = await setup();
+  assert.equal((await registry.consumeAuthorization('authorization-A', context())).status, 'AUTHORIZED');
   const recovered = createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_plan: plan, persistence: store });
-  assert.equal(recovered.consumeAuthorization('authorization-A', context()).status, 'ALREADY_CONSUMED');
+  assert.equal((await recovered.consumeAuthorization('authorization-A', context())).status, 'ALREADY_CONSUMED');
 });
 test('missing authorization denies', () => assert.equal(setup().registry.consumeAuthorization('missing', context()).status, 'NOT_AUTHORIZED'));
 test('duplicate consume and replay are denied', () => { const { registry } = setup(); registry.consumeAuthorization('authorization-A', context()); assert.equal(registry.consumeAuthorization('authorization-A', context()).status, 'ALREADY_CONSUMED'); });
@@ -68,7 +76,7 @@ test('revocation is durable-contract and authorization-ID-bound', () => { const 
 test('revoking/consuming another authorization does not cross ownership', () => { const { registry } = setup('authorization-A'); assert.equal(registry.revokeAuthorization('authorization-B', 'revoke-B').status, 'NOT_AUTHORIZED'); assert.equal(registry.consumeAuthorization('authorization-A', context()).status, 'AUTHORIZED'); });
 test('revoke after consume is denied', () => { const { registry } = setup(); registry.consumeAuthorization('authorization-A', context()); assert.equal(registry.revokeAuthorization('authorization-A', 'revoke-A').status, 'ALREADY_CONSUMED'); });
 test('plan and scope mismatches deny', () => { const { registry } = setup(); assert.equal(registry.consumeAuthorization('authorization-A', context({ provisioning_plan_hash: 'sha256:' + 'f'.repeat(64) })).status, 'PLAN_MISMATCH'); assert.equal(registry.consumeAuthorization('authorization-A', context({ execution_scope: { phase_id: 'P1_BASE_OS_PREPARATION', step_id: 'prepare_os_baseline' } })).status, 'SCOPE_MISMATCH'); });
-test('malformed and unknown persisted state deny', () => { const { store, registry } = setup(); const entry = store.inspect('authorization-A'); store.compareAndConsume('authorization-A', entry.fingerprint, { ...entry, state: 'UNKNOWN', fingerprint: entry.fingerprint }); assert.equal(registry.consumeAuthorization('authorization-A', context()).status, 'INVALID'); });
+test('malformed and unknown persisted state deny', async () => { const { store } = setup(); const entry = store.inspect('authorization-A'); const malformed = { ...entry, state: 'UNKNOWN', fingerprint: entry.fingerprint }; const persistence = overriddenPersistence('read', () => ({ ok: true, status: 'READ', entry: malformed, receipt: null })); const registry = registryWithPersistence(persistence); assert.equal((await registry.consumeAuthorization('authorization-A', context())).status, 'INVALID'); });
 test('persistence read failure denies', () => { const { store, registry } = setup(); store.configureFailure('READ_FAILED'); assert.equal(registry.consumeAuthorization('authorization-A', context()).status, 'READ_FAILED'); });
 test('persistence atomic write failure denies without claiming consume', () => { const { store, registry } = setup(); store.configureFailure('ATOMICITY_FAILED'); assert.equal(registry.consumeAuthorization('authorization-A', context()).status, 'ATOMICITY_FAILED'); assert.equal(store.inspect('authorization-A').state, 'REGISTERED'); });
 test('acknowledged consume with lost response is recoverable and retry is denied', () => { const { store, registry } = setup(); store.configureLostResponseAfterCommit(); assert.equal(registry.consumeAuthorization('authorization-A', context({ reference_id: 'consume-A' })).status, 'WRITE_FAILED'); const retry = createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_plan: plan, persistence: store }); assert.equal(retry.consumeAuthorization('authorization-A', context({ reference_id: 'consume-A' })).status, 'ALREADY_CONSUMED'); });
@@ -91,3 +99,42 @@ test('insert rejected promise fails closed without unhandled rejection', async (
 test('compareAndConsume rejected promise fails closed without unhandled rejection', async () => { const persistence = overriddenPersistence('compareAndConsume', () => Promise.reject(new Error('adapter failure'))); const registry = registryWithPersistence(persistence); assert.equal(registry.registerAuthorization(authorization()).status, 'REGISTERED'); await assertRejectedPersistenceFailure(() => registry.consumeAuthorization('authorization-A', context())); });
 test('revoke rejected promise fails closed without unhandled rejection', async () => { const persistence = overriddenPersistence('revoke', () => Promise.reject(new Error('adapter failure'))); const registry = registryWithPersistence(persistence); assert.equal(registry.registerAuthorization(authorization()).status, 'REGISTERED'); await assertRejectedPersistenceFailure(() => registry.revokeAuthorization('authorization-A', 'revoke-A')); });
 test('thenable inspection failure fails closed', () => { const thenable = {}; Object.defineProperty(thenable, 'then', { get: () => { throw new Error('malformed thenable'); } }); const persistence = overriddenPersistence('read', thenable); assertPersistenceFailure(() => registryWithPersistence(persistence).registerAuthorization(authorization())); });
+
+test('resolved asynchronous persistence results preserve lifecycle semantics', async () => {
+  const base = createDeterministicDurableLifecycleTestStore();
+  const persistence = {
+    ...base,
+    interface_version: PERSISTENCE_INTERFACE_VERSION,
+    read: async (...args) => base.read(...args),
+    insert: async (...args) => base.insert(...args),
+    compareAndConsume: async (...args) => base.compareAndConsume(...args),
+    revoke: async (...args) => base.revoke(...args)
+  };
+  const registry = registryWithPersistence(persistence);
+  assert.equal((await registry.registerAuthorization(authorization())).status, 'REGISTERED');
+  assert.equal((await registry.consumeAuthorization('authorization-A', context())).status, 'AUTHORIZED');
+});
+
+test('registration conflict with the same fingerprint is a deterministic replay', async () => {
+  const first = createDeterministicDurableLifecycleTestStore();
+  const firstRegistry = registryWithPersistence(first);
+  assert.equal(firstRegistry.registerAuthorization(authorization()).status, 'REGISTERED');
+  const entry = first.inspect('authorization-A');
+  const persistedReceipt = first.read('authorization-A').receipt;
+  const conflictPersistence = {
+    ...first,
+    insert: () => ({ ok: false, status: 'CONFLICT', entry, receipt: persistedReceipt })
+  };
+  const registry = registryWithPersistence(conflictPersistence);
+  assert.equal((await registry.registerAuthorization(authorization())).status, 'REPLAY_ACCEPTED');
+});
+
+test('lifecycle receipt reference and hash survive persistence reconstruction', async () => {
+  const { store, registry } = setup();
+  const consumed = await registry.consumeAuthorization('authorization-A', context({ reference_id: 'consume-A' }));
+  const persisted = store.read('authorization-A');
+  assert.equal(persisted.receipt.reference_id, 'consume-A');
+  assert.equal(persisted.receipt.receipt_hash, consumed.receipt.receipt_hash);
+  const recovered = registryWithPersistence(store);
+  assert.equal((await recovered.consumeAuthorization('authorization-A', context({ reference_id: 'consume-A' }))).status, 'ALREADY_CONSUMED');
+});
