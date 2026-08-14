@@ -1,11 +1,14 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 const { buildHermesVpsBootstrapContract } = require('../src/core/hermes-vps-bootstrap-contract');
 const { buildHermesVpsProvisioningPlan } = require('../src/core/hermes-vps-provisioning-plan');
 const { buildHermesVpsExecutionAuthorization } = require('../src/core/hermes-vps-execution-authorization-contract');
 const {
+  createDurableLifecycleReceipt,
   createDeterministicDurableLifecycleTestStore,
   createHermesVpsDurableAuthorizationLifecycleRegistry
 } = require('../src/core/hermes-vps-durable-authorization-lifecycle-registry');
@@ -269,13 +272,112 @@ test('Map adapter remains the explicit reference adapter and preserves async par
   assert.equal((await registry.registerAuthorization(authorization('authorization-B'))).status, 'REGISTERED');
 });
 
-test('real PostgreSQL integration is isolated and opt-in only', { skip: !process.env.HERMES_POSTGRES_TEST_DATABASE_URL }, async () => {
+test('real PostgreSQL integration is isolated and ephemeral', { skip: !process.env.HERMES_POSTGRES_TEST_DATABASE_URL }, async () => {
   const { Pool } = require('pg');
-  const pool = new Pool({ connectionString: process.env.HERMES_POSTGRES_TEST_DATABASE_URL, ssl: { rejectUnauthorized: true }, max: 2 });
+  const pool = new Pool({
+    connectionString: process.env.HERMES_POSTGRES_TEST_DATABASE_URL,
+    ssl: process.env.HERMES_POSTGRES_TEST_SSL === 'true' ? { rejectUnauthorized: true } : false,
+    max: 2
+  });
+  const migration = fs.readFileSync(path.resolve(__dirname, '../../../migrations/hermes/001_create_authorization_lifecycle.sql'), 'utf8');
   try {
+    await pool.query(migration);
+    const first = lifecycleFixture();
     const adapter = adapterFor(pool);
-    assert.equal((await adapter.read('missing-test-only-authorization')).status, 'READ');
+    const { computeLifecycleFingerprint } = require('../src/core/hermes-vps-authorization-lifecycle-registry');
+    const registration = await adapter.insert(first.entry, first.receipt);
+    assert.equal(registration.status, 'INSERTED');
+    const reconstructed = await adapter.read(first.entry.authorization_id);
+    assert.equal(reconstructed.status, 'READ');
+    assert.deepEqual(reconstructed.entry, first.entry);
+    assert.deepEqual(reconstructed.receipt, first.receipt);
+
+    const replay = await adapter.insert(first.entry, first.receipt);
+    assert.equal(replay.status, 'CONFLICT');
+    assert.deepEqual(replay.entry, first.entry);
+    assert.deepEqual(replay.receipt, first.receipt);
+
+    const conflicting = { ...first.entry, authorization: authorization('authorization-A', { target_id: 'different-target' }) };
+    conflicting.fingerprint = computeLifecycleFingerprint(conflicting);
+    const conflict = await adapter.insert(conflicting, createDurableLifecycleReceipt(conflicting, 'REGISTER', null));
+    assert.equal(conflict.status, 'CONFLICT');
+
+    const consumedRegistry = createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_plan: plan, persistence: adapter });
+    const consumed = await consumedRegistry.consumeAuthorization(first.entry.authorization_id, context({ reference_id: 'consume-real' }));
+    assert.equal(consumed.status, 'AUTHORIZED');
+    const consumedRead = await adapter.read(first.entry.authorization_id);
+    assert.equal(consumedRead.entry.state, 'CONSUMED');
+    assert.equal(consumedRead.receipt.reference_id, 'consume-real');
+    assert.equal(consumedRead.receipt.receipt_hash, consumed.receipt.receipt_hash);
+
+    const revokeEntry = authorization('authorization-revoke');
+    const revokeRegistry = createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_plan: plan, persistence: adapter });
+    assert.equal((await revokeRegistry.registerAuthorization(revokeEntry)).status, 'REGISTERED');
+    const revoked = await revokeRegistry.revokeAuthorization(revokeEntry.authorization_id, 'revoke-real');
+    assert.equal(revoked.status, 'REVOKED');
+    const revokedRead = await adapter.read(revokeEntry.authorization_id);
+    assert.equal(revokedRead.entry.state, 'REVOKED');
+    assert.equal(revokedRead.receipt.reference_id, 'revoke-real');
+
+    const rollbackEntry = authorization('authorization-rollback');
+    const rollbackRegistry = createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_plan: plan, persistence: adapter });
+    assert.equal((await rollbackRegistry.registerAuthorization(rollbackEntry)).status, 'REGISTERED');
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION hermes_test_fail_consume() RETURNS trigger
+      LANGUAGE plpgsql AS $$ BEGIN
+        IF NEW.state = 'CONSUMED' THEN RAISE EXCEPTION 'integration rollback'; END IF;
+        RETURN NEW;
+      END; $$;
+      CREATE TRIGGER hermes_test_fail_consume_trigger
+      BEFORE UPDATE ON hermes.authorization_lifecycle
+      FOR EACH ROW EXECUTE FUNCTION hermes_test_fail_consume();
+    `);
+    try {
+      const failedConsume = await rollbackRegistry.consumeAuthorization(rollbackEntry.authorization_id, context({ reference_id: 'consume-rollback' }));
+      assert.equal(failedConsume.status, 'ATOMICITY_FAILED');
+    } finally {
+      await pool.query('DROP TRIGGER hermes_test_fail_consume_trigger ON hermes.authorization_lifecycle; DROP FUNCTION hermes_test_fail_consume();');
+    }
+    const rollbackRead = await adapter.read(rollbackEntry.authorization_id);
+    assert.equal(rollbackRead.entry.state, 'REGISTERED');
+    assert.equal(rollbackRead.receipt.event, 'REGISTER');
+
+    const concurrentEntry = authorization('authorization-concurrent');
+    const concurrentLifecycle = {
+      authorization_id: concurrentEntry.authorization_id,
+      authorization: concurrentEntry,
+      state: 'REGISTERED',
+      consumption_reference: null,
+      revocation_reference: null,
+      sequence: 0,
+      fingerprint: 'pending'
+    };
+    concurrentLifecycle.fingerprint = computeLifecycleFingerprint(concurrentLifecycle);
+    const realReceipt = createDurableLifecycleReceipt(concurrentLifecycle, 'REGISTER', null);
+    const concurrentResults = await Promise.all([
+      adapter.insert(concurrentLifecycle, realReceipt),
+      adapter.insert(concurrentLifecycle, realReceipt)
+    ]);
+    assert.deepEqual(concurrentResults.map((value) => value.status).sort(), ['CONFLICT', 'INSERTED']);
+    const count = await pool.query('SELECT count(*)::int AS count FROM hermes.authorization_lifecycle WHERE authorization_id = $1', [concurrentEntry.authorization_id]);
+    assert.equal(count.rows[0].count, 1);
+
+    const consumeEntry = authorization('authorization-consume-race');
+    const raceRegistry = createHermesVpsDurableAuthorizationLifecycleRegistry({ provisioning_plan: plan, persistence: adapter });
+    assert.equal((await raceRegistry.registerAuthorization(consumeEntry)).status, 'REGISTERED');
+    const raceResults = await Promise.all([
+      raceRegistry.consumeAuthorization(consumeEntry.authorization_id, context({ reference_id: 'consume-race-a' })),
+      raceRegistry.consumeAuthorization(consumeEntry.authorization_id, context({ reference_id: 'consume-race-b' }))
+    ]);
+    assert.equal(raceResults.filter((value) => value.status === 'AUTHORIZED').length, 1);
+    assert.equal(raceResults.some((value) => ['ALREADY_CONSUMED', 'CONFLICT'].includes(value.status)), true);
+    const raceRead = await adapter.read(consumeEntry.authorization_id);
+    assert.equal(raceRead.entry.state, 'CONSUMED');
+
+    const tables = await pool.query("SELECT to_regclass('hermes.authorization_lifecycle') AS table_name");
+    assert.equal(tables.rows[0].table_name, 'hermes.authorization_lifecycle');
   } finally {
+    await pool.query('DROP SCHEMA IF EXISTS hermes CASCADE');
     await pool.end();
   }
 });

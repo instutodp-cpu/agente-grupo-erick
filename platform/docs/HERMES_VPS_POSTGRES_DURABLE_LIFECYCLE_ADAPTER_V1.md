@@ -44,10 +44,14 @@ outcome and is returned as a failure; later reads must reconcile durable truth.
 ## Tests and activation boundary
 
 Unit tests use an injected deterministic client harness and assert the SQL,
-transaction, CAS, receipt, retry, and fail-closed contracts. The optional live
-integration test runs only when `HERMES_POSTGRES_TEST_DATABASE_URL` is set for
-an isolated test database. It never selects a production URL or applies a
-production migration.
+transaction, CAS, receipt, retry, and fail-closed contracts. The live
+integration test applies the already-reviewed PR-B migration to an ephemeral
+PostgreSQL database, then proves insert, reconstruction, replay, conflict,
+consume, revoke, rollback boundary, and concurrent writes. The Hermes CI
+residual job provides PostgreSQL 16.4 as a per-job service and sets
+`HERMES_POSTGRES_TEST_DATABASE_URL` only for that test process. Local runs
+remain opt-in through the same environment variable. The test never selects a
+production URL or applies a production migration.
 
 `PRODUCTION_ADAPTER_IMPLEMENTED: YES`
 
