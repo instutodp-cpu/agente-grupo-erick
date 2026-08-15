@@ -1,0 +1,21 @@
+# Hermes staging observation profile.
+# This file is declarative only; it is not a deployment instruction.
+# It intentionally contains no database, cache, provider, or external host.
+
+name: hermes-staging-observation
+
+services:
+  api:
+    profiles: ["observation"]
+    build: ./services/api
+    restart: "no"
+    environment:
+      HERMES_VERSION: "2.0.0-staging-observation"
+      API_PORT: "8080"
+      HERMES_EXECUTION_ENABLED: "false"
+      HERMES_EXECUTION_KILL_SWITCH: "true"
+      NODE_ENV: "staging"
+    ports:
+      - "127.0.0.1:${OBSERVATION_API_PORT:-8080}:8080"
+    logging:
+      driver: json-file
