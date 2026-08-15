@@ -201,14 +201,14 @@ test('POST /message registra capability_planned sem mensagem crua', withServer(a
     assert.equal(created.trace_id, 'trace-log');
     assert.equal(created.domain, 'financeiro');
     assert.equal(created.intent, 'consultar_financeiro');
-    assert.match(created.confirmation_id, /^confirm_[a-f0-9]{32}$/);
+    assert.equal(created.confirmation_id_present, true);
     assert.equal(created.expires_in_seconds, 900);
     assert.equal(storeCreated.level, 'info');
     assert.equal(storeCreated.event, 'confirmation_store_created');
     assert.equal(storeCreated.trace_id, 'trace-log');
     assert.equal(storeCreated.domain, 'financeiro');
     assert.equal(storeCreated.intent, 'consultar_financeiro');
-    assert.equal(storeCreated.confirmation_id, created.confirmation_id);
+    assert.equal(storeCreated.confirmation_id_present, true);
     assert.ok(typeof storeCreated.expires_at === 'string' && storeCreated.expires_at.length > 0);
     assert.equal(JSON.stringify(logs).includes('segredo interno de caixa'), false);
   } finally {

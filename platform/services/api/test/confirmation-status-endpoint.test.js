@@ -131,7 +131,7 @@ test('GET /confirm/:id registra log sem mensagem crua', withServer(async (port) 
     assert.deepEqual(checked, {
       level: 'info',
       event: 'confirmation_status_checked',
-      confirmation_id: created.body.confirmation.id,
+      confirmation_id_present: true,
       confirmation_status: 'pending'
     });
     assert.equal(JSON.stringify(logs).includes('ver caixa e faturamento do mes'), false);

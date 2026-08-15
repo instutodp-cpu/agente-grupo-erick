@@ -156,7 +156,7 @@ test('POST /confirm aprova confirmacao existente com sim', withServer(async (por
     assert.deepEqual(planned, {
       level: 'info',
       event: 'adapter_execution_planned',
-      confirmation_id: confirmationId,
+      confirmation_id_present: true,
       decision: 'approved',
       execution_allowed: false,
       executed: false,
@@ -295,7 +295,7 @@ test('POST /confirm registra log sem mensagem crua', withServer(async (port) => 
     assert.deepEqual(received, {
       level: 'info',
       event: 'confirmation_response_received',
-      confirmation_id: confirmationId,
+      confirmation_id_present: true,
       decision: 'unknown',
       message_length: 'segredo de confirmacao'.length
     });
@@ -303,7 +303,7 @@ test('POST /confirm registra log sem mensagem crua', withServer(async (port) => 
     assert.deepEqual(resolved, {
       level: 'info',
       event: 'confirmation_store_resolved',
-      confirmation_id: confirmationId,
+      confirmation_id_present: true,
       decision: 'unknown',
       confirmation_status: 'pending'
     });
@@ -330,7 +330,7 @@ test('POST /confirm loga miss sem mensagem crua', withServer(async (port) => {
     assert.deepEqual(miss, {
       level: 'info',
       event: 'confirmation_store_miss',
-      confirmation_id: 'confirm_missing_log'
+      confirmation_id_present: true
     });
     assert.equal(JSON.stringify(logs).includes('segredo em miss'), false);
   } finally {
@@ -372,7 +372,7 @@ test('POST /confirm com policy habilitada continua sem executar adapter real', w
     assert.deepEqual(selected, {
       level: 'info',
       event: 'domain_mock_adapter_selected',
-      confirmation_id: confirmationId,
+      confirmation_id_present: true,
       domain: 'financeiro',
       adapter_id: 'mock-financeiro',
       adapter_mode: 'mock'
@@ -381,7 +381,7 @@ test('POST /confirm com policy habilitada continua sem executar adapter real', w
     assert.deepEqual(simulated, {
       level: 'info',
       event: 'mock_adapter_simulated',
-      confirmation_id: confirmationId,
+      confirmation_id_present: true,
       domain: 'financeiro',
       intent: 'consultar_financeiro',
       adapter_mode: 'mock',
@@ -409,7 +409,7 @@ test('POST /confirm com policy habilitada continua sem executar adapter real', w
     assert.deepEqual(planned, {
       level: 'info',
       event: 'adapter_execution_planned',
-      confirmation_id: confirmationId,
+      confirmation_id_present: true,
       decision: 'approved',
       execution_allowed: false,
       executed: false,
@@ -461,7 +461,7 @@ test('POST /confirm com kill switch bloqueia tudo', withEnv({
     assert.deepEqual(planned, {
       level: 'info',
       event: 'adapter_execution_planned',
-      confirmation_id: confirmationId,
+      confirmation_id_present: true,
       decision: 'approved',
       execution_allowed: false,
       executed: false,
@@ -526,14 +526,14 @@ test('POST /confirm aprovado com dominio desconhecido nao roda mock', withEnv({
     assert.deepEqual(missing, {
       level: 'info',
       event: 'domain_mock_adapter_missing',
-      confirmation_id: 'confirm_unknown_domain',
+      confirmation_id_present: true,
       domain: 'desconhecido'
     });
     const planned = logs.find((log) => log.event === 'adapter_execution_planned');
     assert.deepEqual(planned, {
       level: 'info',
       event: 'adapter_execution_planned',
-      confirmation_id: 'confirm_unknown_domain',
+      confirmation_id_present: true,
       decision: 'approved',
       execution_allowed: false,
       executed: false,
