@@ -23,6 +23,10 @@ const {
 } = require('./core/confirmation-store');
 const { classifyIntent } = require('./core/intent-router');
 const { createPendingConfirmation: createPublicPendingConfirmation } = require('./core/pending-confirmation');
+const {
+  REQUEST_IDENTITY_MODES,
+  attachRequestIdentity
+} = require('./core/request-identity');
 
 const SERVICE = 'hermes-api';
 const VERSION = process.env.HERMES_VERSION || '2.0.0-scaffold';
@@ -117,8 +121,20 @@ function readJsonBody(req) {
   });
 }
 
-function createServer() {
+function createServer({
+  machineIdentityRegistry = null,
+  requestIdentityMode = REQUEST_IDENTITY_MODES.PUBLIC
+} = {}) {
   return http.createServer((req, res) => {
+    try {
+      attachRequestIdentity(req, {
+        mode: requestIdentityMode,
+        registry: machineIdentityRegistry
+      });
+    } catch (error) {
+      return sendJson(res, 401, { error: 'unauthorized' });
+    }
+
     const { method } = req;
     const url = (req.url || '/').split('?')[0];
 
