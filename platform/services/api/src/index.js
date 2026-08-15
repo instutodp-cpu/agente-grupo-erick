@@ -27,6 +27,7 @@ const {
   REQUEST_IDENTITY_MODES,
   attachRequestIdentity
 } = require('./core/request-identity');
+const { beginCallerObservation, confirmationMetadata } = require('./core/caller-observability');
 
 const SERVICE = 'hermes-api';
 const VERSION = process.env.HERMES_VERSION || '2.0.0-scaffold';
@@ -126,6 +127,7 @@ function createServer({
   requestIdentityMode = REQUEST_IDENTITY_MODES.PUBLIC
 } = {}) {
   return http.createServer((req, res) => {
+    beginCallerObservation(req, res, { requestIdFactory: randomUUID });
     try {
       attachRequestIdentity(req, {
         mode: requestIdentityMode,
@@ -206,7 +208,7 @@ function createServer({
               trace_id: traceId,
               domain,
               intent,
-              confirmation_id: confirmation.id,
+              ...confirmationMetadata(confirmation.id),
               expires_in_seconds: confirmation.expires_in_seconds
             }));
             console.log(JSON.stringify({
@@ -215,7 +217,7 @@ function createServer({
               trace_id: traceId,
               domain,
               intent,
-              confirmation_id: confirmation.id,
+              ...confirmationMetadata(confirmation.id),
               expires_at: storedConfirmation.expires_at
             }));
           }
@@ -255,7 +257,7 @@ function createServer({
           console.log(JSON.stringify({
             level: 'info',
             event: 'confirmation_response_received',
-            confirmation_id: confirmationId,
+            ...confirmationMetadata(confirmationId),
             decision,
             message_length: messageLength
           }));
@@ -264,7 +266,7 @@ function createServer({
             console.log(JSON.stringify({
               level: 'info',
               event: 'confirmation_store_miss',
-              confirmation_id: confirmationId
+              ...confirmationMetadata(confirmationId)
             }));
             return sendJson(res, 200, {
               confirmation_id: confirmationId,
@@ -281,7 +283,7 @@ function createServer({
             console.log(JSON.stringify({
               level: 'info',
               event: 'confirmation_store_miss',
-              confirmation_id: confirmationId
+              ...confirmationMetadata(confirmationId)
             }));
             return sendJson(res, 200, {
               confirmation_id: confirmationId,
@@ -326,7 +328,7 @@ function createServer({
               console.log(JSON.stringify({
                 level: 'info',
                 event: 'domain_mock_adapter_selected',
-                confirmation_id: confirmationId,
+                ...confirmationMetadata(confirmationId),
                 domain: resolvedConfirmation.domain,
                 adapter_id: executionPlan.mock_adapter.adapter_id,
                 adapter_mode: executionPlan.mock_adapter.adapter_mode
@@ -334,7 +336,7 @@ function createServer({
               console.log(JSON.stringify({
                 level: 'info',
                 event: 'mock_adapter_simulated',
-                confirmation_id: confirmationId,
+                ...confirmationMetadata(confirmationId),
                 domain: resolvedConfirmation.domain,
                 intent: resolvedConfirmation.intent,
                 adapter_mode: executionPlan.mock_adapter.adapter_mode,
@@ -345,14 +347,14 @@ function createServer({
               console.log(JSON.stringify({
                 level: 'info',
                 event: 'domain_mock_adapter_missing',
-                confirmation_id: confirmationId,
+                ...confirmationMetadata(confirmationId),
                 domain: resolvedConfirmation.domain
               }));
             }
             console.log(JSON.stringify({
               level: 'info',
               event: 'adapter_execution_planned',
-              confirmation_id: confirmationId,
+              ...confirmationMetadata(confirmationId),
               decision,
               execution_allowed: executionPlan.execution_allowed,
               executed: executionPlan.executed,
@@ -368,7 +370,7 @@ function createServer({
           console.log(JSON.stringify({
             level: 'info',
             event: 'confirmation_store_resolved',
-            confirmation_id: confirmationId,
+            ...confirmationMetadata(confirmationId),
             decision,
             confirmation_status: resolvedConfirmation.status
           }));
@@ -402,7 +404,7 @@ function createServer({
         console.log(JSON.stringify({
           level: 'info',
           event: 'confirmation_status_checked',
-          confirmation_id: confirmationId,
+          ...confirmationMetadata(confirmationId),
           confirmation_status: confirmationStatus
         }));
 

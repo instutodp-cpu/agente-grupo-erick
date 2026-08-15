@@ -11,6 +11,7 @@ const {
   sanitizeAdapterAuditEvent,
   validateAdapterAuditEvent
 } = require('./adapter-audit-event');
+const { confirmationMetadata } = require('./caller-observability');
 
 function emitAdapterAuditTrail(event) {
   const sanitized = sanitizeAdapterAuditEvent(event);
@@ -21,7 +22,7 @@ function emitAdapterAuditTrail(event) {
     event: 'adapter_audit_event_created',
     event_type: event.event_type,
     trace_id: event.trace_id,
-    confirmation_id: event.confirmation_id,
+    ...confirmationMetadata(event.confirmation_id),
     domain: event.domain,
     intent: event.intent,
     adapter_id: event.adapter_id,
@@ -36,7 +37,7 @@ function emitAdapterAuditTrail(event) {
     event: 'adapter_audit_event_sanitized',
     event_type: sanitized.event && sanitized.event.event_type,
     trace_id: sanitized.event && sanitized.event.trace_id,
-    confirmation_id: sanitized.event && sanitized.event.confirmation_id,
+    ...confirmationMetadata(sanitized.event && sanitized.event.confirmation_id),
     domain: sanitized.event && sanitized.event.domain,
     intent: sanitized.event && sanitized.event.intent,
     adapter_id: sanitized.event && sanitized.event.adapter_id,
@@ -51,7 +52,7 @@ function emitAdapterAuditTrail(event) {
     event: 'adapter_audit_event_validated',
     event_type: sanitized.event && sanitized.event.event_type,
     trace_id: sanitized.event && sanitized.event.trace_id,
-    confirmation_id: sanitized.event && sanitized.event.confirmation_id,
+    ...confirmationMetadata(sanitized.event && sanitized.event.confirmation_id),
     domain: sanitized.event && sanitized.event.domain,
     intent: sanitized.event && sanitized.event.intent,
     adapter_id: sanitized.event && sanitized.event.adapter_id,
