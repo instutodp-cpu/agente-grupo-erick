@@ -48,10 +48,6 @@ staging-observation.example.invalid {
 		max_size 1MB
 	}
 
-	# Remove query strings before proxying: none of the observation routes needs
-	# query parameters, and this prevents accidental query-data propagation.
-	uri strip_query
-
 	# Explicit route allowlist. Unsupported methods and paths fall through to 404.
 	@write_routes {
 		method POST
@@ -67,6 +63,10 @@ staging-observation.example.invalid {
 	}
 
 	route {
+		# Replace the request URI with its path-only placeholder before any
+		# upstream handler runs. This removes the complete query string using
+		# the supported rewrite directive; no observation route accepts queries.
+		rewrite * {path}
 		handle @write_routes {
 			import hermes_observation_upstream
 		}
