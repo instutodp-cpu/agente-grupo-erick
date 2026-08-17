@@ -56,6 +56,14 @@ test('boundary forwards only safe observation hints and redacts access logs', ()
   }
 });
 
+test('boundary removes the complete query with supported Caddy syntax', () => {
+  const { caddy, docs } = readBoundaryFiles();
+
+  assert.doesNotMatch(caddy, /\buri\s+strip_query\b/);
+  assert.match(caddy, /route\s*\{[\s\S]*rewrite \* \{path\}[\s\S]*handle @write_routes/);
+  assert.match(docs, /removes the complete query string with the supported Caddy\s+`rewrite \* \{path\}` operation/i);
+});
+
 test('staging resource bounds and production block are explicit', () => {
   const { caddy, docs } = readBoundaryFiles();
 
