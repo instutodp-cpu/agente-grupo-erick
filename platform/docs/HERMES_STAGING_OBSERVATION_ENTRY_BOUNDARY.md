@@ -7,8 +7,9 @@ artifacts for a future observation window. They do not install a proxy, change
 the VPS, deploy a container, open a firewall, create DNS, obtain a certificate,
 configure a provider, create secrets, or connect Twilio/ElevenLabs.
 
-The authoritative implementation base for this checkpoint is:
-`739ce3796ced5842b9a0cba7072b9c17ebb7dbd5`.
+The authoritative implementation base for the H04F boundary audit and the
+H04G deployment contract is:
+`5f175fd4ca58a4634e3a6e9b5fb8a5eef719d581`.
 
 ## Architecture
 
