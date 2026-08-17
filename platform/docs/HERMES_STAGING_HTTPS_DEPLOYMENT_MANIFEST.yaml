@@ -1,7 +1,8 @@
 # PR-D4-H04G audit manifest template. Documentary only; do not add real
 # hostnames, IPs, secrets, certificate material, or production identifiers.
 deployment_id: PR-D4-H04G-<WINDOW_ID>
-approved_commit: 5f175fd4ca58a4634e3a6e9b5fb8a5eef719d581
+approved_revision: 4e9655d341e3a79865b8d5136ee69307433f6a14
+approved_caddyfile_sha256: sha256:23d959be214bc1c3e283d0e9118e4b646589a1cd78bedf1914ec5711be2a881a
 caddy_config_hash: sha256:<DEPLOYMENT_COPY_SHA256>
 target_environment: staging
 hostname_placeholder: <STAGING_OBSERVATION_HOST>

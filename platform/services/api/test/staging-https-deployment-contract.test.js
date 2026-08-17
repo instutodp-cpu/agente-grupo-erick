@@ -9,7 +9,9 @@ const PLATFORM_ROOT = path.join(__dirname, '../../../');
 const RUNBOOK_PATH = path.join(PLATFORM_ROOT, 'docs/HERMES_STAGING_HTTPS_DEPLOYMENT_RUNBOOK.md');
 const MANIFEST_PATH = path.join(PLATFORM_ROOT, 'docs/HERMES_STAGING_HTTPS_DEPLOYMENT_MANIFEST.yaml');
 const CADDYFILE_PATH = path.join(PLATFORM_ROOT, 'infra/staging-observation/Caddyfile');
-const APPROVED_COMMIT = '5f175fd4ca58a4634e3a6e9b5fb8a5eef719d581';
+const APPROVED_REVISION = '4e9655d341e3a79865b8d5136ee69307433f6a14';
+const APPROVED_CADDYFILE_SHA256 = '23d959be214bc1c3e283d0e9118e4b646589a1cd78bedf1914ec5711be2a881a';
+const OBSOLETE_REVISION = '5f175fd4ca58a4634e3a6e9b5fb8a5eef719d581';
 
 function readContract() {
   return {
@@ -19,15 +21,27 @@ function readContract() {
   };
 }
 
-test('H04G contract binds deployment to the approved revision and staging placeholder', () => {
+test('H04G contract binds deployment to the approved artifact revision and staging placeholder', () => {
   const { runbook, manifest, caddy } = readContract();
 
-  assert.match(runbook, new RegExp(APPROVED_COMMIT));
-  assert.match(manifest, new RegExp(`approved_commit: ${APPROVED_COMMIT}`));
+  assert.match(runbook, new RegExp(APPROVED_REVISION));
+  assert.match(manifest, new RegExp(`approved_revision: ${APPROVED_REVISION}`));
+  assert.match(manifest, new RegExp(`approved_caddyfile_sha256: sha256:${APPROVED_CADDYFILE_SHA256}`));
+  assert.match(runbook, /git merge-base --is-ancestor "\$APPROVED_DEPLOYMENT_REVISION" HEAD/);
+  assert.match(runbook, /git diff --exit-code[\s\S]*platform\/infra\/staging-observation\/Caddyfile[\s\S]*platform\/docker-compose\.observation\.yml[\s\S]*platform\/services\/api\/src/);
+  assert.match(runbook, new RegExp(APPROVED_CADDYFILE_SHA256));
   assert.match(runbook, /<STAGING_OBSERVATION_HOST>/);
   assert.match(manifest, /hostname_placeholder: <STAGING_OBSERVATION_HOST>/);
   assert.match(caddy, /staging-observation\.example\.invalid/);
   assert.doesNotMatch(manifest, /https?:\/\/|\b(?:\d{1,3}\.){3}\d{1,3}\b/);
+});
+
+test('H04G contract rejects regression to the obsolete self-referential merge pin', () => {
+  const { runbook, manifest } = readContract();
+  const contract = `${runbook}\n${manifest}`;
+
+  assert.doesNotMatch(contract, new RegExp(OBSOLETE_REVISION));
+  assert.doesNotMatch(runbook, new RegExp(`git rev-parse HEAD.*${OBSOLETE_REVISION}`));
 });
 
 test('H04G runbook contains ordered Caddy, DNS, UFW, TLS, smoke, and rollback gates', () => {
@@ -83,7 +97,7 @@ test('H04G Caddy query removal uses supported syntax and forbids strip_query reg
 test('H04G manifest exposes every required audit field with safe defaults', () => {
   const { manifest } = readContract();
   for (const field of [
-    'deployment_id', 'approved_commit', 'caddy_config_hash',
+    'deployment_id', 'approved_revision', 'approved_caddyfile_sha256', 'caddy_config_hash',
     'target_environment', 'hostname_placeholder', 'operator', 'rollback_owner',
     'window_started_at', 'window_ended_at', 'preflight_pass', 'dns_pass',
     'ufw_pass', 'tls_pass', 'route_tests_pass',

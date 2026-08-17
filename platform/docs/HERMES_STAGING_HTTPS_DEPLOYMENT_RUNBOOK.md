@@ -13,11 +13,20 @@ database/cache/vector services.
 
 ## 1. Approved inputs and immutable safety boundary
 
-The only approved source revision is:
+The approved deployment artifact revision is the implementation commit from
+PR #156, not the merge commit that may later bring it to `main`:
 
 ```text
-5f175fd4ca58a4634e3a6e9b5fb8a5eef719d581
+4e9655d341e3a79865b8d5136ee69307433f6a14
 ```
+
+A staging checkout may use this exact revision or a descendant merge commit
+that contains it in full. A descendant is eligible only when all of these
+gates pass: `git merge-base --is-ancestor` proves the approved revision is an
+ancestor of `HEAD`, the working tree is clean, the approved Caddyfile hash is
+exact, and no critical deployment file has diverged from the approved
+revision. This policy deliberately does not require advance knowledge of the
+future merge commit SHA.
 
 The Caddy source artifact is
 `platform/infra/staging-observation/Caddyfile`. Its upstream must remain
@@ -25,6 +34,11 @@ exactly `127.0.0.1:8080`; do not replace it with a container address, public
 IP, `localhost`, or `0.0.0.0`. The repository artifact retains the
 non-routable `.invalid` site label. A real hostname may be substituted only in
 the deployment copy during the approved window and must never be committed.
+The approved repository artifact SHA-256 is:
+
+```text
+23d959be214bc1c3e283d0e9118e4b646589a1cd78bedf1914ec5711be2a881a
+```
 
 The observation API remains loopback-only with:
 
@@ -68,8 +82,14 @@ Run on the approved staging VPS as the non-root operator with `sudo`:
 ```bash
 set -euo pipefail
 cd /path/to/hermes
-test "$(git rev-parse HEAD)" = "5f175fd4ca58a4634e3a6e9b5fb8a5eef719d581"
+APPROVED_DEPLOYMENT_REVISION='4e9655d341e3a79865b8d5136ee69307433f6a14'
+APPROVED_CADDYFILE_SHA256='23d959be214bc1c3e283d0e9118e4b646589a1cd78bedf1914ec5711be2a881a'
+git merge-base --is-ancestor "$APPROVED_DEPLOYMENT_REVISION" HEAD
 test -z "$(git status --porcelain)"
+git diff --exit-code "$APPROVED_DEPLOYMENT_REVISION" HEAD -- \
+  platform/infra/staging-observation/Caddyfile \
+  platform/docker-compose.observation.yml \
+  platform/services/api/src
 git status --short --branch
 
 cd platform
@@ -89,9 +109,10 @@ loopback-only `127.0.0.1:8080`, `HERMES_EXECUTION_ENABLED=false`,
 `HERMES_EXECUTION_KILL_SWITCH=true`, active UFW, and absence of Postgres,
 Redis, and Qdrant. A public `8080` listener is an immediate stop.
 
-Capture the approved source hash before copying it:
+Capture and enforce the approved source hash before copying it:
 
 ```bash
+test "$(sha256sum infra/staging-observation/Caddyfile | awk '{print $1}')" = "$APPROVED_CADDYFILE_SHA256"
 sha256sum infra/staging-observation/Caddyfile
 ```
 
@@ -289,7 +310,9 @@ private key. Every boolean gate is false until independently evidenced.
 
 Stop immediately if any of these occurs:
 
-- HEAD differs from the approved revision or the VPS working tree is dirty;
+- the approved revision is not an ancestor of `HEAD`, the VPS working tree is
+  dirty, the approved Caddyfile hash differs, or a critical deployment file
+  diverges from the approved revision;
 - the Hermes container is not healthy or 8080 is public;
 - `HERMES_EXECUTION_ENABLED=true` or the kill switch is false;
 - Postgres, Redis, Qdrant, or another unexpected service appears;
