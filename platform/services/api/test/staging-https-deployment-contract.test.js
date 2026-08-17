@@ -57,6 +57,29 @@ test('H04G runbook contains ordered Caddy, DNS, UFW, TLS, smoke, and rollback ga
   assert.match(runbook, /systemctl disable --now caddy/);
 });
 
+test('H04G preflight activates observation profile and derives health container from Compose', () => {
+  const { runbook } = readContract();
+  const preflight = runbook.slice(runbook.indexOf('### A. VPS preflight'), runbook.indexOf('### B. Caddy installation'));
+  const composeCommands = preflight.match(/^.*docker compose.*$/gm) || [];
+
+  assert.ok(composeCommands.length >= 3, 'preflight must inspect Compose with explicit commands');
+  for (const command of composeCommands) {
+    assert.match(command, /sudo docker compose -f docker-compose\.observation\.yml --profile observation/);
+  }
+  assert.match(preflight, /HERMES_API_CONTAINER_ID="\$\(\s*sudo docker compose -f docker-compose\.observation\.yml --profile observation ps -q api\s*\)"/);
+  assert.match(preflight, /test -n "\$HERMES_API_CONTAINER_ID"/);
+  assert.match(preflight, /sudo docker inspect --format '\{\{\.State\.Health\.Status\}\}' "\$HERMES_API_CONTAINER_ID"/);
+  assert.doesNotMatch(preflight, /<HERMES_API_CONTAINER>/);
+});
+
+test('H04G Caddy query removal uses supported syntax and forbids strip_query regression', () => {
+  const { caddy, runbook } = readContract();
+
+  assert.doesNotMatch(caddy, /\buri\s+strip_query\b/);
+  assert.match(caddy, /rewrite \* \{path\}/);
+  assert.match(runbook, /caddy validate --config \/etc\/caddy\/Caddyfile --adapter\s+caddyfile/);
+});
+
 test('H04G manifest exposes every required audit field with safe defaults', () => {
   const { manifest } = readContract();
   for (const field of [

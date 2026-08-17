@@ -73,11 +73,13 @@ test -z "$(git status --porcelain)"
 git status --short --branch
 
 cd platform
-docker compose -f docker-compose.observation.yml ps --format json
-docker inspect --format '{{.State.Health.Status}}' <HERMES_API_CONTAINER>
+HERMES_API_CONTAINER_ID="$(sudo docker compose -f docker-compose.observation.yml --profile observation ps -q api)"
+test -n "$HERMES_API_CONTAINER_ID"
+sudo docker compose -f docker-compose.observation.yml --profile observation ps --format json
+test "$(sudo docker inspect --format '{{.State.Health.Status}}' "$HERMES_API_CONTAINER_ID")" = healthy
 curl --fail --silent --show-error http://127.0.0.1:8080/health
 curl --fail --silent --show-error http://127.0.0.1:8080/ready
-docker compose -f docker-compose.observation.yml config
+sudo docker compose -f docker-compose.observation.yml --profile observation config
 sudo ss -lntup
 sudo ufw status verbose
 ```

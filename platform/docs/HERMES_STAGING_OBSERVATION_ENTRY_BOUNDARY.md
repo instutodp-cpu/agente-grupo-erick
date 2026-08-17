@@ -71,7 +71,8 @@ Only the following method/path pairs are forwarded:
 | `GET` | `/health` | Liveness check |
 | `GET` | `/ready` | Readiness/config-presence check |
 
-The proxy strips query strings before forwarding. The route matcher for
+The proxy removes the complete query string with the supported Caddy
+`rewrite * {path}` operation before forwarding. The route matcher for
 `/confirm/<single-segment-id>` does not accept a nested path. All other paths,
 including `/`, `/metrics`, `/admin`, provider webhooks, arbitrary `/confirm/*`
 paths, and every unsupported method, return `404` at the proxy. This is an
