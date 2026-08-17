@@ -1,0 +1,96 @@
+# Hermes controlled caller-observation entry boundary.
+# STAGING-ONLY / PRODUCTION-BLOCKED / declarative artifact only.
+#
+# The .invalid hostname is intentional. Replace it only during an approved
+# future staging deployment after DNS, UFW, TLS and rollback gates pass.
+
+(hermes_observation_upstream) {
+	reverse_proxy 127.0.0.1:8080 {
+		# Keep only protocol and caller-observation hints. Do not forward
+		# sensitive values, cookies, or caller-supplied proxy identity headers.
+		header_up -Authorization
+		header_up -Proxy-Authorization
+		header_up -Cookie
+		header_up -Forwarded
+		header_up -X-Forwarded-For
+		header_up -X-Forwarded-Host
+		header_up -X-Forwarded-Proto
+		header_up Host {http.request.host}
+		header_up X-Forwarded-For {http.request.remote.host}
+		header_up X-Forwarded-Proto https
+		header_up User-Agent {http.request.header.User-Agent}
+		header_up Content-Type {http.request.header.Content-Type}
+		header_up Accept {http.request.header.Accept}
+
+		# Staging-only upstream resource bounds; this is not a full DoS control.
+		transport http {
+			dial_timeout 5s
+			response_header_timeout 30s
+			max_conns_per_host 32
+		}
+
+		# Never reflect cookie or sensitive response headers to an observer.
+		header_down -Set-Cookie
+		header_down -Authorization
+	}
+}
+
+staging-observation.example.invalid {
+	# The explicit TLS site label is HTTPS-only. No real hostname or certificate
+	# is present in this checkpoint; Caddy automatic TLS is future-only.
+	tls {
+		protocols tls1.2 tls1.3
+	}
+
+	# API contracts currently use small JSON bodies. Oversized requests fail at
+	# the boundary before reaching the loopback API.
+	request_body {
+		max_size 1MB
+	}
+
+	# Remove query strings before proxying: none of the observation routes needs
+	# query parameters, and this prevents accidental query-data propagation.
+	uri strip_query
+
+	# Explicit route allowlist. Unsupported methods and paths fall through to 404.
+	@write_routes {
+		method POST
+		path /message /confirm
+	}
+	@confirmation_status {
+		method GET
+		path_regexp confirmation_id ^/confirm/[^/]+$
+	}
+	@health_routes {
+		method GET
+		path /health /ready
+	}
+
+	route {
+		handle @write_routes {
+			import hermes_observation_upstream
+		}
+		handle @confirmation_status {
+			import hermes_observation_upstream
+		}
+		handle @health_routes {
+			import hermes_observation_upstream
+		}
+		handle {
+			respond "not found" 404
+		}
+	}
+
+	# Structured access logs are deliberately narrower than the request.
+	# The API emits hermes.caller_observation with its own safe metadata.
+	log {
+		output stdout
+		format filter {
+			wrap json
+			request>uri delete
+			request>headers delete
+			request>body delete
+			response>headers delete
+		}
+	}
+}
