@@ -80,7 +80,8 @@ function gatewayHeaderHints(headers) {
     x_forwarded_host_present: hasHeader(headers, 'x-forwarded-host'),
     x_forwarded_proto_present: hasHeader(headers, 'x-forwarded-proto'),
     cloudflare_present: hasHeader(headers, 'cf-connecting-ip') || hasHeader(headers, 'cf-ray'),
-    request_id_header_present: hasHeader(headers, 'x-request-id') || hasHeader(headers, 'x-correlation-id')
+    request_id_header_present: hasHeader(headers, 'x-request-id') || hasHeader(headers, 'x-correlation-id'),
+    trusted_caddy_ingress_present: headerValue(headers, 'x-hermes-observation-ingress') === 'caddy-public-v1'
   };
 }
 
@@ -114,6 +115,9 @@ function classificationFor({ user_agent_family, provider_header_hints, gateway_h
   if (Object.values(provider_header_hints).some(Boolean)) {
     return { classification_candidate: 'PROVIDER_LIKE', confidence: 'LOW' };
   }
+  if (Object.values(gateway_header_hints).some(Boolean)) {
+    return { classification_candidate: 'INTERNAL_SERVER_LIKE', confidence: 'LOW' };
+  }
   if (user_agent_family === 'curl') {
     return { classification_candidate: 'LOCAL_SMOKE', confidence: 'MEDIUM' };
   }
@@ -122,9 +126,6 @@ function classificationFor({ user_agent_family, provider_header_hints, gateway_h
   }
   if (user_agent_family === 'browser') {
     return { classification_candidate: 'BROWSER_LIKE', confidence: 'LOW' };
-  }
-  if (Object.values(gateway_header_hints).some(Boolean)) {
-    return { classification_candidate: 'INTERNAL_SERVER_LIKE', confidence: 'LOW' };
   }
   return { classification_candidate: 'UNKNOWN', confidence: 'LOW' };
 }

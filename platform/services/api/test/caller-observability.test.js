@@ -104,3 +104,39 @@ test('local and provider-like hints remain candidates, not trusted identity', ()
   assert.equal(provider[0].caller.classification_candidate, 'PROVIDER_LIKE');
   assert.equal(provider[0].identity.present, false);
 });
+
+test('gateway hints outrank curl user-agent while remaining untrusted caller evidence', () => {
+  const logs = emitFor({
+    method: 'POST',
+    url: '/confirm',
+    headers: {
+      'user-agent': 'curl/8.0',
+      'x-forwarded-for': '203.0.113.10',
+      'x-forwarded-proto': 'https'
+    }
+  });
+
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].caller.classification_candidate, 'INTERNAL_SERVER_LIKE');
+  assert.equal(logs[0].caller.confidence, 'LOW');
+  assert.equal(logs[0].identity.present, false);
+});
+
+test('trusted caddy ingress marker outranks curl while remaining observation-only', () => {
+  const logs = emitFor({
+    method: 'POST',
+    url: '/message',
+    headers: {
+      'user-agent': 'curl/8.0',
+      'x-hermes-observation-ingress': 'caddy-public-v1'
+    }
+  });
+
+  assert.equal(logs.length, 1);
+  const line = JSON.stringify(logs[0]);
+  assert.equal(logs[0].caller.classification_candidate, 'INTERNAL_SERVER_LIKE');
+  assert.equal(logs[0].caller.confidence, 'LOW');
+  assert.equal(logs[0].caller.gateway_header_hints.trusted_caddy_ingress_present, true);
+  assert.equal(logs[0].identity.present, false);
+  assert.equal(line.includes('caddy-public-v1'), false);
+});
