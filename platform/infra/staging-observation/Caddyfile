@@ -21,6 +21,7 @@
 		header_up User-Agent {http.request.header.User-Agent}
 		header_up Content-Type {http.request.header.Content-Type}
 		header_up Accept {http.request.header.Accept}
+		header_up X-Hermes-Observation-Ingress "caddy-public-v1"
 
 		# Staging-only upstream resource bounds; this is not a full DoS control.
 		transport http {
