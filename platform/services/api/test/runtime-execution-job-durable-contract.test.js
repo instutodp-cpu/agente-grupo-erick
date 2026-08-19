@@ -16,9 +16,16 @@ const {
   ADMITTED_STATE,
   RUNTIME_EXECUTION_JOB_DURABLE_CONTRACT_NAME,
   RUNTIME_EXECUTION_JOB_DURABLE_CONTRACT_VERSION,
+  buildAdmissionReference,
   buildDurableJobRecord,
+  computeAdmissionReceiptDigest,
+  computeAdmissionReceiptFingerprint,
+  computeRuntimeExecutionJobDurableDigest,
+  computeRuntimeExecutionJobDurableFingerprint,
   validateRuntimeExecutionJobDurableRecord
 } = require('../src/core/runtime-execution-job-durable-contract');
+const { stablePayload } = require('../src/core/agent-identity-contract');
+const { computeCanonicalContentDigest } = require('../src/core/canonical-content-digest');
 
 const golden = buildGoldenDispatchBundle();
 const dispatchPackage = evaluateRuntimeDispatchRequest(golden.dispatchRequest, {}).package;
@@ -34,6 +41,40 @@ function validIntent(changes = {}) {
 
 function materialize(changes = {}) {
   return Object.keys(changes).length === 0 ? BASE_MATERIALIZATION : buildRuntimeExecutionJobMaterialization(validIntent(changes));
+}
+
+const BASE_RECORD = buildDurableJobRecord(materialize());
+
+function mutableRecord() {
+  return JSON.parse(JSON.stringify(BASE_RECORD));
+}
+
+function recomputeLogicalIdentity(record) {
+  const { fingerprint, digest, ...material } = record.logical_job_identity;
+  record.logical_job_identity.fingerprint = stablePayload(material);
+  record.logical_job_identity.digest = computeCanonicalContentDigest(material);
+}
+
+function recomputeIdempotencyIdentity(record) {
+  const { fingerprint, digest, ...material } = record.idempotency_identity;
+  record.idempotency_identity.fingerprint = stablePayload(material);
+  record.idempotency_identity.digest = computeCanonicalContentDigest(material);
+}
+
+function recomputeReceipt(record, { fingerprint = true, digest = true } = {}) {
+  if (fingerprint) record.admission_receipt.fingerprint = computeAdmissionReceiptFingerprint(record.admission_receipt);
+  if (digest) record.admission_receipt.digest = computeAdmissionReceiptDigest(record.admission_receipt);
+}
+
+function recomputeOuter(record) {
+  record.runtime_execution_job_durable_fingerprint = computeRuntimeExecutionJobDurableFingerprint(record);
+  record.runtime_execution_job_durable_digest = computeRuntimeExecutionJobDurableDigest(record);
+}
+
+function assertInvalid(record, expectedError) {
+  const validation = validateRuntimeExecutionJobDurableRecord(record);
+  assert.equal(validation.valid, false);
+  assert.equal(validation.errors.includes(expectedError), true, validation.errors.join(', '));
 }
 
 test('builds the canonical admitted logical Execution Job record from valid P2', () => {
@@ -95,4 +136,136 @@ test('invalid P2 input fails closed without constructing a record', () => {
     () => buildDurableJobRecord({ contract_name: 'UNKNOWN' }),
     (error) => error.message.includes('runtime_execution_job_durable_input_invalid')
   );
+});
+
+test('rejects logical job identity job_reference divergence after nested and outer recomputation', () => {
+  const record = mutableRecord();
+  record.logical_job_identity.job_reference = { ...record.logical_job_identity.job_reference, id: 'tampered-logical-job' };
+  recomputeLogicalIdentity(record);
+  recomputeOuter(record);
+  assertInvalid(record, 'logical_job_identity_job_reference_mismatch');
+});
+
+test('rejects logical job identity scope divergence after nested and outer recomputation', () => {
+  const record = mutableRecord();
+  record.logical_job_identity.identity_scope = { ...record.logical_job_identity.identity_scope, project_id: 'tampered-project' };
+  recomputeLogicalIdentity(record);
+  recomputeOuter(record);
+  assertInvalid(record, 'logical_job_identity_identity_scope_mismatch');
+});
+
+test('rejects logical job identity materialization reference divergence', () => {
+  const record = mutableRecord();
+  record.logical_job_identity.runtime_execution_job_materialization_reference = {
+    ...record.logical_job_identity.runtime_execution_job_materialization_reference,
+    id: 'tampered-materialization'
+  };
+  recomputeLogicalIdentity(record);
+  recomputeOuter(record);
+  assertInvalid(record, 'logical_job_identity_materialization_reference_mismatch');
+});
+
+test('rejects logical job identity provenance divergence', () => {
+  const record = mutableRecord();
+  record.logical_job_identity.provenance_digest = `sha256:${'0'.repeat(64)}`;
+  recomputeLogicalIdentity(record);
+  recomputeOuter(record);
+  assertInvalid(record, 'logical_job_identity_provenance_mismatch');
+});
+
+test('rejects idempotency identity scope divergence after recomputation', () => {
+  const record = mutableRecord();
+  record.idempotency_identity.identity_scope = { ...record.idempotency_identity.identity_scope, actor_id: 'tampered-actor' };
+  recomputeIdempotencyIdentity(record);
+  recomputeOuter(record);
+  assertInvalid(record, 'idempotency_identity_scope_mismatch');
+});
+
+test('rejects idempotency identity fingerprint source divergence after recomputation', () => {
+  const record = mutableRecord();
+  record.idempotency_identity.idempotency_fingerprint = 'tampered-idempotency-fingerprint';
+  recomputeIdempotencyIdentity(record);
+  recomputeOuter(record);
+  assertInvalid(record, 'idempotency_identity_fingerprint_source_mismatch');
+});
+
+test('rejects admission receipt job_reference divergence after receipt and outer recomputation', () => {
+  const record = mutableRecord();
+  record.admission_receipt.job_reference = { ...record.admission_receipt.job_reference, id: 'tampered-receipt-job' };
+  recomputeReceipt(record);
+  recomputeOuter(record);
+  assertInvalid(record, 'admission_receipt_job_reference_mismatch');
+});
+
+test('rejects admission receipt materialization reference divergence', () => {
+  const record = mutableRecord();
+  record.admission_receipt.materialization_reference = {
+    ...record.admission_receipt.materialization_reference,
+    id: 'tampered-receipt-materialization'
+  };
+  recomputeReceipt(record);
+  recomputeOuter(record);
+  assertInvalid(record, 'admission_receipt_materialization_reference_mismatch');
+});
+
+test('rejects admission receipt scope divergence', () => {
+  const record = mutableRecord();
+  record.admission_receipt.identity_scope = { ...record.admission_receipt.identity_scope, tenant_id: 'tampered-tenant' };
+  recomputeReceipt(record);
+  recomputeOuter(record);
+  assertInvalid(record, 'admission_receipt_identity_scope_mismatch');
+});
+
+test('rejects admission receipt logical identity digest divergence', () => {
+  const record = mutableRecord();
+  record.admission_receipt.logical_job_identity_digest = `sha256:${'0'.repeat(64)}`;
+  recomputeReceipt(record);
+  recomputeOuter(record);
+  assertInvalid(record, 'admission_receipt_logical_job_identity_digest_mismatch');
+});
+
+test('rejects admission receipt admission_reference divergence', () => {
+  const record = mutableRecord();
+  record.admission_receipt.admission_reference = buildAdmissionReference(record.logical_job_identity, 2);
+  recomputeReceipt(record);
+  recomputeOuter(record);
+  assertInvalid(record, 'admission_receipt_admission_reference_mismatch');
+});
+
+test('rejects admission receipt revision divergence', () => {
+  const record = mutableRecord();
+  record.admission_receipt.revision = 2;
+  recomputeReceipt(record);
+  recomputeOuter(record);
+  assertInvalid(record, 'admission_receipt_revision_invalid');
+});
+
+test('rejects semantically mutated admission receipt with the old fingerprint and digest', () => {
+  const record = mutableRecord();
+  record.admission_receipt.reason_code = 'tampered-reason';
+  recomputeOuter(record);
+  assertInvalid(record, 'admission_receipt_fingerprint_mismatch');
+  assertInvalid(record, 'admission_receipt_digest_mismatch');
+});
+
+test('rejects semantically mutated admission receipt with the old digest', () => {
+  const record = mutableRecord();
+  record.admission_receipt.reason_code = 'tampered-reason';
+  recomputeReceipt(record, { fingerprint: true, digest: false });
+  recomputeOuter(record);
+  assertInvalid(record, 'admission_receipt_digest_mismatch');
+});
+
+test('rejects an altered admission reference after outer durable integrity is recomputed', () => {
+  const record = mutableRecord();
+  record.admission_reference = buildAdmissionReference(record.logical_job_identity, 2);
+  recomputeOuter(record);
+  assertInvalid(record, 'admission_reference_canonical_mismatch');
+});
+
+test('outer durable fingerprint and digest cannot legitimize a nested inconsistency', () => {
+  const record = mutableRecord();
+  record.admission_receipt.job_reference = { ...record.admission_receipt.job_reference, id: 'nested-only-tamper' };
+  recomputeOuter(record);
+  assertInvalid(record, 'admission_receipt_job_reference_mismatch');
 });

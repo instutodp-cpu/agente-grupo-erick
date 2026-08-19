@@ -6,7 +6,11 @@ const { computeCanonicalContentDigest, isCanonicalContentDigest } = require('./c
 const {
   ADMITTED_STATE,
   RUNTIME_EXECUTION_JOB_ADMISSION_CONTRACT_NAME,
-  RUNTIME_EXECUTION_JOB_ADMISSION_CONTRACT_VERSION
+  RUNTIME_EXECUTION_JOB_ADMISSION_CONTRACT_VERSION,
+  computeAdmissionReceiptDigest,
+  computeAdmissionReceiptFingerprint,
+  validateAdmissionReceipt,
+  validateLogicalJobIdentity
 } = require('./runtime-execution-job-admission-contract');
 const {
   buildRuntimeExecutionJobMaterialization,
@@ -176,13 +180,13 @@ function buildIdempotencyIdentity(materialization) {
   };
 }
 
-function buildAdmissionReference(logicalJobIdentity) {
+function buildAdmissionReference(logicalJobIdentity, revision = 1) {
   const material = {
     contract_name: RUNTIME_EXECUTION_JOB_ADMISSION_CONTRACT_NAME,
     contract_version: RUNTIME_EXECUTION_JOB_ADMISSION_CONTRACT_VERSION,
     logical_job_identity_digest: logicalJobIdentity.digest,
     state: ADMITTED_STATE,
-    revision: 1
+    revision
   };
   const digest = computeCanonicalContentDigest(material);
   return {
@@ -226,8 +230,8 @@ function buildAdmissionReceipt(materialization, logicalJobIdentity, admissionRef
     admission_reference: material.admission_reference,
     revision: material.revision,
     reason_code: material.reason_code,
-    fingerprint: stablePayload(material),
-    digest: computeCanonicalContentDigest(material)
+    fingerprint: computeAdmissionReceiptFingerprint(material),
+    digest: computeAdmissionReceiptDigest(material)
   };
 }
 
@@ -290,32 +294,6 @@ function computeRuntimeExecutionJobDurableDigest(record) {
   return computeCanonicalContentDigest(material);
 }
 
-function validateLogicalJobIdentity(value, errors) {
-  if (!isPlainObject(value)) {
-    errors.push('logical_job_identity_invalid');
-    return;
-  }
-  if (value.contract_name !== LOGICAL_JOB_IDENTITY_CONTRACT_NAME) errors.push('logical_job_identity_contract_invalid');
-  if (value.contract_version !== RUNTIME_EXECUTION_JOB_DURABLE_CONTRACT_VERSION) errors.push('logical_job_identity_contract_version_invalid');
-  if (value.version !== LOGICAL_JOB_IDENTITY_VERSION) errors.push('logical_job_identity_version_invalid');
-  validateIdentityScope(value.identity_scope, 'logical_job_identity_identity_scope', errors);
-  validateReference(value.job_reference, 'logical_job_identity_job_reference', errors);
-  validateReference(value.runtime_execution_job_materialization_reference, 'logical_job_identity_materialization_reference', errors);
-  validateReference(value.runtime_execution_job_intent_reference, 'logical_job_identity_intent_reference', errors);
-  validateReference(value.dispatch_package_reference, 'logical_job_identity_dispatch_reference', errors);
-  if (!isNonEmptyString(value.idempotency_fingerprint)) errors.push('logical_job_identity_idempotency_invalid');
-  if (!isCanonicalContentDigest(value.provenance_digest)) errors.push('logical_job_identity_provenance_invalid');
-  if (!isNonEmptyString(value.fingerprint)) errors.push('logical_job_identity_fingerprint_invalid');
-  if (!isCanonicalContentDigest(value.digest)) errors.push('logical_job_identity_digest_invalid');
-  try {
-    const { fingerprint, digest, ...material } = value;
-    if (stablePayload(material) !== fingerprint) errors.push('logical_job_identity_fingerprint_mismatch');
-    if (computeCanonicalContentDigest(material) !== digest) errors.push('logical_job_identity_digest_mismatch');
-  } catch (error) {
-    errors.push(`logical_job_identity_integrity_invalid::${error.message}`);
-  }
-}
-
 function validateIdempotencyIdentity(value, errors) {
   if (!isPlainObject(value)) {
     errors.push('idempotency_identity_invalid');
@@ -344,32 +322,67 @@ function validateAdmissionReference(value, errors) {
   if (!suffix) errors.push('admission_reference_id_invalid');
 }
 
-function validateAdmissionReceipt(value, errors) {
-  if (!isPlainObject(value)) {
-    errors.push('admission_receipt_invalid');
-    return;
+function compareCanonical(left, right, errorCode, errors) {
+  try {
+    if (stablePayload(left) !== stablePayload(right)) errors.push(errorCode);
+  } catch (error) {
+    errors.push(`${errorCode}_comparison_invalid`);
   }
-  const required = [
-    'contract_name', 'contract_version', 'event', 'outcome', 'job_reference',
-    'materialization_reference', 'identity_scope', 'idempotency_fingerprint',
-    'logical_job_identity_digest', 'admission_reference', 'revision', 'reason_code',
-    'fingerprint', 'digest'
-  ];
-  exactFields(value, required, 'admission_receipt', errors);
-  if (value.contract_name !== RUNTIME_EXECUTION_JOB_ADMISSION_CONTRACT_NAME) errors.push('admission_receipt_contract_invalid');
-  if (value.contract_version !== RUNTIME_EXECUTION_JOB_ADMISSION_CONTRACT_VERSION) errors.push('admission_receipt_version_invalid');
-  if (value.event !== 'EXECUTION_JOB_ADMISSION') errors.push('admission_receipt_event_invalid');
-  if (value.outcome !== 'ADMITTED') errors.push('admission_receipt_outcome_invalid');
-  validateReference(value.job_reference, 'admission_receipt_job_reference', errors);
-  validateReference(value.materialization_reference, 'admission_receipt_materialization_reference', errors);
-  validateIdentityScope(value.identity_scope, 'admission_receipt_identity_scope', errors);
-  if (!isNonEmptyString(value.idempotency_fingerprint)) errors.push('admission_receipt_idempotency_invalid');
-  if (!isCanonicalContentDigest(value.logical_job_identity_digest)) errors.push('admission_receipt_logical_identity_invalid');
-  validateReference(value.admission_reference, 'admission_receipt_admission_reference', errors);
-  if (value.revision !== 1) errors.push('admission_receipt_revision_invalid');
-  if (!isNonEmptyString(value.reason_code)) errors.push('admission_receipt_reason_invalid');
-  if (!isNonEmptyString(value.fingerprint)) errors.push('admission_receipt_fingerprint_invalid');
-  if (!isCanonicalContentDigest(value.digest)) errors.push('admission_receipt_digest_invalid');
+}
+
+function compareReference(left, right, errorCode, errors) {
+  if (!isPlainObject(left) || !isPlainObject(right)
+    || REFERENCE_FIELDS.some((field) => left[field] !== right[field])) {
+    errors.push(errorCode);
+  }
+}
+
+function compareIdentityScope(left, right, errorCode, errors) {
+  if (!isPlainObject(left) || !isPlainObject(right)
+    || IDENTITY_FIELDS.some((field) => left[field] !== right[field])) {
+    errors.push(errorCode);
+  }
+}
+
+function compareValue(left, right, errorCode, errors) {
+  if (left !== right) errors.push(errorCode);
+}
+
+function validateCrossFieldConsistency(record, errors) {
+  const logical = record.logical_job_identity;
+  const idempotency = record.idempotency_identity;
+  const receipt = record.admission_receipt;
+
+  if (isPlainObject(logical)) {
+    compareIdentityScope(logical.identity_scope, record.identity_scope, 'logical_job_identity_identity_scope_mismatch', errors);
+    compareReference(logical.job_reference, record.job_reference, 'logical_job_identity_job_reference_mismatch', errors);
+    compareReference(logical.runtime_execution_job_materialization_reference, record.runtime_execution_job_materialization_reference, 'logical_job_identity_materialization_reference_mismatch', errors);
+    compareReference(logical.runtime_execution_job_intent_reference, record.runtime_execution_job_intent_reference, 'logical_job_identity_intent_reference_mismatch', errors);
+    compareReference(logical.dispatch_package_reference, record.dispatch_package_reference, 'logical_job_identity_dispatch_reference_mismatch', errors);
+    compareValue(logical.idempotency_fingerprint, record.idempotency_reference && record.idempotency_reference.fingerprint, 'logical_job_identity_idempotency_mismatch', errors);
+    compareValue(logical.provenance_digest, record.provenance_reference && record.provenance_reference.dispatch_provenance_digest, 'logical_job_identity_provenance_mismatch', errors);
+  }
+  if (isPlainObject(idempotency)) {
+    compareIdentityScope(idempotency.identity_scope, record.identity_scope, 'idempotency_identity_scope_mismatch', errors);
+    compareValue(idempotency.idempotency_fingerprint, record.idempotency_reference && record.idempotency_reference.fingerprint, 'idempotency_identity_fingerprint_source_mismatch', errors);
+  }
+  if (isPlainObject(receipt)) {
+    compareReference(receipt.job_reference, record.job_reference, 'admission_receipt_job_reference_mismatch', errors);
+    compareReference(receipt.materialization_reference, record.runtime_execution_job_materialization_reference, 'admission_receipt_materialization_reference_mismatch', errors);
+    compareIdentityScope(receipt.identity_scope, record.identity_scope, 'admission_receipt_identity_scope_mismatch', errors);
+    compareValue(receipt.idempotency_fingerprint, record.idempotency_reference && record.idempotency_reference.fingerprint, 'admission_receipt_idempotency_mismatch', errors);
+    compareValue(receipt.logical_job_identity_digest, logical && logical.digest, 'admission_receipt_logical_job_identity_digest_mismatch', errors);
+    compareReference(receipt.admission_reference, record.admission_reference, 'admission_receipt_admission_reference_mismatch', errors);
+    compareValue(receipt.revision, record.revision, 'admission_receipt_revision_mismatch', errors);
+  }
+  if (isPlainObject(logical) && isPlainObject(record.admission_reference)) {
+    compareCanonical(
+      buildAdmissionReference(logical, record.revision),
+      record.admission_reference,
+      'admission_reference_canonical_mismatch',
+      errors
+    );
+  }
 }
 
 function validateRuntimeExecutionJobDurableRecord(record) {
@@ -401,6 +414,7 @@ function validateRuntimeExecutionJobDurableRecord(record) {
   }
   if (!isCanonicalContentDigest(record.runtime_execution_job_durable_digest)) errors.push('runtime_execution_job_durable_digest_invalid');
   if (record.validator_version !== RUNTIME_EXECUTION_JOB_DURABLE_VALIDATOR_VERSION) errors.push('validator_version_invalid');
+  validateCrossFieldConsistency(record, errors);
   try {
     if (computeRuntimeExecutionJobDurableFingerprint(record) !== record.runtime_execution_job_durable_fingerprint) errors.push('durable_fingerprint_mismatch');
     if (computeRuntimeExecutionJobDurableDigest(record) !== record.runtime_execution_job_durable_digest) errors.push('durable_digest_mismatch');
@@ -424,6 +438,8 @@ module.exports = {
   buildAdmissionReference,
   buildDurableJobRecord,
   buildLogicalJobIdentity,
+  computeAdmissionReceiptDigest,
+  computeAdmissionReceiptFingerprint,
   computeRuntimeExecutionJobDurableDigest,
   computeRuntimeExecutionJobDurableFingerprint,
   validateRuntimeExecutionJobDurableRecord
