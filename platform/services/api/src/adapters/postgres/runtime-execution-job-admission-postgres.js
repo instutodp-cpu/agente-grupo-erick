@@ -330,7 +330,6 @@ function awaitWithTimeout(operation, timeoutMs, error, onLateFulfillment = null)
       timedOut = true;
       reject(error);
     }, timeoutMs);
-    timer.unref?.();
   });
   return Promise.race([tracked, deadline]).finally(() => clearTimeout(timer));
 }
