@@ -538,8 +538,15 @@ test('real PostgreSQL P3B admission, replay, migration re-entry, recovery, scope
       Promise.all(Array.from({ length: 20 }, (_, index) => adapter.admitDurably(index % 2 === 0 ? divergentBase : divergentCandidate))),
       'divergent_concurrency'
     );
-    assert.equal(divergentResults.filter((value) => value.admission_result.outcome === 'CREATED').length, 1);
-    assert.equal(divergentResults.filter((value) => value.admission_result.outcome === 'CONFLICT').length, 19);
+    const createdCount = divergentResults.filter((value) => value.admission_result.outcome === 'CREATED').length;
+    const existingIdenticalCount = divergentResults.filter((value) => value.admission_result.outcome === 'EXISTING_IDENTICAL').length;
+    const conflictCount = divergentResults.filter((value) => value.admission_result.outcome === 'CONFLICT').length;
+    const unexpectedCount = divergentResults.filter((value) => !['CREATED', 'EXISTING_IDENTICAL', 'CONFLICT'].includes(value.admission_result.outcome)).length;
+    assert.equal(createdCount, 1);
+    assert.equal(existingIdenticalCount, 9);
+    assert.equal(conflictCount, 10);
+    assert.equal(createdCount + existingIdenticalCount + conflictCount, 20);
+    assert.equal(unexpectedCount, 0);
     assert.equal((await pool.query('SELECT count(*)::int AS count FROM hermes.execution_jobs')).rows[0].count, 3);
 
     const scopedReplay = await adapter.admit(changedScope(BASE_MATERIALIZATION, 'project_id', 'project-p3b-concurrent-identical'));
