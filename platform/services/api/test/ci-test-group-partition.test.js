@@ -75,11 +75,16 @@ test('residual group is non-empty and does not contain any explicitly grouped fi
   }
 });
 
-test('residual group includes runtime-dispatch, which has a package.json script but no dedicated CI job', () => {
+test('runtime-dispatch is explicitly assigned to its dedicated CI group', () => {
   const residual = getResidualFiles();
-  assert.ok(
+  assert.equal(
     residual.includes('test/runtime-dispatch-simulation-contracts.test.js'),
-    'runtime-dispatch-simulation-contracts.test.js should fall into residual unless a dedicated group is added for it'
+    false,
+    'runtime-dispatch-simulation-contracts.test.js must not remain in residual when its dedicated CI group is present'
+  );
+  assert.deepEqual(
+    GROUPS['runtime-dispatch'],
+    ['test/runtime-dispatch-simulation-contracts.test.js']
   );
 });
 

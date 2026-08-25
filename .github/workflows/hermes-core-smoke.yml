@@ -202,6 +202,198 @@ jobs:
         working-directory: platform/services/api
         run: npm run test:runtime-queue-placement
 
+  runtime-dispatch:
+    name: Runtime dispatch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
+      - name: Runtime dispatch simulation tests
+        working-directory: platform/services/api
+        run: node --test test/runtime-dispatch-simulation-contracts.test.js
+
+  runtime-execution-job-intent:
+    name: Runtime execution job intent
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
+      - name: Runtime execution job intent tests
+        working-directory: platform/services/api
+        run: node --test test/runtime-execution-job-intent.test.js
+
+  runtime-execution-job-materialization:
+    name: Runtime execution job materialization
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
+      - name: Runtime execution job materialization tests
+        working-directory: platform/services/api
+        run: node --test test/runtime-execution-job-materialization-simulation.test.js
+
+  runtime-execution-job-durable:
+    name: Runtime execution job durable contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
+      - name: Runtime execution job durable contract tests
+        working-directory: platform/services/api
+        run: node --test test/runtime-execution-job-durable-contract.test.js
+
+  runtime-execution-job-admission-contract:
+    name: Runtime execution job admission contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
+      - name: Runtime execution job admission contract tests
+        working-directory: platform/services/api
+        run: node --test test/runtime-execution-job-admission-contract.test.js
+
+  runtime-execution-job-admission-memory:
+    name: Runtime execution job admission memory
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
+      - name: Runtime execution job admission memory tests
+        working-directory: platform/services/api
+        run: node --test test/runtime-execution-job-admission-memory.test.js
+
+  runtime-attempt-contracts:
+    name: Runtime attempt contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
+      - name: Runtime attempt contract tests
+        working-directory: platform/services/api
+        run: >-
+          node --test
+          test/runtime-execution-attempt-intent.test.js
+          test/runtime-execution-attempt-materialization.test.js
+          test/runtime-execution-attempt-durable-record.test.js
+          test/runtime-execution-attempt-persistence-postgres.test.js
+
+  postgres-persistence:
+    name: PostgreSQL persistence
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16.4-alpine
+        env:
+          POSTGRES_USER: hermes_test
+          POSTGRES_PASSWORD: hermes_test
+          POSTGRES_DB: hermes_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hermes_test -d hermes_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
+      - name: PostgreSQL persistence integration tests
+        working-directory: platform/services/api
+        env:
+          HERMES_POSTGRES_TEST_DATABASE_URL: postgresql://hermes_test:hermes_test@127.0.0.1:5432/hermes_test
+        run: >-
+          node --test
+          test/runtime-execution-job-admission-postgres.integration.test.js
+          test/runtime-execution-attempt-persistence-postgres.integration.test.js
+
   # Everything discover-tests.js finds that is NOT explicitly named in one of the jobs
   # above (scripts/ci-test-groups.js is the single source of truth for that split). Local
   # `npm test` is untouched -- it keeps discovering and running the full, undivided suite.
@@ -281,6 +473,14 @@ jobs:
     needs:
       - fast-gates
       - runtime-contracts
+      - runtime-dispatch
+      - runtime-execution-job-intent
+      - runtime-execution-job-materialization
+      - runtime-execution-job-durable
+      - runtime-execution-job-admission-contract
+      - runtime-execution-job-admission-memory
+      - runtime-attempt-contracts
+      - postgres-persistence
       - readiness-admission
       - scheduler
       - worker-assignment

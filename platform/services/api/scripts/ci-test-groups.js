@@ -32,6 +32,34 @@ const GROUPS = Object.freeze({
   'runtime-contracts': Object.freeze([
     'test/runtime-execution-simulation-contracts.test.js'
   ]),
+  'runtime-dispatch': Object.freeze([
+    'test/runtime-dispatch-simulation-contracts.test.js'
+  ]),
+  'runtime-execution-job-intent': Object.freeze([
+    'test/runtime-execution-job-intent.test.js'
+  ]),
+  'runtime-execution-job-materialization': Object.freeze([
+    'test/runtime-execution-job-materialization-simulation.test.js'
+  ]),
+  'runtime-execution-job-durable': Object.freeze([
+    'test/runtime-execution-job-durable-contract.test.js'
+  ]),
+  'runtime-execution-job-admission-contract': Object.freeze([
+    'test/runtime-execution-job-admission-contract.test.js'
+  ]),
+  'runtime-execution-job-admission-memory': Object.freeze([
+    'test/runtime-execution-job-admission-memory.test.js'
+  ]),
+  'runtime-attempt-contracts': Object.freeze([
+    'test/runtime-execution-attempt-intent.test.js',
+    'test/runtime-execution-attempt-materialization.test.js',
+    'test/runtime-execution-attempt-durable-record.test.js',
+    'test/runtime-execution-attempt-persistence-postgres.test.js'
+  ]),
+  'postgres-persistence': Object.freeze([
+    'test/runtime-execution-job-admission-postgres.integration.test.js',
+    'test/runtime-execution-attempt-persistence-postgres.integration.test.js'
+  ]),
   'readiness-admission': Object.freeze([
     'test/runtime-readiness-admission-boundary.test.js'
   ]),
