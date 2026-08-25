@@ -348,3 +348,13 @@ test('output integrity fingerprints and digests are canonical', () => {
   assert.equal(output.logical_job_identity_digest, BASE_RECORD.logical_job_identity.digest);
   assert.equal(output.admission_reference.id, BASE_RECORD.admission_reference.id);
 });
+
+test('tampered intent id is rejected even when integrity is recomputed', () => {
+  const candidate = mutableIntent(buildRuntimeExecutionAttemptIntent(BASE_RECORD, 1));
+  candidate.runtime_execution_attempt_intent_id = 'runtime-execution-attempt-intent-arbitrary-tamper';
+  candidate.runtime_execution_attempt_intent_fingerprint = computeRuntimeExecutionAttemptIntentFingerprint(candidate);
+  candidate.runtime_execution_attempt_intent_digest = computeRuntimeExecutionAttemptIntentDigest(candidate);
+  const validation = validateRuntimeExecutionAttemptIntent(candidate);
+  assert.equal(validation.valid, false);
+  assert.ok(validation.errors.includes('intent_id_mismatch'));
+});

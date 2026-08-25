@@ -126,16 +126,39 @@ function computeRuntimeExecutionAttemptIntentDigest(intent) {
   return computeCanonicalContentDigest(material);
 }
 
-function identitySeed(durableJobRecord, attemptOrdinal) {
+function computeRuntimeExecutionAttemptIntentIdentitySeed({
+  jobReference,
+  durableJobDigest,
+  logicalJobIdentityDigest,
+  admissionReference,
+  attemptOrdinal
+}) {
   return computeCanonicalContentDigest({
     contract_name: RUNTIME_EXECUTION_ATTEMPT_INTENT_CONTRACT_NAME,
     contract_version: RUNTIME_EXECUTION_ATTEMPT_INTENT_CONTRACT_VERSION,
-    job_reference: durableJobRecord.job_reference,
-    durable_job_digest: durableJobRecord.runtime_execution_job_durable_digest,
-    logical_job_identity_digest: durableJobRecord.logical_job_identity.digest,
-    admission_reference: durableJobRecord.admission_reference,
+    job_reference: jobReference,
+    durable_job_digest: durableJobDigest,
+    logical_job_identity_digest: logicalJobIdentityDigest,
+    admission_reference: admissionReference,
     attempt_ordinal: attemptOrdinal
   });
+}
+
+function computeRuntimeExecutionAttemptIntentId({
+  jobReference,
+  durableJobDigest,
+  logicalJobIdentityDigest,
+  admissionReference,
+  attemptOrdinal
+}) {
+  const seed = computeRuntimeExecutionAttemptIntentIdentitySeed({
+    jobReference,
+    durableJobDigest,
+    logicalJobIdentityDigest,
+    admissionReference,
+    attemptOrdinal
+  });
+  return `runtime-execution-attempt-intent-${seed.slice('sha256:'.length)}`;
 }
 
 function validatePredecessor(durableJobRecord) {
@@ -157,12 +180,17 @@ function buildRuntimeExecutionAttemptIntent(durableJobRecord, attemptOrdinal) {
     throw new Error(`runtime_execution_attempt_intent_predecessor_invalid::${JSON.stringify(predecessorValidation.errors)}`);
   }
 
-  const seed = identitySeed(durableJobRecord, attemptOrdinal);
   const intent = {
     contract_name: RUNTIME_EXECUTION_ATTEMPT_INTENT_CONTRACT_NAME,
     contract_version: RUNTIME_EXECUTION_ATTEMPT_INTENT_CONTRACT_VERSION,
     runtime_execution_attempt_intent_version: RUNTIME_EXECUTION_ATTEMPT_INTENT_VERSION,
-    runtime_execution_attempt_intent_id: `runtime-execution-attempt-intent-${seed.slice('sha256:'.length)}`,
+    runtime_execution_attempt_intent_id: computeRuntimeExecutionAttemptIntentId({
+      jobReference: durableJobRecord.job_reference,
+      durableJobDigest: durableJobRecord.runtime_execution_job_durable_digest,
+      logicalJobIdentityDigest: durableJobRecord.logical_job_identity.digest,
+      admissionReference: durableJobRecord.admission_reference,
+      attemptOrdinal
+    }),
     runtime_execution_attempt_intent_fingerprint: 'pending',
     runtime_execution_attempt_intent_digest: 'pending',
     status: RUNTIME_EXECUTION_ATTEMPT_INTENT_STATUS,
@@ -224,6 +252,14 @@ function validateRuntimeExecutionAttemptIntent(intent) {
   if (!isNonEmptyString(intent.runtime_execution_attempt_intent_fingerprint)) errors.push('intent_fingerprint_invalid');
   if (!isCanonicalContentDigest(intent.runtime_execution_attempt_intent_digest)) errors.push('intent_digest_invalid');
   try {
+    const expectedIntentId = computeRuntimeExecutionAttemptIntentId({
+      jobReference: intent.job_reference,
+      durableJobDigest: intent.durable_job_reference?.digest,
+      logicalJobIdentityDigest: intent.logical_job_identity_digest,
+      admissionReference: intent.admission_reference,
+      attemptOrdinal: intent.attempt_ordinal
+    });
+    if (intent.runtime_execution_attempt_intent_id !== expectedIntentId) errors.push('intent_id_mismatch');
     if (computeRuntimeExecutionAttemptIntentFingerprint(intent) !== intent.runtime_execution_attempt_intent_fingerprint) errors.push('intent_fingerprint_mismatch');
     if (computeRuntimeExecutionAttemptIntentDigest(intent) !== intent.runtime_execution_attempt_intent_digest) errors.push('intent_digest_mismatch');
   } catch {
@@ -256,5 +292,7 @@ module.exports = {
   compareRuntimeExecutionAttemptIntentReplay,
   computeRuntimeExecutionAttemptIntentDigest,
   computeRuntimeExecutionAttemptIntentFingerprint,
+  computeRuntimeExecutionAttemptIntentId,
+  computeRuntimeExecutionAttemptIntentIdentitySeed,
   validateRuntimeExecutionAttemptIntent
 };
