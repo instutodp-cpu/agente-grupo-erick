@@ -42,12 +42,13 @@ const {
   validateRuntimeExecutionAttemptDurableRecord
 } = require('../src/core/runtime-execution-attempt-durable-record');
 const {
-  INSERT_SQL,
   createRuntimeExecutionAttemptPersistencePostgres
 } = require('../src/adapters/postgres/runtime-execution-attempt-persistence-postgres');
 
 const MIGRATION_PATH = path.resolve(__dirname, '../../../migrations/hermes/004_create_execution_attempts.sql');
 const TEST_DATABASE_URL = process.env.HERMES_POSTGRES_TEST_DATABASE_URL;
+const P7_TEST_SCHEMA = 'hermes_execution_attempts_p7_test';
+const P7_TEST_TABLE = `${P7_TEST_SCHEMA}.execution_attempts`;
 const ZERO_DIGEST = `sha256:${'0'.repeat(64)}`;
 
 function safeTestDatabaseUrl(value) {
@@ -202,25 +203,45 @@ function bounded(operation, label, timeoutMs = 30000) {
   return Promise.race([operation, timeout]).finally(() => clearTimeout(timer));
 }
 
+function isolatedMigration(sql) {
+  return sql
+    .replaceAll('CREATE SCHEMA IF NOT EXISTS hermes;', `CREATE SCHEMA IF NOT EXISTS ${P7_TEST_SCHEMA};`)
+    .replaceAll('hermes.execution_attempts', P7_TEST_TABLE);
+}
+
+test('P7 PostgreSQL adapter defaults to the production table and rejects unsafe table names', () => {
+  const pool = { query() {}, connect() {} };
+  const adapter = createRuntimeExecutionAttemptPersistencePostgres({ pool });
+  assert.equal(adapter.table_name, 'hermes.execution_attempts');
+  assert.throws(
+    () => createRuntimeExecutionAttemptPersistencePostgres({ pool, tableName: 'hermes.execution_attempts; DROP SCHEMA hermes CASCADE' }),
+    /table_name_invalid/
+  );
+});
+
 test('P7 real PostgreSQL persistence proves PREPARED replay, conflicts, concurrency, and rollback', { skip: !REAL_POSTGRES_ENABLED }, async () => {
   const { Pool } = require('pg');
-  const migration = fs.readFileSync(MIGRATION_PATH, 'utf8');
+  const migration = isolatedMigration(fs.readFileSync(MIGRATION_PATH, 'utf8'));
   const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 8, connectionTimeoutMillis: 5000 });
   try {
-    await bounded(pool.query('DROP TABLE IF EXISTS hermes.execution_attempts'), 'drop_previous_attempts');
+    await bounded(pool.query(`DROP SCHEMA IF EXISTS ${P7_TEST_SCHEMA} CASCADE`), 'drop_previous_attempts');
     await bounded(pool.query(migration), 'apply_p7_migration');
 
     const metadata = await bounded(pool.query(`
       SELECT
-        to_regclass('hermes.execution_attempts') AS table_name,
-        EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'execution_attempts_pkey') AS has_primary_key,
-        EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'execution_attempts_job_ordinal_key') AS has_job_ordinal_key
+        to_regclass('${P7_TEST_TABLE}') AS table_name,
+        EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = r.relnamespace
+          WHERE n.nspname = '${P7_TEST_SCHEMA}' AND r.relname = 'execution_attempts' AND c.conname = 'execution_attempts_pkey') AS has_primary_key,
+        EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = r.relnamespace
+          WHERE n.nspname = '${P7_TEST_SCHEMA}' AND r.relname = 'execution_attempts' AND c.conname = 'execution_attempts_job_ordinal_key') AS has_job_ordinal_key
     `), 'inspect_p7_schema');
-    assert.equal(metadata.rows[0].table_name, 'hermes.execution_attempts');
+    assert.equal(metadata.rows[0].table_name, P7_TEST_TABLE);
     assert.equal(metadata.rows[0].has_primary_key, true);
     assert.equal(metadata.rows[0].has_job_ordinal_key, true);
 
-    const adapter = createRuntimeExecutionAttemptPersistencePostgres({ pool });
+    const adapter = createRuntimeExecutionAttemptPersistencePostgres({ pool, tableName: P7_TEST_TABLE });
     const first = await bounded(adapter.persistDurably(getP6(1)), 'first_insert');
     assert.equal(first.persistence_result.outcome, 'CREATED');
     assert.equal(first.persistence_result.attempt_created, true);
@@ -234,7 +255,7 @@ test('P7 real PostgreSQL persistence proves PREPARED replay, conflicts, concurre
              durable_record_fingerprint, durable_record_digest,
              tenant_id, organization_id, project_id, session_reference_id, agent_id, actor_id,
              durable_record->>'status' AS record_status
-      FROM hermes.execution_attempts
+      FROM ${P7_TEST_TABLE}
     `), 'read_persisted_attempt');
     assert.equal(persisted.rows.length, 1);
     assert.equal(persisted.rows[0].state, 'PREPARED');
@@ -251,7 +272,7 @@ test('P7 real PostgreSQL persistence proves PREPARED replay, conflicts, concurre
     assert.equal(replay.persistence_result.attempt_created, false);
     assert.equal(replay.persistence_result.attempt_persisted, true);
     assert.equal(replay.persistence_result.attempt_admitted, false);
-    const countAfterReplay = await bounded(pool.query('SELECT count(*)::int AS count FROM hermes.execution_attempts'), 'count_after_replay');
+    const countAfterReplay = await bounded(pool.query(`SELECT count(*)::int AS count FROM ${P7_TEST_TABLE}`), 'count_after_replay');
     assert.equal(countAfterReplay.rows[0].count, 1);
 
     const divergent = getDivergentP6SameJobOrdinal(2);
@@ -283,23 +304,25 @@ test('P7 real PostgreSQL persistence proves PREPARED replay, conflicts, concurre
         const client = await pool.connect();
         const originalQuery = client.query.bind(client);
         client.query = (sql, values) => {
-          if (sql === INSERT_SQL) return Promise.reject(new Error('forced_insert_failure'));
+          if (typeof sql === 'string' && sql.startsWith(`INSERT INTO ${P7_TEST_TABLE}`)) {
+            return Promise.reject(new Error('forced_insert_failure'));
+          }
           return values === undefined ? originalQuery(sql) : originalQuery(sql, values);
         };
         return client;
       }
     };
-    const faultyAdapter = createRuntimeExecutionAttemptPersistencePostgres({ pool: faultyPool });
+    const faultyAdapter = createRuntimeExecutionAttemptPersistencePostgres({ pool: faultyPool, tableName: P7_TEST_TABLE });
     await assert.rejects(() => bounded(faultyAdapter.persistDurably(getP6(5)), 'rollback_failure'), /postgres_persistence_failed/);
     const afterRollback = await bounded(pool.query(
-      'SELECT count(*)::int AS count FROM hermes.execution_attempts WHERE attempt_ordinal = 5'
+      `SELECT count(*)::int AS count FROM ${P7_TEST_TABLE} WHERE attempt_ordinal = 5`
     ), 'count_after_rollback');
     assert.equal(afterRollback.rows[0].count, 0);
 
-    const total = await bounded(pool.query('SELECT count(*)::int AS count FROM hermes.execution_attempts'), 'final_count');
+    const total = await bounded(pool.query(`SELECT count(*)::int AS count FROM ${P7_TEST_TABLE}`), 'final_count');
     assert.equal(total.rows[0].count, 4);
   } finally {
-    try { await bounded(pool.query('DROP TABLE IF EXISTS hermes.execution_attempts'), 'cleanup_p7_table'); } finally {
+    try { await bounded(pool.query(`DROP SCHEMA IF EXISTS ${P7_TEST_SCHEMA} CASCADE`), 'cleanup_p7_schema'); } finally {
       await bounded(pool.end(), 'cleanup_p7_pool');
     }
   }

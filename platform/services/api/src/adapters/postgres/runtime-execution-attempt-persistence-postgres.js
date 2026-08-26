@@ -16,6 +16,8 @@ const PERSISTENCE_PROOF_CONTRACT_VERSION = 'runtime_execution_attempt_postgres_p
 const CONNECTION_TIMEOUT_MS = 5000;
 const LOCK_TIMEOUT_MS = 5000;
 const STATEMENT_TIMEOUT_MS = 10000;
+const DEFAULT_TABLE_NAME = 'hermes.execution_attempts';
+const SIMPLE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 
 const IDENTITY_SCOPE_FIELDS = Object.freeze([
   'tenant_id', 'organization_id', 'project_id', 'session_reference_id', 'agent_id', 'actor_id'
@@ -92,7 +94,24 @@ const PROOF_FIELDS = Object.freeze([
 ]);
 
 const SELECT_COLUMNS = ROW_FIELDS.join(', ');
-const INSERT_SQL = `INSERT INTO hermes.execution_attempts
+function validateTableName(tableName) {
+  if (typeof tableName !== 'string') return false;
+  const parts = tableName.split('.');
+  return parts.length === 2 && parts.every((part) => SIMPLE_IDENTIFIER.test(part));
+}
+
+function requireTableName(tableName) {
+  if (!validateTableName(tableName)) {
+    throw new TypeError('runtime_execution_attempt_postgres_table_name_invalid');
+  }
+  return tableName;
+}
+
+function buildSql(tableName) {
+  const [schemaName, relationName] = requireTableName(tableName).split('.');
+  const qualifiedTableName = `${schemaName}.${relationName}`;
+  return {
+    insert: `INSERT INTO ${qualifiedTableName}
   (attempt_durable_record_id, durable_job_reference_id,
    materialization_reference_id, materialization_reference_fingerprint, materialization_reference_digest,
    attempt_intent_reference_id, attempt_intent_reference_fingerprint, attempt_intent_reference_digest,
@@ -102,33 +121,41 @@ const INSERT_SQL = `INSERT INTO hermes.execution_attempts
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
         $15, $16, $17, $18, $19, $20, $21, $22, $23, $24::jsonb)
 ON CONFLICT DO NOTHING
-RETURNING ${SELECT_COLUMNS}`;
-const SELECT_BY_ID_SQL = `SELECT ${SELECT_COLUMNS}
-FROM hermes.execution_attempts
+RETURNING ${SELECT_COLUMNS}`,
+    selectById: `SELECT ${SELECT_COLUMNS}
+FROM ${qualifiedTableName}
 WHERE attempt_durable_record_id = $1
-FOR UPDATE`;
-const SELECT_BY_JOB_ORDINAL_SQL = `SELECT ${SELECT_COLUMNS}
-FROM hermes.execution_attempts
+FOR UPDATE`,
+    selectByJobOrdinal: `SELECT ${SELECT_COLUMNS}
+FROM ${qualifiedTableName}
 WHERE durable_job_reference_id = $1 AND attempt_ordinal = $2
-FOR UPDATE`;
-const READINESS_SQL = `
+FOR UPDATE`,
+    readiness: `
 SELECT
-  EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'hermes') AS schema_exists,
-  EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'hermes' AND table_name = 'execution_attempts') AS table_exists,
+  EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = '${schemaName}') AS schema_exists,
+  EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schemaName}' AND table_name = '${relationName}') AS table_exists,
   (
     SELECT count(*) = 26
     FROM information_schema.columns
-    WHERE table_schema = 'hermes' AND table_name = 'execution_attempts'
+    WHERE table_schema = '${schemaName}' AND table_name = '${relationName}'
   ) AS columns_exist,
   EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid
     JOIN pg_namespace n ON n.oid = r.relnamespace
-    WHERE n.nspname = 'hermes' AND r.relname = 'execution_attempts' AND c.conname = 'execution_attempts_pkey') AS primary_key_exists,
+    WHERE n.nspname = '${schemaName}' AND r.relname = '${relationName}' AND c.conname = 'execution_attempts_pkey') AS primary_key_exists,
   EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid
     JOIN pg_namespace n ON n.oid = r.relnamespace
-    WHERE n.nspname = 'hermes' AND r.relname = 'execution_attempts' AND c.conname = 'execution_attempts_job_ordinal_key') AS job_ordinal_key_exists,
+    WHERE n.nspname = '${schemaName}' AND r.relname = '${relationName}' AND c.conname = 'execution_attempts_job_ordinal_key') AS job_ordinal_key_exists,
   EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid
     JOIN pg_namespace n ON n.oid = r.relnamespace
-    WHERE n.nspname = 'hermes' AND r.relname = 'execution_attempts' AND c.conname = 'execution_attempts_state_check') AS state_check_exists`;
+    WHERE n.nspname = '${schemaName}' AND r.relname = '${relationName}' AND c.conname = 'execution_attempts_state_check') AS state_check_exists`
+  };
+}
+
+const DEFAULT_SQL = buildSql(DEFAULT_TABLE_NAME);
+const INSERT_SQL = DEFAULT_SQL.insert;
+const SELECT_BY_ID_SQL = DEFAULT_SQL.selectById;
+const SELECT_BY_JOB_ORDINAL_SQL = DEFAULT_SQL.selectByJobOrdinal;
+const READINESS_SQL = DEFAULT_SQL.readiness;
 
 class RuntimeExecutionAttemptPostgresPersistenceError extends Error {
   constructor(code, message = code) {
@@ -381,8 +408,9 @@ function assertSchemaReadiness(response) {
   }
 }
 
-function createRuntimeExecutionAttemptPersistencePostgres({ pool } = {}) {
+function createRuntimeExecutionAttemptPersistencePostgres({ pool, tableName = DEFAULT_TABLE_NAME } = {}) {
   requirePool(pool);
+  const sql = buildSql(tableName);
   let ready = false;
   let readinessPromise = null;
 
@@ -391,7 +419,7 @@ function createRuntimeExecutionAttemptPersistencePostgres({ pool } = {}) {
     if (!readinessPromise) {
       readinessPromise = (async () => {
         try {
-          assertSchemaReadiness(await awaitWithTimeout(pool.query(READINESS_SQL), STATEMENT_TIMEOUT_MS, timeoutError('postgres_readiness_timeout')));
+          assertSchemaReadiness(await awaitWithTimeout(pool.query(sql.readiness), STATEMENT_TIMEOUT_MS, timeoutError('postgres_readiness_timeout')));
           ready = true;
         } catch (error) {
           throw classifyError(error);
@@ -427,7 +455,7 @@ function createRuntimeExecutionAttemptPersistencePostgres({ pool } = {}) {
       began = true;
       await queryWithTimeout(client, `SET LOCAL lock_timeout = '${LOCK_TIMEOUT_MS}ms'`);
       await queryWithTimeout(client, `SET LOCAL statement_timeout = '${STATEMENT_TIMEOUT_MS}ms'`);
-      const inserted = await queryWithTimeout(client, INSERT_SQL, rowValues(candidate));
+      const inserted = await queryWithTimeout(client, sql.insert, rowValues(candidate));
       if (inserted?.rows?.length === 1) {
         const persisted = rowToDurableRecord(inserted.rows[0]);
         if (!sameCanonicalRecord(candidate, persisted)) throw new RuntimeExecutionAttemptPostgresPersistenceError('CORRUPT_ROW', 'inserted_record_mismatch');
@@ -440,10 +468,10 @@ function createRuntimeExecutionAttemptPersistencePostgres({ pool } = {}) {
         };
       }
 
-      let existingResponse = await queryWithTimeout(client, SELECT_BY_ID_SQL, [candidate.runtime_execution_attempt_durable_record_id]);
+      let existingResponse = await queryWithTimeout(client, sql.selectById, [candidate.runtime_execution_attempt_durable_record_id]);
       if (!existingResponse?.rows || existingResponse.rows.length > 1) throw new RuntimeExecutionAttemptPostgresPersistenceError('STORAGE_INCONSISTENT', 'identity_lookup_inconsistent');
       if (existingResponse.rows.length === 0) {
-        existingResponse = await queryWithTimeout(client, SELECT_BY_JOB_ORDINAL_SQL, [candidate.durable_job_reference.id, candidate.attempt_ordinal]);
+        existingResponse = await queryWithTimeout(client, sql.selectByJobOrdinal, [candidate.durable_job_reference.id, candidate.attempt_ordinal]);
       }
       if (!existingResponse?.rows || existingResponse.rows.length !== 1) throw new RuntimeExecutionAttemptPostgresPersistenceError('STORAGE_INCONSISTENT', 'conflict_record_missing');
       const existing = rowToDurableRecord(existingResponse.rows[0]);
@@ -465,6 +493,7 @@ function createRuntimeExecutionAttemptPersistencePostgres({ pool } = {}) {
 
   return Object.freeze({
     adapter_name: 'runtime_execution_attempt_persistence_postgres',
+    table_name: tableName,
     schema_version: POSTGRES_SCHEMA_VERSION,
     persistDurably,
     validatePersistenceProof
