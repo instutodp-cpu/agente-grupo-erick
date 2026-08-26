@@ -303,11 +303,16 @@ test('P7 real PostgreSQL persistence proves PREPARED replay, conflicts, concurre
       async connect() {
         const client = await pool.connect();
         const originalQuery = client.query.bind(client);
-        client.query = (sql, values) => {
+        client.query = (sql, values, callback) => {
           if (typeof sql === 'string' && sql.startsWith(`INSERT INTO ${P7_TEST_TABLE}`)) {
-            return Promise.reject(new Error('forced_insert_failure'));
+            const error = new Error('forced_insert_failure');
+            if (typeof callback === 'function') {
+              process.nextTick(() => callback(error));
+              return undefined;
+            }
+            return Promise.reject(error);
           }
-          return values === undefined ? originalQuery(sql) : originalQuery(sql, values);
+          return originalQuery(sql, values, callback);
         };
         return client;
       }
