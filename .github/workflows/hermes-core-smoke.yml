@@ -221,7 +221,7 @@ jobs:
         run: npm install
       - name: Runtime dispatch simulation tests
         working-directory: platform/services/api
-        run: node --test test/runtime-dispatch-simulation-contracts.test.js
+        run: npm run test:ci:group -- --group=runtime-dispatch
 
   runtime-execution-job-intent:
     name: Runtime execution job intent
@@ -242,7 +242,7 @@ jobs:
         run: npm install
       - name: Runtime execution job intent tests
         working-directory: platform/services/api
-        run: node --test test/runtime-execution-job-intent.test.js
+        run: npm run test:ci:group -- --group=runtime-execution-job-intent
 
   runtime-execution-job-materialization:
     name: Runtime execution job materialization
@@ -263,7 +263,7 @@ jobs:
         run: npm install
       - name: Runtime execution job materialization tests
         working-directory: platform/services/api
-        run: node --test test/runtime-execution-job-materialization-simulation.test.js
+        run: npm run test:ci:group -- --group=runtime-execution-job-materialization
 
   runtime-execution-job-durable:
     name: Runtime execution job durable contract
@@ -284,7 +284,7 @@ jobs:
         run: npm install
       - name: Runtime execution job durable contract tests
         working-directory: platform/services/api
-        run: node --test test/runtime-execution-job-durable-contract.test.js
+        run: npm run test:ci:group -- --group=runtime-execution-job-durable
 
   runtime-execution-job-admission-contract:
     name: Runtime execution job admission contract
@@ -305,7 +305,7 @@ jobs:
         run: npm install
       - name: Runtime execution job admission contract tests
         working-directory: platform/services/api
-        run: node --test test/runtime-execution-job-admission-contract.test.js
+        run: npm run test:ci:group -- --group=runtime-execution-job-admission-contract
 
   runtime-execution-job-admission-memory:
     name: Runtime execution job admission memory
@@ -326,7 +326,7 @@ jobs:
         run: npm install
       - name: Runtime execution job admission memory tests
         working-directory: platform/services/api
-        run: node --test test/runtime-execution-job-admission-memory.test.js
+        run: npm run test:ci:group -- --group=runtime-execution-job-admission-memory
 
   runtime-attempt-contracts:
     name: Runtime attempt contracts
@@ -347,12 +347,7 @@ jobs:
         run: npm install
       - name: Runtime attempt contract tests
         working-directory: platform/services/api
-        run: >-
-          node --test
-          test/runtime-execution-attempt-intent.test.js
-          test/runtime-execution-attempt-materialization.test.js
-          test/runtime-execution-attempt-durable-record.test.js
-          test/runtime-execution-attempt-persistence-postgres.test.js
+        run: npm run test:ci:group -- --group=runtime-attempt-contracts
 
   postgres-persistence:
     name: PostgreSQL persistence
@@ -389,32 +384,18 @@ jobs:
         working-directory: platform/services/api
         env:
           HERMES_POSTGRES_TEST_DATABASE_URL: postgresql://hermes_test:hermes_test@127.0.0.1:5432/hermes_test
-        run: >-
-          node --test
-          test/runtime-execution-job-admission-postgres.integration.test.js
-          test/runtime-execution-attempt-persistence-postgres.integration.test.js
+        run: npm run test:ci:group -- --group=postgres-persistence
 
-  # Everything discover-tests.js finds that is NOT explicitly named in one of the jobs
-  # above (scripts/ci-test-groups.js is the single source of truth for that split). Local
-  # `npm test` is untouched -- it keeps discovering and running the full, undivided suite.
-  residual-suite:
-    name: Residual suite
+  # Every discovered file not named in GROUPS is assigned to exactly one deterministic
+  # residual shard by scripts/ci-test-groups.js. Local `npm test` remains undivided.
+  residual-shards:
+    name: Residual shard ${{ matrix.shard }}/${{ strategy.job-total }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    services:
-      postgres:
-        image: postgres:16.4-alpine
-        env:
-          POSTGRES_USER: hermes_test
-          POSTGRES_PASSWORD: hermes_test
-          POSTGRES_DB: hermes_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U hermes_test -d hermes_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 12
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     defaults:
       run:
         working-directory: platform
@@ -428,11 +409,9 @@ jobs:
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
-      - name: Residual suite tests
+      - name: Residual shard tests
         working-directory: platform/services/api
-        env:
-          HERMES_POSTGRES_TEST_DATABASE_URL: postgresql://hermes_test:hermes_test@127.0.0.1:5432/hermes_test
-        run: npm run test:ci:residual
+        run: npm run test:ci:residual -- --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
   docker-e2e:
     name: Docker end-to-end smoke
@@ -487,7 +466,7 @@ jobs:
       - queue-admission
       - queue-materialization
       - queue-placement
-      - residual-suite
+      - residual-shards
       - docker-e2e
     if: always()
     steps:

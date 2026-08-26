@@ -13,7 +13,17 @@ const path = require('node:path');
 const test = require('node:test');
 
 const { discoverTestFiles } = require('../scripts/discover-tests');
-const { GROUPS, GROUP_NAMES, getGroupedFiles, getResidualFiles, validatePartition } = require('../scripts/ci-test-groups');
+const {
+  GROUPS,
+  GROUP_NAMES,
+  RESIDUAL_SHARD_COUNT,
+  getGroupedFiles,
+  getResidualFiles,
+  getResidualShardFiles,
+  getResidualShards,
+  validatePartition,
+  validateShardSpec
+} = require('../scripts/ci-test-groups');
 
 const REPO_ROOT = path.join(__dirname, '..');
 const WORKFLOW_PATH = path.join(__dirname, '..', '..', '..', '..', '.github', 'workflows', 'hermes-core-smoke.yml');
@@ -30,6 +40,17 @@ const GROUP_NPM_SCRIPT = {
   'queue-materialization': 'test:runtime-queue-materialization',
   'queue-placement': 'test:runtime-queue-placement'
 };
+
+const GROUP_RUNNER_GROUPS = new Set([
+  'runtime-dispatch',
+  'runtime-execution-job-intent',
+  'runtime-execution-job-materialization',
+  'runtime-execution-job-durable',
+  'runtime-execution-job-admission-contract',
+  'runtime-execution-job-admission-memory',
+  'runtime-attempt-contracts',
+  'postgres-persistence'
+]);
 
 test('every group name is unique', () => {
   assert.equal(new Set(GROUP_NAMES).size, GROUP_NAMES.length);
@@ -88,6 +109,31 @@ test('runtime-dispatch is explicitly assigned to its dedicated CI group', () => 
   );
 });
 
+test('residual shards are deterministic, complete, disjoint, and exclude named groups', () => {
+  const residual = getResidualFiles();
+  const first = getResidualShards(RESIDUAL_SHARD_COUNT);
+  const second = getResidualShards(RESIDUAL_SHARD_COUNT);
+  assert.deepEqual(first, second);
+  assert.equal(first.length, RESIDUAL_SHARD_COUNT);
+  const flattened = first.flat();
+  assert.deepEqual([...new Set(flattened)].sort(), [...residual].sort());
+  assert.equal(flattened.length, new Set(flattened).size);
+  const grouped = new Set(getGroupedFiles());
+  for (const file of flattened) assert.equal(grouped.has(file), false);
+  for (let left = 0; left < first.length; left += 1) {
+    for (let right = left + 1; right < first.length; right += 1) {
+      assert.deepEqual(first[left].filter((file) => first[right].includes(file)), []);
+    }
+  }
+});
+
+test('invalid residual shard specifications fail closed', () => {
+  for (const [index, count] of [[0, 4], [5, 4], [1, 0], [1.5, 4], [1, 2.5]]) {
+    assert.equal(validateShardSpec(index, count).valid, false);
+    assert.throws(() => getResidualShardFiles(index, count), /invalid residual shard/);
+  }
+});
+
 test('validatePartition() output matches discoverTestFiles() count exactly (named groups + residual, no more, no less)', () => {
   const discovered = discoverTestFiles();
   const partition = validatePartition();
@@ -103,6 +149,13 @@ test('CI workflow references every named group with a runnable command', () => {
       assert.ok(
         workflow.includes(`npm run ${npmScript}`),
         `workflow does not reference "npm run ${npmScript}" for group "${name}"`
+      );
+      continue;
+    }
+    if (GROUP_RUNNER_GROUPS.has(name)) {
+      assert.ok(
+        workflow.includes(`npm run test:ci:group -- --group=${name}`),
+        `workflow does not reference the manifest runner for group "${name}"`
       );
       continue;
     }
