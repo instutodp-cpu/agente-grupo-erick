@@ -46,6 +46,7 @@ const {
 } = require('../src/adapters/postgres/runtime-execution-attempt-persistence-postgres');
 
 const MIGRATION_PATH = path.resolve(__dirname, '../../../migrations/hermes/004_create_execution_attempts.sql');
+const P9A_MIGRATION_PATH = path.resolve(__dirname, '../../../migrations/hermes/005_enable_execution_attempt_admission_lifecycle.sql');
 const TEST_DATABASE_URL = process.env.HERMES_POSTGRES_TEST_DATABASE_URL;
 const P7_TEST_SCHEMA = 'hermes_execution_attempts_p7_test';
 const P7_TEST_TABLE = `${P7_TEST_SCHEMA}.execution_attempts`;
@@ -222,6 +223,7 @@ test('P7 PostgreSQL adapter defaults to the production table and rejects unsafe 
 test('P7 real PostgreSQL persistence proves PREPARED replay, conflicts, concurrency, and rollback', { skip: !REAL_POSTGRES_ENABLED }, async () => {
   const { Pool } = require('pg');
   const migration = isolatedMigration(fs.readFileSync(MIGRATION_PATH, 'utf8'));
+  const lifecycleMigration = isolatedMigration(fs.readFileSync(P9A_MIGRATION_PATH, 'utf8'));
   const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 8, connectionTimeoutMillis: 5000 });
   try {
     await bounded(pool.query(`DROP SCHEMA IF EXISTS ${P7_TEST_SCHEMA} CASCADE`), 'drop_previous_attempts');
@@ -241,14 +243,14 @@ test('P7 real PostgreSQL persistence proves PREPARED replay, conflicts, concurre
     assert.equal(metadata.rows[0].has_primary_key, true);
     assert.equal(metadata.rows[0].has_job_ordinal_key, true);
 
-    const adapter = createRuntimeExecutionAttemptPersistencePostgres({ pool, tableName: P7_TEST_TABLE });
-    const first = await bounded(adapter.persistDurably(getP6(1)), 'first_insert');
+    const preMigrationAdapter = createRuntimeExecutionAttemptPersistencePostgres({ pool, tableName: P7_TEST_TABLE });
+    const first = await bounded(preMigrationAdapter.persistDurably(getP6(1)), 'first_insert');
     assert.equal(first.persistence_result.outcome, 'CREATED');
     assert.equal(first.persistence_result.attempt_created, true);
     assert.equal(first.persistence_result.attempt_persisted, true);
     assert.equal(first.persistence_result.attempt_admitted, false);
     assert.equal(first.persistence_result.persistence_real, true);
-    assert.equal(adapter.validatePersistenceProof(first.persistence_proof).valid, true);
+    assert.equal(preMigrationAdapter.validatePersistenceProof(first.persistence_proof).valid, true);
 
     const persisted = await bounded(pool.query(`
       SELECT state, revision, durable_record->>'attempt_admitted' AS attempt_admitted, attempt_durable_record_id,
@@ -267,6 +269,59 @@ test('P7 real PostgreSQL persistence proves PREPARED replay, conflicts, concurre
     assert.equal(persisted.rows[0].durable_record_digest, getP6(1).runtime_execution_attempt_durable_record_digest);
     assert.equal(persisted.rows[0].tenant_id, getP6(1).identity_scope.tenant_id);
 
+    await bounded(pool.query(lifecycleMigration), 'apply_p9a_migration');
+    const lifecycleMetadata = await bounded(pool.query(`
+      SELECT
+        EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = r.relnamespace
+          WHERE n.nspname = '${P7_TEST_SCHEMA}' AND r.relname = 'execution_attempts' AND c.conname = 'execution_attempts_lifecycle_check') AS has_lifecycle_check,
+        EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = r.relnamespace
+          WHERE n.nspname = '${P7_TEST_SCHEMA}' AND r.relname = 'execution_attempts' AND c.conname = 'execution_attempts_state_check') AS has_old_state_check,
+        EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = r.relnamespace
+          WHERE n.nspname = '${P7_TEST_SCHEMA}' AND r.relname = 'execution_attempts' AND c.conname = 'execution_attempts_revision_check') AS has_old_revision_check,
+        (SELECT count(*) = 0 FROM information_schema.columns
+          WHERE table_schema = '${P7_TEST_SCHEMA}' AND table_name = 'execution_attempts'
+            AND column_name IN ('attempt_admitted', 'durable_record_attempt_admitted')) AS has_no_admission_column
+    `), 'inspect_p9a_schema');
+    assert.equal(lifecycleMetadata.rows[0].has_lifecycle_check, true);
+    assert.equal(lifecycleMetadata.rows[0].has_old_state_check, false);
+    assert.equal(lifecycleMetadata.rows[0].has_old_revision_check, false);
+    assert.equal(lifecycleMetadata.rows[0].has_no_admission_column, true);
+
+    const persistedAfterMigration = await bounded(pool.query(`
+      SELECT state, revision, durable_record->>'attempt_admitted' AS attempt_admitted,
+             attempt_durable_record_id, durable_record_fingerprint, durable_record_digest
+      FROM ${P7_TEST_TABLE}
+      WHERE attempt_durable_record_id = $1
+    `, [getP6(1).runtime_execution_attempt_durable_record_id]), 'read_p7_row_after_p9a');
+    assert.equal(persistedAfterMigration.rows[0].state, persisted.rows[0].state);
+    assert.equal(Number(persistedAfterMigration.rows[0].revision), Number(persisted.rows[0].revision));
+    assert.equal(persistedAfterMigration.rows[0].attempt_admitted, persisted.rows[0].attempt_admitted);
+    assert.equal(persistedAfterMigration.rows[0].attempt_durable_record_id, persisted.rows[0].attempt_durable_record_id);
+    assert.equal(persistedAfterMigration.rows[0].durable_record_fingerprint, persisted.rows[0].durable_record_fingerprint);
+    assert.equal(persistedAfterMigration.rows[0].durable_record_digest, persisted.rows[0].durable_record_digest);
+
+    await assert.rejects(
+      () => bounded(pool.query(`UPDATE ${P7_TEST_TABLE} SET state = 'PREPARED', revision = 2 WHERE attempt_durable_record_id = $1`, [getP6(1).runtime_execution_attempt_durable_record_id]), 'reject_prepared_revision_2'),
+      /execution_attempts_lifecycle_check/
+    );
+    await assert.rejects(
+      () => bounded(pool.query(`UPDATE ${P7_TEST_TABLE} SET state = 'ADMITTED', revision = 1 WHERE attempt_durable_record_id = $1`, [getP6(1).runtime_execution_attempt_durable_record_id]), 'reject_admitted_revision_1'),
+      /execution_attempts_lifecycle_check/
+    );
+    await assert.rejects(
+      () => bounded(pool.query(`UPDATE ${P7_TEST_TABLE} SET state = 'UNKNOWN', revision = 9 WHERE attempt_durable_record_id = $1`, [getP6(1).runtime_execution_attempt_durable_record_id]), 'reject_unknown_lifecycle'),
+      /execution_attempts_lifecycle_check/
+    );
+    await bounded(pool.query(`UPDATE ${P7_TEST_TABLE} SET state = 'ADMITTED', revision = 2 WHERE attempt_durable_record_id = $1`, [getP6(1).runtime_execution_attempt_durable_record_id]), 'accept_admitted_revision_2');
+    const admitted = await bounded(pool.query(`SELECT state, revision FROM ${P7_TEST_TABLE} WHERE attempt_durable_record_id = $1`, [getP6(1).runtime_execution_attempt_durable_record_id]), 'read_admitted_lifecycle');
+    assert.equal(admitted.rows[0].state, 'ADMITTED');
+    assert.equal(Number(admitted.rows[0].revision), 2);
+    await bounded(pool.query(`UPDATE ${P7_TEST_TABLE} SET state = 'PREPARED', revision = 1 WHERE attempt_durable_record_id = $1`, [getP6(1).runtime_execution_attempt_durable_record_id]), 'restore_prepared_lifecycle');
+
+    const adapter = createRuntimeExecutionAttemptPersistencePostgres({ pool, tableName: P7_TEST_TABLE });
     const replay = await bounded(adapter.persistDurably(getP6(1)), 'identical_replay');
     assert.equal(replay.persistence_result.outcome, 'EXISTING_IDENTICAL');
     assert.equal(replay.persistence_result.attempt_created, false);
@@ -276,7 +331,11 @@ test('P7 real PostgreSQL persistence proves PREPARED replay, conflicts, concurre
     assert.equal(countAfterReplay.rows[0].count, 1);
 
     const divergent = getDivergentP6SameJobOrdinal(2);
-    assert.equal((await bounded(adapter.persistDurably(getP6(2)), 'second_insert')).persistence_result.outcome, 'CREATED');
+    const secondInsert = await bounded(adapter.persistDurably(getP6(2)), 'second_insert');
+    assert.equal(secondInsert.persistence_result.outcome, 'CREATED');
+    assert.equal(secondInsert.persistence_result.state, 'PREPARED');
+    assert.equal(secondInsert.persistence_result.revision, 1);
+    assert.equal(secondInsert.persistence_result.attempt_admitted, false);
     const conflict = await bounded(adapter.persistDurably(divergent), 'divergent_replay');
     assert.equal(conflict.persistence_result.outcome, 'CONFLICT');
     assert.equal(conflict.persistence_result.attempt_created, false);

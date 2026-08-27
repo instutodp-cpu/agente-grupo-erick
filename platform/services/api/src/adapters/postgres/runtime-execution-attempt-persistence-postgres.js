@@ -18,6 +18,10 @@ const LOCK_TIMEOUT_MS = 5000;
 const STATEMENT_TIMEOUT_MS = 10000;
 const DEFAULT_TABLE_NAME = 'hermes.execution_attempts';
 const SIMPLE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
+const SUPPORTED_LIFECYCLE = Object.freeze({
+  PREPARED: Object.freeze({ revision: 1, attempt_admitted: false }),
+  ADMITTED: Object.freeze({ revision: 2, attempt_admitted: true })
+});
 
 const IDENTITY_SCOPE_FIELDS = Object.freeze([
   'tenant_id', 'organization_id', 'project_id', 'session_reference_id', 'agent_id', 'actor_id'
@@ -107,6 +111,21 @@ function requireTableName(tableName) {
   return tableName;
 }
 
+function lifecycleFor(state, revision) {
+  const expected = SUPPORTED_LIFECYCLE[state];
+  if (!expected || Number(revision) !== expected.revision) {
+    throw new RuntimeExecutionAttemptPostgresPersistenceError(
+      'CORRUPT_ROW',
+      'unsupported_execution_attempt_lifecycle'
+    );
+  }
+  return { state, revision: expected.revision, attempt_admitted: expected.attempt_admitted };
+}
+
+function deriveAttemptAdmittedFromLifecycle(state, revision) {
+  return lifecycleFor(state, revision).attempt_admitted;
+}
+
 function buildSql(tableName) {
   const [schemaName, relationName] = requireTableName(tableName).split('.');
   const qualifiedTableName = `${schemaName}.${relationName}`;
@@ -147,7 +166,8 @@ SELECT
     WHERE n.nspname = '${schemaName}' AND r.relname = '${relationName}' AND c.conname = 'execution_attempts_job_ordinal_key') AS job_ordinal_key_exists,
   EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_class r ON r.oid = c.conrelid
     JOIN pg_namespace n ON n.oid = r.relnamespace
-    WHERE n.nspname = '${schemaName}' AND r.relname = '${relationName}' AND c.conname = 'execution_attempts_state_check') AS state_check_exists`
+    WHERE n.nspname = '${schemaName}' AND r.relname = '${relationName}'
+      AND c.conname IN ('execution_attempts_state_check', 'execution_attempts_lifecycle_check')) AS state_check_exists`
   };
 }
 
@@ -171,9 +191,10 @@ function requirePool(pool) {
   }
 }
 
-function resultFor(outcome, record = null, reasonCode = null) {
+function resultFor(outcome, record = null, reasonCode = null, lifecycle = null) {
   const created = outcome === 'CREATED';
   const persisted = outcome === 'CREATED' || outcome === 'EXISTING_IDENTICAL';
+  const persistedLifecycle = record ? (lifecycle || lifecycleFor('PREPARED', 1)) : null;
   return Object.freeze({
     contract_name: PERSISTENCE_CONTRACT_NAME,
     contract_version: PERSISTENCE_CONTRACT_VERSION,
@@ -181,12 +202,12 @@ function resultFor(outcome, record = null, reasonCode = null) {
     attempt_durable_record_id: record?.runtime_execution_attempt_durable_record_id ?? null,
     durable_record_fingerprint: record?.runtime_execution_attempt_durable_record_fingerprint ?? null,
     durable_record_digest: record?.runtime_execution_attempt_durable_record_digest ?? null,
-    state: record ? 'PREPARED' : null,
-    revision: record ? 1 : null,
+    state: persistedLifecycle?.state ?? null,
+    revision: persistedLifecycle?.revision ?? null,
     reason_code: reasonCode,
     attempt_created: created,
     attempt_persisted: persisted,
-    attempt_admitted: false,
+    attempt_admitted: persistedLifecycle?.attempt_admitted ?? false,
     persistence_real: persisted,
     execution_simulation: true,
     production_execution_blocked: true,
@@ -279,8 +300,9 @@ function rowToDurableRecord(row) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) throw new RuntimeExecutionAttemptPostgresPersistenceError('CORRUPT_ROW', 'row_invalid');
   for (const field of ROW_FIELDS.filter((field) => !['durable_record', 'attempt_ordinal', 'revision', 'schema_version', 'created_at', 'updated_at'].includes(field))) requireString(row, field);
   if (!Number.isSafeInteger(Number(row.attempt_ordinal)) || Number(row.attempt_ordinal) < 1) throw new RuntimeExecutionAttemptPostgresPersistenceError('CORRUPT_ROW', 'attempt_ordinal_invalid');
-  if (Number(row.revision) !== 1 || Number(row.schema_version) !== POSTGRES_SCHEMA_VERSION) throw new RuntimeExecutionAttemptPostgresPersistenceError('CORRUPT_ROW', 'revision_or_schema_invalid');
-  if (row.state !== 'PREPARED' || row.contract_version !== RUNTIME_EXECUTION_ATTEMPT_DURABLE_RECORD_CONTRACT_VERSION) throw new RuntimeExecutionAttemptPostgresPersistenceError('CORRUPT_ROW', 'state_or_contract_invalid');
+  lifecycleFor(row.state, row.revision);
+  if (Number(row.schema_version) !== POSTGRES_SCHEMA_VERSION) throw new RuntimeExecutionAttemptPostgresPersistenceError('CORRUPT_ROW', 'revision_or_schema_invalid');
+  if (row.contract_version !== RUNTIME_EXECUTION_ATTEMPT_DURABLE_RECORD_CONTRACT_VERSION) throw new RuntimeExecutionAttemptPostgresPersistenceError('CORRUPT_ROW', 'state_or_contract_invalid');
   const record = parseRecord(row.durable_record);
   const pairs = [
     ['attempt_durable_record_id', record.runtime_execution_attempt_durable_record_id],
@@ -463,7 +485,7 @@ function createRuntimeExecutionAttemptPersistencePostgres({ pool, tableName = DE
         began = false;
         releaseClient();
         return {
-          persistence_result: resultFor('CREATED', persisted, 'persisted_prepared'),
+          persistence_result: resultFor('CREATED', persisted, 'persisted_prepared', lifecycleFor(inserted.rows[0].state, inserted.rows[0].revision)),
           persistence_proof: buildPersistenceProof('CREATED', persisted, true, true)
         };
       }
@@ -481,7 +503,7 @@ function createRuntimeExecutionAttemptPersistencePostgres({ pool, tableName = DE
       began = false;
       releaseClient();
       return {
-        persistence_result: resultFor(outcome, existing, identical ? 'identical_replay' : 'canonical_semantics_conflict'),
+        persistence_result: resultFor(outcome, existing, identical ? 'identical_replay' : 'canonical_semantics_conflict', lifecycleFor(existingResponse.rows[0].state, existingResponse.rows[0].revision)),
         persistence_proof: identical ? buildPersistenceProof(outcome, existing, false, true) : null
       };
     } catch (error) {
@@ -520,6 +542,8 @@ module.exports = {
   STATEMENT_TIMEOUT_MS,
   buildPersistenceProof,
   createRuntimeExecutionAttemptPersistencePostgres,
+  deriveAttemptAdmittedFromLifecycle,
+  lifecycleFor,
   resultFor,
   rowToDurableRecord,
   rowValues,

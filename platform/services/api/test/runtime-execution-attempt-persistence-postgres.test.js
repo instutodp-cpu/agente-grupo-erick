@@ -1,6 +1,8 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 
 const { cloneFrozen, stablePayload } = require('../src/core/agent-identity-contract');
@@ -45,10 +47,16 @@ const {
   ROW_FIELDS,
   SELECT_BY_ID_SQL,
   SELECT_BY_JOB_ORDINAL_SQL,
-  createRuntimeExecutionAttemptPersistencePostgres
+  createRuntimeExecutionAttemptPersistencePostgres,
+  deriveAttemptAdmittedFromLifecycle,
+  lifecycleFor,
+  resultFor,
+  rowToDurableRecord,
+  rowValues
 } = require('../src/adapters/postgres/runtime-execution-attempt-persistence-postgres');
 
 const ZERO_DIGEST = `sha256:${'0'.repeat(64)}`;
+const P9A_MIGRATION_PATH = path.resolve(__dirname, '../../../migrations/hermes/005_enable_execution_attempt_admission_lifecycle.sql');
 
 function compactReference(id) {
   return { id, version: 1, fingerprint: `${id}-fingerprint`, digest: ZERO_DIGEST };
@@ -249,6 +257,40 @@ function createFakePool() {
     }
   };
 }
+
+test('P9A migration enables only canonical state and revision lifecycle tuples', () => {
+  const migration = fs.readFileSync(P9A_MIGRATION_PATH, 'utf8');
+  assert.match(migration, /DROP CONSTRAINT IF EXISTS execution_attempts_state_check/);
+  assert.match(migration, /DROP CONSTRAINT IF EXISTS execution_attempts_revision_check/);
+  assert.match(migration, /execution_attempts_lifecycle_check/);
+  assert.match(migration, /state = 'PREPARED' AND revision = 1/);
+  assert.match(migration, /state = 'ADMITTED' AND revision = 2/);
+  assert.doesNotMatch(migration, /CREATE TABLE/i);
+  assert.doesNotMatch(migration, /ADD COLUMN/i);
+  assert.doesNotMatch(migration, /attempt_admitted\s+(BOOLEAN|BOOL|TEXT)/i);
+});
+
+test('P9A derives admission from state and revision and rejects impossible tuples', () => {
+  assert.equal(deriveAttemptAdmittedFromLifecycle('PREPARED', 1), false);
+  assert.equal(deriveAttemptAdmittedFromLifecycle('ADMITTED', 2), true);
+  assert.throws(() => deriveAttemptAdmittedFromLifecycle('PREPARED', 2), /unsupported_execution_attempt_lifecycle/);
+  assert.throws(() => deriveAttemptAdmittedFromLifecycle('ADMITTED', 1), /unsupported_execution_attempt_lifecycle/);
+  assert.throws(() => deriveAttemptAdmittedFromLifecycle('UNKNOWN', 1), /unsupported_execution_attempt_lifecycle/);
+  assert.deepEqual(lifecycleFor('ADMITTED', '2'), { state: 'ADMITTED', revision: 2, attempt_admitted: true });
+  assert.equal(ROW_FIELDS.includes('attempt_admitted'), false);
+});
+
+test('P9A row validation accepts ADMITTED/revision 2 without a mutable admission column', () => {
+  const row = makeRow(rowValues(getP6(5)));
+  row.state = 'ADMITTED';
+  row.revision = 2;
+  const record = rowToDurableRecord(row);
+  assert.equal(record.attempt_admitted, false);
+  const result = resultFor('EXISTING_IDENTICAL', record, 'already_admitted', lifecycleFor(row.state, row.revision));
+  assert.equal(result.state, 'ADMITTED');
+  assert.equal(result.revision, 2);
+  assert.equal(result.attempt_admitted, true);
+});
 
 test('P7 persists valid P6, converges identical replay, and keeps authority blocked', async () => {
   const pool = createFakePool();
