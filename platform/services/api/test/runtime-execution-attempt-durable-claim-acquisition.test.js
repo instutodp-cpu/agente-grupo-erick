@@ -236,10 +236,13 @@ test('PostgreSQL BIGINT claim fields normalize before canonical replay compariso
     ...persisted,
     claim_ordinal: String(persisted.claim_ordinal),
     attempt_revision: String(persisted.attempt_revision),
-    attempt_ordinal: String(persisted.attempt_ordinal)
+    attempt_ordinal: String(persisted.attempt_ordinal),
+    created_at: new Date('2026-01-01T00:00:00.000Z')
   };
   assert.equal(classifyPersistedClaim(databaseRow, plan).outcome, 'TECHNICAL_FAILURE');
-  assert.equal(classifyPersistedClaim(adapter.normalizeClaimRow(databaseRow), plan).outcome, 'EXISTING_IDENTICAL');
+  const normalized = adapter.normalizeClaimRow(databaseRow);
+  assert.equal(normalized.created_at, '2026-01-01T00:00:00.000Z');
+  assert.equal(classifyPersistedClaim(normalized, plan).outcome, 'EXISTING_IDENTICAL');
 });
 
 test('P12B contract contains no attempt lifecycle, worker, lease, fencing, or execution mutation', () => {

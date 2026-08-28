@@ -153,7 +153,8 @@ function normalizeClaimRow(row) {
     ...row,
     claim_ordinal: Number(row.claim_ordinal),
     attempt_revision: Number(row.attempt_revision),
-    attempt_ordinal: Number(row.attempt_ordinal)
+    attempt_ordinal: Number(row.attempt_ordinal),
+    created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at
   };
 }
 
