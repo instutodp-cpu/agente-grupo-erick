@@ -229,6 +229,7 @@ test('real PostgreSQL applies P12A and P12A.1 and enforces canonical identity bi
       if (column === 'claim_id') return claimId;
       if (column === 'claim_fingerprint') return claimFingerprint;
       if (column === 'claim_digest') return claimDigest;
+      if (column === 'claim_state') return 'ACTIVE';
       if (column === 'claim_artifact') return JSON.stringify(artifact);
       if (column === 'claim_receipt') return JSON.stringify(receipt);
       if (column === 'schema_version') return 1;
