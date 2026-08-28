@@ -44,10 +44,12 @@ const P7_PATH = path.resolve(__dirname, '../../../migrations/hermes/004_create_e
 const P9A_PATH = path.resolve(__dirname, '../../../migrations/hermes/005_enable_execution_attempt_admission_lifecycle.sql');
 const P12A_PATH = path.resolve(__dirname, '../../../migrations/hermes/006_create_execution_attempt_claims.sql');
 const P12A1_PATH = path.resolve(__dirname, '../../../migrations/hermes/007_complete_execution_attempt_claim_canonical_identity.sql');
+const P12B_SCHEMA_PATH = path.resolve(__dirname, '../../../migrations/hermes/008_replace_claim_identity_index_with_digest.sql');
 const p7 = fs.readFileSync(P7_PATH, 'utf8');
 const p9a = fs.readFileSync(P9A_PATH, 'utf8');
 const p12a = fs.readFileSync(P12A_PATH, 'utf8');
 const p12a1 = fs.readFileSync(P12A1_PATH, 'utf8');
+const p12bSchema = fs.readFileSync(P12B_SCHEMA_PATH, 'utf8');
 const TEST_DATABASE_URL = process.env.HERMES_POSTGRES_TEST_DATABASE_URL;
 const TEST_SCHEMA = 'hermes_execution_attempt_claim_acquisition_p12b_test';
 const TEST_ATTEMPTS = `${TEST_SCHEMA}.execution_attempts`;
@@ -229,6 +231,19 @@ test('P12B contract contains no attempt lifecycle, worker, lease, fencing, or ex
   assert.doesNotMatch(source, /CLAIMED|revision\s*=\s*3|worker_id|lease_id|Math\.random|Date\.now/);
 });
 
+test('P12B schema migration removes only the oversized identity index and preserves canonical identity storage', () => {
+  assert.match(p12bSchema, /BEGIN;/);
+  assert.match(p12bSchema, /COMMIT;\s*$/);
+  assert.match(p12bSchema, /GROUP BY attempt_durable_record_id, claim_digest/);
+  assert.match(p12bSchema, /execution_attempt_claims_digest_identity_key/);
+  assert.match(p12bSchema, /UNIQUE \(attempt_durable_record_id, claim_digest\)/);
+  assert.match(p12bSchema, /DROP CONSTRAINT IF EXISTS execution_attempt_claims_identity_key/);
+  assert.doesNotMatch(p12bSchema, /CREATE TABLE|DROP TABLE|DELETE FROM|TRUNCATE|UPDATE\s|INSERT INTO/i);
+  assert.match(p12bSchema, /octet_length\(claim_digest\) > 8191/);
+  assert.match(p12a, /claim_fingerprint TEXT NOT NULL/);
+  assert.match(p12a, /claim_digest TEXT NOT NULL/);
+});
+
 test('real PostgreSQL acquires, replays, conflicts, and serializes concurrent claims', { skip: !safeTestDatabaseUrl(TEST_DATABASE_URL) }, async () => {
   const { Pool } = require('pg');
   const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 20, connectionTimeoutMillis: 5000 });
@@ -242,6 +257,19 @@ test('real PostgreSQL acquires, replays, conflicts, and serializes concurrent cl
     await bounded(pool.query(isolatedMigration(p9a)), 'apply_p9a');
     await bounded(pool.query(isolatedMigration(p12a)), 'apply_p12a');
     await bounded(pool.query(isolatedMigration(p12a1)), 'apply_p12a1');
+    await bounded(pool.query(isolatedMigration(p12bSchema)), 'apply_p12b_schema');
+    await bounded(pool.query(isolatedMigration(p12bSchema)), 'reapply_p12b_schema');
+
+    const identityConstraints = await bounded(pool.query(`
+      SELECT c.conname
+      FROM pg_constraint c
+      JOIN pg_class r ON r.oid = c.conrelid
+      JOIN pg_namespace n ON n.oid = r.relnamespace
+      WHERE n.nspname = $1 AND r.relname = 'execution_attempt_claims'
+    `, [TEST_SCHEMA]), 'read_identity_constraints');
+    const identityConstraintNames = new Set(identityConstraints.rows.map((row) => row.conname));
+    assert.equal(identityConstraintNames.has('execution_attempt_claims_identity_key'), false);
+    assert.equal(identityConstraintNames.has('execution_attempt_claims_digest_identity_key'), true);
 
     const input = buildAcquisitionInput(1);
     const persistence = createRuntimeExecutionAttemptPersistencePostgres({ pool, tableName: TEST_ATTEMPTS });
