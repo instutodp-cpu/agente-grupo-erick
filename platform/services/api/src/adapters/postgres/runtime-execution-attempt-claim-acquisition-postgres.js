@@ -147,6 +147,16 @@ function claimValues(row) {
   });
 }
 
+function normalizeClaimRow(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+  return {
+    ...row,
+    claim_ordinal: Number(row.claim_ordinal),
+    attempt_revision: Number(row.attempt_revision),
+    attempt_ordinal: Number(row.attempt_ordinal)
+  };
+}
+
 function sameReference(left, right) {
   return ['id', 'version', 'fingerprint', 'digest'].every((field) => left?.[field] === right?.[field]);
 }
@@ -315,21 +325,23 @@ function createRuntimeExecutionAttemptClaimAcquisitionPostgres({
 
       const inserted = await queryWithTimeout(client, sql.insertClaim, claimValues(insertRow));
       if (inserted.rows.length === 1) {
-        const stored = classifyPersistedClaim(inserted.rows[0], plan);
+        const storedRow = normalizeClaimRow(inserted.rows[0]);
+        const stored = classifyPersistedClaim(storedRow, plan);
         if (stored.outcome !== 'EXISTING_IDENTICAL') throw new Error('created_claim_identity_mismatch');
         await commitOrFail(client);
         began = false;
         releaseClient();
-        return resultFor('CREATED', plan, inserted.rows[0], 'claim_created');
+        return resultFor('CREATED', plan, storedRow, 'claim_created');
       }
 
       const existingResponse = await queryWithTimeout(client, sql.selectClaimsByAttempt, [plan.identity.attempt_durable_record_id]);
       if (existingResponse.rows.length !== 1) throw new Error('claim_conflict_without_single_row');
-      const classification = classifyPersistedClaim(existingResponse.rows[0], plan);
+      const existingRow = normalizeClaimRow(existingResponse.rows[0]);
+      const classification = classifyPersistedClaim(existingRow, plan);
       await commitOrFail(client);
       began = false;
       releaseClient();
-      return resultFor(classification.outcome, plan, existingResponse.rows[0], classification.reason_code, classification.validation_errors || []);
+      return resultFor(classification.outcome, plan, existingRow, classification.reason_code, classification.validation_errors || []);
     } catch (error) {
       await rollbackAndRelease(client, began, released);
       throw classifyError(error);
@@ -340,6 +352,7 @@ function createRuntimeExecutionAttemptClaimAcquisitionPostgres({
     adapter_name: 'runtime_execution_attempt_claim_acquisition_postgres',
     attempt_table_name: attemptTableName,
     claim_table_name: claimTableName,
+    normalizeClaimRow,
     acquireDurably
   });
 }

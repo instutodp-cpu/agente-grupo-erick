@@ -19,7 +19,9 @@ const {
   planToInsertRow,
   validateInput
 } = require('../src/core/runtime-execution-attempt-durable-claim-acquisition');
-const { createRuntimeExecutionAttemptClaimAcquisitionPostgres } = require('../src/adapters/postgres/runtime-execution-attempt-claim-acquisition-postgres');
+const {
+  createRuntimeExecutionAttemptClaimAcquisitionPostgres
+} = require('../src/adapters/postgres/runtime-execution-attempt-claim-acquisition-postgres');
 const { createRuntimeExecutionAttemptPersistencePostgres } = require('../src/adapters/postgres/runtime-execution-attempt-persistence-postgres');
 const { createRuntimeExecutionAttemptAdmissionPostgres } = require('../src/adapters/postgres/runtime-execution-attempt-admission-postgres');
 const {
@@ -223,6 +225,21 @@ test('persisted canonical identity distinguishes identical replay from divergent
   const conflict = classifyPersistedClaim(planToInsertRow(divergentPlan), plan);
   assert.equal(conflict.outcome, 'CONFLICT');
   assert.deepEqual(persisted, before);
+});
+
+test('PostgreSQL BIGINT claim fields normalize before canonical replay comparison', () => {
+  const input = buildAcquisitionInput();
+  const plan = buildAcquisitionPlan(acquisitionInput(input));
+  const persisted = planToInsertRow(plan);
+  const adapter = createRuntimeExecutionAttemptClaimAcquisitionPostgres({ pool: fakeUnavailablePool() });
+  const databaseRow = {
+    ...persisted,
+    claim_ordinal: String(persisted.claim_ordinal),
+    attempt_revision: String(persisted.attempt_revision),
+    attempt_ordinal: String(persisted.attempt_ordinal)
+  };
+  assert.equal(classifyPersistedClaim(databaseRow, plan).outcome, 'TECHNICAL_FAILURE');
+  assert.equal(classifyPersistedClaim(adapter.normalizeClaimRow(databaseRow), plan).outcome, 'EXISTING_IDENTICAL');
 });
 
 test('P12B contract contains no attempt lifecycle, worker, lease, fencing, or execution mutation', () => {
