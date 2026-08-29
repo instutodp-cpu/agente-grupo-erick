@@ -9,7 +9,6 @@ const {
 } = require('../../core/runtime-execution-attempt-durable-claim-acquisition');
 const {
   CONNECTION_TIMEOUT_MS,
-  LOCK_TIMEOUT_MS,
   ROW_FIELDS,
   STATEMENT_TIMEOUT_MS,
   lifecycleFor,
@@ -18,6 +17,7 @@ const {
 
 const DEFAULT_ATTEMPT_TABLE_NAME = 'hermes.execution_attempts';
 const DEFAULT_CLAIM_TABLE_NAME = 'hermes.execution_attempt_claims';
+const CLAIM_ACQUISITION_TIMEOUT_MS = 60000;
 const SIMPLE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 const CLAIM_COLUMNS = Object.freeze([
   'claim_id', 'claim_ordinal', 'attempt_durable_record_id', 'attempt_state', 'attempt_revision',
@@ -81,9 +81,9 @@ function awaitWithTimeout(operation, timeoutMs, error, onLateFulfillment = null)
   return Promise.race([tracked, deadline]).finally(() => clearTimeout(timer));
 }
 
-function queryWithTimeout(client, sql, values) {
+function queryWithTimeout(client, sql, values, timeoutMs = STATEMENT_TIMEOUT_MS) {
   const operation = values === undefined ? client.query(sql) : client.query(sql, values);
-  return awaitWithTimeout(operation, STATEMENT_TIMEOUT_MS, timeoutError('postgres_statement_timeout'));
+  return awaitWithTimeout(operation, timeoutMs, timeoutError('postgres_statement_timeout'));
 }
 
 async function rollbackAndRelease(client, began, released) {
@@ -96,9 +96,9 @@ async function rollbackAndRelease(client, began, released) {
   }
 }
 
-async function commitOrFail(client) {
+async function commitOrFail(client, timeoutMs = STATEMENT_TIMEOUT_MS) {
   try {
-    await queryWithTimeout(client, 'COMMIT');
+    await queryWithTimeout(client, 'COMMIT', undefined, timeoutMs);
   } catch {
     const error = new Error('postgres_commit_outcome_unknown');
     error.code = 'UNKNOWN_COMMIT_OUTCOME';
@@ -299,14 +299,16 @@ function createRuntimeExecutionAttemptClaimAcquisitionPostgres({
         timeoutError('postgres_connection_timeout'),
         (lateClient) => { try { lateClient?.release?.(); } catch { /* bounded late cleanup */ } }
       );
-      await queryWithTimeout(client, 'BEGIN');
+      const claimQuery = (sqlText, values) => queryWithTimeout(client, sqlText, values, CLAIM_ACQUISITION_TIMEOUT_MS);
+      const claimCommit = () => commitOrFail(client, CLAIM_ACQUISITION_TIMEOUT_MS);
+      await claimQuery('BEGIN');
       began = true;
-      await queryWithTimeout(client, `SET LOCAL lock_timeout = '${LOCK_TIMEOUT_MS}ms'`);
-      await queryWithTimeout(client, `SET LOCAL statement_timeout = '${STATEMENT_TIMEOUT_MS}ms'`);
+      await claimQuery(`SET LOCAL lock_timeout = '${CLAIM_ACQUISITION_TIMEOUT_MS}ms'`);
+      await claimQuery(`SET LOCAL statement_timeout = '${CLAIM_ACQUISITION_TIMEOUT_MS}ms'`);
 
-      const attemptResponse = await queryWithTimeout(client, sql.selectAttempt, [plan.identity.attempt_durable_record_id]);
+      const attemptResponse = await claimQuery(sql.selectAttempt, [plan.identity.attempt_durable_record_id]);
       if (attemptResponse.rows.length === 0) {
-        await commitOrFail(client);
+        await claimCommit();
         began = false;
         releaseClient();
         return resultFor('NOT_FOUND', plan, null, 'attempt_not_found');
@@ -318,39 +320,39 @@ function createRuntimeExecutionAttemptClaimAcquisitionPostgres({
         input.runtime_execution_attempt_claim_eligibility_decision
       );
       if (currentAttempt.outcome !== 'VALID') {
-        await commitOrFail(client);
+        await claimCommit();
         began = false;
         releaseClient();
         return resultFor(currentAttempt.outcome, plan, null, currentAttempt.reason_code);
       }
 
-      const existingBeforeInsert = await queryWithTimeout(client, sql.selectClaimsByAttempt, [plan.identity.attempt_durable_record_id]);
+      const existingBeforeInsert = await claimQuery(sql.selectClaimsByAttempt, [plan.identity.attempt_durable_record_id]);
       if (existingBeforeInsert.rows.length > 1) throw new Error('claim_conflict_without_single_row');
       if (existingBeforeInsert.rows.length === 1) {
         const existingRow = normalizeClaimRow(existingBeforeInsert.rows[0]);
         const classification = classifyPersistedClaim(existingRow, plan);
-        await commitOrFail(client);
+        await claimCommit();
         began = false;
         releaseClient();
         return resultFor(classification.outcome, plan, existingRow, classification.reason_code, classification.validation_errors || []);
       }
 
-      const inserted = await queryWithTimeout(client, sql.insertClaim, claimValues(insertRow));
+      const inserted = await claimQuery(sql.insertClaim, claimValues(insertRow));
       if (inserted.rows.length === 1) {
         const storedRow = normalizeClaimRow(inserted.rows[0]);
         const stored = classifyPersistedClaim(storedRow, plan);
         if (stored.outcome !== 'EXISTING_IDENTICAL') throw new Error('created_claim_identity_mismatch');
-        await commitOrFail(client);
+        await claimCommit();
         began = false;
         releaseClient();
         return resultFor('CREATED', plan, storedRow, 'claim_created');
       }
 
-      const existingResponse = await queryWithTimeout(client, sql.selectClaimsByAttempt, [plan.identity.attempt_durable_record_id]);
+      const existingResponse = await claimQuery(sql.selectClaimsByAttempt, [plan.identity.attempt_durable_record_id]);
       if (existingResponse.rows.length !== 1) throw new Error('claim_conflict_without_single_row');
       const existingRow = normalizeClaimRow(existingResponse.rows[0]);
       const classification = classifyPersistedClaim(existingRow, plan);
-      await commitOrFail(client);
+      await claimCommit();
       began = false;
       releaseClient();
       return resultFor(classification.outcome, plan, existingRow, classification.reason_code, classification.validation_errors || []);
