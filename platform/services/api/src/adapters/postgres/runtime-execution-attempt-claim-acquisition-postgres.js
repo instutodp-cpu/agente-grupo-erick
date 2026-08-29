@@ -324,6 +324,17 @@ function createRuntimeExecutionAttemptClaimAcquisitionPostgres({
         return resultFor(currentAttempt.outcome, plan, null, currentAttempt.reason_code);
       }
 
+      const existingBeforeInsert = await queryWithTimeout(client, sql.selectClaimsByAttempt, [plan.identity.attempt_durable_record_id]);
+      if (existingBeforeInsert.rows.length > 1) throw new Error('claim_conflict_without_single_row');
+      if (existingBeforeInsert.rows.length === 1) {
+        const existingRow = normalizeClaimRow(existingBeforeInsert.rows[0]);
+        const classification = classifyPersistedClaim(existingRow, plan);
+        await commitOrFail(client);
+        began = false;
+        releaseClient();
+        return resultFor(classification.outcome, plan, existingRow, classification.reason_code, classification.validation_errors || []);
+      }
+
       const inserted = await queryWithTimeout(client, sql.insertClaim, claimValues(insertRow));
       if (inserted.rows.length === 1) {
         const storedRow = normalizeClaimRow(inserted.rows[0]);
