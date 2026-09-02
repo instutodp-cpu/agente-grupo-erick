@@ -64,14 +64,26 @@ function normalizeSelectionRow(row) {
   };
 }
 
+function normalizeClaimRow(row) {
+  if (!row || typeof row !== 'object') return row;
+  return {
+    ...row,
+    claim_ordinal: Number(row.claim_ordinal),
+    attempt_revision: Number(row.attempt_revision),
+    attempt_ordinal: Number(row.attempt_ordinal),
+    created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at
+  };
+}
+
 function normalizeWorkerRow(row) {
-  return rowToWorker({
+  const { created_at, updated_at, ...canonicalWorker } = rowToWorker({
     ...row,
     ...Object.fromEntries([
       'worker_compatibility_reference_ids', 'supported_stage_types', 'supported_modalities',
       'supported_model_provider_ids', 'supported_model_ids', 'supported_tool_ids', 'supported_workflow_ids'
     ].map((field) => [field, parseJson(row[field])]))
   });
+  return canonicalWorker;
 }
 
 function resultFor(outcome, plan, row, reasonCode, validationErrors = []) {
@@ -124,7 +136,7 @@ function createRuntimeExecutionAttemptClaimWorkerSelectionPostgres({
 
   async function selectClaim(client, claimId) {
     const response = await client.query(`SELECT * FROM ${claims} WHERE claim_id = $1 FOR SHARE`, [claimId]);
-    return response.rows[0] || null;
+    return normalizeClaimRow(response.rows[0] || null);
   }
 
   async function selectAttempt(client, attemptId) {

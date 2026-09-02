@@ -113,7 +113,7 @@ function buildWorkerEvidence(scope) {
 }
 
 function buildAcquisitionInput(attemptOrdinal = 1) {
-  const p8 = buildAdmissionInput(attemptOrdinal);
+  const p8 = buildAdmissionInput(attemptOrdinal, { compact: true });
   const p9 = buildAdmissionResult({
     outcome: 'ADMITTED',
     record: p8.p7_durable_record,
@@ -294,7 +294,7 @@ test('real PostgreSQL acquires, replays, conflicts, and serializes concurrent cl
     const input = buildAcquisitionInput(1);
     const persistence = createRuntimeExecutionAttemptPersistencePostgres({ pool, tableName: TEST_ATTEMPTS });
     const admission = createRuntimeExecutionAttemptAdmissionPostgres({ pool, tableName: TEST_ATTEMPTS });
-    const p8 = buildAdmissionInput(1);
+    const p8 = buildAdmissionInput(1, { compact: true });
     assert.equal((await persistence.persistDurably(input.p7_durable_record)).persistence_result.outcome, 'CREATED');
     assert.equal((await admission.admitDurably({
       p7_durable_record: input.p7_durable_record,
@@ -323,7 +323,7 @@ test('real PostgreSQL acquires, replays, conflicts, and serializes concurrent cl
     assert.deepEqual(afterConflict.rows, beforeConflict.rows);
 
     const concurrentInput = buildAcquisitionInput(2);
-    const concurrentP8 = buildAdmissionInput(2);
+    const concurrentP8 = buildAdmissionInput(2, { compact: true });
     assert.equal((await persistence.persistDurably(concurrentInput.p7_durable_record)).persistence_result.outcome, 'CREATED');
     assert.equal((await admission.admitDurably({
       p7_durable_record: concurrentInput.p7_durable_record,
@@ -339,7 +339,7 @@ test('real PostgreSQL acquires, replays, conflicts, and serializes concurrent cl
     assert.equal(identicalCount.rows[0].count, 1);
 
     const divergentConcurrentInput = buildAcquisitionInput(3);
-    const divergentP8 = buildAdmissionInput(3);
+    const divergentP8 = buildAdmissionInput(3, { compact: true });
     assert.equal((await persistence.persistDurably(divergentConcurrentInput.p7_durable_record)).persistence_result.outcome, 'CREATED');
     assert.equal((await admission.admitDurably({
       p7_durable_record: divergentConcurrentInput.p7_durable_record,

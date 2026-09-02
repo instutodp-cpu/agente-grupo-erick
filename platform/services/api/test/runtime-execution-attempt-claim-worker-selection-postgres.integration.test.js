@@ -25,6 +25,7 @@ const { computeHealthFingerprint } = require('../src/core/runtime-worker-health-
 const { computeCapacityDigest, computeCapacityFingerprint } = require('../src/core/runtime-worker-capacity-reference');
 const { computeFreshnessFingerprint } = require('../src/core/runtime-readiness-freshness-reference');
 const { createRuntimeExecutionAttemptClaimWorkerSelectionPostgres } = require('../src/adapters/postgres/runtime-execution-attempt-claim-worker-selection-postgres');
+const { buildAcquisitionPlan, planToInsertRow } = require('../src/core/runtime-execution-attempt-durable-claim-acquisition');
 
 const migrationPaths = [
   '004_create_execution_attempts.sql',
@@ -100,7 +101,7 @@ function workerEvidence(scope) {
 }
 
 function acquisitionInput(attemptOrdinal) {
-  const p8 = buildAdmissionInput(attemptOrdinal);
+  const p8 = buildAdmissionInput(attemptOrdinal, { compact: true });
   const p9 = buildAdmissionResult({
     outcome: 'ADMITTED', record: p8.p7_durable_record, decision: p8.p8_admission_decision,
     finalState: 'ADMITTED', finalRevision: 2, transitionApplied: true, reasonCode: 'prepared_to_admitted'
@@ -111,6 +112,26 @@ function acquisitionInput(attemptOrdinal) {
     ...workerEvidence(p8.p7_durable_record.identity_scope)
   });
   return { p7: p8.p7_durable_record, p8, intent, decision };
+}
+
+function fingerprintNestingDepth(value, depth = 0) {
+  if (typeof value !== 'string') return depth;
+  let parsed;
+  try { parsed = JSON.parse(value); } catch { return depth; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return depth;
+  return Math.max(depth + 1, ...Object.entries(parsed).map(([key, child]) => /fingerprint/i.test(key)
+    ? fingerprintNestingDepth(child, depth + 1) : 0));
+}
+
+function assertCompactP13BFixture(input) {
+  const plan = buildAcquisitionPlan({
+    runtime_execution_attempt_claim_intent: input.intent,
+    runtime_execution_attempt_claim_eligibility_decision: input.decision
+  });
+  const row = planToInsertRow(plan);
+  assert.ok(fingerprintNestingDepth(plan.claim_fingerprint) <= 5);
+  assert.ok(Buffer.byteLength(JSON.stringify(row.claim_artifact)) < 1000000);
+  assert.ok(Buffer.byteLength(JSON.stringify(row.claim_receipt)) < 1000000);
 }
 
 function stage(overrides = {}) {
@@ -167,6 +188,13 @@ async function createClaim(input, persistence, admission, claimAdapter) {
   return acquired.acquisition_result.claim_id;
 }
 
+async function settleConcurrentOperations(operations) {
+  const settled = await Promise.allSettled(operations);
+  const rejection = settled.find((result) => result.status === 'rejected');
+  if (rejection) throw rejection.reason;
+  return settled.map((result) => result.value);
+}
+
 test('real PostgreSQL P13B persists claim-stage selection, replays, conflicts, and serializes concurrency', { skip: !safeDatabaseUrl(TEST_DATABASE_URL) }, async () => {
   const { Pool } = require('pg');
   const pool = new Pool({ connectionString: TEST_DATABASE_URL, max: 30, connectionTimeoutMillis: 5000 });
@@ -178,7 +206,7 @@ test('real PostgreSQL P13B persists claim-stage selection, replays, conflicts, a
     const registry = createRuntimeWorkerRegistryPostgres({ pool, tableName: TEST_WORKERS, authorizeRegistration: async () => true });
     await registry.registerWorker(worker());
     await registry.registerWorker(worker({ worker_id: 'worker-selection-z' }));
-    await registry.registerWorker(worker({ worker_id: 'worker-selection-image', supported_modalities: ['IMAGE'] }));
+    await registry.registerWorker(worker({ worker_id: 'worker-selection-image', supported_modalities: ['IMAGE_INPUT_REFERENCE'] }));
     await registry.registerWorker(worker({ worker_id: 'worker-selection-disabled', lifecycle_state: 'DISABLED' }));
     await registry.registerWorker(worker({ worker_id: 'worker-selection-other-scope', tenant_id: 'other-tenant' }));
 
@@ -191,6 +219,7 @@ test('real PostgreSQL P13B persists claim-stage selection, replays, conflicts, a
     });
 
     const firstInput = acquisitionInput(1);
+    assertCompactP13BFixture(firstInput);
     const firstClaimId = await createClaim(firstInput, persistence, admission, claimAdapter);
     const first = await selectionAdapter.acquireSelection({ claim_id: firstClaimId, stage_reference: stage() });
     assert.equal(first.selection_result.outcome, 'CREATED');
@@ -210,7 +239,9 @@ test('real PostgreSQL P13B persists claim-stage selection, replays, conflicts, a
 
     const identicalInput = acquisitionInput(2);
     const identicalClaimId = await createClaim(identicalInput, persistence, admission, claimAdapter);
-    const identicalResults = await Promise.all(Array.from({ length: 6 }, () => selectionAdapter.acquireSelection({ claim_id: identicalClaimId, stage_reference: stage() })));
+    const identicalResults = await settleConcurrentOperations(
+      Array.from({ length: 6 }, () => selectionAdapter.acquireSelection({ claim_id: identicalClaimId, stage_reference: stage() }))
+    );
     assert.equal(identicalResults.filter((result) => result.selection_result.outcome === 'CREATED').length, 1);
     assert.equal(identicalResults.filter((result) => result.selection_result.outcome === 'EXISTING_IDENTICAL').length, 5);
     assert.equal(identicalResults.filter((result) => result.selection_result.outcome === 'CONFLICT').length, 0);
@@ -219,7 +250,7 @@ test('real PostgreSQL P13B persists claim-stage selection, replays, conflicts, a
 
     const divergentInput = acquisitionInput(3);
     const divergentClaimId = await createClaim(divergentInput, persistence, admission, claimAdapter);
-    const divergentResults = await Promise.all([
+    const divergentResults = await settleConcurrentOperations([
       selectionAdapter.acquireSelection({ claim_id: divergentClaimId, stage_reference: stage() }),
       selectionAdapter.acquireSelection({ claim_id: divergentClaimId, stage_reference: stage({ required_modalities: ['IMAGE_INPUT_REFERENCE'] }) })
     ]);
@@ -234,7 +265,10 @@ test('real PostgreSQL P13B persists claim-stage selection, replays, conflicts, a
     const names = columns.rows.map((row) => row.column_name);
     assert.equal(names.some((name) => /binding|ownership|lease|fenc|capacity|execution/i.test(name)), false);
   } finally {
-    await pool.query(`DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE`);
-    await pool.end();
+    try {
+      await pool.query(`DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE`);
+    } finally {
+      await pool.end();
+    }
   }
 });

@@ -1,6 +1,6 @@
 'use strict';
 
-const { stablePayload } = require('../../src/core/agent-identity-contract');
+const { cloneFrozen, stablePayload } = require('../../src/core/agent-identity-contract');
 const { computeCanonicalContentDigest } = require('../../src/core/canonical-content-digest');
 const {
   EXTERNAL_EFFECT_AUTHORIZATION_STATE,
@@ -20,7 +20,13 @@ const {
 const { buildDurableJobRecord } = require('../../src/core/runtime-execution-job-durable-contract');
 const { buildRuntimeExecutionAttemptIntent } = require('../../src/core/runtime-execution-attempt-intent');
 const { buildRuntimeExecutionAttemptMaterialization } = require('../../src/core/runtime-execution-attempt-materialization');
-const { buildRuntimeExecutionAttemptDurableRecord } = require('../../src/core/runtime-execution-attempt-durable-record');
+const {
+  buildRuntimeExecutionAttemptDurableRecord,
+  computeRuntimeExecutionAttemptDurableRecordDigest,
+  computeRuntimeExecutionAttemptDurableRecordFingerprint,
+  computeRuntimeExecutionAttemptDurableRecordId,
+  validateRuntimeExecutionAttemptDurableRecord
+} = require('../../src/core/runtime-execution-attempt-durable-record');
 const { buildRuntimeAdmissionPolicy } = require('../../src/core/runtime-admission-policy');
 const { buildRuntimeReadinessDecision } = require('../../src/core/runtime-readiness-decision');
 const { buildRuntimeExecutionAttemptAdmissionDecision } = require('../../src/core/runtime-execution-attempt-admission-decision-simulation');
@@ -86,6 +92,36 @@ function buildP7Record(attemptOrdinal = 1) {
   );
 }
 
+function compactReference(reference) {
+  const material = { id: reference.id, version: reference.version, digest: reference.digest };
+  return { ...reference, fingerprint: stablePayload(material) };
+}
+
+function buildCompactP7Record(attemptOrdinal = 1) {
+  const record = JSON.parse(JSON.stringify(buildP7Record(attemptOrdinal)));
+  for (const field of [
+    'runtime_execution_attempt_materialization_reference',
+    'runtime_execution_attempt_intent_reference',
+    'durable_job_reference',
+    'admission_reference'
+  ]) record[field] = compactReference(record[field]);
+
+  record.runtime_execution_attempt_durable_record_id = computeRuntimeExecutionAttemptDurableRecordId({
+    materializationReference: record.runtime_execution_attempt_materialization_reference,
+    intentReference: record.runtime_execution_attempt_intent_reference,
+    durableJobReference: record.durable_job_reference,
+    logicalJobIdentityDigest: record.logical_job_identity_digest,
+    admissionReference: record.admission_reference,
+    identityScope: record.identity_scope,
+    attemptOrdinal: record.attempt_ordinal
+  });
+  record.runtime_execution_attempt_durable_record_fingerprint = computeRuntimeExecutionAttemptDurableRecordFingerprint(record);
+  record.runtime_execution_attempt_durable_record_digest = computeRuntimeExecutionAttemptDurableRecordDigest(record);
+  const validation = validateRuntimeExecutionAttemptDurableRecord(record);
+  if (!validation.valid) throw new Error(`compact_p7_fixture_invalid::${JSON.stringify(validation.errors)}`);
+  return cloneFrozen(record);
+}
+
 function buildP8Input(record) {
   const scope = record.identity_scope;
   const readiness = buildRuntimeReadinessDecision({
@@ -123,9 +159,9 @@ function buildP8Input(record) {
   };
 }
 
-function buildAdmissionInput(attemptOrdinal = 1) {
-  const p7 = buildP7Record(attemptOrdinal);
+function buildAdmissionInput(attemptOrdinal = 1, { compact = false } = {}) {
+  const p7 = compact ? buildCompactP7Record(attemptOrdinal) : buildP7Record(attemptOrdinal);
   return { p7_durable_record: p7, p8_admission_decision: buildRuntimeExecutionAttemptAdmissionDecision(buildP8Input(p7)) };
 }
 
-module.exports = { buildAdmissionInput, buildP7Record };
+module.exports = { buildAdmissionInput, buildCompactP7Record, buildP7Record };
