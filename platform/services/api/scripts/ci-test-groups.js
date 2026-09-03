@@ -59,6 +59,7 @@ const GROUPS = Object.freeze({
     'test/runtime-operational-owner-identity-postgres.integration.test.js',
     'test/runtime-execution-attempt-worker-ownership-postgres.integration.test.js',
     'test/runtime-execution-attempt-worker-lease-postgres.integration.test.js',
+    'test/runtime-execution-attempt-worker-capacity-reservation-postgres.integration.test.js',
     'test/hermes-vps-postgres-authorization-lifecycle-persistence.test.js',
     'test/postgres-confirmation-persistence.test.js'
   ]),
