@@ -13,6 +13,14 @@ const MIGRATION_PATH = path.resolve(__dirname, '../../../migrations/hermes/016_c
 const MIGRATION = fs.readFileSync(MIGRATION_PATH, 'utf8');
 const TEST_DATABASE_URL = process.env.HERMES_POSTGRES_TEST_DATABASE_URL;
 const TEST_SCHEMA = 'hermes_governance_root_bootstrap_test';
+const TEST_TABLES = Object.freeze({
+  guard: `${TEST_SCHEMA}.installation_bootstrap_guard`,
+  installations: `${TEST_SCHEMA}.installations`,
+  bootstraps: `${TEST_SCHEMA}.installation_bootstraps`,
+  roots: `${TEST_SCHEMA}.governance_root_subjects`,
+  keys: `${TEST_SCHEMA}.governance_root_keys`,
+  audit: `${TEST_SCHEMA}.governance_audit_events`
+});
 
 function safeDatabaseUrl(value) {
   if (typeof value !== 'string' || value.length === 0) return false;
@@ -135,6 +143,7 @@ test('real PostgreSQL bootstrap is atomic, one-shot, replay-safe and concurrent'
 
     const authority = createCanonicalGovernanceRootBootstrapPostgres({
       pool,
+      tables: TEST_TABLES,
       externalTrustVerifier: { verify: async () => ({ valid: true }) },
       rootTransitionVerifier: { verify: async () => ({ valid: true }) }
     });
@@ -153,6 +162,7 @@ test('real PostgreSQL bootstrap is atomic, one-shot, replay-safe and concurrent'
 
     const replay = await createCanonicalGovernanceRootBootstrapPostgres({
       pool,
+      tables: TEST_TABLES,
       externalTrustVerifier: { verify: async () => ({ valid: true }) }
     }).bootstrap(firstArtifact);
     assert.equal(replay.status, 'REPLAY_ACCEPTED');
@@ -229,7 +239,7 @@ test('real PostgreSQL transaction rollback leaves no bootstrap or root', { skip:
     await pool.query(isolatedMigration(MIGRATION));
     const authority = createCanonicalGovernanceRootBootstrapPostgres({
       pool,
-      tables: { roots: `${TEST_SCHEMA}.missing_roots` },
+      tables: { ...TEST_TABLES, roots: `${TEST_SCHEMA}.missing_roots` },
       externalTrustVerifier: { verify: async () => true }
     });
     const result = await authority.bootstrap(artifact());
