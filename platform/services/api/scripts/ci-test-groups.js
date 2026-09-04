@@ -48,6 +48,7 @@ const GROUPS = Object.freeze({
     'test/runtime-execution-attempt-persistence-postgres.test.js'
   ]),
   'postgres-persistence': Object.freeze([
+    'test/canonical-governance-root-bootstrap-postgres.integration.test.js',
     'test/runtime-execution-job-admission-postgres.integration.test.js',
     'test/runtime-execution-attempt-persistence-postgres.integration.test.js',
     'test/runtime-execution-attempt-admission-postgres.integration.test.js',
