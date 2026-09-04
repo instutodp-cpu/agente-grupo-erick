@@ -240,8 +240,12 @@ test('real PostgreSQL bootstrap is atomic, one-shot, replay-safe and concurrent'
     const concurrent = await Promise.all(Array.from({ length: 8 }, () => authority.bootstrap(firstArtifact)));
     assert.equal(concurrent.filter((result) => result.status === 'REPLAY_ACCEPTED').length, 8);
 
-    const secondKey = await pool.query(`SELECT count(*)::int AS count FROM ${TEST_SCHEMA}.governance_root_keys WHERE lifecycle_state = 'ACTIVE'`);
-    assert.equal(secondKey.rows[0].count, 1);
+    const secondKey = await pool.query(`
+      SELECT count(*)::int AS total,
+             count(*) FILTER (WHERE lifecycle_state = 'ACTIVE')::int AS active
+      FROM ${TEST_SCHEMA}.governance_root_keys
+    `);
+    assert.deepEqual(secondKey.rows[0], { total: 2, active: 0 });
 
     const immutableIdentity = await pool.query(`
       UPDATE ${TEST_SCHEMA}.installations SET installation_id = 'tampered' WHERE installation_id = $1
