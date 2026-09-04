@@ -160,6 +160,35 @@ test('real PostgreSQL bootstrap is atomic, one-shot, replay-safe and concurrent'
     `);
     assert.deepEqual(counts.rows[0], { installations: 1, bootstraps: 1, roots: 1, keys: 1, audits: 3 });
 
+    const triggerInventory = await pool.query(`
+      SELECT table_name, trigger_name, function_name
+      FROM (
+        SELECT c.relname AS table_name, t.tgname AS trigger_name, p.proname AS function_name
+        FROM pg_trigger t
+        JOIN pg_class c ON c.oid = t.tgrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        JOIN pg_proc p ON p.oid = t.tgfoid
+        WHERE NOT t.tgisinternal AND n.nspname = $1
+      ) AS triggers
+      WHERE trigger_name IN (
+        'installations_immutable_trigger',
+        'installation_bootstraps_append_only_trigger',
+        'governance_root_subjects_immutable_trigger',
+        'governance_root_keys_immutable_trigger',
+        'governance_audit_append_only_trigger',
+        'governance_audit_delete_trigger'
+      )
+      ORDER BY trigger_name
+    `, [TEST_SCHEMA]);
+    assert.deepEqual(triggerInventory.rows, [
+      { table_name: 'governance_audit_events', trigger_name: 'governance_audit_append_only_trigger', function_name: 'reject_governance_audit_update' },
+      { table_name: 'governance_audit_events', trigger_name: 'governance_audit_delete_trigger', function_name: 'reject_governance_audit_delete' },
+      { table_name: 'governance_root_keys', trigger_name: 'governance_root_keys_immutable_trigger', function_name: 'reject_governance_root_key_immutable_update' },
+      { table_name: 'governance_root_subjects', trigger_name: 'governance_root_subjects_immutable_trigger', function_name: 'reject_governance_root_subject_immutable_update' },
+      { table_name: 'installation_bootstraps', trigger_name: 'installation_bootstraps_append_only_trigger', function_name: 'reject_installation_bootstrap_update' },
+      { table_name: 'installations', trigger_name: 'installations_immutable_trigger', function_name: 'reject_installation_immutable_update' }
+    ]);
+
     const replay = await createCanonicalGovernanceRootBootstrapPostgres({
       pool,
       tables: TEST_TABLES,
@@ -217,14 +246,36 @@ test('real PostgreSQL bootstrap is atomic, one-shot, replay-safe and concurrent'
     const immutableIdentity = await pool.query(`
       UPDATE ${TEST_SCHEMA}.installations SET installation_id = 'tampered' WHERE installation_id = $1
     `, ['installation-test-1']).catch((error) => error);
+    assert.equal(immutableIdentity.code, 'P0001');
     assert.match(immutableIdentity.message, /governance_installation_identity_immutable/);
+
+    const bootstrapUpdate = await pool.query(`
+      UPDATE ${TEST_SCHEMA}.installation_bootstraps SET receipt = receipt
+    `).catch((error) => error);
+    assert.equal(bootstrapUpdate.code, 'P0001');
+    assert.match(bootstrapUpdate.message, /governance_bootstrap_append_only/);
+
+    const rootIdentity = await pool.query(`
+      UPDATE ${TEST_SCHEMA}.governance_root_subjects
+      SET root_digest = 'sha256:' || repeat('0', 64)
+    `).catch((error) => error);
+    assert.equal(rootIdentity.code, 'P0001');
+    assert.match(rootIdentity.message, /governance_root_subject_immutable/);
+
+    const rootKeyIdentity = await pool.query(`
+      UPDATE ${TEST_SCHEMA}.governance_root_keys SET public_key = 'tampered'
+    `).catch((error) => error);
+    assert.equal(rootKeyIdentity.code, 'P0001');
+    assert.match(rootKeyIdentity.message, /governance_root_key_immutable/);
 
     const auditUpdate = await pool.query(`
       UPDATE ${TEST_SCHEMA}.governance_audit_events SET actor_subject = 'tampered'
     `).catch((error) => error);
+    assert.equal(auditUpdate.code, 'P0001');
     assert.match(auditUpdate.message, /governance_audit_append_only/);
 
     const auditDelete = await pool.query(`DELETE FROM ${TEST_SCHEMA}.governance_audit_events`).catch((error) => error);
+    assert.equal(auditDelete.code, 'P0001');
     assert.match(auditDelete.message, /governance_audit_append_only/);
   } finally {
     try { await pool.query(`DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE`); } finally { await pool.end(); }

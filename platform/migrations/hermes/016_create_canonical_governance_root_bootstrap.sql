@@ -209,25 +209,45 @@ CREATE INDEX IF NOT EXISTS governance_audit_events_installation_idx
 CREATE INDEX IF NOT EXISTS governance_audit_events_root_idx
   ON hermes.governance_audit_events (root_subject_id, created_at);
 
-CREATE OR REPLACE FUNCTION hermes.reject_governance_immutable_update()
+DROP TRIGGER IF EXISTS installations_immutable_trigger ON hermes.installations;
+DROP TRIGGER IF EXISTS installation_bootstraps_append_only_trigger ON hermes.installation_bootstraps;
+DROP TRIGGER IF EXISTS governance_root_subjects_immutable_trigger ON hermes.governance_root_subjects;
+DROP TRIGGER IF EXISTS governance_root_keys_immutable_trigger ON hermes.governance_root_keys;
+DROP TRIGGER IF EXISTS governance_audit_append_only_trigger ON hermes.governance_audit_events;
+
+DROP FUNCTION IF EXISTS hermes.reject_governance_immutable_update();
+
+CREATE OR REPLACE FUNCTION hermes.reject_installation_immutable_update()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
 BEGIN
-  IF TG_TABLE_NAME = 'installations' AND (
-    NEW.installation_id IS DISTINCT FROM OLD.installation_id
+  IF NEW.installation_id IS DISTINCT FROM OLD.installation_id
     OR NEW.installation_slot IS DISTINCT FROM OLD.installation_slot
     OR NEW.installation_identity IS DISTINCT FROM OLD.installation_identity
     OR NEW.installation_identity_digest IS DISTINCT FROM OLD.installation_identity_digest
-    OR NEW.created_at IS DISTINCT FROM OLD.created_at
-  ) THEN
+    OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
     RAISE EXCEPTION 'governance_installation_identity_immutable';
   END IF;
-  IF TG_TABLE_NAME = 'installation_bootstraps' THEN
-    RAISE EXCEPTION 'governance_bootstrap_append_only';
-  END IF;
-  IF TG_TABLE_NAME = 'governance_root_subjects' AND (
-    NEW.root_subject_id IS DISTINCT FROM OLD.root_subject_id
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION hermes.reject_installation_bootstrap_update()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'governance_bootstrap_append_only';
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION hermes.reject_governance_root_subject_immutable_update()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.root_subject_id IS DISTINCT FROM OLD.root_subject_id
     OR NEW.installation_id IS DISTINCT FROM OLD.installation_id
     OR NEW.root_subject_slot IS DISTINCT FROM OLD.root_subject_slot
     OR NEW.root_scope IS DISTINCT FROM OLD.root_scope
@@ -235,12 +255,19 @@ BEGIN
     OR NEW.delegation_policy IS DISTINCT FROM OLD.delegation_policy
     OR NEW.root_fingerprint IS DISTINCT FROM OLD.root_fingerprint
     OR NEW.root_digest IS DISTINCT FROM OLD.root_digest
-    OR NEW.created_at IS DISTINCT FROM OLD.created_at
-  ) THEN
+    OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
     RAISE EXCEPTION 'governance_root_subject_immutable';
   END IF;
-  IF TG_TABLE_NAME = 'governance_root_keys' AND (
-    NEW.root_key_id IS DISTINCT FROM OLD.root_key_id
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION hermes.reject_governance_root_key_immutable_update()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.root_key_id IS DISTINCT FROM OLD.root_key_id
     OR NEW.root_subject_id IS DISTINCT FROM OLD.root_subject_id
     OR NEW.generation IS DISTINCT FROM OLD.generation
     OR NEW.algorithm IS DISTINCT FROM OLD.algorithm
@@ -248,41 +275,41 @@ BEGIN
     OR NEW.key_fingerprint IS DISTINCT FROM OLD.key_fingerprint
     OR NEW.key_digest IS DISTINCT FROM OLD.key_digest
     OR NEW.valid_from IS DISTINCT FROM OLD.valid_from
-    OR NEW.created_at IS DISTINCT FROM OLD.created_at
-  ) THEN
+    OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
     RAISE EXCEPTION 'governance_root_key_immutable';
-  END IF;
-  IF TG_TABLE_NAME = 'governance_audit_events' THEN
-    RAISE EXCEPTION 'governance_audit_append_only';
   END IF;
   RETURN NEW;
 END;
 $$;
 
-DROP TRIGGER IF EXISTS installations_immutable_trigger ON hermes.installations;
+CREATE OR REPLACE FUNCTION hermes.reject_governance_audit_update()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'governance_audit_append_only';
+END;
+$$;
+
 CREATE TRIGGER installations_immutable_trigger
   BEFORE UPDATE ON hermes.installations
-  FOR EACH ROW EXECUTE FUNCTION hermes.reject_governance_immutable_update();
+  FOR EACH ROW EXECUTE FUNCTION hermes.reject_installation_immutable_update();
 
-DROP TRIGGER IF EXISTS installation_bootstraps_append_only_trigger ON hermes.installation_bootstraps;
 CREATE TRIGGER installation_bootstraps_append_only_trigger
   BEFORE UPDATE ON hermes.installation_bootstraps
-  FOR EACH ROW EXECUTE FUNCTION hermes.reject_governance_immutable_update();
+  FOR EACH ROW EXECUTE FUNCTION hermes.reject_installation_bootstrap_update();
 
-DROP TRIGGER IF EXISTS governance_root_subjects_immutable_trigger ON hermes.governance_root_subjects;
 CREATE TRIGGER governance_root_subjects_immutable_trigger
   BEFORE UPDATE ON hermes.governance_root_subjects
-  FOR EACH ROW EXECUTE FUNCTION hermes.reject_governance_immutable_update();
+  FOR EACH ROW EXECUTE FUNCTION hermes.reject_governance_root_subject_immutable_update();
 
-DROP TRIGGER IF EXISTS governance_root_keys_immutable_trigger ON hermes.governance_root_keys;
 CREATE TRIGGER governance_root_keys_immutable_trigger
   BEFORE UPDATE ON hermes.governance_root_keys
-  FOR EACH ROW EXECUTE FUNCTION hermes.reject_governance_immutable_update();
+  FOR EACH ROW EXECUTE FUNCTION hermes.reject_governance_root_key_immutable_update();
 
-DROP TRIGGER IF EXISTS governance_audit_append_only_trigger ON hermes.governance_audit_events;
 CREATE TRIGGER governance_audit_append_only_trigger
   BEFORE UPDATE ON hermes.governance_audit_events
-  FOR EACH ROW EXECUTE FUNCTION hermes.reject_governance_immutable_update();
+  FOR EACH ROW EXECUTE FUNCTION hermes.reject_governance_audit_update();
 
 CREATE OR REPLACE FUNCTION hermes.reject_governance_audit_delete()
 RETURNS trigger
