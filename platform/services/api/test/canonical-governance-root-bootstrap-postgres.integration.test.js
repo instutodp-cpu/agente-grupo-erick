@@ -172,15 +172,6 @@ test('real PostgreSQL bootstrap is atomic, one-shot, replay-safe and concurrent'
         JOIN pg_proc p ON p.oid = t.tgfoid
         WHERE NOT t.tgisinternal AND n.nspname = $1
       ) AS triggers
-      WHERE trigger_name IN (
-        'installations_immutable_trigger',
-        'installation_bootstraps_append_only_trigger',
-        'governance_root_subjects_immutable_trigger',
-        'governance_root_keys_immutable_trigger',
-        'governance_root_keys_delete_trigger',
-        'governance_audit_append_only_trigger',
-        'governance_audit_delete_trigger'
-      )
       ORDER BY trigger_name
     `, [TEST_SCHEMA]);
     assert.deepEqual(triggerInventory.rows, [
