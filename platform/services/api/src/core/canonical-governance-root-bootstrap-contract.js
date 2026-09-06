@@ -159,7 +159,15 @@ function validateRootSpec(rootSpec, installationId, errors = []) {
   return errors;
 }
 
-function validateExternalAuthorization(authorization, request, errors = []) {
+function validationNow(options = {}) {
+  const value = options.now === undefined ? Date.now() : options.now;
+  const timestamp = value instanceof Date
+    ? value.getTime()
+    : typeof value === 'number' ? value : Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function validateExternalAuthorization(authorization, request, errors = [], options = {}) {
   if (!exactFields(authorization, AUTHORIZATION_FIELDS, 'external_authorization', errors)) return errors;
   requiredStrings(authorization, AUTHORIZATION_FIELDS, 'external_authorization', errors);
   if (authorization.boundary_type !== 'EXTERNAL_DEPLOYMENT_BOUNDARY') errors.push('external_boundary_type_invalid');
@@ -176,11 +184,19 @@ function validateExternalAuthorization(authorization, request, errors = []) {
   if (Number.isFinite(issuedAt) && Number.isFinite(expiresAt) && expiresAt <= issuedAt) {
     errors.push('external_authorization_expiry_invalid');
   }
+  const now = validationNow(options);
+  if (!Number.isFinite(now)) errors.push('external_authorization_now_invalid');
+  if (Number.isFinite(now) && Number.isFinite(issuedAt) && now < issuedAt) {
+    errors.push('external_authorization_not_yet_valid');
+  }
+  if (Number.isFinite(now) && Number.isFinite(expiresAt) && now >= expiresAt) {
+    errors.push('external_authorization_expired');
+  }
   if (authorization.attestation_digest !== computeAttestationDigest(authorization)) errors.push('external_attestation_digest_mismatch');
   return errors;
 }
 
-function validateBootstrapRequest(request) {
+function validateBootstrapRequest(request, options = {}) {
   const errors = [];
   const fields = ['contract_version', 'bootstrap_id', 'installation_identity', 'root_spec', 'external_authorization', 'artifact_digest', 'provenance_digest'];
   if (!exactFields(request, fields, 'bootstrap_request', errors)) return { valid: false, errors: uniqueSorted(errors) };
@@ -190,17 +206,17 @@ function validateBootstrapRequest(request) {
   if (!isCanonicalContentDigest(request.provenance_digest)) errors.push('provenance_digest_invalid');
   validateInstallationIdentity(request.installation_identity, null, errors);
   validateRootSpec(request.root_spec, request.installation_identity?.installation_id, errors);
-  validateExternalAuthorization(request.external_authorization, request, errors);
+  validateExternalAuthorization(request.external_authorization, request, errors, options);
   if (request.artifact_digest !== computeArtifactDigest(request)) errors.push('artifact_digest_mismatch');
   if (request.provenance_digest !== computeProvenanceDigest(request)) errors.push('provenance_digest_mismatch');
   if (request.external_authorization.authorized_artifact_digest !== request.artifact_digest) errors.push('external_artifact_digest_mismatch');
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }
 
-function validatePersistedBootstrapRecord(record) {
+function validatePersistedBootstrapRecord(record, options = {}) {
   const errors = [];
   if (!isPlainObject(record)) return { valid: false, errors: ['bootstrap_record_must_be_object'] };
-  const result = validateBootstrapRequest(record.bootstrap_artifact);
+  const result = validateBootstrapRequest(record.bootstrap_artifact, options);
   if (!result.valid) errors.push(...result.errors);
   if (record.bootstrap_id !== record.bootstrap_artifact?.bootstrap_id) errors.push('persisted_bootstrap_id_mismatch');
   if (record.artifact_digest !== record.bootstrap_artifact?.artifact_digest) errors.push('persisted_artifact_digest_mismatch');
@@ -210,7 +226,7 @@ function validatePersistedBootstrapRecord(record) {
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }
 
-function buildBootstrapArtifact(input = {}) {
+function buildBootstrapArtifact(input = {}, options = {}) {
   const request = {
     contract_version: CONTRACT_VERSION,
     bootstrap_id: input.bootstrap_id,
@@ -227,7 +243,7 @@ function buildBootstrapArtifact(input = {}) {
   };
   request.external_authorization.attestation_digest = computeAttestationDigest(request.external_authorization);
   request.provenance_digest = computeProvenanceDigest(request);
-  const validation = validateBootstrapRequest(request);
+  const validation = validateBootstrapRequest(request, options);
   if (!validation.valid) throw new Error(`bootstrap_request_invalid::${validation.errors.join(',')}`);
   return cloneFrozen(request);
 }

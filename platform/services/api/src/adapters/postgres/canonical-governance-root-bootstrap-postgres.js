@@ -203,14 +203,15 @@ async function rollback(client, began) {
   try { await client.query('ROLLBACK'); } catch { /* preserve fail-closed result */ }
 }
 
-function createCanonicalGovernanceRootBootstrapPostgres({ pool, externalTrustVerifier, rootTransitionVerifier, tables } = {}) {
+function createCanonicalGovernanceRootBootstrapPostgres({ pool, externalTrustVerifier, rootTransitionVerifier, tables, clock = () => Date.now() } = {}) {
   requirePool(pool);
+  if (typeof clock !== 'function') throw new TypeError('governance_postgres_clock_invalid');
   const qualified = tablesWithOverrides(tables);
 
   async function bootstrap(input = {}) {
     let request;
     try {
-      request = buildBootstrapArtifact(input);
+      request = buildBootstrapArtifact(input, { now: clock() });
     } catch (error) {
       return invalidResult(input, [error.message]);
     }

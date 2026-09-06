@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
+const { createCanonicalGovernanceRootBootstrapPostgres } = require('../src/adapters/postgres/canonical-governance-root-bootstrap-postgres');
 const {
   CONTRACT_VERSION,
   IDENTITY_VERSION,
@@ -16,6 +17,8 @@ const {
   validateBootstrapRequest,
   validateScope
 } = require('../src/core/canonical-governance-root-bootstrap-contract');
+
+const TEST_NOW = '2026-09-03T12:05:00.000Z';
 
 function identity(overrides = {}) {
   const base = {
@@ -88,16 +91,20 @@ function authorization(install, root, overrides = {}) {
   };
 }
 
-function artifact(overrides = {}) {
+function artifactInput(overrides = {}) {
   const install = identity();
   const root = rootSpec(install);
-  return buildBootstrapArtifact({
+  return {
     bootstrap_id: 'bootstrap-1',
     installation_identity: install,
     root_spec: root,
     external_authorization: authorization(install, root),
     ...overrides
-  });
+  };
+}
+
+function artifact(overrides = {}) {
+  return buildBootstrapArtifact(artifactInput(overrides), { now: TEST_NOW });
 }
 
 test('builds a deterministic bootstrap artifact and digest', () => {
@@ -105,7 +112,77 @@ test('builds a deterministic bootstrap artifact and digest', () => {
   const second = artifact();
   assert.deepEqual(first, second);
   assert.equal(first.contract_version, CONTRACT_VERSION);
-  assert.equal(validateBootstrapRequest(first).valid, true);
+  assert.equal(validateBootstrapRequest(first, { now: TEST_NOW }).valid, true);
+  assert.equal(validateBootstrapRequest(first, { now: Date.parse(TEST_NOW) }).valid, true);
+  assert.equal(validateBootstrapRequest(first, { now: '2026-09-03T12:06:00.000Z' }).valid, true);
+});
+
+test('external authorization freshness is explicit, deterministic and checked before persistence', async () => {
+  const valid = artifact();
+  assert.equal(validateBootstrapRequest(valid, { now: TEST_NOW }).valid, true);
+  assert.equal(valid.artifact_digest, buildBootstrapArtifact(artifactInput(), { now: '2026-09-03T12:14:00.000Z' }).artifact_digest);
+
+  assert.throws(
+    () => buildBootstrapArtifact(artifactInput({ external_authorization: authorization(identity(), rootSpec(identity()), {
+      expires_at: '2026-09-03T12:05:00.000Z'
+    }) }), { now: TEST_NOW }),
+    /external_authorization_expired/
+  );
+  assert.throws(
+    () => buildBootstrapArtifact(artifactInput({ external_authorization: authorization(identity(), rootSpec(identity()), {
+      issued_at: '2026-09-03T12:06:00.000Z'
+    }) }), { now: TEST_NOW }),
+    /external_authorization_not_yet_valid/
+  );
+  assert.throws(
+    () => buildBootstrapArtifact(artifactInput({ external_authorization: authorization(identity(), rootSpec(identity()), {
+      issued_at: '2026-09-03T12:05:00.000Z', expires_at: '2026-09-03T12:05:00.000Z'
+    }) }), { now: TEST_NOW }),
+    /external_authorization_expiry_invalid/
+  );
+  assert.throws(
+    () => buildBootstrapArtifact(artifactInput({ external_authorization: authorization(identity(), rootSpec(identity()), {
+      issued_at: 'not-a-timestamp'
+    }) }), { now: TEST_NOW }),
+    /external_issued_at_invalid/
+  );
+
+  let connectCalls = 0;
+  let verifierCalls = 0;
+  const authority = createCanonicalGovernanceRootBootstrapPostgres({
+    pool: { connect: async () => { connectCalls += 1; throw new Error('unexpected_pool_connect'); } },
+    clock: () => new Date(TEST_NOW),
+    externalTrustVerifier: { verify: async () => { verifierCalls += 1; return { valid: true }; } }
+  });
+  const result = await authority.bootstrap(artifactInput({ external_authorization: authorization(identity(), rootSpec(identity()), {
+    expires_at: '2026-09-03T12:05:00.000Z'
+  }) }));
+  assert.equal(result.status, 'INVALID');
+  assert.match(result.errors[0], /external_authorization_expired/);
+  assert.equal(connectCalls, 0);
+  assert.equal(verifierCalls, 0);
+
+  const notYetValid = await createCanonicalGovernanceRootBootstrapPostgres({
+    pool: { connect: async () => { connectCalls += 1; throw new Error('unexpected_pool_connect'); } },
+    clock: () => new Date(TEST_NOW),
+    externalTrustVerifier: { verify: async () => { verifierCalls += 1; return { valid: true }; } }
+  }).bootstrap(artifactInput({ external_authorization: authorization(identity(), rootSpec(identity()), {
+    issued_at: '2026-09-03T12:06:00.000Z'
+  }) }));
+  assert.equal(notYetValid.status, 'INVALID');
+  assert.match(notYetValid.errors[0], /external_authorization_not_yet_valid/);
+  assert.equal(connectCalls, 0);
+  assert.equal(verifierCalls, 0);
+
+  const expiredReplay = await createCanonicalGovernanceRootBootstrapPostgres({
+    pool: { connect: async () => { connectCalls += 1; throw new Error('unexpected_pool_connect'); } },
+    clock: () => new Date('2026-09-03T12:15:00.000Z'),
+    externalTrustVerifier: { verify: async () => { verifierCalls += 1; return { valid: true }; } }
+  }).bootstrap(valid);
+  assert.equal(expiredReplay.status, 'INVALID');
+  assert.match(expiredReplay.errors[0], /external_authorization_expired/);
+  assert.equal(connectCalls, 0);
+  assert.equal(verifierCalls, 0);
 });
 
 test('semantic identity and root changes alter their canonical digests', () => {
@@ -131,7 +208,7 @@ test('rejects provenance, external authorization and identity mismatches fail-cl
   assert.throws(() => artifact({ installation_identity: { ...install, commit_sha: 'b'.repeat(40) } }), /bootstrap_request_invalid/);
   assert.throws(() => artifact({ external_authorization: authorization(install, root, { target_installation_id: 'installation-other' }) }), /bootstrap_request_invalid/);
   const valid = artifact();
-  assert.equal(validateBootstrapRequest({ ...valid, artifact_digest: canonicalDigest({ divergent: true }) }).valid, false);
+  assert.equal(validateBootstrapRequest({ ...valid, artifact_digest: canonicalDigest({ divergent: true }) }, { now: TEST_NOW }).valid, false);
 });
 
 test('contract and migration contain no operational authority or private-key persistence', () => {
@@ -140,5 +217,6 @@ test('contract and migration contain no operational authority or private-key per
   assert.doesNotMatch(source, /execution_started\s*:\s*true|provider_called\s*:\s*true|tool_called\s*:\s*true|network_used\s*:\s*true/i);
   assert.doesNotMatch(migration, /private_key|secret_value|auth_token/i);
   assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS governance_root_keys_one_active_idx/);
+  assert.match(migration, /CREATE TRIGGER governance_root_keys_delete_trigger/);
   assert.match(migration, /CREATE TRIGGER governance_audit_append_only_trigger/);
 });

@@ -13,6 +13,7 @@ const MIGRATION_PATH = path.resolve(__dirname, '../../../migrations/hermes/016_c
 const MIGRATION = fs.readFileSync(MIGRATION_PATH, 'utf8');
 const TEST_DATABASE_URL = process.env.HERMES_POSTGRES_TEST_DATABASE_URL;
 const TEST_SCHEMA = 'hermes_governance_root_bootstrap_test';
+const TEST_NOW = '2026-09-03T12:05:00.000Z';
 const TEST_TABLES = Object.freeze({
   guard: `${TEST_SCHEMA}.installation_bootstrap_guard`,
   installations: `${TEST_SCHEMA}.installations`,
@@ -98,7 +99,7 @@ function artifact(id = 'installation-test-1', bootstrapId = `bootstrap-${id}`) {
       boundary_key_id: 'boundary-key-1', signature_algorithm: 'Ed25519',
       signature: 'signature-fixture', attestation_digest: 'pending'
     }
-  });
+  }, { now: TEST_NOW });
 }
 
 function rootTransitionInput(first, action, overrides = {}) {
@@ -145,7 +146,8 @@ test('real PostgreSQL bootstrap is atomic, one-shot, replay-safe and concurrent'
       pool,
       tables: TEST_TABLES,
       externalTrustVerifier: { verify: async () => ({ valid: true }) },
-      rootTransitionVerifier: { verify: async () => ({ valid: true }) }
+      rootTransitionVerifier: { verify: async () => ({ valid: true }) },
+      clock: () => new Date(TEST_NOW)
     });
     const firstArtifact = artifact();
     const first = await authority.bootstrap(firstArtifact);
@@ -175,6 +177,7 @@ test('real PostgreSQL bootstrap is atomic, one-shot, replay-safe and concurrent'
         'installation_bootstraps_append_only_trigger',
         'governance_root_subjects_immutable_trigger',
         'governance_root_keys_immutable_trigger',
+        'governance_root_keys_delete_trigger',
         'governance_audit_append_only_trigger',
         'governance_audit_delete_trigger'
       )
@@ -184,6 +187,7 @@ test('real PostgreSQL bootstrap is atomic, one-shot, replay-safe and concurrent'
       { table_name: 'governance_audit_events', trigger_name: 'governance_audit_append_only_trigger', function_name: 'reject_governance_audit_update' },
       { table_name: 'governance_audit_events', trigger_name: 'governance_audit_delete_trigger', function_name: 'reject_governance_audit_delete' },
       { table_name: 'governance_root_keys', trigger_name: 'governance_root_keys_immutable_trigger', function_name: 'reject_governance_root_key_immutable_update' },
+      { table_name: 'governance_root_keys', trigger_name: 'governance_root_keys_delete_trigger', function_name: 'reject_governance_root_key_delete' },
       { table_name: 'governance_root_subjects', trigger_name: 'governance_root_subjects_immutable_trigger', function_name: 'reject_governance_root_subject_immutable_update' },
       { table_name: 'installation_bootstraps', trigger_name: 'installation_bootstraps_append_only_trigger', function_name: 'reject_installation_bootstrap_update' },
       { table_name: 'installations', trigger_name: 'installations_immutable_trigger', function_name: 'reject_installation_immutable_update' }
@@ -192,7 +196,8 @@ test('real PostgreSQL bootstrap is atomic, one-shot, replay-safe and concurrent'
     const replay = await createCanonicalGovernanceRootBootstrapPostgres({
       pool,
       tables: TEST_TABLES,
-      externalTrustVerifier: { verify: async () => ({ valid: true }) }
+      externalTrustVerifier: { verify: async () => ({ valid: true }) },
+      clock: () => new Date(TEST_NOW)
     }).bootstrap(firstArtifact);
     assert.equal(replay.status, 'REPLAY_ACCEPTED');
     assert.equal(replay.artifact_digest, first.artifact_digest);
@@ -272,6 +277,28 @@ test('real PostgreSQL bootstrap is atomic, one-shot, replay-safe and concurrent'
     assert.equal(rootKeyIdentity.code, 'P0001');
     assert.match(rootKeyIdentity.message, /governance_root_key_immutable/);
 
+    const rootKeyDelete = await pool.query(`
+      DELETE FROM ${TEST_SCHEMA}.governance_root_keys
+      WHERE root_key_id = 'root-key-0'
+    `).catch((error) => error);
+    assert.equal(rootKeyDelete.code, 'P0001');
+    assert.match(rootKeyDelete.message, /governance_root_key_delete_forbidden/);
+    const rootKeyAfterDelete = await pool.query(`
+      SELECT root_key_id, generation, lifecycle_state
+      FROM ${TEST_SCHEMA}.governance_root_keys
+      ORDER BY generation
+    `);
+    assert.deepEqual(rootKeyAfterDelete.rows, [
+      { root_key_id: 'root-key-0', generation: 0, lifecycle_state: 'SUPERSEDED' },
+      { root_key_id: 'root-key-1', generation: 1, lifecycle_state: 'REVOKED' }
+    ]);
+    const rootAfterDelete = await pool.query(`
+      SELECT active_generation, lifecycle_state
+      FROM ${TEST_SCHEMA}.governance_root_subjects
+      WHERE root_subject_id = $1
+    `, [first.receipt.root_subject_id]);
+    assert.deepEqual(rootAfterDelete.rows, [{ active_generation: 1, lifecycle_state: 'REVOKED' }]);
+
     const auditUpdate = await pool.query(`
       UPDATE ${TEST_SCHEMA}.governance_audit_events SET actor_subject = 'tampered'
     `).catch((error) => error);
@@ -295,7 +322,8 @@ test('real PostgreSQL transaction rollback leaves no bootstrap or root', { skip:
     const authority = createCanonicalGovernanceRootBootstrapPostgres({
       pool,
       tables: { ...TEST_TABLES, roots: `${TEST_SCHEMA}.missing_roots` },
-      externalTrustVerifier: { verify: async () => true }
+      externalTrustVerifier: { verify: async () => true },
+      clock: () => new Date(TEST_NOW)
     });
     const result = await authority.bootstrap(artifact());
     assert.equal(result.status, 'PERSISTENCE_FAILURE');

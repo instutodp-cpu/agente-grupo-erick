@@ -213,6 +213,7 @@ DROP TRIGGER IF EXISTS installations_immutable_trigger ON hermes.installations;
 DROP TRIGGER IF EXISTS installation_bootstraps_append_only_trigger ON hermes.installation_bootstraps;
 DROP TRIGGER IF EXISTS governance_root_subjects_immutable_trigger ON hermes.governance_root_subjects;
 DROP TRIGGER IF EXISTS governance_root_keys_immutable_trigger ON hermes.governance_root_keys;
+DROP TRIGGER IF EXISTS governance_root_keys_delete_trigger ON hermes.governance_root_keys;
 DROP TRIGGER IF EXISTS governance_audit_append_only_trigger ON hermes.governance_audit_events;
 
 DROP FUNCTION IF EXISTS hermes.reject_governance_immutable_update();
@@ -306,6 +307,19 @@ CREATE TRIGGER governance_root_subjects_immutable_trigger
 CREATE TRIGGER governance_root_keys_immutable_trigger
   BEFORE UPDATE ON hermes.governance_root_keys
   FOR EACH ROW EXECUTE FUNCTION hermes.reject_governance_root_key_immutable_update();
+
+CREATE OR REPLACE FUNCTION hermes.reject_governance_root_key_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'governance_root_key_delete_forbidden';
+END;
+$$;
+
+CREATE TRIGGER governance_root_keys_delete_trigger
+  BEFORE DELETE ON hermes.governance_root_keys
+  FOR EACH ROW EXECUTE FUNCTION hermes.reject_governance_root_key_delete();
 
 CREATE TRIGGER governance_audit_append_only_trigger
   BEFORE UPDATE ON hermes.governance_audit_events
