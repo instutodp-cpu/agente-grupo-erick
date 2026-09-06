@@ -186,8 +186,8 @@ test('real PostgreSQL bootstrap is atomic, one-shot, replay-safe and concurrent'
     assert.deepEqual(triggerInventory.rows, [
       { table_name: 'governance_audit_events', trigger_name: 'governance_audit_append_only_trigger', function_name: 'reject_governance_audit_update' },
       { table_name: 'governance_audit_events', trigger_name: 'governance_audit_delete_trigger', function_name: 'reject_governance_audit_delete' },
-      { table_name: 'governance_root_keys', trigger_name: 'governance_root_keys_immutable_trigger', function_name: 'reject_governance_root_key_immutable_update' },
       { table_name: 'governance_root_keys', trigger_name: 'governance_root_keys_delete_trigger', function_name: 'reject_governance_root_key_delete' },
+      { table_name: 'governance_root_keys', trigger_name: 'governance_root_keys_immutable_trigger', function_name: 'reject_governance_root_key_immutable_update' },
       { table_name: 'governance_root_subjects', trigger_name: 'governance_root_subjects_immutable_trigger', function_name: 'reject_governance_root_subject_immutable_update' },
       { table_name: 'installation_bootstraps', trigger_name: 'installation_bootstraps_append_only_trigger', function_name: 'reject_installation_bootstrap_update' },
       { table_name: 'installations', trigger_name: 'installations_immutable_trigger', function_name: 'reject_installation_immutable_update' }
