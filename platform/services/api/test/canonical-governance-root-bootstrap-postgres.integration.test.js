@@ -297,7 +297,7 @@ test('real PostgreSQL bootstrap is atomic, one-shot, replay-safe and concurrent'
       FROM ${TEST_SCHEMA}.governance_root_subjects
       WHERE root_subject_id = $1
     `, [first.receipt.root_subject_id]);
-    assert.deepEqual(rootAfterDelete.rows, [{ active_generation: 1, lifecycle_state: 'REVOKED' }]);
+    assert.deepEqual(rootAfterDelete.rows, [{ active_generation: 1, lifecycle_state: 'RECOVERY_REQUIRED' }]);
 
     const auditUpdate = await pool.query(`
       UPDATE ${TEST_SCHEMA}.governance_audit_events SET actor_subject = 'tampered'
