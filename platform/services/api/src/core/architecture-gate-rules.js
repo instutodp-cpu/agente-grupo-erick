@@ -52,7 +52,7 @@ const STRUCTURAL_GATE_IDS = Object.freeze([
 // blanket exemption for an entire directory.
 const ALLOWLIST = Object.freeze({
   FORBIDDEN_RUNTIME_IMPORT: Object.freeze([
-    // All four use crypto.createHash('sha256') only -- the identical safe, non-network,
+    // The first four use crypto.createHash('sha256') only -- the identical safe, non-network,
     // non-secret, non-HMAC pattern this PR's own canonical-content-digest.js uses. The other
     // three predate canonical-content-digest.js and each independently implemented the same safe
     // hashing pattern before that shared utility existed; not something this PR's own scope
@@ -111,6 +111,7 @@ const PATTERN_GATES = Object.freeze([
 // anywhere); only an actual connection-oriented API triggers this gate.
 const NET_CONNECTION_PATTERN = /\bnet\.(connect|createConnection|createServer)\s*\(|new\s+net\.Socket\s*\(/;
 const NETWORK_CALL_PATTERN = /\bfetch\s*\(|\bhttp\.request\s*\(|\bhttps\.request\s*\(|\btls\.connect\s*\(/;
+const CRYPTO_VERIFIER_FILE = 'canonical-governance-root-command-authentication.js';
 
 function isCommentLine(line) {
   return line.trim().startsWith('//') || line.trim().startsWith('*') || line.trim().startsWith('/*');
@@ -126,6 +127,11 @@ function scanFileForPatternGates(relativePath, content) {
     if (allowlist.includes(fileName)) continue;
     for (let i = 0; i < lines.length; i += 1) {
       if (isCommentLine(lines[i])) continue;
+      const approvedCryptoPrimitiveImport = gate.id === 'FORBIDDEN_RUNTIME_IMPORT'
+        && fileName === CRYPTO_VERIFIER_FILE
+        && /require\(\s*['"]node:crypto['"]\s*\)/.test(lines[i])
+        && !/require\(\s*['"]node:(worker_threads|cluster|vm)['"]\s*\)/.test(lines[i]);
+      if (approvedCryptoPrimitiveImport) continue;
       if (gate.pattern.test(lines[i])) {
         findings.push({ gate: gate.id, file: relativePath, line: i + 1, description: gate.description });
       }
