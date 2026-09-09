@@ -40,7 +40,10 @@ function bootstrapArtifact() {
   const root = {
     root_subject_id: `governance-root::${installation.installation_id}`,
     root_scope: { scope_type: 'installation', installation_id: installation.installation_id, tenant_ids: [], organization_ids: [], project_ids: [], cross_tenant: false, cross_organization: false, cross_project: false },
-    root_capabilities: ['GOVERNANCE_AUDIT_READ'],
+    root_capabilities: [
+      'GOVERNANCE_AUDIT_READ', 'GOVERNANCE_DELEGATE_AUTHORITY',
+      'GOVERNANCE_REVOKE_AUTHORITY', 'GOVERNANCE_ROTATE_ROOT_KEY'
+    ],
     delegation_policy: { max_depth: 1, wildcard_allowed: false, cross_tenant_allowed: false, cross_organization_allowed: false, cross_project_allowed: false, delegable_authority_classes: [] },
     initial_key: { ...keyMaterial, key_fingerprint: publicKeyFingerprint(publicKey), key_digest: rootKeyDigest(keyMaterial) }
   };
