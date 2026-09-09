@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS hermes.governance_authority_grants (
   CONSTRAINT governance_authority_grants_scope_object_check
     CHECK (
       jsonb_typeof(authority_scope) = 'object'
-      AND jsonb_object_length(authority_scope) = 8
+      AND (SELECT count(*) FROM jsonb_each(authority_scope)) = 8
       AND authority_scope ?& ARRAY[
         'scope_type', 'installation_id', 'tenant_ids', 'organization_ids',
         'project_ids', 'cross_tenant', 'cross_organization', 'cross_project'
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS hermes.governance_authority_grants (
   CONSTRAINT governance_authority_grants_restrictions_check
     CHECK (
       jsonb_typeof(restrictions) = 'object'
-      AND jsonb_object_length(restrictions) = 4
+      AND (SELECT count(*) FROM jsonb_each(restrictions)) = 4
       AND restrictions ?& ARRAY[
         'allow_further_delegation', 'allow_cross_tenant',
         'allow_cross_organization', 'allow_cross_project'
