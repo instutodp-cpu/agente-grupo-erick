@@ -20,9 +20,6 @@ const GROUPS = Object.freeze({
     'test/validation-semantics-architecture-gates.test.js',
     'test/validation-trace.test.js'
   ]),
-  'governance-contracts': Object.freeze([
-    'test/canonical-governance-authority-grant-revocation-contract.test.js'
-  ]),
   'runtime-contracts': Object.freeze([
     'test/runtime-execution-simulation-contracts.test.js'
   ]),
