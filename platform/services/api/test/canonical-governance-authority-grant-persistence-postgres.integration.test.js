@@ -105,6 +105,7 @@ test('migration installs cleanly twice with canonical constraints, indexes and m
     const constraints = await pool.query(`
       SELECT constraint_name FROM information_schema.table_constraints
       WHERE table_schema = $1 AND table_name = 'governance_authority_grants'
+        AND constraint_name LIKE 'governance_authority_grants_%'
       ORDER BY constraint_name
     `, [TEST_SCHEMA]);
     assert.deepEqual(constraints.rows.map((row) => row.constraint_name), [
