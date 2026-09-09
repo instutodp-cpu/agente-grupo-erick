@@ -64,7 +64,7 @@ function commandFor(artifact) {
     command_id: 'command-resolution-1', installation_id: artifact.installation_identity.installation_id, root_subject_id: artifact.root_spec.root_subject_id,
     root_generation: 0, root_digest: rootSpecDigest(artifact.root_spec), root_key_id: artifact.root_spec.initial_key.root_key_id,
     root_key_fingerprint: publicKeyFingerprint(publicKey), root_key_digest: rootKeyDigest(artifact.root_spec.initial_key), command_type: 'GOVERNANCE_ROOT_TEST',
-    payload: { target: 'resolution' }, issued_at: '2026-09-08T12:00:00.000Z', expires_at: '2026-09-08T12:15:00.000Z', nonce: 'B'.repeat(22),
+    payload: { target: 'resolution' }, issued_at: '2026-09-08T12:00:00.000Z', expires_at: '2026-09-08T12:15:00.000Z', nonce: 'A'.repeat(22),
     signature_algorithm: 'Ed25519', signature: 'A'.repeat(86)
   });
   return { envelope: command, authentication: { authenticated: true, status: 'AUTHENTICATED', reason_code: null, command_digest: command.command_digest, replay_identity: replayIdentity(command) } };
