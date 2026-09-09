@@ -23,6 +23,24 @@ AS $$
   END;
 $$;
 
+CREATE OR REPLACE FUNCTION hermes.authority_grant_object_keys_exact(value JSONB, expected TEXT[])
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+  actual_count INTEGER := 0;
+  key_name TEXT;
+BEGIN
+  IF jsonb_typeof(value) <> 'object' THEN RETURN FALSE; END IF;
+  FOR key_name IN SELECT jsonb_object_keys(value) LOOP
+    actual_count := actual_count + 1;
+    IF NOT key_name = ANY(expected) THEN RETURN FALSE; END IF;
+  END LOOP;
+  RETURN actual_count = cardinality(expected);
+END;
+$$;
+
 CREATE TABLE IF NOT EXISTS hermes.governance_authority_grants (
   authority_grant_id TEXT PRIMARY KEY,
   contract_version TEXT NOT NULL,
@@ -78,11 +96,10 @@ CREATE TABLE IF NOT EXISTS hermes.governance_authority_grants (
   CONSTRAINT governance_authority_grants_scope_object_check
     CHECK (
       jsonb_typeof(authority_scope) = 'object'
-      AND (SELECT count(*) FROM jsonb_each(authority_scope)) = 8
-      AND authority_scope ?& ARRAY[
+      AND hermes.authority_grant_object_keys_exact(authority_scope, ARRAY[
         'scope_type', 'installation_id', 'tenant_ids', 'organization_ids',
         'project_ids', 'cross_tenant', 'cross_organization', 'cross_project'
-      ]
+      ])
       AND authority_scope->>'scope_type' = 'installation'
       AND authority_scope->>'installation_id' = installation_id
       AND jsonb_typeof(authority_scope->'tenant_ids') = 'array'
@@ -102,11 +119,10 @@ CREATE TABLE IF NOT EXISTS hermes.governance_authority_grants (
   CONSTRAINT governance_authority_grants_restrictions_check
     CHECK (
       jsonb_typeof(restrictions) = 'object'
-      AND (SELECT count(*) FROM jsonb_each(restrictions)) = 4
-      AND restrictions ?& ARRAY[
+      AND hermes.authority_grant_object_keys_exact(restrictions, ARRAY[
         'allow_further_delegation', 'allow_cross_tenant',
         'allow_cross_organization', 'allow_cross_project'
-      ]
+      ])
       AND restrictions->>'allow_further_delegation' = 'false'
       AND restrictions->>'allow_cross_tenant' = 'false'
       AND restrictions->>'allow_cross_organization' = 'false'
