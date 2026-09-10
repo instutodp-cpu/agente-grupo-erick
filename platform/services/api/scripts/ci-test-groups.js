@@ -52,6 +52,7 @@ const GROUPS = Object.freeze({
     'test/canonical-governance-root-active-authority-resolution-postgres.integration.test.js',
     'test/canonical-governance-authority-grant-persistence-postgres.integration.test.js',
     'test/canonical-governance-authority-grant-revocation-persistence-postgres.integration.test.js',
+    'test/canonical-governance-authority-grant-resolution-postgres.integration.test.js',
     'test/runtime-execution-job-admission-postgres.integration.test.js',
     'test/runtime-execution-attempt-persistence-postgres.integration.test.js',
     'test/runtime-execution-attempt-admission-postgres.integration.test.js',
