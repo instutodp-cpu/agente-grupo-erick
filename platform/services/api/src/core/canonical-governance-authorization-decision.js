@@ -61,6 +61,18 @@ const AUTHORIZATION_REASON_CODES = Object.freeze([
   'evidence_mismatch'
 ]);
 const AUTHORIZATION_DECISION_STATUS = Object.freeze({ AUTHORIZED: 'AUTHORIZED', DENIED: 'DENIED', REJECTED: 'REJECTED' });
+const DECISION_FOR_REASON = Object.freeze({
+  within_validity_window_and_all_bindings_match: AUTHORIZATION_DECISION_STATUS.AUTHORIZED,
+  grant_not_active: AUTHORIZATION_DECISION_STATUS.DENIED,
+  subject_mismatch: AUTHORIZATION_DECISION_STATUS.DENIED,
+  capability_mismatch: AUTHORIZATION_DECISION_STATUS.DENIED,
+  scope_mismatch: AUTHORIZATION_DECISION_STATUS.DENIED,
+  installation_mismatch: AUTHORIZATION_DECISION_STATUS.DENIED,
+  request_invalid: AUTHORIZATION_DECISION_STATUS.REJECTED,
+  authentication_evidence_invalid: AUTHORIZATION_DECISION_STATUS.REJECTED,
+  grant_resolution_invalid: AUTHORIZATION_DECISION_STATUS.REJECTED,
+  evidence_mismatch: AUTHORIZATION_DECISION_STATUS.REJECTED
+});
 const IDENTIFIER_PATTERN = /^[^\u0000-\u001f\u007f\s]{1,255}$/u;
 const TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
@@ -295,19 +307,14 @@ function validateAuthorizationDecision(decision) {
     errors.push('authorization_decision_grant_resolution_status_invalid');
   }
   if (decision.evaluation_time !== null && !isCanonicalTimestamp(decision.evaluation_time)) errors.push('authorization_decision_evaluation_time_invalid');
+  if (DECISION_FOR_REASON[decision.reason_code] !== decision.decision) {
+    errors.push('authorization_decision_outcome_reason_mismatch');
+  }
   try {
     if (decision.authorization_decision_id !== authorizationDecisionId(decision)) errors.push('authorization_decision_id_mismatch');
     if (decision.authorization_decision_digest !== authorizationDecisionDigest(decision)) errors.push('authorization_decision_digest_mismatch');
   } catch (error) {
     errors.push(`authorization_decision_canonical_serialization_invalid::${error.message}`);
-  }
-  if (decision.decision === AUTHORIZATION_DECISION_STATUS.AUTHORIZED
-    && decision.reason_code !== 'within_validity_window_and_all_bindings_match') {
-    errors.push('authorization_decision_authorized_reason_invalid');
-  }
-  if (decision.decision !== AUTHORIZATION_DECISION_STATUS.AUTHORIZED
-    && decision.reason_code === 'within_validity_window_and_all_bindings_match') {
-    errors.push('authorization_decision_outcome_reason_mismatch');
   }
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }
