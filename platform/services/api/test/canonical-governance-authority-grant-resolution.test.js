@@ -105,6 +105,63 @@ test('effective revocation at the exact effective timestamp wins over active gra
   assert.deepEqual(result.effective_revocation_digests, [cancellation.revocation_digest]);
 });
 
+test('not-yet-active grant precedes an already-effective revocation', () => {
+  const candidate = grant();
+  const cancellation = revocation(candidate, {
+    authority_grant_revocation_id: 'revocation-before-not-before',
+    issued_at: '2026-09-10T11:58:00.000Z',
+    effective_at: '2026-09-10T11:59:00.000Z'
+  });
+  const result = resolveCanonicalGovernanceAuthorityGrant(request(candidate, [cancellation], {
+    evaluation_time: '2026-09-10T11:59:59.999Z'
+  }));
+  assert.equal(result.status, RESOLUTION_STATUS.NOT_YET_ACTIVE);
+  assert.equal(result.reason_code, 'not_before_not_reached');
+});
+
+test('expired grant precedes an already-effective revocation', () => {
+  const candidate = grant();
+  const cancellation = revocation(candidate, { authority_grant_revocation_id: 'revocation-after-expiry' });
+  const result = resolveCanonicalGovernanceAuthorityGrant(request(candidate, [cancellation], {
+    evaluation_time: '2026-09-10T12:10:00.001Z'
+  }));
+  assert.equal(result.status, RESOLUTION_STATUS.EXPIRED);
+  assert.equal(result.reason_code, 'grant_expired');
+});
+
+test('effective revocation at expires_at remains revoked because the expiry boundary is inclusive', () => {
+  const candidate = grant();
+  const cancellation = revocation(candidate, { authority_grant_revocation_id: 'revocation-at-expiry' });
+  const result = resolveCanonicalGovernanceAuthorityGrant(request(candidate, [cancellation], {
+    evaluation_time: candidate.expires_at
+  }));
+  assert.equal(result.status, RESOLUTION_STATUS.REVOKED);
+  assert.equal(result.reason_code, 'effective_revocation');
+});
+
+test('a future revocation does not revoke a grant inside its valid window', () => {
+  const candidate = grant();
+  const future = revocation(candidate, {
+    authority_grant_revocation_id: 'revocation-future-window',
+    effective_at: '2026-09-10T12:06:00.000Z'
+  });
+  const result = resolveCanonicalGovernanceAuthorityGrant(request(candidate, [future], {
+    evaluation_time: '2026-09-10T12:05:00.000Z'
+  }));
+  assert.equal(result.status, RESOLUTION_STATUS.ACTIVE);
+  assert.equal(result.reason_code, 'within_validity_window');
+});
+
+test('an effective revocation revokes a grant inside its valid window', () => {
+  const candidate = grant();
+  const cancellation = revocation(candidate, { authority_grant_revocation_id: 'revocation-inside-window' });
+  const result = resolveCanonicalGovernanceAuthorityGrant(request(candidate, [cancellation], {
+    evaluation_time: '2026-09-10T12:05:00.000Z'
+  }));
+  assert.equal(result.status, RESOLUTION_STATUS.REVOKED);
+  assert.equal(result.reason_code, 'effective_revocation');
+});
+
 test('future, multiple, and mixed revocations are deterministic and only effective evidence revokes', () => {
   const candidate = grant();
   const futureA = revocation(candidate, { authority_grant_revocation_id: 'revocation-future-a', reason_code: 'OTHER', effective_at: '2026-09-10T12:06:00.000Z' });

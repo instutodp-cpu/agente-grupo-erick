@@ -217,15 +217,15 @@ function resolveCanonicalGovernanceAuthorityGrant(request = {}) {
 
   let status = RESOLUTION_STATUS.ACTIVE;
   let reasonCode = 'within_validity_window';
-  if (effectiveRevocations.length > 0) {
-    status = RESOLUTION_STATUS.REVOKED;
-    reasonCode = 'effective_revocation';
-  } else if (evaluationMs < Date.parse(request.grant.not_before)) {
+  if (evaluationMs < Date.parse(request.grant.not_before)) {
     status = RESOLUTION_STATUS.NOT_YET_ACTIVE;
     reasonCode = 'not_before_not_reached';
   } else if (evaluationMs > Date.parse(request.grant.expires_at)) {
     status = RESOLUTION_STATUS.EXPIRED;
     reasonCode = 'grant_expired';
+  } else if (effectiveRevocations.length > 0) {
+    status = RESOLUTION_STATUS.REVOKED;
+    reasonCode = 'effective_revocation';
   }
   common.status = status;
   common.reason_code = reasonCode;
