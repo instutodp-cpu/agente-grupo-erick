@@ -5,22 +5,7 @@ const {
   deepClone,
   sanitizeCanaryData
 } = require('./public-web-canary-session-contract');
-
-const CANARY_AUDIT_EVENTS = [
-  'public_web_canary_requested',
-  'public_web_canary_validation_passed',
-  'public_web_canary_validation_blocked',
-  'public_web_canary_approved',
-  'public_web_canary_activated',
-  'public_web_canary_request_started',
-  'public_web_canary_request_succeeded',
-  'public_web_canary_request_failed_safe',
-  'public_web_canary_completed',
-  'public_web_canary_expired',
-  'public_web_canary_cancelled',
-  'public_web_canary_kill_switch_terminated',
-  'public_web_canary_trial_cleanup'
-];
+const { CANARY_AUDIT_EVENTS } = require('./public-web-canary-durable-audit-contract');
 
 function createPublicWebCanaryAuditSink(options = {}) {
   const events = [];
@@ -54,6 +39,7 @@ function createPublicWebCanaryAuditSink(options = {}) {
   }
 
   return Object.freeze({
+    durable: false,
     append,
     list,
     getBySession,

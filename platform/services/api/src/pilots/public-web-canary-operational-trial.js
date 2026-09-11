@@ -69,7 +69,11 @@ function mergeContext(options, input, plan, preflight) {
   return createSyntheticCanaryContext(plan, {
     ...options,
     ...input,
-    preflight
+    preflight,
+    requireDurableAudit: input.requireDurableAudit === true
+      || options.requireDurableAudit === true
+      || input.operationalBootstrapConfigured === true
+      || options.operationalBootstrapConfigured === true
   });
 }
 
@@ -119,7 +123,15 @@ function createPublicWebCanaryOperationalTrial(options = {}) {
     const plan = built.plan;
     const register = trialRegistry.registerTrialPlan(plan, { request_id: `${plan.trial_id}_register`, change_id: `${plan.trial_id}_register_change` });
     if (!register.ok) return register;
-    const preflight = runTrialPreflight(plan, { ...options, ...input, now: nowIso(clock) });
+    const preflight = runTrialPreflight(plan, {
+      ...options,
+      ...input,
+      requireDurableAudit: input.requireDurableAudit === true
+        || options.requireDurableAudit === true
+        || input.operationalBootstrapConfigured === true
+        || options.operationalBootstrapConfigured === true,
+      now: nowIso(clock)
+    });
     const preflightRecord = trialRegistry.recordPreflight({ trial_id: plan.trial_id, expected_version: 1, request_id: `${plan.trial_id}_preflight`, change_id: `${plan.trial_id}_preflight_change` }, preflight);
     if (!preflight.passed) return sanitizeTrialData({ ok: false, plan, preflight, registry_result: preflightRecord });
     if (input.preflightOnly === true) return sanitizeTrialData({ ok: true, plan, preflight, registry_result: preflightRecord });

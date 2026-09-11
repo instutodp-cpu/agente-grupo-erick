@@ -155,6 +155,9 @@ function runTrialPreflight(plan, context = {}) {
   if (!context.rateLimitBudget || !isFunction(context.rateLimitBudget.check) || context.rateLimitBudget.check(plan).allowed !== true) blocking.push('rate_budget_blocked');
   if (!context.costBudget || !isFunction(context.costBudget.check) || context.costBudget.check(plan).allowed !== true) blocking.push('cost_budget_blocked');
   if (!context.auditSink || !isFunction(context.auditSink.append)) blocking.push('audit_sink_missing');
+  if (context.requireDurableAudit === true && (!context.auditSink || context.auditSink.durable !== true || !isFunction(context.auditSink.appendDurably))) {
+    blocking.push('persistent_audit_unavailable');
+  }
   if (!context.dnsResolver || !isFunction(context.dnsResolver.resolve)) blocking.push('dns_resolver_missing');
   if (!context.nodeHttpsClient && !context.canaryRunner) blocking.push('https_client_or_runner_missing');
   if (plan.maximum_requests !== 1) blocking.push('maximum_requests_must_be_one');
