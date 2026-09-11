@@ -44,8 +44,19 @@ function nowIso(deps) {
   return value instanceof Date ? value.toISOString() : String(value);
 }
 
-function appendAudit(deps, event) {
-  if (deps.auditSink && typeof deps.auditSink.append === 'function') deps.auditSink.append(event);
+async function appendAudit(deps, event, { durable = false } = {}) {
+  if (!deps.auditSink) return { ok: false, status: 'AUDIT_SINK_MISSING' };
+  try {
+    if (durable) {
+      if (typeof deps.auditSink.appendDurably !== 'function') return { ok: false, status: 'PERSISTENT_AUDIT_UNAVAILABLE' };
+      const result = await deps.auditSink.appendDurably(event);
+      return result && result.ok === true ? result : { ok: false, status: 'PERSISTENT_AUDIT_FAILED' };
+    }
+    if (typeof deps.auditSink.append !== 'function') return { ok: false, status: 'AUDIT_SINK_MISSING' };
+    return { ok: true, result: await deps.auditSink.append(event) };
+  } catch (_error) {
+    return { ok: false, status: durable ? 'PERSISTENT_AUDIT_FAILED' : 'AUDIT_SINK_FAILED' };
+  }
 }
 
 function baseAudit(input, session, fields = {}) {
@@ -63,7 +74,7 @@ function baseAudit(input, session, fields = {}) {
   });
 }
 
-function buildBlockedBeforeNetworkResult(input, session, code, reason, deps = {}) {
+async function buildBlockedBeforeNetworkResult(input, session, code, reason, deps = {}) {
   const audit = baseAudit(input, session, {
     event_name: 'public_web_canary_request_failed_safe',
     status: 'public_web_canary_request_failed_safe',
@@ -74,7 +85,7 @@ function buildBlockedBeforeNetworkResult(input, session, code, reason, deps = {}
     real_provider_called: false,
     occurred_at: hasAllDeps(deps) ? nowIso(deps) : new Date(0).toISOString()
   });
-  appendAudit(deps, audit);
+  await appendAudit(deps, audit, { durable: deps.requireDurableAudit === true });
   return sanitizeCanaryData({
     canary_session_id: session && session.canary_session_id || input && input.canary_session_id,
     canary_execution_id: input && (input.canary_execution_id || input.change_id),
@@ -99,7 +110,7 @@ function buildBlockedBeforeNetworkResult(input, session, code, reason, deps = {}
   });
 }
 
-function buildFailedAfterNetworkResult(input, session, code, reason, deps = {}) {
+async function buildFailedAfterNetworkResult(input, session, code, reason, deps = {}) {
   const audit = baseAudit(input, session, {
     event_name: 'public_web_canary_request_failed_safe',
     status: 'public_web_canary_request_failed_safe',
@@ -110,7 +121,7 @@ function buildFailedAfterNetworkResult(input, session, code, reason, deps = {}) 
     real_provider_called: true,
     occurred_at: nowIso(deps)
   });
-  appendAudit(deps, audit);
+  await appendAudit(deps, audit, { durable: deps.requireDurableAudit === true });
   return sanitizeCanaryData({
     canary_session_id: session.canary_session_id,
     canary_execution_id: input.canary_execution_id || input.change_id,
@@ -238,14 +249,14 @@ function normalizeNetworkResult(result, input, session, networkStarted, deps) {
 
 function createPublicWebCanaryRunner(deps = {}) {
   async function runCanaryRequest(input = {}) {
-    if (!hasAllDeps(deps)) return buildBlockedBeforeNetworkResult(input, null, 'CANARY_INTERNAL_ERROR', 'missing_canary_dependency', deps);
+    if (!hasAllDeps(deps)) return await buildBlockedBeforeNetworkResult(input, null, 'CANARY_INTERNAL_ERROR', 'missing_canary_dependency', deps);
     const session = deps.canarySessionRegistry.getCanarySession(input.canary_session_id);
-    if (!session) return buildBlockedBeforeNetworkResult(input, null, 'CANARY_SESSION_NOT_FOUND', 'canary_session_not_found', deps);
-    if (session.canary_state !== 'active') return buildBlockedBeforeNetworkResult(input, session, 'CANARY_SESSION_NOT_ACTIVE', 'canary_session_not_active', deps);
-    if (isSessionExpired(session, deps.clock)) return buildBlockedBeforeNetworkResult(input, session, 'CANARY_SESSION_EXPIRED', 'canary_session_expired', deps);
+    if (!session) return await buildBlockedBeforeNetworkResult(input, null, 'CANARY_SESSION_NOT_FOUND', 'canary_session_not_found', deps);
+    if (session.canary_state !== 'active') return await buildBlockedBeforeNetworkResult(input, session, 'CANARY_SESSION_NOT_ACTIVE', 'canary_session_not_active', deps);
+    if (isSessionExpired(session, deps.clock)) return await buildBlockedBeforeNetworkResult(input, session, 'CANARY_SESSION_EXPIRED', 'canary_session_expired', deps);
 
     const path = exactPathApproved(input, session);
-    if (!path.valid) return buildBlockedBeforeNetworkResult(input, session, 'CANARY_TARGET_NOT_ALLOWLISTED', path.reason, deps);
+    if (!path.valid) return await buildBlockedBeforeNetworkResult(input, session, 'CANARY_TARGET_NOT_ALLOWLISTED', path.reason, deps);
 
     const binding = validateCanaryExecutionBindings(session, deps, input, { requireApproval: true });
     if (binding.code === 'CANARY_KILL_SWITCH_ACTIVE') {
@@ -258,10 +269,10 @@ function createPublicWebCanaryRunner(deps = {}) {
         reason: 'kill_switch_active'
       });
     }
-    if (!binding.valid) return buildBlockedBeforeNetworkResult(input, session, binding.code, binding.reason, deps);
+    if (!binding.valid) return await buildBlockedBeforeNetworkResult(input, session, binding.code, binding.reason, deps);
 
     const limits = validateTargetPolicyLimits(input, session, binding.target_policy);
-    if (!limits.valid) return buildBlockedBeforeNetworkResult(input, session, 'CANARY_TARGET_POLICY_BLOCKED', limits.reason, deps);
+    if (!limits.valid) return await buildBlockedBeforeNetworkResult(input, session, 'CANARY_TARGET_POLICY_BLOCKED', limits.reason, deps);
 
     const began = deps.canarySessionRegistry.beginCanaryExecution({
       canary_session_id: session.canary_session_id,
@@ -272,12 +283,12 @@ function createPublicWebCanaryRunner(deps = {}) {
       expected_version: session.version
     });
     if (!began.ok) {
-      return buildBlockedBeforeNetworkResult(input, session, began.error && began.error.error_code || 'CANARY_INTERNAL_ERROR', began.error && began.error.blocked_reason || 'canary_execution_reservation_failed', deps);
+      return await buildBlockedBeforeNetworkResult(input, session, began.error && began.error.error_code || 'CANARY_INTERNAL_ERROR', began.error && began.error.blocked_reason || 'canary_execution_reservation_failed', deps);
     }
     let executionSession = began.session;
     const executionReservationId = began.execution_reservation_id;
 
-    function abortReservedExecution(code, reason) {
+    async function abortReservedExecution(code, reason) {
       deps.canarySessionRegistry.abortCanaryExecution({
         canary_session_id: executionSession.canary_session_id,
         execution_reservation_id: executionReservationId,
@@ -290,10 +301,22 @@ function createPublicWebCanaryRunner(deps = {}) {
         expected_version: executionSession.version,
         reason
       });
-      return buildBlockedBeforeNetworkResult(input, session, code, reason, deps);
+      return await buildBlockedBeforeNetworkResult(input, session, code, reason, deps);
     }
 
-    if (!deps.dnsResolver || typeof deps.dnsResolver.resolve !== 'function') return abortReservedExecution('CANARY_TARGET_POLICY_BLOCKED', 'async_dns_resolver_required');
+    const preNetworkAudit = await appendAudit(deps, baseAudit(input, executionSession, {
+      event_name: 'public_web_canary_request_started',
+      status: 'public_web_canary_request_started',
+      applied: false,
+      executed: false,
+      real_provider_called: false,
+      occurred_at: nowIso(deps)
+    }), { durable: deps.requireDurableAudit === true });
+    if (!preNetworkAudit.ok && deps.requireDurableAudit === true) {
+      return await abortReservedExecution('CANARY_INTERNAL_ERROR', 'persistent_audit_unavailable_before_network');
+    }
+
+    if (!deps.dnsResolver || typeof deps.dnsResolver.resolve !== 'function') return await abortReservedExecution('CANARY_TARGET_POLICY_BLOCKED', 'async_dns_resolver_required');
     const targetUrl = new URL(`${session.target_origin}${session.target_path}`);
     const dns = await deps.dnsResolver.resolve(targetUrl.hostname, {
       trace_id: input.trace_id,
@@ -303,7 +326,7 @@ function createPublicWebCanaryRunner(deps = {}) {
       tenant_id: session.tenant_id
     });
     if (!dns || dns.allowed !== true || typeof dns.approved_ip !== 'string' || !Array.isArray(dns.approved_ips) || dns.approved_ips.length === 0) {
-      return abortReservedExecution('CANARY_TARGET_POLICY_BLOCKED', dns && dns.blocked_reason || 'dns_policy_blocked');
+      return await abortReservedExecution('CANARY_TARGET_POLICY_BLOCKED', dns && dns.blocked_reason || 'dns_policy_blocked');
     }
 
     let networkStarted = false;
@@ -346,7 +369,9 @@ function createPublicWebCanaryRunner(deps = {}) {
         dnsResolver: typeof deps.dnsResolver.resolveSyncForPolicy === 'function' ? deps.dnsResolver.resolveSyncForPolicy : () => dns.approved_ips,
         rateLimitBudget: deps.rateLimitBudget,
         costBudget: deps.costBudget,
-        audit_available: true,
+        audit_available: deps.requireDurableAudit === true
+          ? deps.auditSink && deps.auditSink.durable === true
+          : true,
         environment: session.environment,
         production: false,
         feature_flag: true,
@@ -360,7 +385,7 @@ function createPublicWebCanaryRunner(deps = {}) {
         secretAccessContext: buildSecretAccessContext(input, session),
         clock: deps.clock
       });
-      const normalized = normalizeNetworkResult(result, input, session, networkStarted, deps);
+      let normalized = normalizeNetworkResult(result, input, session, networkStarted, deps);
       executionSession = deps.canarySessionRegistry.getCanarySession(session.canary_session_id);
       if (networkStarted) {
         deps.canarySessionRegistry.finishCanaryExecution({
@@ -388,7 +413,19 @@ function createPublicWebCanaryRunner(deps = {}) {
           reason: normalized.error && normalized.error.blocked_reason || 'pre_network_blocked'
         });
       }
-      appendAudit(deps, normalized.audit_event_candidate || baseAudit(input, session, { executed: networkStarted, real_provider_called: networkStarted }));
+      const postNetworkAudit = await appendAudit(
+        deps,
+        normalized.audit_event_candidate || baseAudit(input, session, { executed: networkStarted, real_provider_called: networkStarted }),
+        { durable: deps.requireDurableAudit === true }
+      );
+      if (!postNetworkAudit.ok && deps.requireDurableAudit === true) {
+        normalized = sanitizeCanaryData({
+          ...normalized,
+          status: 'public_web_provider_error_safe',
+          warnings: [...(normalized.warnings || []), 'persistent_audit_failed_after_network'],
+          error: buildSafeCanaryError('CANARY_INTERNAL_ERROR', 'persistent_audit_failed_after_network')
+        });
+      }
       return normalized;
     } catch (_error) {
       executionSession = deps.canarySessionRegistry.getCanarySession(session.canary_session_id);
@@ -405,9 +442,9 @@ function createPublicWebCanaryRunner(deps = {}) {
           expected_version: executionSession.version,
           reason: 'canary_request_failed_before_network'
         });
-        return buildBlockedBeforeNetworkResult(input, session, 'CANARY_INTERNAL_ERROR', 'canary_request_failed_before_network', deps);
+        return await buildBlockedBeforeNetworkResult(input, session, 'CANARY_INTERNAL_ERROR', 'canary_request_failed_before_network', deps);
       }
-      const failed = buildFailedAfterNetworkResult(input, session, 'CANARY_INTERNAL_ERROR', 'canary_request_failed_after_network', deps);
+      const failed = await buildFailedAfterNetworkResult(input, session, 'CANARY_INTERNAL_ERROR', 'canary_request_failed_after_network', deps);
       deps.canarySessionRegistry.finishCanaryExecution({
         canary_session_id: session.canary_session_id,
         execution_reservation_id: executionReservationId,

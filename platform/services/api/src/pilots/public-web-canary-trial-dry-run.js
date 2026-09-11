@@ -211,6 +211,7 @@ function createSyntheticCanaryContext(plan, overrides = {}) {
     userAllowlist: overrides.userAllowlist || [plan.user_id],
     operatorPolicy: overrides.operatorPolicy || createPublicWebCanaryOperatorPolicy(),
     auditSink: overrides.auditSink || createPublicWebCanaryAuditSink(),
+    requireDurableAudit: overrides.requireDurableAudit === true,
     clock: overrides.clock,
     preflight: overrides.preflight
   };

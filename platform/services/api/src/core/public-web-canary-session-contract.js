@@ -434,6 +434,9 @@ function buildCanaryAuditEventCandidate(context = {}) {
     configuration_id: context.configuration_id || 'configuration_not_available',
     adapter_id: context.adapter_id || 'adapter_not_available',
     provider_id: context.provider_id || 'provider_not_available',
+    tenant_id: context.tenant_id || 'tenant_not_available',
+    workspace_type: context.workspace_type || 'workspace_not_available',
+    user_id: context.user_id || null,
     previous_state: context.previous_state || null,
     current_state: context.current_state || context.canary_state || null,
     operation: context.operation || 'operation_not_available',
@@ -445,6 +448,9 @@ function buildCanaryAuditEventCandidate(context = {}) {
     target_origin_hash: context.target_origin_hash || (context.target_origin ? hashValue(context.target_origin) : 'target_not_available'),
     operator_id: context.operator_id || 'operator_not_available',
     approved_by: context.approved_by || null,
+    event_sequence: Number.isSafeInteger(context.event_sequence) && context.event_sequence >= 0
+      ? context.event_sequence
+      : 0,
     simulated: true,
     executed: context.executed === true,
     real_provider_called: context.real_provider_called === true,

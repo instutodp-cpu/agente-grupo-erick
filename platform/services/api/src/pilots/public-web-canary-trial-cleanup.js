@@ -87,15 +87,20 @@ async function runPublicWebCanaryTrialCleanup(input = {}, context = {}) {
   }
   try {
     if (context.auditSink && typeof context.auditSink.append === 'function') {
-      const audit = context.auditSink.append({
+      const event = {
         event_name: 'public_web_canary_trial_cleanup',
         trial_id: input.trial_id,
         canary_session_id: input.canary_session_id,
         status: warnings.length === 0 ? 'cleanup_completed' : 'cleanup_partial',
         executed: false,
         real_provider_called: false
-      });
-      confirmations.audit_registered = Boolean(audit && audit.canary_session_id === input.canary_session_id);
+      };
+      const audit = context.requireDurableAudit === true && typeof context.auditSink.appendDurably === 'function'
+        ? await context.auditSink.appendDurably(event)
+        : context.auditSink.append(event);
+      confirmations.audit_registered = context.requireDurableAudit === true
+        ? Boolean(audit && audit.ok === true && audit.event && audit.event.canary_session_id === input.canary_session_id)
+        : Boolean(audit && audit.canary_session_id === input.canary_session_id);
       if (!confirmations.audit_registered) warnings.push('audit_cleanup_not_confirmed');
     } else {
       warnings.push('audit_sink_missing');
