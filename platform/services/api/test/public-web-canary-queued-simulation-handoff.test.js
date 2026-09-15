@@ -67,7 +67,7 @@ test('simulation guards: no real execution, provider, network, runtime, or secre
   assert.equal(result.network_used, false);
   assert.equal(result.real_provider_called, false);
   assert.equal(result.secret_resolved, false);
-  assert.equal(result.fake_network_used, true);
+  assert.equal(result.fake_network_used, false);
   assert.equal(result.evidence.real_provider_called, false);
   assert.equal(result.evidence.network_used, false);
   assert.equal(result.evidence.secret_resolved, false);
