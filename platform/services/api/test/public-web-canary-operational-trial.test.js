@@ -13,7 +13,8 @@ const {
   validateTrialConfiguration,
   hashTrialPlan,
   findTrialForbiddenFields,
-  sanitizeTrialData
+  sanitizeTrialData,
+  validateTrialDryRunResult
 } = require('../src/core/public-web-canary-trial-contract');
 const { createPublicWebCanaryTrialRegistry } = require('../src/core/public-web-canary-trial-registry');
 const { createPublicWebCanaryTrialExecutionAuthorization } = require('../src/core/public-web-canary-trial-execution-authorization');
@@ -148,8 +149,10 @@ test('preflight validates dependencies and never calls network', () => {
   const context = validPreflightContext({ nodeHttpsClient: { execute: () => { networkCalls += 1; } } });
   const result = runTrialPreflight(validPlan(), context);
   assert.equal(result.passed, true);
+  assert.equal(result.simulated, true);
   assert.equal(result.executed, false);
   assert.equal(result.real_provider_called, false);
+  assert.equal(result.can_trigger_real_execution, false);
   assert.equal(networkCalls, 0);
   assert.equal(runTrialPreflight(validPlan(), { ...context, featureFlagResolver: () => false }).passed, false);
   assert.equal(runTrialPreflight(validPlan(), { ...context, killSwitchResolver: () => true }).passed, false);
@@ -183,20 +186,105 @@ test('preflight uses real policy interfaces and validates deep bindings', () => 
   assert.ok(runTrialPreflight(plan, { ...base, secretReferenceRegistry: { getSecretReference: () => ({ ...base.secretReferenceRegistry.getSecretReference('public_web_local_reference'), revoked: true, status: 'revoked' }) } }).blocking_reasons.includes('secret_reference_not_resolvable'));
 });
 
-test('dry-run uses real canary components with fake network and reports no real provider call', async () => {
+test('preflight does not invoke injected transport, DNS, secret or external audit capabilities', () => {
+  const base = validPreflightContext();
+  const calls = { http: 0, dns: 0, secret: 0, audit: 0, runner: 0 };
+  const result = runTrialPreflight(validPlan(), {
+    ...base,
+    nodeHttpsClient: { execute() { calls.http += 1; } },
+    dnsResolver: { resolve() { calls.dns += 1; } },
+    canaryRunner: { runCanaryRequest() { calls.runner += 1; } },
+    secretResolver: { canResolve() { calls.secret += 1; return true; }, resolveReference() { calls.secret += 1; } },
+    auditSink: { append() { calls.audit += 1; }, durable: false }
+  });
+  assert.equal(result.passed, true);
+  assert.equal(result.simulated, true);
+  assert.equal(result.executed, false);
+  assert.equal(result.real_provider_called, false);
+  assert.equal(result.can_trigger_real_execution, false);
+  assert.deepEqual(calls, { http: 0, dns: 0, secret: 0, audit: 0, runner: 0 });
+});
+
+test('dry-run uses an isolated synthetic boundary and reports no execution', async () => {
   const context = validPreflightContext();
   const plan = validPlan();
   const preflight = runTrialPreflight(plan, context);
   const passed = await runTrialDryRun(plan, { ...context, preflight });
   assert.equal(passed.dry_run_passed, true);
   assert.equal(passed.fake_provider_calls, 1);
-  assert.equal(passed.fake_network_called, true);
+  assert.equal(passed.synthetic_probe_calls, 1);
+  assert.equal(passed.fake_network_called, false);
   assert.equal(passed.replay_blocked, true);
   assert.equal(passed.kill_switch_blocked, true);
-  assert.equal(passed.cleanup_status, 'cleanup_completed');
-  assert.equal(passed.actual_state, 'completed');
-  assert.equal(passed.executed, true);
+  assert.equal(passed.cleanup_status, 'synthetic_preflight_only');
+  assert.equal(passed.actual_state, 'preflight_only');
+  assert.equal(passed.executed, false);
   assert.equal(passed.real_provider_called, false);
+  assert.equal(passed.can_trigger_real_execution, false);
+});
+
+test('synthetic dry-run ignores operational transport, provider, secret, database and audit capabilities', async () => {
+  const context = validPreflightContext();
+  const plan = validPlan();
+  const preflight = runTrialPreflight(plan, context);
+  const calls = { runner: 0, http: 0, dns: 0, secret: 0, database: 0, audit: 0 };
+  const result = await runTrialDryRun(plan, {
+    preflight,
+    canaryRunner: { runCanaryRequest() { calls.runner += 1; } },
+    nodeHttpsClient: { execute() { calls.http += 1; } },
+    dnsResolver: { resolve() { calls.dns += 1; } },
+    secretResolver: { resolveReference() { calls.secret += 1; }, canResolve() { calls.secret += 1; } },
+    database: { write() { calls.database += 1; } },
+    auditSink: { append() { calls.audit += 1; } }
+  });
+
+  assert.equal(result.dry_run_passed, true);
+  assert.equal(result.simulated, true);
+  assert.equal(result.executed, false);
+  assert.equal(result.real_provider_called, false);
+  assert.equal(result.can_trigger_real_execution, false);
+  assert.deepEqual(calls, { runner: 0, http: 0, dns: 0, secret: 0, database: 0, audit: 0 });
+});
+
+test('synthetic dry-run module has no operational runner import or call path', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'src', 'pilots', 'public-web-canary-trial-dry-run.js'),
+    'utf8'
+  );
+  assert.equal(source.includes("require('./public-web-canary-runner')"), false);
+  assert.equal(source.includes('createPublicWebCanaryRunner'), false);
+});
+
+test('dry-run contract rejects execution or capability-escalation flags', () => {
+  const safe = {
+    status: 'dry_run_passed',
+    fake_provider_calls: 1,
+    simulated: true,
+    executed: false,
+    real_provider_called: false,
+    can_trigger_real_execution: false
+  };
+  for (const field of ['simulated', 'executed', 'real_provider_called', 'can_trigger_real_execution']) {
+    const candidate = { ...safe, [field]: field === 'simulated' ? false : true };
+    assert.equal(validateTrialDryRunResult(candidate).valid, false, field);
+  }
+});
+
+test('synthetic dry-run rejects an unsafe preflight result fail-closed', async () => {
+  const plan = validPlan();
+  const unsafePreflight = {
+    passed: true,
+    executed: true,
+    real_provider_called: true,
+    can_trigger_real_execution: true
+  };
+  const result = await runTrialDryRun(plan, { preflight: unsafePreflight });
+  assert.equal(result.dry_run_passed, false);
+  assert.deepEqual(result.blocking_reasons, ['preflight_not_passed']);
+  assert.equal(result.simulated, true);
+  assert.equal(result.executed, false);
+  assert.equal(result.real_provider_called, false);
+  assert.equal(result.can_trigger_real_execution, false);
 });
 
 test('trial registry is private, frozen, versioned and replay protected', () => {
