@@ -14,7 +14,7 @@ const {
   normalizePublicWebCanaryControls,
   validatePublicWebCanaryConfiguration
 } = require('../src/core/public-web-canary-configuration-contract');
-const { buildTrialPlanFromConfig } = require('../src/pilots/public-web-canary-trial-config-loader');
+const { loadTrialConfig } = require('../src/core/public-web-canary-configuration-loader');
 
 function validConfiguration(overrides = {}) {
   return {
@@ -87,6 +87,7 @@ test('PR-B configuration fails closed for missing, malformed, unknown and incons
   const missing = { ...complete };
   delete missing.tenant_id;
   assert.equal(validatePublicWebCanaryConfiguration(missing).valid, false);
+  assert.equal(loadTrialConfig(undefined).ok, false);
 });
 
 test('PR-B configuration normalization is deterministic and does not authorize execution', () => {
@@ -96,32 +97,73 @@ test('PR-B configuration normalization is deterministic and does not authorize e
   assert.equal(first.configuration.synthetic, false);
   assert.equal(first.configuration.authorization_granted_by_default, false);
 
-  const built = buildTrialPlanFromConfig(validConfiguration());
-  assert.equal(built.ok, true, built.blocked_reason);
-  assert.equal(built.plan.production_allowed, false);
-  assert.equal(built.plan.automatic_execution_allowed, false);
-  assert.equal(built.plan.message_integration_allowed, false);
-  assert.equal(built.plan.confirm_integration_allowed, false);
 });
 
-test('PR-B configuration boundary has no operational capability imports', () => {
-  const source = fs.readFileSync(
-    path.join(__dirname, '..', 'src', 'core', 'public-web-canary-configuration-contract.js'),
-    'utf8'
-  );
-  for (const forbidden of [
-    'public-web-canary-runner',
-    'fetch(',
-    'axios',
-    "require('node:http')",
-    "require('node:https')",
-    "require('node:dns')",
-    "require('node:net')",
-    "require('node:tls')",
-    'process.env',
-    'secretResolver',
-    'database'
-  ]) {
-    assert.equal(source.includes(forbidden), false, forbidden);
+test('PR-B configuration loader has no direct or transitive operational capabilities', () => {
+  const entry = path.join(__dirname, '..', 'src', 'core', 'public-web-canary-configuration-loader.js');
+  const visited = new Set();
+  const allowedBuiltins = new Set(['node:crypto', 'node:fs', 'node:net', 'node:path']);
+
+  function visit(filePath) {
+    const resolved = path.resolve(filePath);
+    if (visited.has(resolved)) return;
+    visited.add(resolved);
+
+    const source = fs.readFileSync(resolved, 'utf8');
+    const requireCalls = [...source.matchAll(/\brequire\s*\(/g)];
+    const literalRequires = [...source.matchAll(/\brequire\s*\(\s*(['"])([^'"]+)\1\s*\)/g)];
+    assert.equal(literalRequires.length, requireCalls.length, `${resolved} must use only static require specifiers`);
+    assert.equal(/\bimport\s*\(/.test(source), false, `${resolved} must not use dynamic import`);
+    for (const forbiddenCapability of [
+      /\bfetch\s*\(/,
+      /\baxios\b/,
+      /\bsecretResolver\b/,
+      /\bauditSink\b/,
+      /\b(?:database|supabase)\b/i
+    ]) {
+      assert.equal(forbiddenCapability.test(source), false, `${resolved} contains ${forbiddenCapability}`);
+    }
+
+    for (const match of literalRequires) {
+      const specifier = match[2];
+      if (specifier.startsWith('node:')) {
+        assert.equal(allowedBuiltins.has(specifier), true, `unexpected Node capability ${specifier}`);
+        if (specifier === 'node:net') {
+          assert.equal(path.basename(resolved), 'public-web-transport-contract.js');
+          const netMethods = [...source.matchAll(/\bnet\.([A-Za-z_$][\w$]*)/g)].map((netCall) => netCall[1]);
+          assert.ok(netMethods.length > 0);
+          assert.equal(netMethods.every((method) => method === 'isIP'), true, 'node:net may only validate IP string syntax');
+        }
+        if (specifier === 'node:fs') {
+          const fsMethods = [...source.matchAll(/\bfs\.([A-Za-z_$][\w$]*)/g)].map((fsCall) => fsCall[1]);
+          assert.ok(fsMethods.length > 0);
+          assert.equal(fsMethods.every((method) => ['lstatSync', 'readFileSync'].includes(method)), true, 'configuration loader filesystem access must remain read-only');
+        }
+        continue;
+      }
+      assert.equal(specifier.startsWith('.'), true, `unexpected external dependency ${specifier}`);
+      let dependency = path.resolve(path.dirname(resolved), specifier);
+      if (!path.extname(dependency)) dependency += '.js';
+      assert.equal(fs.existsSync(dependency), true, `unresolved static dependency ${specifier}`);
+      visit(dependency);
+    }
   }
+
+  visit(entry);
+  const graph = [...visited].map((filePath) => path.relative(path.join(__dirname, '..', 'src'), filePath)).sort();
+  const expectedGraph = [
+    path.join('core', 'public-web-canary-configuration-contract.js'),
+    path.join('core', 'public-web-canary-configuration-loader.js'),
+    path.join('core', 'public-web-canary-trial-contract.js'),
+    path.join('core', 'public-web-transport-contract.js'),
+    path.join('core', 'read-only-adapter-contract.js')
+  ].sort();
+  assert.deepEqual(graph, expectedGraph, 'PR-B import closure must remain limited to pure configuration/contract modules');
+  assert.deepEqual(Object.keys(require('../src/core/public-web-canary-configuration-loader')).sort(), [
+    'ALLOWED_CONFIG_FIELDS',
+    'findUnknownConfigFields',
+    'loadTrialConfig',
+    'sanitizeLoadedTrialConfig',
+    'validateTrialConfigPath'
+  ]);
 });

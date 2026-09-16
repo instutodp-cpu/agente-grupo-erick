@@ -138,6 +138,10 @@ test('trial plan contract blocks production, queries, wildcards and forbidden fi
   assert.equal(validateTrialConfiguration({ ...validTrialConfig(), target_path: '/../secret' }).valid, false);
   assert.equal(validateTrialConfiguration({ ...validTrialConfig(), headers: { authorization: 'secret' } }).valid, false);
   const plan = validPlan();
+  assert.equal(plan.production_allowed, false);
+  assert.equal(plan.automatic_execution_allowed, false);
+  assert.equal(plan.message_integration_allowed, false);
+  assert.equal(plan.confirm_integration_allowed, false);
   assert.equal(validateTrialPlan(plan).valid, true);
   assert.equal(hashTrialPlan(plan), plan.plan_hash);
   assert.deepEqual(findTrialForbiddenFields({ nested: { rawBody: 'x' } }), ['forbidden_field::rawBody']);
