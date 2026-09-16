@@ -17,9 +17,10 @@ The normative predecessors are:
 PR-B configuration readiness is not provider readiness, canary activation,
 production authorization, or authorization for `PR-C_REAL_TRANSPORT`.
 
-## Existing implementation boundary
+## Existing implementation boundaries
 
-The readiness evaluator is the existing pure core module:
+The canonical preflight readiness evaluator remains the existing pure core
+module:
 
 `platform/services/api/src/core/public-web-canary-preflight-readiness-boundary.js`
 
@@ -27,8 +28,21 @@ Its existing contract test is:
 
 `platform/services/api/test/public-web-canary-preflight-readiness-boundary.test.js`
 
-This checkpoint does not create a parallel readiness evaluator, wire the
-Operational Trial, or modify the historical Operational Trial implementation.
+The Operational Trial has a separate, narrower readiness-review boundary:
+
+`platform/services/api/src/core/public-web-canary-operational-trial-readiness-boundary.js`
+
+Its explicit-evidence binding is:
+
+`platform/services/api/src/core/public-web-canary-operational-trial-readiness-binding.js`
+
+These modules are not a parallel implementation of the canonical preflight
+evaluator. The preflight boundary evaluates the complete preparation and trial
+plan contract; the Operational Trial boundary evaluates the explicit
+readiness-only evidence shape consumed by its binding. The binding may compose
+PR-B evidence for review, but it must not wire the Operational Trial, invoke an
+operational runner, or create an execution path. Neither boundary changes the
+historical Operational Trial implementation.
 
 ## Readiness result
 
@@ -40,9 +54,14 @@ decision=ENTER_PUBLIC_WEB_CANARY_NON_SIDE_EFFECT_PREFLIGHT
 next_state=WAITING_PUBLIC_WEB_CANARY_PREFLIGHT_RUN
 ```
 
-This means only that the supplied preparation evidence and trial plan may
-enter a non-side-effect synthetic preflight. It never means ready for real
-execution.
+For the canonical preflight evaluator, this means only that the supplied
+preparation evidence and trial plan may enter a non-side-effect synthetic
+preflight. It never means ready for real execution.
+
+The Operational Trial boundary may return `READY_FOR_REVIEW` only as an
+intermediate, readiness-only result. That status is not
+`PUBLIC_WEB_CANARY_PREFLIGHT_READY`, does not authorize entry into the
+preflight runner, and never means ready for real execution.
 
 Any missing, invalid, stale, mismatched or authority-escalated input returns a
 blocked or validation-failed result with `fail_closed` and explicit reason
