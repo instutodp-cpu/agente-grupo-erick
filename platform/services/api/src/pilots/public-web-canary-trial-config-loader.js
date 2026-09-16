@@ -16,9 +16,13 @@ const {
   findTrialForbiddenFields,
   hashTrialPlan,
   sanitizeTrialData,
-  validateTrialConfiguration,
   validateTrialPlan
 } = require('../core/public-web-canary-trial-contract');
+const {
+  CONTROL_FIELDS,
+  stripControlFields,
+  validatePublicWebCanaryConfiguration
+} = require('../core/public-web-canary-configuration-contract');
 
 const ALLOWED_CONFIG_FIELDS = Object.freeze([
   'trial_id',
@@ -44,7 +48,8 @@ const ALLOWED_CONFIG_FIELDS = Object.freeze([
   'user_id',
   'reason',
   'session_expires_at',
-  'approval_expires_at'
+  'approval_expires_at',
+  ...CONTROL_FIELDS
 ]);
 
 function fail(code, reason) {
@@ -79,6 +84,10 @@ function sanitizeLoadedTrialConfig(config) {
   return result;
 }
 
+function findUnknownConfigFields(config) {
+  return Object.keys(config || {}).filter((field) => !ALLOWED_CONFIG_FIELDS.includes(field));
+}
+
 function loadTrialConfig(filePath, options = {}) {
   const pathValidation = validateTrialConfigPath(filePath, options);
   if (!pathValidation.ok) return pathValidation;
@@ -88,48 +97,63 @@ function loadTrialConfig(filePath, options = {}) {
   } catch (error) {
     return fail('INVALID_TRIAL_CONFIGURATION', 'config_json_invalid');
   }
-  const unknown = Object.keys(parsed || {}).filter((field) => !ALLOWED_CONFIG_FIELDS.includes(field));
+  const unknown = findUnknownConfigFields(parsed);
   if (unknown.length > 0) return fail('INVALID_TRIAL_CONFIGURATION', 'unknown_field_blocked');
   if (findTrialForbiddenFields(parsed).length > 0) return fail('TRIAL_FORBIDDEN_FIELD_DETECTED', 'forbidden_field_detected');
   const config = sanitizeLoadedTrialConfig(parsed);
-  const validation = validateTrialConfiguration(config);
+  const validation = validatePublicWebCanaryConfiguration(config, {
+    source: options.configurationSource === undefined
+      ? 'explicit_non_production_document'
+      : options.configurationSource,
+    syntheticTestContext: options.syntheticTestContext === true
+  });
   if (!validation.valid) return fail('INVALID_TRIAL_CONFIGURATION', validation.errors[0]);
-  return { ok: true, config };
+  return { ok: true, config, configuration_controls: validation.configuration };
 }
 
 function buildTrialPlanFromConfig(config, context = {}) {
+  const unknown = findUnknownConfigFields(config);
+  if (unknown.length > 0) return { ok: false, error: buildSafeTrialError('INVALID_TRIAL_CONFIGURATION', 'unknown_field_blocked'), blocked_reason: 'unknown_field_blocked' };
+  const configurationValidation = validatePublicWebCanaryConfiguration(config, {
+    source: context.configurationSource === undefined
+      ? 'explicit_non_production_document'
+      : context.configurationSource,
+    syntheticTestContext: context.syntheticTestContext === true
+  });
+  if (!configurationValidation.valid) return { ok: false, error: buildSafeTrialError('INVALID_TRIAL_CONFIGURATION', configurationValidation.errors[0]), blocked_reason: configurationValidation.errors[0] };
+  const normalizedConfig = stripControlFields(config);
   const now = context.now || (typeof context.clock === 'function' ? context.clock() : new Date(0).toISOString());
-  const sessionExpiresAt = config.session_expires_at || new Date(Date.parse(now) + 30 * 60 * 1000).toISOString();
-  const approvalExpiresAt = config.approval_expires_at || sessionExpiresAt;
+  const sessionExpiresAt = normalizedConfig.session_expires_at || new Date(Date.parse(now) + 30 * 60 * 1000).toISOString();
+  const approvalExpiresAt = normalizedConfig.approval_expires_at || sessionExpiresAt;
   const plan = {
-    trial_id: config.trial_id,
-    trial_version: config.trial_version || 1,
-    trial_name: config.trial_name || 'Public Web Canary Operational Trial',
-    environment: config.environment,
+    trial_id: normalizedConfig.trial_id,
+    trial_version: normalizedConfig.trial_version || 1,
+    trial_name: normalizedConfig.trial_name || 'Public Web Canary Operational Trial',
+    environment: normalizedConfig.environment,
     connector_id: context.connector_id || CONNECTOR_ID,
     configuration_id: context.configuration_id || CONFIGURATION_ID,
     adapter_id: context.adapter_id || ADAPTER_ID,
     provider_id: context.provider_id || PROVIDER_ID,
     readiness_candidate_id: context.readiness_candidate_id || READINESS_CANDIDATE_ID,
-    target_policy_id: config.target_policy_id,
-    canary_session_id: context.canary_session_id || `${config.trial_id}_session`,
-    workspace_type: config.workspace_type,
-    tenant_id: config.tenant_id,
-    user_id: config.user_id,
-    operator_id: config.operator_id,
-    operator_role: config.operator_role || 'integration_operator',
-    approver_id: config.approver_id,
-    approver_role: config.approver_role || 'security_operator',
-    target_origin: config.target_origin,
-    target_path: config.target_path,
-    target_path_hash: hashValue(config.target_path),
-    source_type: config.source_type,
-    operation: config.operation,
-    requested_content_types: config.requested_content_types,
-    maximum_requests: config.maximum_requests,
-    rollout_percentage: config.rollout_percentage,
-    timeout_ms: config.timeout_ms,
-    maximum_response_bytes: config.maximum_response_bytes,
+    target_policy_id: normalizedConfig.target_policy_id,
+    canary_session_id: context.canary_session_id || `${normalizedConfig.trial_id}_session`,
+    workspace_type: normalizedConfig.workspace_type,
+    tenant_id: normalizedConfig.tenant_id,
+    user_id: normalizedConfig.user_id,
+    operator_id: normalizedConfig.operator_id,
+    operator_role: normalizedConfig.operator_role || 'integration_operator',
+    approver_id: normalizedConfig.approver_id,
+    approver_role: normalizedConfig.approver_role || 'security_operator',
+    target_origin: normalizedConfig.target_origin,
+    target_path: normalizedConfig.target_path,
+    target_path_hash: hashValue(normalizedConfig.target_path),
+    source_type: normalizedConfig.source_type,
+    operation: normalizedConfig.operation,
+    requested_content_types: normalizedConfig.requested_content_types,
+    maximum_requests: normalizedConfig.maximum_requests,
+    rollout_percentage: normalizedConfig.rollout_percentage,
+    timeout_ms: normalizedConfig.timeout_ms,
+    maximum_response_bytes: normalizedConfig.maximum_response_bytes,
     session_expires_at: sessionExpiresAt,
     approval_expires_at: approvalExpiresAt,
     feature_flag_key: context.feature_flag_key || 'HERMES_PUBLIC_WEB_READ_ONLY_ENABLED',
@@ -139,8 +163,8 @@ function buildTrialPlanFromConfig(config, context = {}) {
     message_integration_allowed: false,
     confirm_integration_allowed: false,
     created_at: now,
-    created_by: config.operator_id,
-    reason: config.reason,
+    created_by: normalizedConfig.operator_id,
+    reason: normalizedConfig.reason,
     status: 'not_started'
   };
   for (const field of REQUIRED_TRIAL_PLAN_FIELDS) {
