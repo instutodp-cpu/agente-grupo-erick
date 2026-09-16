@@ -315,10 +315,10 @@ function validateTrialConfiguration(config) {
 function validateTrialPreflightResult(result) {
   const errors = [];
   if (!isPlainObject(result)) return { valid: false, errors: ['preflight_must_be_object'] };
-  for (const field of ['status', 'passed', 'blocking_reasons', 'plan_hash', 'evidence_hash', 'executed', 'real_provider_called']) {
+  for (const field of ['status', 'passed', 'blocking_reasons', 'plan_hash', 'evidence_hash', 'simulated', 'executed', 'real_provider_called', 'can_trigger_real_execution']) {
     if (!Object.prototype.hasOwnProperty.call(result, field)) errors.push(`missing_${field}`);
   }
-  if (result.executed !== false || result.real_provider_called !== false) errors.push('preflight_must_not_execute');
+  if (result.simulated !== true || result.executed !== false || result.real_provider_called !== false || result.can_trigger_real_execution !== false) errors.push('preflight_must_not_execute');
   if (findTrialForbiddenFields(result).length > 0) errors.push('forbidden_field_detected');
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }
@@ -328,7 +328,9 @@ function validateTrialDryRunResult(result) {
   if (!isPlainObject(result)) return { valid: false, errors: ['dry_run_must_be_object'] };
   if (result.status !== 'dry_run_passed') errors.push('dry_run_not_passed');
   if (result.fake_provider_calls !== 1) errors.push('fake_provider_calls_must_equal_one');
-  if (result.simulated !== true || result.real_provider_called !== false) errors.push('dry_run_safety_flags_invalid');
+  if (result.simulated !== true || result.executed !== false || result.real_provider_called !== false || result.can_trigger_real_execution !== false) {
+    errors.push('dry_run_safety_flags_invalid');
+  }
   if (findTrialForbiddenFields(result).length > 0) errors.push('forbidden_field_detected');
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }

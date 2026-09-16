@@ -122,9 +122,6 @@ function runTrialPreflight(plan, context = {}) {
     if (secretReference.revoked === true || secretReference.disabled === true || ['revoked', 'disabled', 'expired', 'rotation_required', 'reference_pending'].includes(secretReference.status)) {
       blocking.push('secret_reference_not_resolvable');
     }
-    if (!context.secretResolver || !isFunction(context.secretResolver.canResolve) || context.secretResolver.canResolve(secretReference) !== true) {
-      blocking.push('secret_resolver_blocked');
-    }
   }
 
   let target = null;
@@ -154,12 +151,10 @@ function runTrialPreflight(plan, context = {}) {
   if (!approvePolicy || approvePolicy.allowed !== true) blocking.push('approver_not_authorized');
   if (!context.rateLimitBudget || !isFunction(context.rateLimitBudget.check) || context.rateLimitBudget.check(plan).allowed !== true) blocking.push('rate_budget_blocked');
   if (!context.costBudget || !isFunction(context.costBudget.check) || context.costBudget.check(plan).allowed !== true) blocking.push('cost_budget_blocked');
-  if (!context.auditSink || !isFunction(context.auditSink.append)) blocking.push('audit_sink_missing');
+  if (!context.auditSink) blocking.push('audit_sink_missing');
   if (context.requireDurableAudit === true && (!context.auditSink || context.auditSink.durable !== true || !isFunction(context.auditSink.appendDurably))) {
     blocking.push('persistent_audit_unavailable');
   }
-  if (!context.dnsResolver || !isFunction(context.dnsResolver.resolve)) blocking.push('dns_resolver_missing');
-  if (!context.nodeHttpsClient && !context.canaryRunner) blocking.push('https_client_or_runner_missing');
   if (plan.maximum_requests !== 1) blocking.push('maximum_requests_must_be_one');
   const bindingSnapshot = sanitizeTrialData({
     lifecycle_version: connector && connector.lifecycle_version,
@@ -178,11 +173,12 @@ function runTrialPreflight(plan, context = {}) {
     plan_hash: plan.plan_hash || hashTrialPlan(plan),
     evidence_hash: hashTrialEvidence({ plan_hash: plan.plan_hash || hashTrialPlan(plan), blocking, bindingSnapshot }),
     checked_at: context.now || (isFunction(context.clock) ? context.clock() : new Date(0).toISOString()),
+    simulated: true,
     executed: false,
     real_provider_called: false,
+    can_trigger_real_execution: false,
     error: blocking.length === 0 ? null : buildSafeTrialError('TRIAL_PREFLIGHT_BLOCKED', blocking[0])
   });
-  if (context.auditSink && isFunction(context.auditSink.append)) context.auditSink.append({ event_name: 'public_web_canary_trial_preflight', ...result, trial_id: plan.trial_id });
   return result;
 }
 

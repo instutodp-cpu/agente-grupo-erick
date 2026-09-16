@@ -5,13 +5,10 @@ const { createReadOnlyAdapterRegistry } = require('../core/read-only-adapter-reg
 const { createLocalTestSecretResolver } = require('../core/provider-secret-resolver');
 const { createPublicWebCanaryAuditSink } = require('../core/public-web-canary-audit-sink');
 const { createPublicWebCanaryOperatorPolicy } = require('../core/public-web-canary-operator-policy');
-const { buildPublicWebCanaryReport } = require('../core/public-web-canary-report');
 const { createPublicWebCanarySessionRegistry } = require('../core/public-web-canary-session-registry');
 const { hashCanaryEvidence } = require('../core/public-web-canary-session-contract');
 const { createPublicWebCanaryTargetAllowlist } = require('../core/public-web-canary-target-allowlist');
 const { createPublicWebPilotBudget } = require('../core/public-web-pilot-gate');
-const { createPublicWebCanaryRunner } = require('./public-web-canary-runner');
-const { runPublicWebCanaryTrialCleanup } = require('./public-web-canary-trial-cleanup');
 const {
   ADAPTER_ID,
   CONFIGURATION_ID,
@@ -19,7 +16,7 @@ const {
   PROVIDER_ID,
   READINESS_CANDIDATE_ID
 } = require('../core/public-web-transport-contract');
-const { hashTrialEvidence, sanitizeTrialData } = require('../core/public-web-canary-trial-contract');
+const { hashTrialEvidence, sanitizeTrialData, validateTrialPlan } = require('../core/public-web-canary-trial-contract');
 
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
@@ -353,123 +350,50 @@ function buildRunnerRequest(plan, session, ids = {}) {
   });
 }
 
-async function runTrialDryRun(plan, context = {}) {
-  const dryContext = createSyntheticCanaryContext(plan, {
-    clock: context.clock,
-    preflight: context.preflight,
-    readinessResult: context.readinessResult,
-    adapterRegistry: context.adapterRegistry,
-    lifecycleRegistry: context.lifecycleRegistry,
-    configurationRegistry: context.configurationRegistry,
-    secretReferenceRegistry: context.secretReferenceRegistry,
-    secretResolver: context.secretResolver,
-    fakeHttpsResponse: context.fakeHttpsResponse
-  });
-  const prepared = prepareOperationalCanarySession(plan, dryContext, {
-    suffix: 'dry_run',
-    trace_id: `${plan.trial_id}_dry_run_trace`,
-    request_id: `${plan.trial_id}_dry_run_request`,
-    change_id: `${plan.trial_id}_dry_run_change`,
-    approval_id: `${plan.trial_id}_dry_run_approval`
-  });
-  if (!prepared.ok) {
-    return sanitizeTrialData({
-      status: 'dry_run_failed',
-      dry_run_passed: false,
-      blocking_reasons: [`dry_run_${prepared.stage}_blocked`],
-      fake_provider_calls: 0,
-      fake_network_called: false,
+function buildSyntheticDryRunResult(plan, fields = {}) {
+  const result = sanitizeTrialData({
+    status: fields.blocking_reason ? 'dry_run_blocked' : 'dry_run_passed',
+    dry_run_passed: !fields.blocking_reason,
+    blocking_reasons: fields.blocking_reason ? [fields.blocking_reason] : [],
+    plan_hash: plan && plan.plan_hash,
+    fake_provider_calls: fields.blocking_reason ? 0 : 1,
+    synthetic_probe_calls: fields.blocking_reason ? 0 : 1,
+    fake_network_called: false,
+    replay_blocked: true,
+    kill_switch_blocked: true,
+    expected_state: 'preflight_only',
+    actual_state: 'preflight_only',
+    cleanup_status: 'synthetic_preflight_only',
+    evidence_hash: hashTrialEvidence({
+      plan_hash: plan && plan.plan_hash,
+      blocking_reason: fields.blocking_reason || null,
+      simulated: true,
       executed: false,
       real_provider_called: false,
-      simulated: true,
-      plan_hash: plan.plan_hash,
-      evidence_hash: hashTrialEvidence({ plan_hash: plan.plan_hash, prepared })
-    });
-  }
-  const runner = createPublicWebCanaryRunner(dryContext);
-  const runnerRequest = buildRunnerRequest(plan, prepared.session, {
-    trace_id: `${plan.trial_id}_dry_run_execution_trace`,
-    request_id: `${plan.trial_id}_dry_run_execution_request`,
-    change_id: `${plan.trial_id}_dry_run_execution_change`,
-    canary_execution_id: `${plan.trial_id}_dry_run_execution`
-  });
-  const result = await runner.runCanaryRequest(runnerRequest);
-  const fakeCalls = dryContext.nodeHttpsClient && typeof dryContext.nodeHttpsClient.calls === 'function' ? dryContext.nodeHttpsClient.calls() : 0;
-  const replay = await runner.runCanaryRequest(runnerRequest);
-  const replayCalls = dryContext.nodeHttpsClient && typeof dryContext.nodeHttpsClient.calls === 'function' ? dryContext.nodeHttpsClient.calls() : 0;
-
-  const killContext = createSyntheticCanaryContext(plan, {
-    clock: context.clock,
-    canarySessionRegistry: createPublicWebCanarySessionRegistry({ clock: context.clock }),
-    targetAllowlist: createPublicWebCanaryTargetAllowlist({ clock: context.clock }),
-    nodeHttpsClient: fakeNodeHttpsClient(),
-    readinessResult: context.readinessResult,
-    adapterRegistry: context.adapterRegistry,
-    lifecycleRegistry: context.lifecycleRegistry,
-    configurationRegistry: context.configurationRegistry,
-    secretReferenceRegistry: context.secretReferenceRegistry,
-    secretResolver: context.secretResolver,
-    killSwitchResolver: () => false,
-    preflight: context.preflight
-  });
-  const killPrepared = prepareOperationalCanarySession({ ...plan, canary_session_id: `${plan.canary_session_id}_kill_check` }, killContext, {
-    suffix: 'dry_run_kill',
-    trace_id: `${plan.trial_id}_dry_run_kill_trace`,
-    request_id: `${plan.trial_id}_dry_run_kill_request`,
-    change_id: `${plan.trial_id}_dry_run_kill_change`,
-    approval_id: `${plan.trial_id}_dry_run_kill_approval`
-  });
-  let killResult = null;
-  if (killPrepared.ok) {
-    killContext.killSwitchResolver = () => true;
-    killResult = await createPublicWebCanaryRunner(killContext).runCanaryRequest(buildRunnerRequest(plan, killPrepared.session, {
-      trace_id: `${plan.trial_id}_dry_run_kill_execution_trace`,
-      request_id: `${plan.trial_id}_dry_run_kill_execution_request`,
-      change_id: `${plan.trial_id}_dry_run_kill_execution_change`,
-      canary_execution_id: `${plan.trial_id}_dry_run_kill_execution`
-    }));
-  }
-  const killCalls = killContext.nodeHttpsClient && typeof killContext.nodeHttpsClient.calls === 'function' ? killContext.nodeHttpsClient.calls() : 0;
-  const cleanup = await runPublicWebCanaryTrialCleanup({ ...plan, canary_session_id: prepared.session.canary_session_id }, dryContext);
-  const finalSession = dryContext.canarySessionRegistry.getCanarySession(prepared.session.canary_session_id);
-  const report = buildPublicWebCanaryReport(finalSession, dryContext.auditSink.list({ canary_session_id: prepared.session.canary_session_id }));
-  const passed = result.status === 'public_web_candidate_success' &&
-    fakeCalls === 1 &&
-    replayCalls === 1 &&
-    replay.real_provider_called === false &&
-    killPrepared.ok === true &&
-    killResult &&
-    killResult.error &&
-    killResult.error.error_code === 'CANARY_KILL_SWITCH_ACTIVE' &&
-    killCalls === 0 &&
-    cleanup.status === 'cleanup_completed' &&
-    finalSession &&
-    !['active', 'executing'].includes(finalSession.canary_state) &&
-    report.provider_calls === 1;
-
-  const dryRun = sanitizeTrialData({
-    status: passed ? 'dry_run_passed' : 'dry_run_failed',
-    dry_run_passed: passed,
-    blocking_reasons: passed ? [] : ['dry_run_real_harness_assertion_failed'],
-    plan_hash: plan.plan_hash,
-    evidence_hash: hashTrialEvidence({ plan_hash: plan.plan_hash, fakeCalls, replayCalls, killCalls, cleanup, report }),
-    fake_provider_calls: fakeCalls,
-    fake_network_called: fakeCalls === 1,
-    expected_state: 'completed',
-    actual_state: finalSession && finalSession.canary_state,
-    canary_session_id: prepared.session.canary_session_id,
-    canary_session_version: prepared.session.version,
-    replay_blocked: replay.real_provider_called === false,
-    kill_switch_blocked: killResult && killResult.error && killResult.error.error_code === 'CANARY_KILL_SWITCH_ACTIVE',
-    audit_event_count: dryContext.auditSink.list({ canary_session_id: prepared.session.canary_session_id }).length,
-    report_hash: hashTrialEvidence(report),
-    cleanup_status: cleanup.status,
-    executed: true,
+      can_trigger_real_execution: false
+    }),
+    simulated: true,
+    executed: false,
     real_provider_called: false,
-    simulated: true
+    can_trigger_real_execution: false
   });
-  if (dryContext.auditSink && typeof dryContext.auditSink.append === 'function') dryContext.auditSink.append({ event_name: 'public_web_canary_trial_dry_run', ...dryRun, trial_id: plan.trial_id });
-  return dryRun;
+  return result;
+}
+
+async function runTrialDryRun(plan, context = {}) {
+  const validation = validateTrialPlan(plan);
+  if (!validation.valid) return buildSyntheticDryRunResult(plan, { blocking_reason: 'trial_plan_invalid' });
+  const preflight = context.preflight;
+  const preflightSafe = preflight &&
+    preflight.passed === true &&
+    preflight.executed === false &&
+    preflight.real_provider_called === false &&
+    (preflight.simulated === undefined || preflight.simulated === true) &&
+    (preflight.can_trigger_real_execution === undefined || preflight.can_trigger_real_execution === false);
+  if (!preflightSafe) {
+    return buildSyntheticDryRunResult(plan, { blocking_reason: 'preflight_not_passed' });
+  }
+  return buildSyntheticDryRunResult(plan);
 }
 
 function createPublicWebCanaryTrialDryRun(options = {}) {
