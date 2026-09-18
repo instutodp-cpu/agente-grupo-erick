@@ -22,7 +22,12 @@ const { buildTrialEvidence, validateTrialEvidence } = require('../src/core/publi
 const { evaluateTrialDecision } = require('../src/core/public-web-canary-trial-decision');
 const { loadTrialConfig, buildTrialPlanFromConfig } = require('../src/pilots/public-web-canary-trial-config-loader');
 const { runTrialPreflight } = require('../src/pilots/public-web-canary-trial-preflight');
-const { runTrialDryRun } = require('../src/pilots/public-web-canary-trial-dry-run');
+const {
+  buildRunnerRequest,
+  createSyntheticCanaryContext,
+  prepareOperationalCanarySession,
+  runTrialDryRun
+} = require('../src/pilots/public-web-canary-trial-dry-run');
 const { createPublicWebCanaryRunner } = require('../src/pilots/public-web-canary-runner');
 const { createPublicWebCanaryOperationalTrial } = require('../src/pilots/public-web-canary-operational-trial');
 const {
@@ -225,6 +230,52 @@ test('dry-run uses an isolated synthetic boundary and reports no execution', asy
   assert.equal(passed.executed, false);
   assert.equal(passed.real_provider_called, false);
   assert.equal(passed.can_trigger_real_execution, false);
+});
+
+test('synthetic canary runtime defaults satisfy the pilot gate before one fake provider call', async () => {
+  const plan = validPlan({ environment: 'staging' });
+  const context = createSyntheticCanaryContext(plan, {
+    clock: deterministicClock
+  });
+
+  const connector = context.lifecycleRegistry.getConnector(plan.connector_id);
+  const configuration = context.configurationRegistry.getConfiguration(plan.configuration_id);
+
+  assert.equal(connector.feature_flag_default, false);
+  assert.equal(connector.real_provider_enabled, false);
+  assert.equal(configuration.feature_flag_default, false);
+  assert.equal(configuration.readiness_status, 'configuration_structurally_ready');
+  assert.equal(configuration.environment, 'local_test');
+  assert.equal(context.readinessResult.status, 'ready_for_real_read_only_pr');
+  assert.equal(context.readinessResult.verdict, 'allow_future_read_only_pr');
+  assert.deepEqual(context.readinessResult.blocking_requirements, []);
+  assert.deepEqual(context.readinessResult.blocking_reasons, []);
+
+  const prepared = prepareOperationalCanarySession(plan, context, {
+    suffix: 'runtime_gate_binding_regression',
+    trace_id: 'trace_runtime_gate_binding_regression',
+    request_id: 'request_runtime_gate_binding_regression',
+    change_id: 'change_runtime_gate_binding_regression',
+    approval_id: 'approval_runtime_gate_binding_regression'
+  });
+  assert.equal(prepared.ok, true, JSON.stringify(prepared));
+
+  const runner = createPublicWebCanaryRunner(context);
+  const result = await runner.runCanaryRequest(buildRunnerRequest(
+    plan,
+    prepared.session,
+    {
+      trace_id: 'trace_runtime_gate_binding_execution',
+      request_id: 'request_runtime_gate_binding_execution',
+      change_id: 'change_runtime_gate_binding_execution',
+      canary_execution_id: 'execution_runtime_gate_binding_regression'
+    }
+  ));
+
+  assert.equal(result.status, 'public_web_candidate_success', JSON.stringify(result));
+  assert.equal(result.executed, true);
+  assert.equal(result.real_provider_called, true);
+  assert.equal(context.nodeHttpsClient.calls(), 1);
 });
 
 test('synthetic dry-run ignores operational transport, provider, secret, database and audit capabilities', async () => {
