@@ -45,8 +45,16 @@ function defaultLifecycleRegistry(plan, version) {
     readiness_candidate_id: READINESS_CANDIDATE_ID,
     lifecycle_state: 'readiness_passed',
     lifecycle_version: version,
+    workspace_types: [plan.workspace_type],
+    operations: [plan.operation],
     feature_flag_key: plan.feature_flag_key,
-    kill_switch_key: plan.kill_switch_key
+    feature_flag_default: false,
+    kill_switch_key: plan.kill_switch_key,
+    runtime_enabled: false,
+    real_provider_enabled: false,
+    execution_mode: 'contract_only',
+    deprecated: false,
+    retired: false
   });
   return Object.freeze({
     getConnector(id) {
@@ -65,9 +73,19 @@ function defaultConfigurationRegistry(plan, version, secretReferenceId) {
     workspace_type: plan.workspace_type,
     tenant_id: plan.tenant_id,
     user_id: plan.user_id,
+    environment: 'local_test',
     configuration_status: 'structurally_ready',
+    readiness_status: 'configuration_structurally_ready',
     configuration_version: version,
-    secret_reference_descriptors: [{ reference_id: secretReferenceId, reference_type: 'local_test_double_reference' }]
+    feature_flag_key: plan.feature_flag_key,
+    feature_flag_default: false,
+    kill_switch_key: plan.kill_switch_key,
+    kill_switch_required: true,
+    disabled: false,
+    deprecated: false,
+    secret_reference_descriptors: [{ reference_id: secretReferenceId, reference_type: 'local_test_double_reference' }],
+    required_secret_names: ['public_web_test_handle'],
+    allowed_operations: [plan.operation]
   });
   return Object.freeze({
     getConfiguration(id) {
@@ -176,11 +194,15 @@ function createSyntheticCanaryContext(plan, overrides = {}) {
     candidate_id: READINESS_CANDIDATE_ID,
     provider_id: PROVIDER_ID,
     adapter_id: ADAPTER_ID,
+    status: 'ready_for_real_read_only_pr',
+    verdict: 'allow_future_read_only_pr',
     ready: true,
     simulated: true,
     executed: false,
     real_provider_called: false,
-    can_trigger_real_execution: false
+    can_trigger_real_execution: false,
+    blocking_requirements: [],
+    blocking_reasons: []
   };
   const snapshotReadinessId = overrides.preflight && overrides.preflight.binding_snapshot && overrides.preflight.binding_snapshot.readiness_evidence_id;
   if (snapshotReadinessId && hashCanaryEvidence(readinessResult) !== snapshotReadinessId && overrides.readinessResult) {
@@ -218,6 +240,12 @@ function createSyntheticCanaryContext(plan, overrides = {}) {
 
 function buildCanaryRequestFromPlan(plan, context, ids = {}) {
   const preflightSnapshot = context.preflight && context.preflight.binding_snapshot || {};
+  const lifecycle = context.lifecycleRegistry && typeof context.lifecycleRegistry.getConnector === 'function'
+    ? context.lifecycleRegistry.getConnector(plan.connector_id)
+    : null;
+  const configuration = context.configurationRegistry && typeof context.configurationRegistry.getConfiguration === 'function'
+    ? context.configurationRegistry.getConfiguration(plan.configuration_id)
+    : null;
   return sanitizeTrialData({
     trace_id: ids.trace_id || `${plan.trial_id}_trace`,
     request_id: ids.request_id || `${plan.trial_id}_request_canary`,
@@ -244,10 +272,15 @@ function buildCanaryRequestFromPlan(plan, context, ids = {}) {
     kill_switch_active: false,
     rollout_percentage: plan.rollout_percentage,
     maximum_requests: plan.maximum_requests,
-    lifecycle_version: preflightSnapshot.lifecycle_version || plan.lifecycle_version,
-    configuration_version: preflightSnapshot.configuration_version || plan.configuration_version,
+    lifecycle_version: preflightSnapshot.lifecycle_version || plan.lifecycle_version || lifecycle && lifecycle.lifecycle_version,
+    configuration_version: preflightSnapshot.configuration_version || plan.configuration_version || configuration && configuration.configuration_version,
     readiness_evidence_id: context.readiness_evidence_id || preflightSnapshot.readiness_evidence_id || plan.readiness_evidence_id,
-    secret_reference_id: preflightSnapshot.secret_reference_id || plan.secret_reference_id,
+    secret_reference_id: preflightSnapshot.secret_reference_id || plan.secret_reference_id || (
+      configuration &&
+      Array.isArray(configuration.secret_reference_descriptors) &&
+      configuration.secret_reference_descriptors[0] &&
+      configuration.secret_reference_descriptors[0].reference_id
+    ),
     reason: plan.reason,
     requested_at: nowIso(context),
     expires_at: plan.session_expires_at,
