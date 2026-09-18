@@ -1,0 +1,135 @@
+name: Authorized Public Web Canary Real Once 2026-09-18
+
+on:
+  push:
+    branches:
+      - ops/public-web-canary-real-once-20260918
+
+permissions:
+  contents: read
+
+jobs:
+  precheck:
+    name: Authorized canary precheck
+    if: ${{ github.event.head_commit.message == 'ops: execute authorized public web canary once' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact execution commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Verify exact validated base and ops-only diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=6f5a11a2f3e2efe638565265300641c7eb0e369c
+          git merge-base --is-ancestor "$BASE" HEAD
+          mapfile -t changed < <(git diff --name-only "$BASE"...HEAD | sort)
+          printf '%s\n' "${changed[@]}"
+          expected_a=".github/workflows/public-web-canary-real-once-20260918.yml"
+          expected_b="platform/services/api/scripts/public-web-canary-real-once-20260918.js"
+          if [[ "${#changed[@]}" -ne 2 ]] ||
+             [[ "${changed[0]}" != "$expected_a" ]] ||
+             [[ "${changed[1]}" != "$expected_b" ]]; then
+            echo "Unexpected execution-branch diff; fail closed."
+            exit 1
+          fi
+
+      - name: Block any prior real-canary audit on this branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh api             "repos/${GITHUB_REPOSITORY}/contents/ops-audit/public-web-canary?ref=${GITHUB_REF_NAME}"             > /tmp/prior-canary-audit.json 2>/dev/null; then
+            if [[ "$(jq 'length' /tmp/prior-canary-audit.json)" -gt 0 ]]; then
+              echo "Prior real-canary audit exists; replay blocked."
+              cat /tmp/prior-canary-audit.json | jq '[.[].name]'
+              exit 1
+            fi
+          fi
+          echo "No prior real-canary audit found."
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
+
+      - name: Syntax check one-shot executor
+        working-directory: platform/services/api
+        run: node --check scripts/public-web-canary-real-once-20260918.js
+
+      - name: Revalidate grant, bridge and canonical readiness contracts
+        working-directory: platform/services/api
+        run: >-
+          node --test
+          test/public-web-canary-execution-authorization-grant-reservation-boundary.test.js
+          test/public-web-canary-real-non-production-execution-bridge.test.js
+          test/public-web-canary-preflight-readiness-boundary.test.js
+
+  execute:
+    name: Execute one authorized staging canary
+    needs: precheck
+    if: ${{ needs.precheck.result == 'success' && github.event.head_commit.message == 'ops: execute authorized public web canary once' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      AUTHORIZED_CANARY_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+    steps:
+      - name: Checkout exact execution commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install API dependencies
+        working-directory: platform/services/api
+        run: npm install
+
+      - name: Execute exactly one real non-production public web canary
+        working-directory: platform/services/api
+        run: node scripts/public-web-canary-real-once-20260918.js
+
+      - name: Show sanitized result summary
+        if: always()
+        working-directory: platform/services/api
+        shell: bash
+        run: |
+          if [[ -f canary-artifacts/result.json ]]; then
+            jq '{
+              status: .result.status // .status,
+              ok: .result.ok // false,
+              environment,
+              target_origin,
+              operation,
+              reservation_consumed: .result.reservation_consumed // false,
+              replay_key_consumed: .result.replay_key_consumed // false,
+              runner_invoked: .result.runner_invoked // false,
+              executed: .result.executed // false,
+              real_provider_called: .result.real_provider_called // false,
+              production_effect: .result.production_effect // "ZERO",
+              cleanup
+            }' canary-artifacts/result.json
+          fi
+
+      - name: Preserve execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-web-canary-real-once-${{ github.run_id }}
+          path: platform/services/api/canary-artifacts/
+          if-no-files-found: warn
+          retention-days: 30
