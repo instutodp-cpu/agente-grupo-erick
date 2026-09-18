@@ -690,8 +690,6 @@ async function main() {
       );
     }
 
-    plan.canary_session_id = prepared.session.canary_session_id;
-
     runnerRequest = buildRunnerRequest(plan, prepared.session, {
       trace_id: executionIdentity.trialId + '_execution_trace',
       request_id: executionIdentity.trialId + '_execution_request',
