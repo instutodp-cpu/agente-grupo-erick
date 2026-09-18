@@ -275,7 +275,12 @@ function buildCanaryRequestFromPlan(plan, context, ids = {}) {
     lifecycle_version: preflightSnapshot.lifecycle_version || plan.lifecycle_version || lifecycle && lifecycle.lifecycle_version,
     configuration_version: preflightSnapshot.configuration_version || plan.configuration_version || configuration && configuration.configuration_version,
     readiness_evidence_id: context.readiness_evidence_id || preflightSnapshot.readiness_evidence_id || plan.readiness_evidence_id,
-    secret_reference_id: preflightSnapshot.secret_reference_id || plan.secret_reference_id,
+    secret_reference_id: preflightSnapshot.secret_reference_id || plan.secret_reference_id || (
+      configuration &&
+      Array.isArray(configuration.secret_reference_descriptors) &&
+      configuration.secret_reference_descriptors[0] &&
+      configuration.secret_reference_descriptors[0].reference_id
+    ),
     reason: plan.reason,
     requested_at: nowIso(context),
     expires_at: plan.session_expires_at,
