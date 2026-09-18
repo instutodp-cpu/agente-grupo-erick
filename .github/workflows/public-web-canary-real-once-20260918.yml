@@ -112,17 +112,17 @@ jobs:
         run: |
           if [[ -f canary-artifacts/result.json ]]; then
             jq '{
-              status: .result.status // .status,
-              ok: .result.ok // false,
+              status: (.result.status // .status),
+              ok: (.result.ok // false),
               environment,
               target_origin,
               operation,
-              reservation_consumed: .result.reservation_consumed // false,
-              replay_key_consumed: .result.replay_key_consumed // false,
-              runner_invoked: .result.runner_invoked // false,
-              executed: .result.executed // false,
-              real_provider_called: .result.real_provider_called // false,
-              production_effect: .result.production_effect // "ZERO",
+              reservation_consumed: (.result.reservation_consumed // false),
+              replay_key_consumed: (.result.replay_key_consumed // false),
+              runner_invoked: (.result.runner_invoked // false),
+              executed: (.result.executed // false),
+              real_provider_called: (.result.real_provider_called // false),
+              production_effect: (.result.production_effect // "ZERO"),
               cleanup
             }' canary-artifacts/result.json
           fi
