@@ -240,6 +240,12 @@ function createSyntheticCanaryContext(plan, overrides = {}) {
 
 function buildCanaryRequestFromPlan(plan, context, ids = {}) {
   const preflightSnapshot = context.preflight && context.preflight.binding_snapshot || {};
+  const lifecycle = context.lifecycleRegistry && typeof context.lifecycleRegistry.getConnector === 'function'
+    ? context.lifecycleRegistry.getConnector(plan.connector_id)
+    : null;
+  const configuration = context.configurationRegistry && typeof context.configurationRegistry.getConfiguration === 'function'
+    ? context.configurationRegistry.getConfiguration(plan.configuration_id)
+    : null;
   return sanitizeTrialData({
     trace_id: ids.trace_id || `${plan.trial_id}_trace`,
     request_id: ids.request_id || `${plan.trial_id}_request_canary`,
@@ -266,8 +272,8 @@ function buildCanaryRequestFromPlan(plan, context, ids = {}) {
     kill_switch_active: false,
     rollout_percentage: plan.rollout_percentage,
     maximum_requests: plan.maximum_requests,
-    lifecycle_version: preflightSnapshot.lifecycle_version || plan.lifecycle_version,
-    configuration_version: preflightSnapshot.configuration_version || plan.configuration_version,
+    lifecycle_version: preflightSnapshot.lifecycle_version || plan.lifecycle_version || lifecycle && lifecycle.lifecycle_version,
+    configuration_version: preflightSnapshot.configuration_version || plan.configuration_version || configuration && configuration.configuration_version,
     readiness_evidence_id: context.readiness_evidence_id || preflightSnapshot.readiness_evidence_id || plan.readiness_evidence_id,
     secret_reference_id: preflightSnapshot.secret_reference_id || plan.secret_reference_id,
     reason: plan.reason,
