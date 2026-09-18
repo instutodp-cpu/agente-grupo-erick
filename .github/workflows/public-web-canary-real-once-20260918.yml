@@ -11,7 +11,7 @@ permissions:
 jobs:
   precheck:
     name: Authorized canary precheck
-    if: ${{ github.event.head_commit.message == 'ops: execute authorized public web canary once' && github.run_attempt == 1 }}
+    if: github.event.head_commit.message == 'AUTHORIZED_PUBLIC_WEB_CANARY_EXECUTE_ONCE_20260918' && github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -76,7 +76,7 @@ jobs:
   execute:
     name: Execute one authorized staging canary
     needs: precheck
-    if: ${{ needs.precheck.result == 'success' && github.event.head_commit.message == 'ops: execute authorized public web canary once' && github.run_attempt == 1 }}
+    if: needs.precheck.result == 'success' && github.event.head_commit.message == 'AUTHORIZED_PUBLIC_WEB_CANARY_EXECUTE_ONCE_20260918' && github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
