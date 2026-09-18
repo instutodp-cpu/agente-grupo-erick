@@ -45,8 +45,16 @@ function defaultLifecycleRegistry(plan, version) {
     readiness_candidate_id: READINESS_CANDIDATE_ID,
     lifecycle_state: 'readiness_passed',
     lifecycle_version: version,
+    workspace_types: [plan.workspace_type],
+    operations: [plan.operation],
     feature_flag_key: plan.feature_flag_key,
-    kill_switch_key: plan.kill_switch_key
+    feature_flag_default: false,
+    kill_switch_key: plan.kill_switch_key,
+    runtime_enabled: false,
+    real_provider_enabled: false,
+    execution_mode: 'contract_only',
+    deprecated: false,
+    retired: false
   });
   return Object.freeze({
     getConnector(id) {
@@ -65,9 +73,19 @@ function defaultConfigurationRegistry(plan, version, secretReferenceId) {
     workspace_type: plan.workspace_type,
     tenant_id: plan.tenant_id,
     user_id: plan.user_id,
+    environment: 'local_test',
     configuration_status: 'structurally_ready',
+    readiness_status: 'configuration_structurally_ready',
     configuration_version: version,
-    secret_reference_descriptors: [{ reference_id: secretReferenceId, reference_type: 'local_test_double_reference' }]
+    feature_flag_key: plan.feature_flag_key,
+    feature_flag_default: false,
+    kill_switch_key: plan.kill_switch_key,
+    kill_switch_required: true,
+    disabled: false,
+    deprecated: false,
+    secret_reference_descriptors: [{ reference_id: secretReferenceId, reference_type: 'local_test_double_reference' }],
+    required_secret_names: ['public_web_test_handle'],
+    allowed_operations: [plan.operation]
   });
   return Object.freeze({
     getConfiguration(id) {
@@ -176,11 +194,15 @@ function createSyntheticCanaryContext(plan, overrides = {}) {
     candidate_id: READINESS_CANDIDATE_ID,
     provider_id: PROVIDER_ID,
     adapter_id: ADAPTER_ID,
+    status: 'ready_for_real_read_only_pr',
+    verdict: 'allow_future_read_only_pr',
     ready: true,
     simulated: true,
     executed: false,
     real_provider_called: false,
-    can_trigger_real_execution: false
+    can_trigger_real_execution: false,
+    blocking_requirements: [],
+    blocking_reasons: []
   };
   const snapshotReadinessId = overrides.preflight && overrides.preflight.binding_snapshot && overrides.preflight.binding_snapshot.readiness_evidence_id;
   if (snapshotReadinessId && hashCanaryEvidence(readinessResult) !== snapshotReadinessId && overrides.readinessResult) {
