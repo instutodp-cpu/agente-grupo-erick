@@ -51,7 +51,7 @@ const {
 
 const EXPECTED_MAIN_SHA = '6f5a11a2f3e2efe638565265300641c7eb0e369c';
 const EXPECTED_BRANCH = 'ops/public-web-canary-real-once-20260918';
-const EXPECTED_COMMIT_MESSAGE = 'ops: execute authorized public web canary once';
+const EXPECTED_COMMIT_MESSAGE = 'AUTHORIZED_PUBLIC_WEB_CANARY_EXECUTE_ONCE_20260918';
 const AUTHORIZATION_REFERENCE =
   'owner-explicit-authorization:2026-09-18:single-public-web-canary-non-production';
 
