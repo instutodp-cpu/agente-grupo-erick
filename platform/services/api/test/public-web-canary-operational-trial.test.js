@@ -640,7 +640,7 @@ test('cleanup and post-network failures drive remediation without masking flags'
   assert.equal(failed.decision.decision, 'remediation_required');
 });
 
-test('prepare preflight-only does not run dry-run and CLI execute blocks without bootstrap', async () => {
+test('prepare preflight-only does not run dry-run and CLI execute blocks when selected bootstrap is absent', async () => {
   const context = validPreflightContext();
   const trial = createPublicWebCanaryOperationalTrial({ ...context, clock: deterministicClock });
   const prepared = await trial.prepareTrial({ config: validTrialConfig(), preflightOnly: true });
@@ -649,7 +649,8 @@ test('prepare preflight-only does not run dry-run and CLI execute blocks without
   assert.equal(context.nodeHttpsClient.calls(), 0);
 
   const configPath = tempConfig(validTrialConfig({ trial_id: 'public_web_trial_cli_bootstrap' }));
-  const cli = spawnSync(process.execPath, ['scripts/public-web-canary-operational-trial.js', '--config', configPath], {
+  const missingBootstrap = path.join(os.tmpdir(), `hermes-missing-bootstrap-${process.pid}`, 'bootstrap.js');
+  const cli = spawnSync(process.execPath, ['scripts/public-web-canary-operational-trial.js', '--config', configPath, '--bootstrap', missingBootstrap], {
     cwd: path.resolve(__dirname, '..'),
     encoding: 'utf8'
   });

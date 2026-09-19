@@ -26,6 +26,9 @@ function buildPublicWebCanaryReport(session, events = []) {
     providerCallIds.add(String(id));
   }
   const providerCalls = providerCallIds.size;
+  const providerInvocations = safeEvents.filter((event) => event.provider_invoked === true).length;
+  const transportInvocations = safeEvents.filter((event) => event.transport_invoked === true).length;
+  const externalNetworkCalls = safeEvents.filter((event) => event.external_network_called === true).length;
   const ssrfBlocks = safeEvents.filter((event) => String(event.blocked_reason || '').includes('ssrf')).length;
   const dnsRebindingBlocks = safeEvents.filter((event) => String(event.blocked_reason || '').includes('rebind')).length;
   const rateLimitBlocks = safeEvents.filter((event) => String(event.blocked_reason || '').includes('rate')).length;
@@ -53,6 +56,9 @@ function buildPublicWebCanaryReport(session, events = []) {
     requests_succeeded: requestsSucceeded,
     requests_failed_safe: requestsFailedSafe,
     provider_calls: providerCalls,
+    provider_invocations: providerInvocations,
+    transport_invocations: transportInvocations,
+    external_network_calls: externalNetworkCalls,
     total_bytes: safeEvents.reduce((total, event) => total + (Number.isInteger(event.bytes_received) ? event.bytes_received : 0), 0),
     total_duration_ms: safeEvents.reduce((total, event) => total + (Number.isInteger(event.duration_ms) ? event.duration_ms : 0), 0),
     redirects_followed: 0,

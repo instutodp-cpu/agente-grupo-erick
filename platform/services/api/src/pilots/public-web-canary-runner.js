@@ -14,6 +14,7 @@ const {
 const {
   REQUEST_LIMITS
 } = require('../core/public-web-transport-contract');
+const { normalizeCanaryTelemetry } = require('../core/public-web-canary-telemetry');
 
 const REQUIRED_DEPS = Object.freeze([
   'canarySessionRegistry',
@@ -70,11 +71,15 @@ function baseAudit(input, session, fields = {}) {
     blocked_reason: fields.blocked_reason || null,
     executed: fields.executed === true,
     real_provider_called: fields.real_provider_called === true,
+    provider_invoked: fields.provider_invoked === true,
+    transport_invoked: fields.transport_invoked === true,
+    external_network_called: fields.external_network_called === true,
     occurred_at: fields.occurred_at || new Date(0).toISOString()
   });
 }
 
-async function buildBlockedBeforeNetworkResult(input, session, code, reason, deps = {}) {
+async function buildBlockedBeforeNetworkResult(input, session, code, reason, deps = {}, telemetry = {}) {
+  const flags = normalizeCanaryTelemetry(telemetry);
   const audit = baseAudit(input, session, {
     event_name: 'public_web_canary_request_failed_safe',
     status: 'public_web_canary_request_failed_safe',
@@ -83,6 +88,7 @@ async function buildBlockedBeforeNetworkResult(input, session, code, reason, dep
     blocked_reason: reason,
     executed: false,
     real_provider_called: false,
+    ...flags,
     occurred_at: hasAllDeps(deps) ? nowIso(deps) : new Date(0).toISOString()
   });
   await appendAudit(deps, audit, { durable: deps.requireDurableAudit === true });
@@ -104,13 +110,15 @@ async function buildBlockedBeforeNetworkResult(input, session, code, reason, dep
     redirects_followed: 0,
     executed: false,
     real_provider_called: false,
+    ...flags,
     can_trigger_real_execution: false,
     audit_event_candidate: audit,
     error: buildSafeCanaryError(code, reason)
   });
 }
 
-async function buildFailedAfterNetworkResult(input, session, code, reason, deps = {}) {
+async function buildFailedAfterNetworkResult(input, session, code, reason, deps = {}, telemetry = {}) {
+  const flags = normalizeCanaryTelemetry(telemetry);
   const audit = baseAudit(input, session, {
     event_name: 'public_web_canary_request_failed_safe',
     status: 'public_web_canary_request_failed_safe',
@@ -119,6 +127,7 @@ async function buildFailedAfterNetworkResult(input, session, code, reason, deps 
     blocked_reason: reason,
     executed: true,
     real_provider_called: true,
+    ...flags,
     occurred_at: nowIso(deps)
   });
   await appendAudit(deps, audit, { durable: deps.requireDurableAudit === true });
@@ -140,6 +149,7 @@ async function buildFailedAfterNetworkResult(input, session, code, reason, deps 
     redirects_followed: 0,
     executed: true,
     real_provider_called: true,
+    ...flags,
     can_trigger_real_execution: false,
     audit_event_candidate: audit,
     error: buildSafeCanaryError(code, reason)
@@ -225,12 +235,13 @@ function buildSecretAccessContext(input, session) {
   };
 }
 
-function normalizeNetworkResult(result, input, session, networkStarted, deps) {
-  if (!networkStarted) return result;
+function normalizeNetworkResult(result, input, session, networkStarted, deps, telemetry = {}) {
+  const flags = normalizeCanaryTelemetry(telemetry);
   const normalized = {
     ...result,
-    executed: true,
-    real_provider_called: true,
+    executed: networkStarted ? true : result.executed === true,
+    real_provider_called: networkStarted,
+    ...flags,
     can_trigger_real_execution: false
   };
   normalized.audit_event_candidate = {
@@ -239,8 +250,9 @@ function normalizeNetworkResult(result, input, session, networkStarted, deps) {
     trace_id: input.trace_id,
     request_id: input.request_id,
     canary_session_id: session.canary_session_id,
-    executed: true,
-    real_provider_called: true,
+    executed: networkStarted ? true : result.executed === true,
+    real_provider_called: networkStarted,
+    ...flags,
     can_trigger_real_execution: false,
     occurred_at: nowIso(deps)
   };
@@ -330,6 +342,9 @@ function createPublicWebCanaryRunner(deps = {}) {
     }
 
     let networkStarted = false;
+    let providerInvoked = false;
+    let transportInvoked = false;
+    let externalNetworkCalled = false;
     const transport = createPublicWebRealTransportCandidate({
       enabled: true,
       environment: session.environment,
@@ -341,17 +356,25 @@ function createPublicWebCanaryRunner(deps = {}) {
         : () => dns.approved_ips,
       httpClient: async (transportRequest) => {
         networkStarted = true;
-        return deps.nodeHttpsClient.execute({
-          ...transportRequest,
-          approved_ip: dns.approved_ip,
-          approved_ips: dns.approved_ips,
-          hostname: targetUrl.hostname,
-          port: 443,
-          protocol: 'https',
-          server_name: targetUrl.hostname,
-          host_header: targetUrl.hostname,
-          redirect_mode: 'manual'
-        });
+        transportInvoked = true;
+        try {
+          const response = await deps.nodeHttpsClient.execute({
+            ...transportRequest,
+            approved_ip: dns.approved_ip,
+            approved_ips: dns.approved_ips,
+            hostname: targetUrl.hostname,
+            port: 443,
+            protocol: 'https',
+            server_name: targetUrl.hostname,
+            host_header: targetUrl.hostname,
+            redirect_mode: 'manual'
+          });
+          externalNetworkCalled = response && response.external_network_called === true;
+          return response;
+        } catch (error) {
+          externalNetworkCalled = error && error.external_network_called === true;
+          throw error;
+        }
       },
       secretResolver: deps.secretResolver,
       clock: deps.clock,
@@ -359,6 +382,7 @@ function createPublicWebCanaryRunner(deps = {}) {
     });
 
     try {
+      providerInvoked = true;
       const result = await transport.execute(buildPublicWebRequest(input, session, targetUrl.toString(), limits), {
         adapterRegistry: deps.adapterRegistry,
         lifecycleRegistry: deps.lifecycleRegistry,
@@ -385,7 +409,11 @@ function createPublicWebCanaryRunner(deps = {}) {
         secretAccessContext: buildSecretAccessContext(input, session),
         clock: deps.clock
       });
-      let normalized = normalizeNetworkResult(result, input, session, networkStarted, deps);
+      let normalized = normalizeNetworkResult(result, input, session, networkStarted, deps, {
+        provider_invoked: providerInvoked,
+        transport_invoked: transportInvoked,
+        external_network_called: externalNetworkCalled || result.external_network_called === true
+      });
       executionSession = deps.canarySessionRegistry.getCanarySession(session.canary_session_id);
       if (networkStarted) {
         deps.canarySessionRegistry.finishCanaryExecution({
@@ -415,7 +443,13 @@ function createPublicWebCanaryRunner(deps = {}) {
       }
       const postNetworkAudit = await appendAudit(
         deps,
-        normalized.audit_event_candidate || baseAudit(input, session, { executed: networkStarted, real_provider_called: networkStarted }),
+        normalized.audit_event_candidate || baseAudit(input, session, {
+          executed: networkStarted,
+          real_provider_called: networkStarted,
+          provider_invoked: providerInvoked,
+          transport_invoked: transportInvoked,
+          external_network_called: externalNetworkCalled
+        }),
         { durable: deps.requireDurableAudit === true }
       );
       if (!postNetworkAudit.ok && deps.requireDurableAudit === true) {
@@ -442,9 +476,17 @@ function createPublicWebCanaryRunner(deps = {}) {
           expected_version: executionSession.version,
           reason: 'canary_request_failed_before_network'
         });
-        return await buildBlockedBeforeNetworkResult(input, session, 'CANARY_INTERNAL_ERROR', 'canary_request_failed_before_network', deps);
+        return await buildBlockedBeforeNetworkResult(input, session, 'CANARY_INTERNAL_ERROR', 'canary_request_failed_before_network', deps, {
+          provider_invoked: providerInvoked,
+          transport_invoked: transportInvoked,
+          external_network_called: externalNetworkCalled
+        });
       }
-      const failed = await buildFailedAfterNetworkResult(input, session, 'CANARY_INTERNAL_ERROR', 'canary_request_failed_after_network', deps);
+      const failed = await buildFailedAfterNetworkResult(input, session, 'CANARY_INTERNAL_ERROR', 'canary_request_failed_after_network', deps, {
+        provider_invoked: providerInvoked,
+        transport_invoked: transportInvoked,
+        external_network_called: externalNetworkCalled
+      });
       deps.canarySessionRegistry.finishCanaryExecution({
         canary_session_id: session.canary_session_id,
         execution_reservation_id: executionReservationId,

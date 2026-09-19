@@ -162,6 +162,15 @@ After network starts, `executed:true` and `real_provider_called:true` are
 mandatory. Blocks before network remain `executed:false` and
 `real_provider_called:false`. `can_trigger_real_execution:false` remains fixed.
 
+Telemetry separates `provider_invoked`, `transport_invoked` and
+`external_network_called`. The legacy `real_provider_called` field remains for
+compatibility and means that the injected transport boundary was entered; it
+does not, by itself, prove an external network call. `external_network_called`
+is true only when the transport supplies explicit boundary evidence. The local
+bootstrap remains synthetic. Real HTTP/DNS wiring is available only through
+the explicit staging bootstrap factory, which fails closed without staging,
+one-request limits, complete dependencies and production disabled.
+
 No result may contain raw body, HTML, headers, cookies, secret handles, remote
 IP, full URL or stack traces.
 
