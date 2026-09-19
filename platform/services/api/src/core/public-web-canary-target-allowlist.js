@@ -102,6 +102,7 @@ function createPublicWebCanaryTargetAllowlist(options = {}) {
     if (!Array.isArray(policy.allowed_operations) || policy.allowed_operations.length === 0) return { valid: false, reason: 'missing_allowed_operations' };
     if (!Array.isArray(policy.allowed_source_types) || policy.allowed_source_types.length === 0) return { valid: false, reason: 'missing_allowed_source_types' };
     if (!Array.isArray(policy.allowed_content_types) || policy.allowed_content_types.length === 0) return { valid: false, reason: 'missing_allowed_content_types' };
+    if (policy.path_match_mode !== undefined && !['exact', 'prefix'].includes(policy.path_match_mode)) return { valid: false, reason: 'invalid_path_match_mode' };
     if (policy.redirects_allowed !== false || policy.enabled !== true || policy.revoked !== false) return { valid: false, reason: 'invalid_target_policy_flags' };
     if (!Number.isInteger(policy.maximum_requests) || policy.maximum_requests < 1 || policy.maximum_requests > 5) return { valid: false, reason: 'invalid_target_request_limit' };
     if (!Number.isInteger(policy.maximum_response_bytes) || policy.maximum_response_bytes < 1 || policy.maximum_response_bytes > 2097152) return { valid: false, reason: 'invalid_target_response_limit' };
@@ -148,7 +149,13 @@ function createPublicWebCanaryTargetAllowlist(options = {}) {
       parseTimestamp(policy.expires_at).getTime() > now.getTime() &&
       policy.allowed_operations.includes(input.operation) &&
       policy.allowed_source_types.includes(input.source_type) &&
-      policy.allowed_path_prefixes.some((prefix) => pathMatchesCanaryPrefix(path.path, prefix))
+      policy.allowed_path_prefixes.some((prefix) => {
+        const normalizedPrefix = normalizeCanaryTargetPath(prefix);
+        if (!normalizedPrefix.valid) return false;
+        return policy.path_match_mode === 'exact'
+          ? path.path === normalizedPrefix.path
+          : pathMatchesCanaryPrefix(path.path, normalizedPrefix.path);
+      })
     ));
     if (matches.length === 0) {
       return { allowed: false, error_code: 'CANARY_TARGET_NOT_ALLOWLISTED', blocked_reason: 'target_not_allowlisted' };

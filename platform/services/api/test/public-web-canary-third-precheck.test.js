@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const { createPublicWebCanaryTargetAllowlist } = require('../src/core/public-web-canary-target-allowlist');
+const { loadPublicWebThirdCanaryTargetConfig } = require('../src/pilots/public-web-canary-third-target-config');
 const {
   preparePublicWebThirdCanaryPrecheck,
   validateThirdCanaryTelemetry
@@ -18,7 +19,8 @@ function allowlist() {
     target_policy_id: 'staging_external_target_policy_test',
     environment: 'staging',
     origin: 'https://staging.example.test',
-    allowed_path_prefixes: ['/approved'],
+    allowed_path_prefixes: ['/approved/page'],
+    path_match_mode: 'exact',
     allowed_operations: ['fetch_public_page_summary'],
     allowed_source_types: ['public_product_page'],
     allowed_content_types: ['text/html'],
@@ -57,6 +59,10 @@ function validInput(overrides = {}) {
       synthetic: false,
       origin: 'https://staging.example.test',
       path: '/approved/page',
+      method: 'GET',
+      port: 443,
+      path_allowlist_mode: 'exact',
+      redirects_allowed: false,
       operation: 'fetch_public_page_summary',
       source_type: 'public_product_page',
       targetAllowlist: allowlist()
@@ -116,6 +122,79 @@ test('target and path require an explicitly approved external staging allowlist'
   assert.equal(preparePublicWebThirdCanaryPrecheck(outsidePath).reason_codes.includes('target_or_path_not_allowlisted'), true);
   const synthetic = validInput({ target: { ...validInput().target, source: 'synthetic_local', synthetic: true } });
   assert.equal(preparePublicWebThirdCanaryPrecheck(synthetic).reason_codes.includes('target_external_staging_approval_required'), true);
+});
+
+test('human-approved example target is an exact offline configuration and passes only its exact path gate', () => {
+  const loaded = loadPublicWebThirdCanaryTargetConfig();
+  assert.equal(loaded.ok, true);
+  assert.deepEqual({
+    origin: loaded.config.target_origin,
+    path: loaded.config.target_path,
+    method: loaded.config.method,
+    port: loaded.config.port,
+    redirects_allowed: loaded.config.redirects_allowed
+  }, {
+    origin: 'https://example.com',
+    path: '/',
+    method: 'GET',
+    port: 443,
+    redirects_allowed: false
+  });
+
+  const targetAllowlist = createPublicWebCanaryTargetAllowlist({ clock: () => NOW });
+  assert.equal(targetAllowlist.registerTargetPolicy({
+    target_policy_id: loaded.config.target_policy_id,
+    environment: loaded.config.environment,
+    origin: loaded.config.target_origin,
+    allowed_path_prefixes: [loaded.config.target_path],
+    path_match_mode: loaded.config.path_allowlist_mode,
+    allowed_operations: [loaded.config.operation],
+    allowed_source_types: [loaded.config.source_type],
+    allowed_content_types: ['text/html'],
+    maximum_requests: loaded.config.maximum_requests,
+    maximum_response_bytes: 4096,
+    timeout_ms: 3000,
+    redirects_allowed: loaded.config.redirects_allowed,
+    enabled: true,
+    revoked: false,
+    expires_at: '2026-09-19T13:00:00.000Z',
+    approved_by: 'explicit_human_target_decision',
+    created_at: NOW,
+    version: 1
+  }).ok, true);
+  assert.equal(targetAllowlist.isTargetAllowed({
+    target_origin: 'https://example.com',
+    target_path: '/',
+    environment: 'staging',
+    operation: loaded.config.operation,
+    source_type: loaded.config.source_type
+  }).allowed, true);
+  assert.equal(targetAllowlist.isTargetAllowed({
+    target_origin: 'https://example.com',
+    target_path: '/other',
+    environment: 'staging',
+    operation: loaded.config.operation,
+    source_type: loaded.config.source_type
+  }).allowed, false);
+});
+
+test('third target contract rejects unsafe target variants without network capabilities', () => {
+  const loaded = loadPublicWebThirdCanaryTargetConfig();
+  for (const [field, value] of [
+    ['target_origin', 'http://example.com'],
+    ['target_origin', 'https://www.example.com'],
+    ['target_origin', 'https://sub.example.com'],
+    ['target_origin', 'https://example.com:8443'],
+    ['target_path', '/other'],
+    ['method', 'POST'],
+    ['port', 8443],
+    ['target_origin', 'https://user@example.com'],
+    ['target_origin', 'https://example.com/#fragment'],
+    ['target_origin', 'https://example.com/?unexpected=true']
+  ]) {
+    assert.equal(loaded.ok, true);
+    assert.equal(require('../src/pilots/public-web-canary-third-target-config').validatePublicWebThirdCanaryTargetConfig({ ...loaded.config, [field]: value }).valid, false, field);
+  }
 });
 
 test('fresh authorization, Grant, and Reservation are mandatory and prior resources are rejected', () => {

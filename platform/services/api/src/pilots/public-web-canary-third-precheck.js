@@ -71,6 +71,13 @@ function validateTarget(target, context) {
     return ['target_external_staging_approval_required'];
   }
   if (!isNonEmptyString(target.origin) || !isNonEmptyString(target.path)) return ['target_required_from_human'];
+  if (target.method !== 'GET') return ['target_method_must_be_get'];
+  if (target.port !== 443) return ['target_port_must_be_443'];
+  if (target.path_allowlist_mode !== 'exact') return ['target_path_allowlist_must_be_exact'];
+  if (target.redirects_allowed !== false) return ['target_redirects_must_be_disabled'];
+  if (target.query !== undefined && target.query !== '') return ['target_query_forbidden'];
+  if (target.fragment !== undefined && target.fragment !== '') return ['target_fragment_forbidden'];
+  if (target.body !== undefined && target.body !== null && target.body !== '') return ['target_body_forbidden'];
   if (!target.targetAllowlist || typeof target.targetAllowlist.isTargetAllowed !== 'function') {
     return ['target_allowlist_required'];
   }
@@ -87,6 +94,9 @@ function validateTarget(target, context) {
   }
   if (allowed.target_policy.maximum_requests !== REQUIRED_MAXIMUM_REQUESTS) {
     return ['target_policy_maximum_requests_must_be_one'];
+  }
+  if (allowed.target_policy.path_match_mode !== 'exact') {
+    return ['target_policy_path_allowlist_must_be_exact'];
   }
   return [];
 }
