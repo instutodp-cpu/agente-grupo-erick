@@ -1,0 +1,16 @@
+{
+  "target_policy_id": "public_web_third_canary_example_com_exact",
+  "environment": "staging",
+  "target_origin": "https://example.com",
+  "target_path": "/",
+  "method": "GET",
+  "port": 443,
+  "source": "human_approved_staging_external",
+  "synthetic": false,
+  "path_allowlist_mode": "exact",
+  "redirects_allowed": false,
+  "operation": "fetch_public_page_summary",
+  "source_type": "public_documentation_page",
+  "maximum_requests": 1,
+  "rollout_percentage": 1
+}
