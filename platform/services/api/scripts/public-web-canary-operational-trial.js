@@ -7,9 +7,9 @@ const readline = require('node:readline/promises');
 const { stdin: input, stdout: output } = require('node:process');
 const { createPublicWebCanaryOperationalTrial, REQUIRED_CONFIRMATION } = require('../src/pilots/public-web-canary-operational-trial');
 
-const ALLOWED_FLAGS = new Set(['--config', '--preflight-only', '--dry-run-only', '--report', '--cancel', '--trial-id']);
+const ALLOWED_FLAGS = new Set(['--config', '--preflight-only', '--dry-run-only', '--report', '--cancel', '--trial-id', '--bootstrap']);
 const MODE_FLAGS = new Set(['--preflight-only', '--dry-run-only', '--report', '--cancel']);
-const VALUE_FLAGS = new Set(['--config', '--trial-id']);
+const VALUE_FLAGS = new Set(['--config', '--trial-id', '--bootstrap']);
 const BLOCKED_FLAGS = new Set(['--force', '--yes', '--skip-preflight', '--skip-dry-run', '--production', '--url', '--target', '--token', '--secret', '--header', '--cookie']);
 const BOOTSTRAP_PATH = path.resolve(__dirname, '../config/public-web-canary-trial-bootstrap.local.js');
 
@@ -38,6 +38,7 @@ function parseArgs(argv) {
       if (typeof value !== 'string' || value.trim() === '' || value.startsWith('--')) return fail(4, `${item.slice(2)}_value_required`);
       if (item === '--config') args.configPath = value;
       else if (item === '--trial-id') args.trialId = value;
+      else if (item === '--bootstrap') args.bootstrapPath = value;
       index += 1;
       continue;
     }
@@ -47,9 +48,10 @@ function parseArgs(argv) {
   return { ok: true, args };
 }
 
-function loadBootstrap() {
-  if (!fs.existsSync(BOOTSTRAP_PATH)) return null;
-  const bootstrap = require(BOOTSTRAP_PATH);
+function loadBootstrap(bootstrapPath = BOOTSTRAP_PATH) {
+  const resolvedPath = path.resolve(bootstrapPath);
+  if (!fs.existsSync(resolvedPath)) return null;
+  const bootstrap = require(resolvedPath);
   if (!bootstrap || typeof bootstrap !== 'object' || bootstrap.operationalBootstrapConfigured !== true) return null;
   return bootstrap;
 }
@@ -72,7 +74,7 @@ async function main() {
     process.exitCode = parsed.code;
     return;
   }
-  const bootstrap = loadBootstrap();
+  const bootstrap = loadBootstrap(parsed.args.bootstrapPath || BOOTSTRAP_PATH);
   const trial = createPublicWebCanaryOperationalTrial({
     ...(bootstrap || {}),
     injectedConfirmationReader: readExactConfirmation

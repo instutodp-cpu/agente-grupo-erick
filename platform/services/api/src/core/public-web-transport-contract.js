@@ -715,6 +715,9 @@ function buildPublicWebAuditEvent(context = {}) {
     simulated: true,
     executed: context.executed === true,
     real_provider_called: context.real_provider_called === true,
+    provider_invoked: context.provider_invoked === true,
+    transport_invoked: context.transport_invoked === true,
+    external_network_called: context.external_network_called === true,
     duration_ms: Number.isInteger(context.duration_ms) && context.duration_ms >= 0 ? context.duration_ms : 0,
     bytes_received: Number.isInteger(context.bytes_received) && context.bytes_received >= 0 ? context.bytes_received : 0,
     redirects_followed: Number.isInteger(context.redirects_followed) && context.redirects_followed >= 0 ? context.redirects_followed : 0,
@@ -761,6 +764,9 @@ function buildTransportEnvelope(request, fields = {}) {
     simulated: true,
     executed: fields.executed === true,
     real_provider_called: fields.real_provider_called === true,
+    provider_invoked: fields.provider_invoked === true,
+    transport_invoked: fields.transport_invoked === true,
+    external_network_called: fields.external_network_called === true,
     can_trigger_real_execution: false,
     error,
     audit_event_candidate: buildPublicWebAuditEvent({
@@ -778,6 +784,9 @@ function buildTransportEnvelope(request, fields = {}) {
       rollout_percentage: fields.rollout_percentage,
       executed: fields.executed === true,
       real_provider_called: fields.real_provider_called === true,
+      provider_invoked: fields.provider_invoked === true,
+      transport_invoked: fields.transport_invoked === true,
+      external_network_called: fields.external_network_called === true,
       duration_ms: fields.duration_ms,
       bytes_received: fields.bytes_received,
       redirects_followed: fields.redirects_followed,
@@ -809,6 +818,9 @@ function sanitizeTransportResponse(rawResponse, request = {}, options = {}) {
       http_status_class: '3xx',
       executed: options.executed === true,
       real_provider_called: options.real_provider_called === true,
+      provider_invoked: options.provider_invoked === true,
+      transport_invoked: options.transport_invoked === true,
+      external_network_called: options.external_network_called === true,
       environment: options.environment || 'local_test'
     });
   }
@@ -821,6 +833,9 @@ function sanitizeTransportResponse(rawResponse, request = {}, options = {}) {
       http_status_class: '4xx',
       executed: options.executed === true,
       real_provider_called: options.real_provider_called === true,
+      provider_invoked: options.provider_invoked === true,
+      transport_invoked: options.transport_invoked === true,
+      external_network_called: options.external_network_called === true,
       environment: options.environment || 'local_test'
     });
   }
@@ -833,6 +848,9 @@ function sanitizeTransportResponse(rawResponse, request = {}, options = {}) {
       http_status_class: statusClass,
       executed: options.executed === true,
       real_provider_called: options.real_provider_called === true,
+      provider_invoked: options.provider_invoked === true,
+      transport_invoked: options.transport_invoked === true,
+      external_network_called: options.external_network_called === true,
       environment: options.environment || 'local_test'
     });
   }
@@ -845,6 +863,9 @@ function sanitizeTransportResponse(rawResponse, request = {}, options = {}) {
       ,
       executed: options.executed === true,
       real_provider_called: options.real_provider_called === true,
+      provider_invoked: options.provider_invoked === true,
+      transport_invoked: options.transport_invoked === true,
+      external_network_called: options.external_network_called === true,
       environment: options.environment || 'local_test'
     });
   }
@@ -883,6 +904,9 @@ function sanitizeTransportResponse(rawResponse, request = {}, options = {}) {
     redirects_followed: Array.isArray(rawResponse.redirects) ? rawResponse.redirects.length : 0,
     executed: options.executed === true,
     real_provider_called: options.real_provider_called === true,
+    provider_invoked: options.provider_invoked === true,
+    transport_invoked: options.transport_invoked === true,
+    external_network_called: options.external_network_called === true,
     environment: options.environment || 'local_test',
     feature_flag_state: options.feature_flag_state === true,
     kill_switch_state: options.kill_switch_state === true,

@@ -35,6 +35,9 @@ function blockResult(code, reason, flags = {}) {
     simulated: true,
     executed: flags.executed === true,
     real_provider_called: flags.real_provider_called === true,
+    provider_invoked: flags.provider_invoked === true,
+    transport_invoked: flags.transport_invoked === true,
+    external_network_called: flags.external_network_called === true,
     can_trigger_real_execution: false,
     decision: flags.real_provider_called === true ? { decision: 'remediation_required', reason: 'failed_after_network' } : undefined
   });
@@ -44,8 +47,14 @@ function buildTrialBlockedBeforeNetwork(code, reason) {
   return blockResult(code, reason, { executed: false, real_provider_called: false });
 }
 
-function buildTrialFailedAfterNetwork(code, reason) {
-  return blockResult(code, reason, { executed: true, real_provider_called: true });
+function buildTrialFailedAfterNetwork(code, reason, flags = {}) {
+  return blockResult(code, reason, {
+    executed: true,
+    real_provider_called: true,
+    provider_invoked: flags.provider_invoked,
+    transport_invoked: flags.transport_invoked,
+    external_network_called: flags.external_network_called
+  });
 }
 
 function nowIso(clock) {
@@ -99,6 +108,9 @@ function buildReport(plan, session, auditSink, evidence, cleanup) {
     canary_session_id: plan.canary_session_id,
     status: evidence.status,
     provider_calls: evidence.real_provider_called ? 1 : 0,
+    provider_invocations: evidence.provider_invoked ? 1 : 0,
+    transport_invocations: evidence.transport_invoked ? 1 : 0,
+    external_network_calls: evidence.external_network_called ? 1 : 0,
     requests_attempted: evidence.executed ? 1 : 0,
     total_bytes: evidence.bytes_received,
     total_duration_ms: evidence.duration_ms,
@@ -281,7 +293,10 @@ function createPublicWebCanaryOperationalTrial(options = {}) {
       const result = await runner.runCanaryRequest(runnerRequest);
       executionFlags = {
         executed: result.executed === true,
-        real_provider_called: result.real_provider_called === true
+        real_provider_called: result.real_provider_called === true,
+        provider_invoked: result.provider_invoked === true,
+        transport_invoked: result.transport_invoked === true,
+        external_network_called: result.external_network_called === true
       };
       const evidence = buildTrialEvidence({
         trial_id: plan.trial_id,
@@ -301,6 +316,9 @@ function createPublicWebCanaryOperationalTrial(options = {}) {
         status: result.status === 'public_web_candidate_success' ? 'trial_success' : 'trial_failed_safe',
         executed: executionFlags.executed,
         real_provider_called: executionFlags.real_provider_called,
+        provider_invoked: executionFlags.provider_invoked,
+        transport_invoked: executionFlags.transport_invoked,
+        external_network_called: executionFlags.external_network_called,
         result_count: result.result_count || 0,
         bytes_received: result.bytes_received || 0,
         duration_ms: result.duration_ms || 0,
@@ -348,14 +366,17 @@ function createPublicWebCanaryOperationalTrial(options = {}) {
         decision,
         cleanup,
         executed: evidence.executed,
-        real_provider_called: evidence.real_provider_called
+        real_provider_called: evidence.real_provider_called,
+        provider_invoked: evidence.provider_invoked,
+        transport_invoked: evidence.transport_invoked,
+        external_network_called: evidence.external_network_called
       });
     } catch (error) {
       if (operationalContext && activeSession && !cleanupAttempted) {
         await ensureCleanup();
       }
       if (executionFlags.real_provider_called === true) {
-        return buildTrialFailedAfterNetwork('TRIAL_INTERNAL_ERROR', 'trial_failed_safe_after_network');
+        return buildTrialFailedAfterNetwork('TRIAL_INTERNAL_ERROR', 'trial_failed_safe_after_network', executionFlags);
       }
       return buildTrialBlockedBeforeNetwork('TRIAL_INTERNAL_ERROR', 'trial_internal_error_safe');
     } finally {

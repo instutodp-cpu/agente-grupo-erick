@@ -454,6 +454,9 @@ function buildCanaryAuditEventCandidate(context = {}) {
     simulated: true,
     executed: context.executed === true,
     real_provider_called: context.real_provider_called === true,
+    provider_invoked: context.provider_invoked === true,
+    transport_invoked: context.transport_invoked === true,
+    external_network_called: context.external_network_called === true,
     can_trigger_real_execution: false,
     occurred_at: context.occurred_at || new Date(0).toISOString()
   });

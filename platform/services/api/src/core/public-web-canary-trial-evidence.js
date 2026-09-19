@@ -53,6 +53,9 @@ function buildTrialEvidence(input = {}) {
     status: input.status,
     executed: input.executed === true,
     real_provider_called: input.real_provider_called === true,
+    provider_invoked: input.provider_invoked === true,
+    transport_invoked: input.transport_invoked === true,
+    external_network_called: input.external_network_called === true,
     result_count: Number.isInteger(input.result_count) ? input.result_count : 0,
     bytes_received: Number.isInteger(input.bytes_received) ? input.bytes_received : 0,
     duration_ms: Number.isInteger(input.duration_ms) ? input.duration_ms : 0,
@@ -76,6 +79,8 @@ function validateTrialEvidence(evidence) {
   }
   if (findTrialForbiddenFields(evidence).length > 0) errors.push('forbidden_field_detected');
   if (evidence && evidence.executed === false && evidence.real_provider_called === true) errors.push('execution_flags_invalid');
+  if (evidence && evidence.transport_invoked === true && evidence.provider_invoked !== true) errors.push('telemetry_flags_invalid');
+  if (evidence && evidence.external_network_called === true && evidence.transport_invoked !== true) errors.push('telemetry_flags_invalid');
   return {
     valid: errors.length === 0,
     errors,

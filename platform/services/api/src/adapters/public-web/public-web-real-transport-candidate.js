@@ -268,6 +268,7 @@ function createPublicWebRealTransportCandidate(options = {}) {
           max_response_bytes: request.max_response_bytes,
           abort_signal: abortController && abortController.signal
         }), request.timeout_ms, abortController);
+        const externalNetworkCalled = rawResponse && rawResponse.external_network_called === true;
 
         if (rawResponse && rawResponse.remote_address !== targetValidation.approved_ip) {
           providerError = true;
@@ -277,6 +278,7 @@ function createPublicWebRealTransportCandidate(options = {}) {
             blocked_reason: 'remote_address_mismatch',
             executed: true,
             real_provider_called: true,
+            external_network_called: externalNetworkCalled,
             canary_state: 'canary_blocked',
             environment: context.environment
           });
@@ -298,6 +300,7 @@ function createPublicWebRealTransportCandidate(options = {}) {
             redirects_followed: 0,
             executed: true,
             real_provider_called: true,
+            external_network_called: externalNetworkCalled,
             canary_state: 'canary_blocked',
             environment: context.environment
           });
@@ -313,6 +316,7 @@ function createPublicWebRealTransportCandidate(options = {}) {
             bytes_received: body.bytes_received || 0,
             executed: true,
             real_provider_called: true,
+            external_network_called: externalNetworkCalled,
             canary_state: 'canary_blocked',
             environment: context.environment
           });
@@ -326,6 +330,7 @@ function createPublicWebRealTransportCandidate(options = {}) {
         }, request, {
           executed: true,
           real_provider_called: true,
+          external_network_called: externalNetworkCalled,
           max_response_bytes: request.max_response_bytes,
           environment: context.environment,
           feature_flag_state: context.feature_flag === true,
@@ -348,6 +353,7 @@ function createPublicWebRealTransportCandidate(options = {}) {
           blocked_reason: timedOut ? 'timeout_after_network_start' : 'provider_error_after_network_start',
           executed: true,
           real_provider_called: true,
+          external_network_called: error && error.external_network_called === true,
           canary_state: 'canary_blocked',
           environment: context.environment
         });

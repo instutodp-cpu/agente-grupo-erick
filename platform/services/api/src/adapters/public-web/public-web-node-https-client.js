@@ -17,6 +17,7 @@ function normalizeRemoteAddress(address) {
 
 function createPublicWebNodeHttpsClient(options = {}) {
   const requestFactory = options.requestFactory || https.request;
+  const externalNetworkEvidence = options.externalNetworkEvidence === true || requestFactory === https.request;
   const userAgent = 'HermesCorePublicWebCanary/1.0';
 
   async function execute(input = {}) {
@@ -101,13 +102,17 @@ function createPublicWebNodeHttpsClient(options = {}) {
           content_length: Number.isInteger(contentLength) ? contentLength : undefined,
           remote_address: remoteAddress || approvedIp,
           redirect_location: typeof (res.headers && res.headers.location) === 'string' ? res.headers.location : '',
-          body_stream: stream
+          body_stream: stream,
+          external_network_called: externalNetworkEvidence
         });
       });
       req.on('timeout', () => {
         req.destroy(new Error('PUBLIC_WEB_TIMEOUT'));
       });
-      req.on('error', reject);
+      req.on('error', (error) => {
+        if (externalNetworkEvidence) error.external_network_called = true;
+        reject(error);
+      });
       req.end();
     });
   }
