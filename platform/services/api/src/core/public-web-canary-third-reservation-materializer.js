@@ -26,6 +26,15 @@ function fail(reason) {
 }
 
 function materializePublicWebThirdCanaryReservation(input = {}) {
+  const readiness = input.materialization_contract || {};
+  if (readiness.ok !== true || readiness.status !== 'THIRD_CANARY_MATERIALIZATION_CONTRACT_READY') {
+    return fail('materialization_contract_ready_required');
+  }
+  if (readiness.trial_id !== input.trial_id) return fail('materialization_contract_trial_binding_mismatch');
+  const candidateIds = readiness.candidate_ids || {};
+  if (!isNonEmptyString(candidateIds.reservation_candidate_id)) return fail('reservation_candidate_binding_required');
+  if (input.reservation_candidate_id !== candidateIds.reservation_candidate_id) return fail('reservation_candidate_binding_mismatch');
+
   const authStep = input.authorization_materialization || {};
   if (authStep.ok !== true || authStep.status !== 'THIRD_CANARY_AUTHORIZATION_MATERIALIZED_NOT_AUTHORIZED_FOR_EXECUTION') {
     return fail('authorization_materialization_required');
