@@ -1,15 +1,13 @@
 'use strict';
 
-const crypto = require('node:crypto');
-
 const GRANT_CONTRACT_VERSION = 'public_web_third_canary_single_use_grant_v1';
 
 function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 
-function hash(value) {
-  return crypto.createHash('sha256').update(String(value)).digest('hex');
+function stableScopeValue(value) {
+  return String(value == null ? '' : value);
 }
 
 function isNonEmptyString(value) {
@@ -60,13 +58,13 @@ function createPublicWebThirdCanaryGrantRegistry(options = {}) {
       grant_id: grantId,
       trial_id: input.trial_id,
       environment: 'staging',
-      target_origin_hash: hash(input.target_origin),
-      target_path_hash: hash(input.target_path),
+      target_origin: stableScopeValue(input.target_origin),
+      target_path: stableScopeValue(input.target_path),
       method: 'GET',
       port: 443,
       maximum_requests: 1,
       rollout_percentage: 1,
-      authorization_candidate_id_hash: hash(input.authorization_candidate_id),
+      authorization_candidate_id: stableScopeValue(input.authorization_candidate_id),
       single_use: true,
       used: false,
       revoked: false,
@@ -98,11 +96,11 @@ function createPublicWebThirdCanaryGrantRegistry(options = {}) {
     if (
       context.trial_id !== grant.trial_id ||
       context.environment !== grant.environment ||
-      hash(context.target_origin) !== grant.target_origin_hash ||
-      hash(context.target_path) !== grant.target_path_hash ||
+      stableScopeValue(context.target_origin) !== grant.target_origin ||
+      stableScopeValue(context.target_path) !== grant.target_path ||
       context.method !== grant.method ||
       context.port !== grant.port ||
-      hash(context.authorization_candidate_id) !== grant.authorization_candidate_id_hash
+      stableScopeValue(context.authorization_candidate_id) !== grant.authorization_candidate_id
     ) return fail('grant_scope_mismatch');
 
     consumed.add(grantId);
