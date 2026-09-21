@@ -6,7 +6,7 @@ const path = require('node:path');
 const test = require('node:test');
 
 test('third canary workflow is manual, staging-only and exact-confirmation gated', () => {
-  const text = fs.readFileSync(path.resolve(__dirname, '../../../.github/workflows/public-web-third-canary-execution.yml'), 'utf8');
+  const text = fs.readFileSync(path.resolve(__dirname, '../../../../.github/workflows/public-web-third-canary-execution.yml'), 'utf8');
   assert.match(text, /workflow_dispatch:/);
   assert.match(text, /EXECUTAR CANARY PUBLIC WEB/);
   assert.match(text, /environment: staging/);
