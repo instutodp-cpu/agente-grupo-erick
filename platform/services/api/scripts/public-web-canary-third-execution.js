@@ -22,8 +22,8 @@ async function main() {
   const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
   if (
     config.environment !== 'staging' ||
-    config.origin !== 'https://example.com' ||
-    config.path !== '/' ||
+    config.target_origin !== 'https://example.com' ||
+    config.target_path !== '/' ||
     config.method !== 'GET' ||
     config.port !== 443 ||
     config.maximum_requests !== 1 ||
