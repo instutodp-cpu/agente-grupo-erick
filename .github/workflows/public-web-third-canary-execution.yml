@@ -1,0 +1,58 @@
+name: Third public web canary execution
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Exact human authorization phrase'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: public-web-third-canary-real-execution
+  cancel-in-progress: false
+
+jobs:
+  execute-third-canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate immutable execution scope
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRMATION" = "EXECUTAR CANARY PUBLIC WEB"
+          test -f platform/services/api/config/public-web-canary-third-target.json
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const p = JSON.parse(fs.readFileSync('platform/services/api/config/public-web-canary-third-target.json','utf8'));
+          const checks = [
+            p.environment === 'staging',
+            p.origin === 'https://example.com',
+            p.path === '/',
+            p.method === 'GET',
+            p.port === 443,
+            p.maximum_requests === 1,
+            p.rollout_percentage === 1,
+            p.redirects_allowed === false
+          ];
+          if (!checks.every(Boolean)) process.exit(2);
+          NODE
+      - name: Execute exactly one authorized third canary
+        working-directory: platform/services/api
+        shell: bash
+        env:
+          HERMES_THIRD_CANARY_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          node scripts/public-web-canary-third-execution.js
