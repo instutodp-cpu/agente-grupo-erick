@@ -30,9 +30,24 @@ function authorizationMaterialization(overrides = {}) {
   };
 }
 
+function materializationContract(overrides = {}) {
+  return {
+    ok: true,
+    status: 'THIRD_CANARY_MATERIALIZATION_CONTRACT_READY',
+    trial_id: 'third_canary_trial_1',
+    candidate_ids: {
+      authorization_candidate_id: 'third_canary_authorization_candidate_1',
+      grant_candidate_id: 'third_canary_grant_candidate_1',
+      reservation_candidate_id: 'third_canary_reservation_candidate_1'
+    },
+    ...overrides
+  };
+}
+
 function input(overrides = {}) {
   return {
     trial_id: 'third_canary_trial_1',
+    materialization_contract: materializationContract(),
     authorization_materialization: authorizationMaterialization(),
     authorization_id: 'third_canary_authorization_candidate_1',
     grant_id: 'third_canary_grant_candidate_1',
@@ -58,6 +73,9 @@ test('materializes reservation identity without reserving execution', () => {
 
 test('requires exact trial, grant and authorization bindings', () => {
   for (const patch of [
+    { materialization_contract: { ...materializationContract(), ok: false } },
+    { materialization_contract: materializationContract({ trial_id: 'other_trial' }) },
+    { materialization_contract: materializationContract({ candidate_ids: { ...materializationContract().candidate_ids, reservation_candidate_id: 'other_reservation' } }) },
     { authorization_materialization: { ...authorizationMaterialization(), ok: false } },
     { trial_id: 'other_trial' },
     { authorization_id: 'other_authorization' },
