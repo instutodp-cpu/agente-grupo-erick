@@ -66,7 +66,8 @@ const GROUPS = Object.freeze({
     'test/runtime-execution-attempt-worker-lease-postgres.integration.test.js',
     'test/runtime-execution-attempt-worker-capacity-reservation-postgres.integration.test.js',
     'test/hermes-vps-postgres-authorization-lifecycle-persistence.test.js',
-    'test/postgres-confirmation-persistence.test.js'
+    'test/postgres-confirmation-persistence.test.js',
+    'test/public-web-canary-third-atomic-resource-commit-postgres.integration.test.js'
   ]),
   'readiness-admission': Object.freeze([
     'test/runtime-readiness-admission-boundary.test.js'
