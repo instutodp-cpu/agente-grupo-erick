@@ -249,6 +249,50 @@ function createPublicWebRealTransportCandidate(options = {}) {
       const costReserve = reserveBudget('cost', context.costBudget, request, reserved);
       if (!costReserve.ok) return costReserve.response;
 
+      let dynamicFeatureFlag;
+      let dynamicKillSwitch;
+      try {
+        if (typeof options.featureFlagResolver !== 'function' || typeof options.killSwitchResolver !== 'function') {
+          for (const item of reserved) releaseBudget(item.budget, { provider_error: false });
+          return buildTransportEnvelope(request, {
+            status: 'public_web_validation_blocked',
+            error_code: 'INVALID_PUBLIC_WEB_REQUEST',
+            blocked_reason: 'dynamic_runtime_gate_resolver_missing',
+            canary_state: 'canary_blocked',
+            environment: context.environment
+          });
+        }
+        dynamicFeatureFlag = await options.featureFlagResolver(request, context);
+        dynamicKillSwitch = await options.killSwitchResolver(request, context);
+      } catch (_error) {
+        for (const item of reserved) releaseBudget(item.budget, { provider_error: false });
+        return buildTransportEnvelope(request, {
+          status: 'public_web_validation_blocked',
+          error_code: 'INVALID_PUBLIC_WEB_REQUEST',
+          blocked_reason: 'dynamic_runtime_gate_resolution_failed',
+          canary_state: 'canary_blocked',
+          environment: context.environment
+        });
+      }
+      if (dynamicFeatureFlag !== true || dynamicKillSwitch !== false) {
+        for (const item of reserved) releaseBudget(item.budget, { provider_error: false });
+        return buildTransportEnvelope(request, {
+          status: 'public_web_validation_blocked',
+          error_code: 'INVALID_PUBLIC_WEB_REQUEST',
+          blocked_reason: dynamicKillSwitch === true ? 'kill_switch_active' : 'feature_flag_off',
+          canary_state: 'canary_blocked',
+          environment: context.environment,
+          feature_flag_state: dynamicFeatureFlag === true,
+          kill_switch_state: dynamicKillSwitch === true,
+          rollout_percentage: context.rollout_percentage || 0
+        });
+      }
+
+      const runtimeContext = {
+        ...context,
+        feature_flag: dynamicFeatureFlag,
+        kill_switch: dynamicKillSwitch
+      };
       const abortController = abortControllerFactory();
       let rawResponse;
       let providerError = false;
@@ -333,8 +377,8 @@ function createPublicWebRealTransportCandidate(options = {}) {
           external_network_called: externalNetworkCalled,
           max_response_bytes: request.max_response_bytes,
           environment: context.environment,
-          feature_flag_state: context.feature_flag === true,
-          kill_switch_state: context.kill_switch === true,
+          feature_flag_state: runtimeContext.feature_flag === true,
+          kill_switch_state: runtimeContext.kill_switch === true,
           lifecycle_state: context.lifecycle_state,
           readiness_state: context.readiness_state,
           configuration_state: context.configuration_state,
