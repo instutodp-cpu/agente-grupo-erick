@@ -164,8 +164,41 @@ function createPublicWebRealTransportCandidate(options = {}) {
       if (!secretResolver || typeof secretResolver.resolveReference !== 'function') return dependencyMissing('secretResolver', request);
       if (typeof abortControllerFactory !== 'function') return dependencyMissing('abortControllerFactory', request);
 
+      let dynamicFeatureFlag;
+      let dynamicKillSwitch;
+      try {
+        dynamicFeatureFlag = typeof options.featureFlagResolver === 'function'
+          ? await options.featureFlagResolver(request, context)
+          : null;
+        dynamicKillSwitch = typeof options.killSwitchResolver === 'function'
+          ? await options.killSwitchResolver(request, context)
+          : null;
+      } catch (_error) {
+        return buildTransportEnvelope(request, {
+          status: 'public_web_validation_blocked',
+          error_code: 'INVALID_PUBLIC_WEB_REQUEST',
+          blocked_reason: 'dynamic_runtime_gate_resolution_failed',
+          canary_state: 'canary_blocked',
+          environment: context.environment
+        });
+      }
+      if (dynamicFeatureFlag !== true || dynamicKillSwitch !== false) {
+        return buildTransportEnvelope(request, {
+          status: 'public_web_validation_blocked',
+          error_code: 'INVALID_PUBLIC_WEB_REQUEST',
+          blocked_reason: dynamicKillSwitch === true ? 'kill_switch_active' : 'feature_flag_off',
+          canary_state: 'canary_blocked',
+          environment: context.environment,
+          feature_flag_state: dynamicFeatureFlag === true,
+          kill_switch_state: dynamicKillSwitch === true,
+          rollout_percentage: context.rollout_percentage || 0
+        });
+      }
+
       const gate = evaluatePublicWebPilotGate(request, {
         ...context,
+        feature_flag: dynamicFeatureFlag,
+        kill_switch: dynamicKillSwitch,
         dnsResolver,
         secretResolver,
         environment: context.environment,
