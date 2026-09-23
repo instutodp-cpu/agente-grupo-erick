@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const { computeCanonicalContentDigest } = require('../src/core/canonical-content-digest');
 const { executePublicWebThirdCanarySingleRequest } =
   require('../src/core/public-web-canary-third-controlled-single-request-adapter');
 
@@ -15,11 +16,20 @@ function command() {
     single_use: true, execution_started: false, external_network_called: false
   };
 }
+function commandDigest(c) {
+  return computeCanonicalContentDigest([
+    c.trial_id, c.official_authorization_id, c.preparatory_authorization_id,
+    c.grant_id, c.reservation_id, c.environment, c.target_origin,
+    c.target_path, c.method, c.port, c.maximum_requests,
+    c.rollout_percentage, c.redirects_allowed, c.production_allowed,
+    c.confirmed_at, c.confirmation_maximum_age_ms, c.single_use
+  ]);
+}
 function input() {
   const c=command();
   return {
     side_effect_boundary:{ok:true,status:'THIRD_CANARY_SIDE_EFFECT_BOUNDARY_READY_COMMAND_PREPARED_NOT_EXECUTED',side_effect_boundary_ready:true,execution_command_prepared:true,execution_started:false,external_network_called:false,production_allowed:false,execution_command:c},
-    execution_claim:{ok:true,status:'THIRD_CANARY_DURABLE_EXECUTION_CLAIMED_NOT_STARTED_NOT_EXECUTED',execution_claimed:true,execution_started:false,provider_invoked:false,transport_invoked:false,external_network_called:false,production_allowed:false,trial_id:c.trial_id,reservation_id:c.reservation_id,command_fingerprint:'a'.repeat(64)},
+    execution_claim:{ok:true,status:'THIRD_CANARY_DURABLE_EXECUTION_CLAIMED_NOT_STARTED_NOT_EXECUTED',execution_claimed:true,execution_started:false,provider_invoked:false,transport_invoked:false,external_network_called:false,production_allowed:false,trial_id:c.trial_id,reservation_id:c.reservation_id,command_fingerprint:commandDigest(c)},
     runtime_binding:{canary_session_id:'session-3',canary_execution_id:'reservation-3',change_id:'change-3',trace_id:'trace-3',request_id:'request-3'},
     production_allowed:false
   };
