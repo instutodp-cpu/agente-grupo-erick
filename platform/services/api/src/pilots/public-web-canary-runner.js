@@ -349,8 +349,8 @@ function createPublicWebCanaryRunner(deps = {}) {
       enabled: true,
       environment: session.environment,
       production: false,
-      featureFlagResolver: () => true,
-      killSwitchResolver: () => false,
+      featureFlagResolver: deps.featureFlagResolver,
+      killSwitchResolver: deps.killSwitchResolver,
       dnsResolver: typeof deps.dnsResolver.resolveSyncForPolicy === 'function'
         ? deps.dnsResolver.resolveSyncForPolicy
         : () => dns.approved_ips,
