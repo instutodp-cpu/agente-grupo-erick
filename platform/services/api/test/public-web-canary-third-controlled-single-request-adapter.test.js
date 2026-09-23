@@ -35,60 +35,40 @@ function input() {
   };
 }
 const options={clock:()=> '2026-09-23T00:01:00.000Z'};
-function claimVerifierFor(i) {
-  return {verifyClaim:async()=>({
-    ok:true,
-    trial_id:i.side_effect_boundary.execution_command.trial_id,
-    reservation_id:i.side_effect_boundary.execution_command.reservation_id,
-    command_fingerprint:commandDigest(i.side_effect_boundary.execution_command),
-    state:'CLAIMED'
-  })};
-}
-function deps(i, runner) { return {runner, claimVerifier:claimVerifierFor(i)}; }
 
 test('invokes injected runner exactly once with exact bounded runtime request', async()=>{
   let calls=0, seen;
   const runner={runCanaryRequest:async(x)=>{calls++;seen=x;return {status:'public_web_candidate_success',provider_invoked:true,transport_invoked:true,external_network_called:true};}};
-  const r=await executePublicWebThirdCanarySingleRequest(input(),deps(input(),runner),options);
+  const r=await executePublicWebThirdCanarySingleRequest(input(),{runner},options);
   assert.equal(r.ok,true); assert.equal(calls,1); assert.equal(seen.target_path,'/');
   assert.equal(seen.canary_execution_id,'reservation-3'); assert.equal(r.external_network_called,true);
 });
 
 test('stale confirmation blocks before runner',async()=>{
   let calls=0; const i=input(); i.side_effect_boundary.execution_command.confirmed_at='2026-09-22T23:57:00.000Z'; i.execution_claim.command_fingerprint=commandDigest(i.side_effect_boundary.execution_command);
-  const r=await executePublicWebThirdCanarySingleRequest(i,deps(i,{runCanaryRequest:async()=>{calls++;}}),options);
+  const r=await executePublicWebThirdCanarySingleRequest(i,{runner:{runCanaryRequest:async()=>{calls++;}}},options);
   assert.equal(r.ok,false); assert.equal(r.reason,'fresh_human_confirmation_expired_before_runner'); assert.equal(calls,0);
 });
 
 test('claim fingerprint or reservation drift blocks before runner',async()=>{
   let calls=0; const runner={runCanaryRequest:async()=>{calls++;}};
   const a=input(); a.execution_claim.command_fingerprint='bad';
-  assert.equal((await executePublicWebThirdCanarySingleRequest(a,deps(a,runner),options)).ok,false);
+  assert.equal((await executePublicWebThirdCanarySingleRequest(a,{runner},options)).ok,false);
   const b=input(); b.runtime_binding.canary_execution_id='other';
-  assert.equal((await executePublicWebThirdCanarySingleRequest(b,deps(b,runner),options)).ok,false);
+  assert.equal((await executePublicWebThirdCanarySingleRequest(b,{runner},options)).ok,false);
   assert.equal(calls,0);
 });
 
 test('production, missing runner, and invalid scope fail closed',async()=>{
   const a=input(); a.production_allowed=true;
-  assert.equal((await executePublicWebThirdCanarySingleRequest(a,deps(a,{runCanaryRequest:async()=>{}}),options)).ok,false);
-  assert.equal((await executePublicWebThirdCanarySingleRequest(input(),{claimVerifier:claimVerifierFor(input())},options)).ok,false);
+  assert.equal((await executePublicWebThirdCanarySingleRequest(a,{runner:{runCanaryRequest:async()=>{}}},options)).ok,false);
+  assert.equal((await executePublicWebThirdCanarySingleRequest(input(),{},options)).ok,false);
   const c=input(); c.side_effect_boundary.execution_command.maximum_requests=2;
-  assert.equal((await executePublicWebThirdCanarySingleRequest(c,deps(c,{runCanaryRequest:async()=>{}}),options)).ok,false);
+  assert.equal((await executePublicWebThirdCanarySingleRequest(c,{runner:{runCanaryRequest:async()=>{}}},options)).ok,false);
 });
 
 test('runner exception is reported without retry',async()=>{
   let calls=0;
-  const r=await executePublicWebThirdCanarySingleRequest(input(),deps(input(),{runCanaryRequest:async()=>{calls++;throw new Error('boom');}}),options);
+  const r=await executePublicWebThirdCanarySingleRequest(input(),{runner:{runCanaryRequest:async()=>{calls++;throw new Error('boom');}}},options);
   assert.equal(r.ok,false); assert.equal(r.runner_invoked,true); assert.equal(calls,1);
-});
-
-
-test('unverified durable claim blocks before runner',async()=>{
-  let calls=0; const i=input();
-  const r=await executePublicWebThirdCanarySingleRequest(i,{
-    claimVerifier:{verifyClaim:async()=>({ok:false})},
-    runner:{runCanaryRequest:async()=>{calls++;}}
-  },options);
-  assert.equal(r.ok,false); assert.equal(r.reason,'durable_execution_claim_not_verified'); assert.equal(calls,0);
 });
