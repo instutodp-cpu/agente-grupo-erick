@@ -142,30 +142,7 @@ function createPublicWebCanaryThirdExecutionClaimPostgres({
     }
   }
 
-  async function verifyClaim(input = {}) {
-    if (!input.trial_id || !input.reservation_id || !input.command_fingerprint) return blocked('execution_claim_identity_required');
-    const client = await pool.connect();
-    try {
-      const result = await client.query(
-        `SELECT trial_id, reservation_id, command_fingerprint, state, production_allowed
-         FROM ${claims}
-         WHERE trial_id = $1 AND reservation_id = $2 AND command_fingerprint = $3`,
-        [input.trial_id, input.reservation_id, input.command_fingerprint]
-      );
-      if (
-        result.rowCount !== 1 ||
-        result.rows[0].state !== 'CLAIMED' ||
-        result.rows[0].production_allowed !== false
-      ) return blocked('durable_execution_claim_not_found');
-      return Object.freeze({ ok: true, ...result.rows[0] });
-    } catch (_error) {
-      return blocked('durable_execution_claim_verification_failed');
-    } finally {
-      client.release();
-    }
-  }
-
-  return Object.freeze({ claimExecution, verifyClaim, claimTableName: claims });
+  return Object.freeze({ claimExecution, claimTableName: claims });
 }
 
 module.exports = {
