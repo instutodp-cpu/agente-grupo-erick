@@ -164,15 +164,15 @@ function createPublicWebRealTransportCandidate(options = {}) {
       if (!secretResolver || typeof secretResolver.resolveReference !== 'function') return dependencyMissing('secretResolver', request);
       if (typeof abortControllerFactory !== 'function') return dependencyMissing('abortControllerFactory', request);
 
-      let dynamicFeatureFlag;
-      let dynamicKillSwitch;
+      let dynamicFeatureFlag = context.feature_flag;
+      let dynamicKillSwitch = context.kill_switch;
       try {
-        dynamicFeatureFlag = typeof options.featureFlagResolver === 'function'
-          ? await options.featureFlagResolver(request, context)
-          : null;
-        dynamicKillSwitch = typeof options.killSwitchResolver === 'function'
-          ? await options.killSwitchResolver(request, context)
-          : null;
+        if (typeof options.featureFlagResolver === 'function') {
+          dynamicFeatureFlag = await options.featureFlagResolver(request, context);
+        }
+        if (typeof options.killSwitchResolver === 'function') {
+          dynamicKillSwitch = await options.killSwitchResolver(request, context);
+        }
       } catch (_error) {
         return buildTransportEnvelope(request, {
           status: 'public_web_validation_blocked',
