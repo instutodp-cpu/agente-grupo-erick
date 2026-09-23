@@ -2,86 +2,72 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { computeCanonicalContentDigest } = require('../src/core/canonical-content-digest');
-const { executePublicWebThirdCanaryFinalLiveEntry } =
+const { preparePublicWebThirdCanaryFinalLiveEntry } =
   require('../src/core/public-web-canary-third-final-live-entry');
 
-function digest(c) {
-  return computeCanonicalContentDigest([
-    c.trial_id,c.official_authorization_id,c.preparatory_authorization_id,c.grant_id,c.reservation_id,
-    c.environment,c.target_origin,c.target_path,c.method,c.port,c.maximum_requests,c.rollout_percentage,
-    c.redirects_allowed,c.production_allowed,c.confirmed_at,c.confirmation_maximum_age_ms,c.single_use
-  ]);
-}
-function fixture() {
-  const c={trial_id:'trial-249',official_authorization_id:'official-249',preparatory_authorization_id:'prep-249',
-    grant_id:'grant-249',reservation_id:'reservation-249',environment:'staging',
-    target_origin:'https://example.com',target_path:'/',method:'GET',port:443,maximum_requests:1,
-    rollout_percentage:1,redirects_allowed:false,production_allowed:false,
-    confirmed_at:'2026-09-23T18:00:00.000Z',confirmation_maximum_age_ms:120000,single_use:true,
-    execution_started:false,external_network_called:false};
-  return {execute:true,production_allowed:false,maximum_requests:1,
+function input() {
+  return {
+    production_allowed:false,maximum_requests:1,execution_started:false,external_network_called:false,
     side_effect_boundary:{ok:true,status:'THIRD_CANARY_SIDE_EFFECT_BOUNDARY_READY_COMMAND_PREPARED_NOT_EXECUTED',
-      side_effect_boundary_ready:true,execution_command_prepared:true,execution_started:false,
-      external_network_called:false,production_allowed:false,execution_command:c},
-    execution_claim:{ok:true,status:'THIRD_CANARY_DURABLE_EXECUTION_CLAIMED_NOT_STARTED_NOT_EXECUTED',
-      execution_claimed:true,execution_started:false,provider_invoked:false,transport_invoked:false,
-      external_network_called:false,production_allowed:false,trial_id:c.trial_id,reservation_id:c.reservation_id,
-      command_fingerprint:digest(c)},
-    runtime_binding:{canary_session_id:'session-249',canary_execution_id:'reservation-249',
-      change_id:'change-249',trace_id:'trace-249',request_id:'request-249'}};
+      execution_started:false,external_network_called:false,
+      execution_command:{trial_id:'trial-249',reservation_id:'reservation-249',environment:'staging',
+        target_origin:'https://example.com',target_path:'/',method:'GET',port:443,maximum_requests:1,
+        rollout_percentage:1,redirects_allowed:false,production_allowed:false,single_use:true}}
+  };
 }
-function runtime(i,counters={verify:0,runner:0}) {
-  const c=i.side_effect_boundary.execution_command;
+function wiring() {
   return {official:true,production_allowed:false,maximum_requests:1,
-    secretAccessContract:{environment:'staging',purpose:'public_web_canary_execution',
-      production_allowed:false,exportable:false,single_request:true},
-    featureFlagResolver:async()=>true,killSwitchResolver:async()=>false,
-    claimVerifier:{verifyClaim:async()=>{counters.verify++;return {ok:true,trial_id:c.trial_id,
-      reservation_id:c.reservation_id,command_fingerprint:digest(c),state:'CLAIMED',production_allowed:false};}},
-    runner:{runCanaryRequest:async()=>{counters.runner++;return {status:'public_web_candidate_success',
-      provider_invoked:true,transport_invoked:true,external_network_called:true};}}};
+    runner_factory_id:'public_web_canary_runner',
+    claim_verifier_id:'durable_execution_claim_verifier',
+    feature_flag_resolver_id:'public_web_dynamic_feature_flag',
+    kill_switch_resolver_id:'public_web_dynamic_kill_switch',
+    secret_access_contract:{environment:'staging',purpose:'public_web_canary_execution',
+      production_allowed:false,exportable:false,single_request:true}};
 }
-const options={clock:()=> '2026-09-23T18:01:00.000Z'};
 
-test('final entry composes exact controlled runtime once',async()=>{
-  const i=fixture(), counters={verify:0,runner:0};
-  const r=await executePublicWebThirdCanaryFinalLiveEntry(i,runtime(i,counters),options);
-  assert.equal(r.ok,true); assert.equal(counters.verify,1); assert.equal(counters.runner,1);
-  assert.equal(r.production_allowed,false); assert.equal(r.reservation_id,'reservation-249');
+test('prepares exact final live-entry wiring without starting execution',()=>{
+  const r=preparePublicWebThirdCanaryFinalLiveEntry(input(),wiring());
+  assert.equal(r.ok,true);
+  assert.equal(r.status,'THIRD_CANARY_FINAL_LIVE_ENTRY_WIRING_READY_NOT_STARTED');
+  assert.equal(r.execution_started,false); assert.equal(r.provider_invoked,false);
+  assert.equal(r.transport_invoked,false); assert.equal(r.external_network_called,false);
+  assert.equal(r.requires_fresh_human_authorization_at_side_effect_boundary,true);
 });
 
-test('missing official runtime wiring fails closed before verifier or runner',async()=>{
-  const i=fixture();
-  for (const r of [{}, {...runtime(i),official:false}, {...runtime(i),featureFlagResolver:null},
-    {...runtime(i),killSwitchResolver:null}, {...runtime(i),secretAccessContract:null}]) {
-    const result=await executePublicWebThirdCanaryFinalLiveEntry(i,r,options);
-    assert.equal(result.ok,false); assert.equal(result.execution_started,false);
-    assert.equal(result.external_network_called,false);
+test('missing or unofficial wiring fails closed',()=>{
+  for (const w of [{},{...wiring(),official:false},{...wiring(),runner_factory_id:'fake'},
+    {...wiring(),claim_verifier_id:'fake'},{...wiring(),feature_flag_resolver_id:'fake'},
+    {...wiring(),kill_switch_resolver_id:'fake'}]) {
+    const r=preparePublicWebThirdCanaryFinalLiveEntry(input(),w);
+    assert.equal(r.ok,false); assert.equal(r.execution_started,false); assert.equal(r.external_network_called,false);
   }
 });
 
-test('staging secret access contract is exact and fail closed',async()=>{
-  const i=fixture();
+test('staging secret access contract is exact and fail closed',()=>{
   for (const patch of [{environment:'local_test'},{purpose:'local_test_readiness_validation'},
     {production_allowed:true},{exportable:true},{single_request:false}]) {
-    const r=runtime(i); r.secretAccessContract={...r.secretAccessContract,...patch};
-    const result=await executePublicWebThirdCanaryFinalLiveEntry(i,r,options);
-    assert.equal(result.ok,false); assert.equal(result.reason,'official_runtime_wiring_required');
+    const w=wiring(); w.secret_access_contract={...w.secret_access_contract,...patch};
+    const r=preparePublicWebThirdCanaryFinalLiveEntry(input(),w);
+    assert.equal(r.ok,false); assert.equal(r.reason,'official_runtime_wiring_contract_required');
   }
 });
 
-test('scope drift and production fail closed before controlled runtime',async()=>{
-  const a=fixture(); a.side_effect_boundary.execution_command.target_origin='https://other.example';
-  assert.equal((await executePublicWebThirdCanaryFinalLiveEntry(a,runtime(a),options)).reason,'exact_third_canary_scope_required');
-  const b=fixture(); b.production_allowed=true;
-  assert.equal((await executePublicWebThirdCanaryFinalLiveEntry(b,runtime(b),options)).ok,false);
+test('scope drift fails closed',()=>{
+  for (const mutate of [
+    x=>{x.side_effect_boundary.execution_command.target_origin='https://other.example';},
+    x=>{x.side_effect_boundary.execution_command.target_path='/other';},
+    x=>{x.side_effect_boundary.execution_command.maximum_requests=2;},
+    x=>{x.side_effect_boundary.execution_command.production_allowed=true;},
+    x=>{x.side_effect_boundary.execution_command.redirects_allowed=true;}
+  ]) {
+    const i=input(); mutate(i);
+    const r=preparePublicWebThirdCanaryFinalLiveEntry(i,wiring());
+    assert.equal(r.ok,false); assert.equal(r.external_network_called,false);
+  }
 });
 
-test('durable claim rejection never invokes runner',async()=>{
-  const i=fixture(); let runnerCalls=0; const r=runtime(i);
-  r.claimVerifier={verifyClaim:async()=>({ok:false})};
-  r.runner={runCanaryRequest:async()=>{runnerCalls++;}};
-  const result=await executePublicWebThirdCanaryFinalLiveEntry(i,r,options);
-  assert.equal(result.ok,false); assert.equal(runnerCalls,0); assert.equal(result.external_network_called,false);
+test('readiness input cannot claim execution already started',()=>{
+  const i=input(); i.execution_started=true;
+  const r=preparePublicWebThirdCanaryFinalLiveEntry(i,wiring());
+  assert.equal(r.ok,false); assert.equal(r.reason,'non_executing_single_request_readiness_input_required');
 });
