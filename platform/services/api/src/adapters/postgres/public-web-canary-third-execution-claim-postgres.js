@@ -1,6 +1,6 @@
 'use strict';
 
-const crypto = require('node:crypto');
+const { computeCanonicalContentDigest } = require('../../core/canonical-content-digest');
 
 const SIMPLE_IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 const DEFAULT_CLAIM_TABLE = 'hermes.public_web_canary_execution_claims';
@@ -29,14 +29,13 @@ function blocked(reason) {
 }
 
 function fingerprint(command) {
-  const canonical = [
+  return computeCanonicalContentDigest([
     command.trial_id, command.official_authorization_id, command.preparatory_authorization_id,
     command.grant_id, command.reservation_id, command.environment, command.target_origin,
     command.target_path, command.method, command.port, command.maximum_requests,
     command.rollout_percentage, command.redirects_allowed, command.production_allowed,
     command.confirmed_at, command.confirmation_maximum_age_ms, command.single_use
-  ].join('|');
-  return crypto.createHash('sha256').update(canonical).digest('hex');
+  ]);
 }
 
 function createPublicWebCanaryThirdExecutionClaimPostgres({
