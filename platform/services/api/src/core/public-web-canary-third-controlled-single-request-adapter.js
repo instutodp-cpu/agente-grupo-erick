@@ -1,5 +1,7 @@
 'use strict';
 
+const { computeCanonicalContentDigest } = require('./canonical-content-digest');
+
 const VERSION = 'public_web_third_canary_controlled_single_request_adapter_v1';
 const CLAIM_STATUS = 'THIRD_CANARY_DURABLE_EXECUTION_CLAIMED_NOT_STARTED_NOT_EXECUTED';
 const BOUNDARY_STATUS = 'THIRD_CANARY_SIDE_EFFECT_BOUNDARY_READY_COMMAND_PREPARED_NOT_EXECUTED';
@@ -18,6 +20,16 @@ function blocked(reason) {
     production_allowed: false,
     version: VERSION
   });
+}
+
+function commandDigest(command = {}) {
+  return computeCanonicalContentDigest([
+    command.trial_id, command.official_authorization_id, command.preparatory_authorization_id,
+    command.grant_id, command.reservation_id, command.environment, command.target_origin,
+    command.target_path, command.method, command.port, command.maximum_requests,
+    command.rollout_percentage, command.redirects_allowed, command.production_allowed,
+    command.confirmed_at, command.confirmation_maximum_age_ms, command.single_use
+  ]);
 }
 
 function exactCommand(command = {}) {
@@ -55,7 +67,7 @@ async function executePublicWebThirdCanarySingleRequest(input = {}, dependencies
     claim.execution_started !== false || claim.provider_invoked !== false ||
     claim.transport_invoked !== false || claim.external_network_called !== false ||
     claim.production_allowed !== false || claim.trial_id !== command.trial_id ||
-    claim.reservation_id !== command.reservation_id || typeof claim.command_fingerprint !== 'string' || claim.command_fingerprint.length !== 64
+    claim.reservation_id !== command.reservation_id || claim.command_fingerprint !== commandDigest(command)
   ) return blocked('durable_execution_claim_binding_required');
 
   if (input.production_allowed !== false) return blocked('production_must_remain_blocked');
