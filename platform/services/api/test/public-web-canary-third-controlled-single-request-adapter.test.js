@@ -45,7 +45,7 @@ test('invokes injected runner exactly once with exact bounded runtime request', 
 });
 
 test('stale confirmation blocks before runner',async()=>{
-  let calls=0; const i=input(); i.side_effect_boundary.execution_command.confirmed_at='2026-09-22T23:57:00.000Z'; i.execution_claim.command_fingerprint=commandDigest(i.side_effect_boundary.execution_command);
+  let calls=0; const i=input(); i.side_effect_boundary.execution_command.confirmed_at='2026-09-22T23:57:00.000Z'; i.execution_claim.command_fingerprint=commandDigest(i.side_effect_boundary.execution_command); i.execution_claim.command_fingerprint=commandDigest(i.side_effect_boundary.execution_command);
   const r=await executePublicWebThirdCanarySingleRequest(i,{runner:{runCanaryRequest:async()=>{calls++;}}},options);
   assert.equal(r.ok,false); assert.equal(r.reason,'fresh_human_confirmation_expired_before_runner'); assert.equal(calls,0);
 });
