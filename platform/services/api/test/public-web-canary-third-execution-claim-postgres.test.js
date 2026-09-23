@@ -26,12 +26,17 @@ function boundary() {
   };
 }
 
-function pool({ claimRows = 1, reservationState = 'EXECUTION_RESERVED' } = {}) {
+function pool({ claimRows = 1, reservationState = 'EXECUTION_RESERVED', verifyRows = null, verifyThrows = false } = {}) {
   const queries = [];
   const client = {
     async query(sql) {
       queries.push(sql);
       if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rowCount: null, rows: [] };
+      if (sql.includes('SELECT trial_id, reservation_id, command_fingerprint, state, production_allowed') && sql.includes('FROM hermes.public_web_canary_execution_claims')) {
+        if (verifyThrows) throw new Error('verify_failed');
+        const rows = verifyRows === null ? [] : verifyRows;
+        return { rowCount: rows.length, rows };
+      }
       if (sql.includes('FROM hermes.public_web_canary_atomic_commits')) return {
         rowCount: 1, rows: [{ trial_id: 'trial-3', official_authorization_id: 'official-3', grant_id: 'grant-3', reservation_id: 'reservation-3' }]
       };
@@ -86,4 +91,24 @@ test('production and runtime activity remain impossible in this layer', async ()
   b.execution_started = true;
   assert.equal((await adapter.claimExecution({ side_effect_boundary: b, production_allowed: false })).ok, false);
   assert.equal(db.queries.length, 0);
+});
+
+
+test('verifyClaim accepts only exact durable CLAIMED non-production row', async () => {
+  const row={trial_id:'trial-3',reservation_id:'reservation-3',command_fingerprint:'sha256:abc',state:'CLAIMED',production_allowed:false};
+  const adapter=createPublicWebCanaryThirdExecutionClaimPostgres({pool:pool({verifyRows:[row]})});
+  const result=await adapter.verifyClaim({trial_id:'trial-3',reservation_id:'reservation-3',command_fingerprint:'sha256:abc'});
+  assert.equal(result.ok,true); assert.equal(result.state,'CLAIMED'); assert.equal(result.production_allowed,false);
+});
+
+test('verifyClaim fails closed for missing, wrong-state, production, duplicate, and query failure', async () => {
+  const identity={trial_id:'trial-3',reservation_id:'reservation-3',command_fingerprint:'sha256:abc'};
+  assert.equal((await createPublicWebCanaryThirdExecutionClaimPostgres({pool:pool()}).verifyClaim(identity)).ok,false);
+  const wrong={...identity,state:'AVAILABLE',production_allowed:false};
+  assert.equal((await createPublicWebCanaryThirdExecutionClaimPostgres({pool:pool({verifyRows:[wrong]})}).verifyClaim(identity)).ok,false);
+  const prod={...identity,state:'CLAIMED',production_allowed:true};
+  assert.equal((await createPublicWebCanaryThirdExecutionClaimPostgres({pool:pool({verifyRows:[prod]})}).verifyClaim(identity)).ok,false);
+  const good={...identity,state:'CLAIMED',production_allowed:false};
+  assert.equal((await createPublicWebCanaryThirdExecutionClaimPostgres({pool:pool({verifyRows:[good,good]})}).verifyClaim(identity)).ok,false);
+  assert.equal((await createPublicWebCanaryThirdExecutionClaimPostgres({pool:pool({verifyThrows:true})}).verifyClaim(identity)).ok,false);
 });
