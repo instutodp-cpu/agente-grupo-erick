@@ -1,14 +1,11 @@
 'use strict';
 
-const { executePublicWebThirdCanaryControlledRuntime } =
-  require('./public-web-canary-third-controlled-runtime-composition');
-
-const VERSION = 'public_web_third_canary_final_live_entry_v1';
+const VERSION = 'public_web_third_canary_final_live_entry_readiness_v1';
 
 function blocked(reason, stage) {
   return Object.freeze({
     ok: false,
-    status: 'THIRD_CANARY_FINAL_LIVE_ENTRY_BLOCKED',
+    status: 'THIRD_CANARY_FINAL_LIVE_ENTRY_READINESS_BLOCKED',
     reason,
     stage,
     execution_started: false,
@@ -28,29 +25,32 @@ function validSecretAccessContract(contract = {}) {
     && contract.single_request === true;
 }
 
-function validRuntime(runtime = {}) {
-  return runtime.official === true
-    && runtime.production_allowed === false
-    && runtime.maximum_requests === 1
-    && runtime.runner && typeof runtime.runner.runCanaryRequest === 'function'
-    && runtime.claimVerifier && typeof runtime.claimVerifier.verifyClaim === 'function'
-    && typeof runtime.featureFlagResolver === 'function'
-    && typeof runtime.killSwitchResolver === 'function'
-    && validSecretAccessContract(runtime.secretAccessContract);
+function validWiring(wiring = {}) {
+  return wiring.official === true
+    && wiring.production_allowed === false
+    && wiring.maximum_requests === 1
+    && wiring.runner_factory_id === 'public_web_canary_runner'
+    && wiring.claim_verifier_id === 'durable_execution_claim_verifier'
+    && wiring.feature_flag_resolver_id === 'public_web_dynamic_feature_flag'
+    && wiring.kill_switch_resolver_id === 'public_web_dynamic_kill_switch'
+    && validSecretAccessContract(wiring.secret_access_contract);
 }
 
-async function executePublicWebThirdCanaryFinalLiveEntry(input = {}, runtime = {}, options = {}) {
+function preparePublicWebThirdCanaryFinalLiveEntry(input = {}, wiring = {}) {
   if (
-    input.execute !== true ||
     input.production_allowed !== false ||
-    input.maximum_requests !== 1
-  ) return blocked('explicit_single_request_execution_input_required', 'INPUT');
-
-  if (!validRuntime(runtime)) return blocked('official_runtime_wiring_required', 'RUNTIME_WIRING');
+    input.maximum_requests !== 1 ||
+    input.execution_started !== false ||
+    input.external_network_called !== false
+  ) return blocked('non_executing_single_request_readiness_input_required', 'INPUT');
 
   const boundary = input.side_effect_boundary || {};
   const command = boundary.execution_command || {};
   if (
+    boundary.ok !== true ||
+    boundary.status !== 'THIRD_CANARY_SIDE_EFFECT_BOUNDARY_READY_COMMAND_PREPARED_NOT_EXECUTED' ||
+    boundary.execution_started !== false ||
+    boundary.external_network_called !== false ||
     command.environment !== 'staging' ||
     command.target_origin !== 'https://example.com' ||
     command.target_path !== '/' ||
@@ -63,41 +63,32 @@ async function executePublicWebThirdCanaryFinalLiveEntry(input = {}, runtime = {
     command.single_use !== true
   ) return blocked('exact_third_canary_scope_required', 'SCOPE');
 
-  const result = await executePublicWebThirdCanaryControlledRuntime({
-    ...input,
-    execute: true,
-    production_allowed: false,
-    maximum_requests: 1
-  }, {
-    claimVerifier: runtime.claimVerifier,
-    runner: runtime.runner
-  }, options);
-
-  if (!result || result.ok !== true) {
-    return Object.freeze({
-      ...blocked('controlled_runtime_blocked', 'CONTROLLED_RUNTIME'),
-      controlled_runtime_result: result || null
-    });
-  }
+  if (!validWiring(wiring)) return blocked('official_runtime_wiring_contract_required', 'RUNTIME_WIRING');
 
   return Object.freeze({
     ok: true,
-    status: 'THIRD_CANARY_FINAL_LIVE_ENTRY_ATTEMPT_COMPLETED',
-    trial_id: result.trial_id,
-    reservation_id: result.reservation_id,
-    runner_invoked: result.runner_invoked === true,
-    execution_started: result.execution_started === true,
-    provider_invoked: result.provider_invoked === true,
-    transport_invoked: result.transport_invoked === true,
-    external_network_called: result.external_network_called === true,
+    status: 'THIRD_CANARY_FINAL_LIVE_ENTRY_WIRING_READY_NOT_STARTED',
+    trial_id: command.trial_id,
+    reservation_id: command.reservation_id,
+    runtime_wiring: Object.freeze({
+      runner_factory_id: wiring.runner_factory_id,
+      claim_verifier_id: wiring.claim_verifier_id,
+      feature_flag_resolver_id: wiring.feature_flag_resolver_id,
+      kill_switch_resolver_id: wiring.kill_switch_resolver_id,
+      secret_access_contract: Object.freeze({ ...wiring.secret_access_contract })
+    }),
+    execution_started: false,
+    provider_invoked: false,
+    transport_invoked: false,
+    external_network_called: false,
     production_allowed: false,
-    controlled_runtime_result: result,
+    requires_fresh_human_authorization_at_side_effect_boundary: true,
     version: VERSION
   });
 }
 
 module.exports = {
   VERSION,
-  executePublicWebThirdCanaryFinalLiveEntry,
+  preparePublicWebThirdCanaryFinalLiveEntry,
   validSecretAccessContract
 };
