@@ -315,6 +315,8 @@ test('real transport candidate with fake HTTP returns sanitized response only wh
   let callCount = 0;
   const transport = createPublicWebRealTransportCandidate({
     enabled: true,
+    featureFlagResolver: async (_request, context) => context.feature_flag,
+    killSwitchResolver: async (_request, context) => context.kill_switch,
     httpClient: async (request) => {
       callCount += 1;
       assert.equal(request.redirect_mode, 'manual');
@@ -360,6 +362,8 @@ test('real transport candidate with fake HTTP returns sanitized response only wh
 test('real transport candidate blocks redirects, rebinding, provider errors and unsafe streams after network start', async () => {
   const base = {
     enabled: true,
+    featureFlagResolver: async (_request, context) => context.feature_flag,
+    killSwitchResolver: async (_request, context) => context.kill_switch,
     dnsResolver: fakeDnsResolver(),
     secretResolver: validPilotContext().secretResolver,
     clock: () => '2026-07-14T12:00:00.000Z',
