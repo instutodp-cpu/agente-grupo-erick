@@ -81,26 +81,6 @@ async function executePublicWebThirdCanarySingleRequest(input = {}, dependencies
     return blocked('fresh_human_confirmation_expired_before_runner');
   }
 
-  const claimVerifier = dependencies.claimVerifier;
-  if (!claimVerifier || typeof claimVerifier.verifyClaim !== 'function') return blocked('durable_claim_verifier_required');
-  let verifiedClaim;
-  try {
-    verifiedClaim = await claimVerifier.verifyClaim({
-      trial_id: command.trial_id,
-      reservation_id: command.reservation_id,
-      command_fingerprint: commandDigest(command)
-    });
-  } catch (_error) {
-    return blocked('durable_execution_claim_not_verified');
-  }
-  if (
-    !verifiedClaim || verifiedClaim.ok !== true ||
-    verifiedClaim.trial_id !== command.trial_id ||
-    verifiedClaim.reservation_id !== command.reservation_id ||
-    verifiedClaim.command_fingerprint !== commandDigest(command) ||
-    verifiedClaim.state !== 'CLAIMED'
-  ) return blocked('durable_execution_claim_not_verified');
-
   const runner = dependencies.runner;
   if (!runner || typeof runner.runCanaryRequest !== 'function') return blocked('controlled_runner_required');
 
