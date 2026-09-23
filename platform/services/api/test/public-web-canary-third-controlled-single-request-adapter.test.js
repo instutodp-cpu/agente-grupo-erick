@@ -1,7 +1,6 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const crypto = require('node:crypto');
 const test = require('node:test');
 const { executePublicWebThirdCanarySingleRequest } =
   require('../src/core/public-web-canary-third-controlled-single-request-adapter');
@@ -16,18 +15,11 @@ function command() {
     single_use: true, execution_started: false, external_network_called: false
   };
 }
-function fp(c) {
-  return crypto.createHash('sha256').update([
-    c.trial_id,c.official_authorization_id,c.preparatory_authorization_id,c.grant_id,c.reservation_id,
-    c.environment,c.target_origin,c.target_path,c.method,c.port,c.maximum_requests,c.rollout_percentage,
-    c.redirects_allowed,c.production_allowed,c.confirmed_at,c.confirmation_maximum_age_ms,c.single_use
-  ].join('|')).digest('hex');
-}
 function input() {
   const c=command();
   return {
     side_effect_boundary:{ok:true,status:'THIRD_CANARY_SIDE_EFFECT_BOUNDARY_READY_COMMAND_PREPARED_NOT_EXECUTED',side_effect_boundary_ready:true,execution_command_prepared:true,execution_started:false,external_network_called:false,production_allowed:false,execution_command:c},
-    execution_claim:{ok:true,status:'THIRD_CANARY_DURABLE_EXECUTION_CLAIMED_NOT_STARTED_NOT_EXECUTED',execution_claimed:true,execution_started:false,provider_invoked:false,transport_invoked:false,external_network_called:false,production_allowed:false,trial_id:c.trial_id,reservation_id:c.reservation_id,command_fingerprint:fp(c)},
+    execution_claim:{ok:true,status:'THIRD_CANARY_DURABLE_EXECUTION_CLAIMED_NOT_STARTED_NOT_EXECUTED',execution_claimed:true,execution_started:false,provider_invoked:false,transport_invoked:false,external_network_called:false,production_allowed:false,trial_id:c.trial_id,reservation_id:c.reservation_id,command_fingerprint:'a'.repeat(64)},
     runtime_binding:{canary_session_id:'session-3',canary_execution_id:'reservation-3',change_id:'change-3',trace_id:'trace-3',request_id:'request-3'},
     production_allowed:false
   };
@@ -44,7 +36,6 @@ test('invokes injected runner exactly once with exact bounded runtime request', 
 
 test('stale confirmation blocks before runner',async()=>{
   let calls=0; const i=input(); i.side_effect_boundary.execution_command.confirmed_at='2026-09-22T23:57:00.000Z';
-  i.execution_claim.command_fingerprint=fp(i.side_effect_boundary.execution_command);
   const r=await executePublicWebThirdCanarySingleRequest(i,{runner:{runCanaryRequest:async()=>{calls++;}}},options);
   assert.equal(r.ok,false); assert.equal(r.reason,'fresh_human_confirmation_expired_before_runner'); assert.equal(calls,0);
 });
