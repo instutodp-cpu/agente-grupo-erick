@@ -1,0 +1,17 @@
+'use strict';
+const {isNonEmptyString,isPlainObject,uniqueSorted}=require('./read-only-adapter-contract');
+const {stablePayload}=require('./agent-identity-contract');
+const {computeCanonicalContentDigest,isCanonicalContentDigest}=require('./canonical-content-digest');
+const {CLAIMED,validateHermesMaintainerExecutionAttemptClaim}=require('./hermes-maintainer-execution-attempt-ownership');
+const CONTRACT_VERSION='hermes_maintainer_durable_admission_handoff_v1';
+const ADMITTED='MAINTAINER_DURABLE_ADMISSION_PREPARED_STAGING',BLOCKED='MAINTAINER_DURABLE_ADMISSION_BLOCKED';
+const digest=v=>computeCanonicalContentDigest(JSON.parse(stablePayload(v)));
+function material(v){return{contract_version:CONTRACT_VERSION,attempt_id:v.attempt_id,attempt_fingerprint:v.attempt_fingerprint,authorization_id:v.authorization_id,mission_id:v.mission_id,operation:v.operation,repository:v.repository,base_ref:v.base_ref,executor_id:v.executor_id,admission_id:v.admission_id,environment:v.environment};}
+function buildHermesMaintainerDurableAdmissionHandoff(attempt,input={}){
+ const b=[],av=validateHermesMaintainerExecutionAttemptClaim(attempt);if(!av.valid)b.push(...av.errors.map(e=>'attempt::'+e));if(av.valid&&(attempt.status!==CLAIMED||attempt.claimed!==true))b.push('attempt_not_claimed');
+ if(!isNonEmptyString(input.admission_id))b.push('admission_id_invalid');if(attempt?.execution_performed!==false||attempt?.network_used!==false||attempt?.credentials_used!==false||attempt?.write_performed!==false||attempt?.production_allowed!==false)b.push('attempt_boundary_invalid');
+ const u=uniqueSorted(b),ok=u.length===0,v={contract_version:CONTRACT_VERSION,attempt_id:attempt?.attempt_id||'attempt_not_available',attempt_fingerprint:attempt?.attempt_fingerprint||'fingerprint_not_available',authorization_id:attempt?.authorization_id||'authorization_not_available',mission_id:attempt?.mission_id||'mission_not_available',operation:attempt?.operation||'operation_not_available',repository:attempt?.repository||'repository_not_available',base_ref:attempt?.base_ref||'ref_not_available',executor_id:attempt?.executor_id||'executor_not_available',admission_id:input.admission_id||'admission_not_available',environment:'staging',status:ok?ADMITTED:BLOCKED,admission_prepared:ok,handoff_fingerprint:null,execution_eligible:false,execution_performed:false,network_enabled:false,credentials_enabled:false,write_enabled:false,production_allowed:false,blockers:Object.freeze(u)};
+ v.handoff_fingerprint=ok?digest(material(v)):null;return Object.freeze(v);
+}
+function validateHermesMaintainerDurableAdmissionHandoff(v){const e=[];if(!isPlainObject(v))return{valid:false,errors:['handoff_must_be_object']};if(v.contract_version!==CONTRACT_VERSION)e.push('contract_version_invalid');if(![ADMITTED,BLOCKED].includes(v.status)||v.admission_prepared!==(v.status===ADMITTED))e.push('status_invalid');if(v.environment!=='staging'||v.execution_eligible!==false||v.execution_performed!==false||v.network_enabled!==false||v.credentials_enabled!==false||v.write_enabled!==false||v.production_allowed!==false)e.push('boundary_invalid');if(v.admission_prepared&&(!isCanonicalContentDigest(v.handoff_fingerprint)||v.handoff_fingerprint!==digest(material(v))))e.push('handoff_fingerprint_invalid');if(!Array.isArray(v.blockers)||!v.blockers.every(isNonEmptyString))e.push('blockers_invalid');return{valid:e.length===0,errors:uniqueSorted(e)};}
+module.exports={ADMITTED,BLOCKED,CONTRACT_VERSION,buildHermesMaintainerDurableAdmissionHandoff,validateHermesMaintainerDurableAdmissionHandoff};
