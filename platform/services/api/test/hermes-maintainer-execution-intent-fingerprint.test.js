@@ -1,0 +1,16 @@
+'use strict';
+const test=require('node:test'); const assert=require('node:assert/strict');
+const { CONTRACT_VERSION:REQUEST }=require('../src/core/hermes-maintainer-request-contract');
+const { prepareHermesMaintainerPlan }=require('../src/core/hermes-maintainer-plan-contract');
+const { buildHermesMaintainerPlanFingerprint }=require('../src/core/hermes-maintainer-plan-fingerprint');
+const { prepareHermesMaintainerSteps }=require('../src/core/hermes-maintainer-step-contract');
+const { admitHermesMaintainerSteps }=require('../src/core/hermes-maintainer-step-admission-contract');
+const { buildHermesMaintainerStepAdmissionFingerprint }=require('../src/core/hermes-maintainer-step-admission-fingerprint');
+const { prepareHermesMaintainerExecutionIntent }=require('../src/core/hermes-maintainer-execution-intent-contract');
+const { buildHermesMaintainerExecutionIntentFingerprint,validateHermesMaintainerExecutionIntentFingerprint,verifyHermesMaintainerExecutionIntentFingerprint }=require('../src/core/hermes-maintainer-execution-intent-fingerprint');
+function req(id,action){return {contract_version:REQUEST,request_id:id,action,repository:'instutodp-cpu/agente-grupo-erick',base_ref:'main',target_ref:null,simulation:true,production_blocked:true};}
+function fixture(){const p=prepareHermesMaintainerPlan({mission_id:'m1',requests:[req('1','repository_read'),req('2','ci_read')]}); const s=prepareHermesMaintainerSteps(p,buildHermesMaintainerPlanFingerprint(p).fingerprint); const a=admitHermesMaintainerSteps(s); const af=buildHermesMaintainerStepAdmissionFingerprint(a).fingerprint; return prepareHermesMaintainerExecutionIntent(a,af);}
+test('binds execution intents deterministically without authority',()=>{const i=fixture(),a=buildHermesMaintainerExecutionIntentFingerprint(i),b=buildHermesMaintainerExecutionIntentFingerprint(i);assert.deepEqual(a,b);assert.equal(validateHermesMaintainerExecutionIntentFingerprint(a.fingerprint).valid,true);assert.equal(verifyHermesMaintainerExecutionIntentFingerprint(i,a.fingerprint).valid,true);for(const f of ['executed','runtime_mutated','network_used','provider_called','secret_accessed','operational_authority_consumed','production_allowed'])assert.equal(a[f],false);});
+test('detects intent drift fail closed',()=>{const i=fixture(),f=buildHermesMaintainerExecutionIntentFingerprint(i).fingerprint;const d={...i,intents:i.intents.map((x,n)=>n===0?{...x,action:'ci_read'}:x)};const v=verifyHermesMaintainerExecutionIntentFingerprint(d,f);assert.equal(v.valid,false);assert.ok(v.errors.includes('intent_digest_mismatch'));});
+test('blocks fingerprint for non-ready intent',()=>{const i={...fixture(),ready:false,status:'MAINTAINER_EXECUTION_INTENT_BLOCKED',blockers:['blocked']};const b=buildHermesMaintainerExecutionIntentFingerprint(i);assert.equal(b.status,'MAINTAINER_EXECUTION_INTENT_FINGERPRINT_BLOCKED');assert.equal(b.fingerprint,null);});
+test('rejects fingerprint tampering',()=>{const i=fixture(),f=buildHermesMaintainerExecutionIntentFingerprint(i).fingerprint;assert.equal(verifyHermesMaintainerExecutionIntentFingerprint(i,{...f,intent_count:99}).valid,false);assert.equal(verifyHermesMaintainerExecutionIntentFingerprint(i,{...f,intent_digest:'sha256:bad'}).valid,false);});
