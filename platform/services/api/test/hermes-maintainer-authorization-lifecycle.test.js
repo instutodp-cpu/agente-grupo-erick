@@ -1,0 +1,12 @@
+'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');
+const {buildHermesMaintainerSingleUseAuthorization}=require('../src/core/hermes-maintainer-single-use-execution-authorization');
+const {createHermesMaintainerAuthorizationLifecycle}=require('../src/core/hermes-maintainer-authorization-lifecycle');
+function gate(){return{contract_version:'hermes_maintainer_staging_gate_v1',mission_id:'m1',operation:'repository_read',repository:'instutodp-cpu/agente-grupo-erick',base_ref:'main',status:'MAINTAINER_STAGING_GATE_PASSED_SIMULATION',staging_gate_passed:true,real_execution_enabled:false,production_enabled:false,network_enabled:false,credentials_enabled:false,write_enabled:false,simulation:true,blockers:[]};}
+function auth(){return buildHermesMaintainerSingleUseAuthorization(gate(),{authorization_id:'a1',issued_at:'2026-09-24T16:00:00.000Z',expires_at:'2026-09-24T17:00:00.000Z'});}
+const ctx={reference_id:'consume-1',now:'2026-09-24T16:30:00.000Z',mission_id:'m1',operation:'repository_read',repository:'instutodp-cpu/agente-grupo-erick',base_ref:'main'};
+test('registers and consumes once without execution',()=>{const r=createHermesMaintainerAuthorizationLifecycle();assert.equal(r.registerAuthorization(auth()).status,'REGISTERED');const c=r.consumeAuthorization('a1',ctx);assert.equal(c.status,'CONSUMED');assert.equal(c.execution_performed,false);assert.equal(c.production_effect,'ZERO');});
+test('blocks replay after single use',()=>{const r=createHermesMaintainerAuthorizationLifecycle();r.registerAuthorization(auth());r.consumeAuthorization('a1',ctx);assert.equal(r.consumeAuthorization('a1',{...ctx,reference_id:'consume-2'}).status,'ALREADY_CONSUMED');});
+test('blocks scope drift',()=>{const r=createHermesMaintainerAuthorizationLifecycle();r.registerAuthorization(auth());assert.equal(r.consumeAuthorization('a1',{...ctx,repository:'other'}).status,'SCOPE_MISMATCH');});
+test('blocks expired authorization',()=>{const r=createHermesMaintainerAuthorizationLifecycle();r.registerAuthorization(auth());assert.equal(r.consumeAuthorization('a1',{...ctx,now:'2026-09-24T17:00:00.000Z'}).status,'EXPIRED');});
+test('registration replay is idempotent',()=>{const r=createHermesMaintainerAuthorizationLifecycle();assert.equal(r.registerAuthorization(auth()).status,'REGISTERED');assert.equal(r.registerAuthorization(auth()).status,'REPLAY_ACCEPTED');});
