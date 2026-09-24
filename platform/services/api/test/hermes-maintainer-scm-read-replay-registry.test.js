@@ -1,0 +1,13 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {buildHermesMaintainerExecutionAttemptClaim}=require('../src/core/hermes-maintainer-execution-attempt-ownership');
+const {buildHermesMaintainerDurableAdmissionHandoff}=require('../src/core/hermes-maintainer-durable-admission-handoff');
+const {buildHermesMaintainerScmReadCapabilityGrant}=require('../src/core/hermes-maintainer-scm-read-capability-grant');
+const {buildHermesMaintainerScmReadExecutionBoundary}=require('../src/core/hermes-maintainer-scm-read-execution-boundary');
+const {buildHermesMaintainerScmReadCapabilityConsumption}=require('../src/core/hermes-maintainer-scm-read-capability-consumption');
+const {createHermesMaintainerScmReadReplayRegistry}=require('../src/core/hermes-maintainer-scm-read-replay-registry');
+function consumption(id='consume1'){const c={ok:true,status:'CONSUMED',authorization_id:'a1',fingerprint:'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'},i={attempt_id:'at1',mission_id:'m1',operation:'repository_read',repository:'instutodp-cpu/agente-grupo-erick',base_ref:'main',executor_id:'hermes-maintainer-staging',lease_id:'lease1',lease_expires_at:'2026-09-25T00:00:00.000Z',idempotency_key:'idem1'},a=buildHermesMaintainerExecutionAttemptClaim(c,i),h=buildHermesMaintainerDurableAdmissionHandoff(a,{admission_id:'adm1'}),g=buildHermesMaintainerScmReadCapabilityGrant(h,{capability_id:'cap1'}),b=buildHermesMaintainerScmReadExecutionBoundary(g,{execution_id:'exec1'});return buildHermesMaintainerScmReadCapabilityConsumption(b,{consumption_id:id});}
+test('admits a capability exactly once inside registry lifetime',()=>{const r=createHermesMaintainerScmReadReplayRegistry(),v=r.consume(consumption());assert.equal(v.ok,true);assert.equal(v.status,'CONSUMED_ONCE');assert.equal(v.durable_replay_enforced,false);assert.equal(r.get(v.capability_fingerprint).state,'CONSUMED');});
+test('blocks deterministic replay',()=>{const r=createHermesMaintainerScmReadReplayRegistry(),v=consumption();assert.equal(r.consume(v).ok,true);assert.equal(r.consume(v).status,'REPLAY_BLOCKED');});
+test('blocks conflicting second consumption of same capability',()=>{const r=createHermesMaintainerScmReadReplayRegistry();assert.equal(r.consume(consumption('consume1')).ok,true);assert.equal(r.consume(consumption('consume2')).status,'CONFLICT_BLOCKED');});
+test('does not claim durable distributed atomicity',()=>{const r=createHermesMaintainerScmReadReplayRegistry();assert.equal(r.mode,'IN_MEMORY_CONTRACT_ONLY');assert.equal(r.durable_distributed_atomicity,false);});
