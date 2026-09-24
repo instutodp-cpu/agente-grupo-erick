@@ -1,0 +1,17 @@
+'use strict';
+const {isNonEmptyString,isPlainObject,uniqueSorted}=require('./read-only-adapter-contract');
+const {stablePayload}=require('./agent-identity-contract');
+const {computeCanonicalContentDigest,isCanonicalContentDigest}=require('./canonical-content-digest');
+const {GRANTED,READ_OPERATIONS,validateHermesMaintainerScmReadCapabilityGrant}=require('./hermes-maintainer-scm-read-capability-grant');
+const CONTRACT_VERSION='hermes_maintainer_scm_read_execution_boundary_v1';
+const READY='MAINTAINER_SCM_READ_EXECUTION_READY_STAGING',BLOCKED='MAINTAINER_SCM_READ_EXECUTION_BLOCKED';
+const digest=v=>computeCanonicalContentDigest(JSON.parse(stablePayload(v)));
+function material(v){return{contract_version:CONTRACT_VERSION,capability_id:v.capability_id,capability_fingerprint:v.capability_fingerprint,attempt_id:v.attempt_id,mission_id:v.mission_id,operation:v.operation,repository:v.repository,base_ref:v.base_ref,executor_id:v.executor_id,execution_id:v.execution_id,environment:v.environment};}
+function buildHermesMaintainerScmReadExecutionBoundary(grant,input={}){
+ const b=[],gv=validateHermesMaintainerScmReadCapabilityGrant(grant);if(!gv.valid)b.push(...gv.errors.map(e=>'grant::'+e));if(gv.valid&&(grant.status!==GRANTED||grant.capability_granted!==true))b.push('capability_not_granted');
+ if(!READ_OPERATIONS.includes(grant?.operation))b.push('operation_not_read_only');if(!isNonEmptyString(input.execution_id))b.push('execution_id_invalid');
+ const u=uniqueSorted(b),ok=u.length===0,v={contract_version:CONTRACT_VERSION,capability_id:grant?.capability_id||'capability_not_available',capability_fingerprint:grant?.capability_fingerprint||'fingerprint_not_available',attempt_id:grant?.attempt_id||'attempt_not_available',mission_id:grant?.mission_id||'mission_not_available',operation:grant?.operation||'operation_not_available',repository:grant?.repository||'repository_not_available',base_ref:grant?.base_ref||'ref_not_available',executor_id:grant?.executor_id||'executor_not_available',execution_id:input.execution_id||'execution_not_available',environment:'staging',status:ok?READY:BLOCKED,execution_ready:ok,execution_fingerprint:null,read_only:true,network_authorized:false,credentials_authorized:false,write_authorized:false,provider_called:false,execution_performed:false,production_allowed:false,blockers:Object.freeze(u)};
+ v.execution_fingerprint=ok?digest(material(v)):null;return Object.freeze(v);
+}
+function validateHermesMaintainerScmReadExecutionBoundary(v){const e=[];if(!isPlainObject(v))return{valid:false,errors:['boundary_must_be_object']};if(v.contract_version!==CONTRACT_VERSION)e.push('contract_version_invalid');if(![READY,BLOCKED].includes(v.status)||v.execution_ready!==(v.status===READY))e.push('status_invalid');if(v.environment!=='staging'||v.read_only!==true||v.network_authorized!==false||v.credentials_authorized!==false||v.write_authorized!==false||v.provider_called!==false||v.execution_performed!==false||v.production_allowed!==false)e.push('boundary_invalid');if(v.execution_ready&&(!READ_OPERATIONS.includes(v.operation)||!isCanonicalContentDigest(v.execution_fingerprint)||v.execution_fingerprint!==digest(material(v))))e.push('execution_binding_invalid');if(!Array.isArray(v.blockers)||!v.blockers.every(isNonEmptyString))e.push('blockers_invalid');return{valid:e.length===0,errors:uniqueSorted(e)};}
+module.exports={BLOCKED,CONTRACT_VERSION,READY,buildHermesMaintainerScmReadExecutionBoundary,validateHermesMaintainerScmReadExecutionBoundary};
