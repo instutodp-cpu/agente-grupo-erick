@@ -1,0 +1,6 @@
+'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');
+const {OPERATIONS,buildHermesMaintainerScmAdapterRequest,validateHermesMaintainerScmAdapterRequest}=require('../src/core/hermes-maintainer-scm-adapter-contract');
+test('prepares every maintainer SCM operation without authority',()=>{for(const operation of OPERATIONS){const r=buildHermesMaintainerScmAdapterRequest({operation,repository:'instutodp-cpu/agente-grupo-erick',base_ref:'main'});assert.equal(r.ready,true);assert.equal(validateHermesMaintainerScmAdapterRequest(r).valid,true);for(const f of ['execution_authorized','network_authorized','credentials_authorized','write_authorized','executed','runtime_mutated','network_used','provider_called','secret_accessed','operational_authority_consumed','production_allowed'])assert.equal(r[f],false);}});
+test('unknown operation fails closed',()=>{const r=buildHermesMaintainerScmAdapterRequest({operation:'push_force',repository:'repo',base_ref:'main'});assert.equal(r.ready,false);assert.equal(r.status,'SCM_ADAPTER_REQUEST_BLOCKED');});
+test('validator rejects premature write authority',()=>{const r=buildHermesMaintainerScmAdapterRequest({operation:'repository_read',repository:'repo',base_ref:'main'});assert.equal(validateHermesMaintainerScmAdapterRequest({...r,write_authorized:true}).valid,false);});
