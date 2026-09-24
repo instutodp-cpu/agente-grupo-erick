@@ -1,0 +1,11 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {buildHermesMaintainerExecutionAttemptClaim}=require('../src/core/hermes-maintainer-execution-attempt-ownership');
+const {buildHermesMaintainerDurableAdmissionHandoff}=require('../src/core/hermes-maintainer-durable-admission-handoff');
+const {buildHermesMaintainerScmReadCapabilityGrant}=require('../src/core/hermes-maintainer-scm-read-capability-grant');
+const {buildHermesMaintainerScmReadExecutionBoundary,validateHermesMaintainerScmReadExecutionBoundary}=require('../src/core/hermes-maintainer-scm-read-execution-boundary');
+function grant(operation='repository_read'){const c={ok:true,status:'CONSUMED',authorization_id:'a1',fingerprint:'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'},i={attempt_id:'at1',mission_id:'m1',operation,repository:'instutodp-cpu/agente-grupo-erick',base_ref:'main',executor_id:'hermes-maintainer-staging',lease_id:'lease1',lease_expires_at:'2026-09-25T00:00:00.000Z',idempotency_key:'idem1'},a=buildHermesMaintainerExecutionAttemptClaim(c,i),h=buildHermesMaintainerDurableAdmissionHandoff(a,{admission_id:'adm1'});return buildHermesMaintainerScmReadCapabilityGrant(h,{capability_id:'cap1'});}
+test('prepares read execution boundary without network or provider call',()=>{const v=buildHermesMaintainerScmReadExecutionBoundary(grant(),{execution_id:'exec1'});assert.equal(v.execution_ready,true);assert.equal(v.network_authorized,false);assert.equal(v.provider_called,false);assert.equal(v.execution_performed,false);assert.equal(validateHermesMaintainerScmReadExecutionBoundary(v).valid,true);});
+test('blocked capability fails closed',()=>{assert.equal(buildHermesMaintainerScmReadExecutionBoundary(grant('branch_prepare'),{execution_id:'exec1'}).execution_ready,false);});
+test('fingerprint drift is rejected',()=>{const v={...buildHermesMaintainerScmReadExecutionBoundary(grant(),{execution_id:'exec1'}),base_ref:'other'};assert.equal(validateHermesMaintainerScmReadExecutionBoundary(v).valid,false);});
+test('validator rejects premature provider call',()=>{const v={...buildHermesMaintainerScmReadExecutionBoundary(grant(),{execution_id:'exec1'}),provider_called:true};assert.equal(validateHermesMaintainerScmReadExecutionBoundary(v).valid,false);});
