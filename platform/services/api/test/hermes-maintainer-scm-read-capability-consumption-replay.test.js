@@ -1,0 +1,9 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {buildHermesMaintainerExecutionAttemptClaim}=require('../src/core/hermes-maintainer-execution-attempt-ownership');
+const {buildHermesMaintainerDurableAdmissionHandoff}=require('../src/core/hermes-maintainer-durable-admission-handoff');
+const {buildHermesMaintainerScmReadCapabilityGrant}=require('../src/core/hermes-maintainer-scm-read-capability-grant');
+const {buildHermesMaintainerScmReadExecutionBoundary}=require('../src/core/hermes-maintainer-scm-read-execution-boundary');
+const {buildHermesMaintainerScmReadCapabilityConsumption}=require('../src/core/hermes-maintainer-scm-read-capability-consumption');
+function boundary(){const c={ok:true,status:'CONSUMED',authorization_id:'a1',fingerprint:'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'},i={attempt_id:'at1',mission_id:'m1',operation:'repository_read',repository:'instutodp-cpu/agente-grupo-erick',base_ref:'main',executor_id:'hermes-maintainer-staging',lease_id:'lease1',lease_expires_at:'2026-09-25T00:00:00.000Z',idempotency_key:'idem1'},a=buildHermesMaintainerExecutionAttemptClaim(c,i),h=buildHermesMaintainerDurableAdmissionHandoff(a,{admission_id:'adm1'}),g=buildHermesMaintainerScmReadCapabilityGrant(h,{capability_id:'cap1'});return buildHermesMaintainerScmReadExecutionBoundary(g,{execution_id:'exec1'});}
+test('contract is deterministic but does not claim durable replay enforcement',()=>{const b=boundary(),a=buildHermesMaintainerScmReadCapabilityConsumption(b,{consumption_id:'consume1'}),r=buildHermesMaintainerScmReadCapabilityConsumption(b,{consumption_id:'consume1'});assert.equal(a.consumption_fingerprint,r.consumption_fingerprint);assert.equal(a.single_use,true);assert.equal(a.durable_replay_enforced,false);});
