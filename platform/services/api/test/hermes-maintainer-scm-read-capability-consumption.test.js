@@ -1,0 +1,12 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {buildHermesMaintainerExecutionAttemptClaim}=require('../src/core/hermes-maintainer-execution-attempt-ownership');
+const {buildHermesMaintainerDurableAdmissionHandoff}=require('../src/core/hermes-maintainer-durable-admission-handoff');
+const {buildHermesMaintainerScmReadCapabilityGrant}=require('../src/core/hermes-maintainer-scm-read-capability-grant');
+const {buildHermesMaintainerScmReadExecutionBoundary}=require('../src/core/hermes-maintainer-scm-read-execution-boundary');
+const {buildHermesMaintainerScmReadCapabilityConsumption,validateHermesMaintainerScmReadCapabilityConsumption}=require('../src/core/hermes-maintainer-scm-read-capability-consumption');
+function boundary(){const c={ok:true,status:'CONSUMED',authorization_id:'a1',fingerprint:'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'},i={attempt_id:'at1',mission_id:'m1',operation:'repository_read',repository:'instutodp-cpu/agente-grupo-erick',base_ref:'main',executor_id:'hermes-maintainer-staging',lease_id:'lease1',lease_expires_at:'2026-09-25T00:00:00.000Z',idempotency_key:'idem1'},a=buildHermesMaintainerExecutionAttemptClaim(c,i),h=buildHermesMaintainerDurableAdmissionHandoff(a,{admission_id:'adm1'}),g=buildHermesMaintainerScmReadCapabilityGrant(h,{capability_id:'cap1'});return buildHermesMaintainerScmReadExecutionBoundary(g,{execution_id:'exec1'});}
+test('consumes prepared read capability without provider call',()=>{const v=buildHermesMaintainerScmReadCapabilityConsumption(boundary(),{consumption_id:'consume1'});assert.equal(v.capability_consumed,true);assert.equal(v.single_use,true);assert.equal(v.provider_called,false);assert.equal(v.execution_performed,false);assert.equal(validateHermesMaintainerScmReadCapabilityConsumption(v).valid,true);});
+test('missing consumption id fails closed',()=>{assert.equal(buildHermesMaintainerScmReadCapabilityConsumption(boundary()).capability_consumed,false);});
+test('fingerprint drift is rejected',()=>{const v={...buildHermesMaintainerScmReadCapabilityConsumption(boundary(),{consumption_id:'consume1'}),repository:'other'};assert.equal(validateHermesMaintainerScmReadCapabilityConsumption(v).valid,false);});
+test('validator rejects premature network authority',()=>{const v={...buildHermesMaintainerScmReadCapabilityConsumption(boundary(),{consumption_id:'consume1'}),network_authorized:true};assert.equal(validateHermesMaintainerScmReadCapabilityConsumption(v).valid,false);});
