@@ -1,0 +1,18 @@
+'use strict';
+const {isNonEmptyString,isPlainObject,uniqueSorted}=require('./read-only-adapter-contract');
+const {stablePayload}=require('./agent-identity-contract');
+const {computeCanonicalContentDigest,isCanonicalContentDigest}=require('./canonical-content-digest');
+const {ADMITTED,validateHermesMaintainerDurableAdmissionHandoff}=require('./hermes-maintainer-durable-admission-handoff');
+const CONTRACT_VERSION='hermes_maintainer_scm_read_capability_grant_v1';
+const GRANTED='MAINTAINER_SCM_READ_CAPABILITY_GRANTED_STAGING',BLOCKED='MAINTAINER_SCM_READ_CAPABILITY_BLOCKED';
+const READ_OPERATIONS=Object.freeze(['ci_read','repository_code_search','repository_read']);
+const digest=v=>computeCanonicalContentDigest(JSON.parse(stablePayload(v)));
+function material(v){return{contract_version:CONTRACT_VERSION,attempt_id:v.attempt_id,handoff_fingerprint:v.handoff_fingerprint,authorization_id:v.authorization_id,mission_id:v.mission_id,operation:v.operation,repository:v.repository,base_ref:v.base_ref,executor_id:v.executor_id,capability_id:v.capability_id,environment:v.environment,read_only:v.read_only};}
+function buildHermesMaintainerScmReadCapabilityGrant(handoff,input={}){
+ const b=[],hv=validateHermesMaintainerDurableAdmissionHandoff(handoff);if(!hv.valid)b.push(...hv.errors.map(e=>'handoff::'+e));if(hv.valid&&(handoff.status!==ADMITTED||handoff.admission_prepared!==true))b.push('handoff_not_admitted');
+ if(!READ_OPERATIONS.includes(handoff?.operation))b.push('operation_not_read_only');if(!isNonEmptyString(input.capability_id))b.push('capability_id_invalid');
+ const u=uniqueSorted(b),ok=u.length===0,v={contract_version:CONTRACT_VERSION,attempt_id:handoff?.attempt_id||'attempt_not_available',handoff_fingerprint:handoff?.handoff_fingerprint||'fingerprint_not_available',authorization_id:handoff?.authorization_id||'authorization_not_available',mission_id:handoff?.mission_id||'mission_not_available',operation:handoff?.operation||'operation_not_available',repository:handoff?.repository||'repository_not_available',base_ref:handoff?.base_ref||'ref_not_available',executor_id:handoff?.executor_id||'executor_not_available',capability_id:input.capability_id||'capability_not_available',environment:'staging',read_only:true,status:ok?GRANTED:BLOCKED,capability_granted:ok,capability_fingerprint:null,network_authorized:false,credentials_authorized:false,write_authorized:false,execution_performed:false,production_allowed:false,blockers:Object.freeze(u)};
+ v.capability_fingerprint=ok?digest(material(v)):null;return Object.freeze(v);
+}
+function validateHermesMaintainerScmReadCapabilityGrant(v){const e=[];if(!isPlainObject(v))return{valid:false,errors:['grant_must_be_object']};if(v.contract_version!==CONTRACT_VERSION)e.push('contract_version_invalid');if(![GRANTED,BLOCKED].includes(v.status)||v.capability_granted!==(v.status===GRANTED))e.push('status_invalid');if(v.environment!=='staging'||v.read_only!==true||v.network_authorized!==false||v.credentials_authorized!==false||v.write_authorized!==false||v.execution_performed!==false||v.production_allowed!==false)e.push('boundary_invalid');if(v.capability_granted&&(!READ_OPERATIONS.includes(v.operation)||!isCanonicalContentDigest(v.capability_fingerprint)||v.capability_fingerprint!==digest(material(v))))e.push('capability_invalid');if(!Array.isArray(v.blockers)||!v.blockers.every(isNonEmptyString))e.push('blockers_invalid');return{valid:e.length===0,errors:uniqueSorted(e)};}
+module.exports={BLOCKED,CONTRACT_VERSION,GRANTED,READ_OPERATIONS,buildHermesMaintainerScmReadCapabilityGrant,validateHermesMaintainerScmReadCapabilityGrant};
