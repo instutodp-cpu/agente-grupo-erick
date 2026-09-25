@@ -1,0 +1,11 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {buildHermesMaintainerScmReadPersistenceRequest}=require('../src/core/hermes-maintainer-scm-read-persistence-contract');
+const {invokeHermesMaintainerScmReadPersistence}=require('../src/core/hermes-maintainer-scm-read-persistence-adapter');
+const {buildHermesMaintainerScmReadDurableConsumptionReceipt,validateHermesMaintainerScmReadDurableConsumptionReceipt}=require('../src/core/hermes-maintainer-scm-read-durable-consumption-receipt');
+const c={capability_fingerprint:'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',consumption_fingerprint:'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',consumption_id:'consume1',mission_id:'m1',operation:'repository_read',repository:'instutodp-cpu/agente-grupo-erick',base_ref:'main',executor_id:'hermes-maintainer-staging',capability_consumed:true,single_use:true,durable_replay_enforced:false};
+async function pair(outcome='CREATED'){const q=buildHermesMaintainerScmReadPersistenceRequest(c),a=await invokeHermesMaintainerScmReadPersistence(q,{createIfAbsent:async()=>({outcome})});return[q,a];}
+test('binds CREATED durable persistence evidence to deterministic receipt',async()=>{const[q,a]=await pair(),r=buildHermesMaintainerScmReadDurableConsumptionReceipt(q,a);assert.equal(r.durable_consumption_confirmed,true);assert.equal(validateHermesMaintainerScmReadDurableConsumptionReceipt(r).valid,true);assert.equal(r.execution_allowed,false);});
+test('ALREADY_EXISTS cannot produce confirmed receipt',async()=>{const[q,a]=await pair('ALREADY_EXISTS'),r=buildHermesMaintainerScmReadDurableConsumptionReceipt(q,a);assert.equal(r.durable_consumption_confirmed,false);});
+test('UNKNOWN_OUTCOME cannot produce confirmed receipt',async()=>{const[q,a]=await pair('UNKNOWN_OUTCOME'),r=buildHermesMaintainerScmReadDurableConsumptionReceipt(q,a);assert.equal(r.durable_consumption_confirmed,false);});
+test('fingerprint drift is rejected',async()=>{const[q,a]=await pair(),r=buildHermesMaintainerScmReadDurableConsumptionReceipt(q,a);assert.equal(validateHermesMaintainerScmReadDurableConsumptionReceipt({...r,repository:'other/repo'}).valid,false);});
