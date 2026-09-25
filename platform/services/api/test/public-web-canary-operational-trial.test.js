@@ -237,6 +237,13 @@ test('synthetic canary runtime defaults satisfy the pilot gate before one fake p
   const context = createSyntheticCanaryContext(plan, {
     clock: deterministicClock
   });
+  context.secretAccessContract = {
+    environment: 'staging',
+    purpose: 'public_web_canary_execution',
+    production_allowed: false,
+    exportable: false,
+    single_request: true
+  };
 
   const connector = context.lifecycleRegistry.getConnector(plan.connector_id);
   const configuration = context.configurationRegistry.getConfiguration(plan.configuration_id);
