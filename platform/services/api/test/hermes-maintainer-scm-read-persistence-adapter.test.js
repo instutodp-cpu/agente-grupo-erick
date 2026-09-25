@@ -1,0 +1,11 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {buildHermesMaintainerScmReadPersistenceRequest}=require('../src/core/hermes-maintainer-scm-read-persistence-contract');
+const {invokeHermesMaintainerScmReadPersistence}=require('../src/core/hermes-maintainer-scm-read-persistence-adapter');
+const c={capability_fingerprint:'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',consumption_fingerprint:'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',consumption_id:'consume1',mission_id:'m1',operation:'repository_read',repository:'instutodp-cpu/agente-grupo-erick',base_ref:'main',executor_id:'hermes-maintainer-staging',capability_consumed:true,single_use:true,durable_replay_enforced:false};
+const req=()=>buildHermesMaintainerScmReadPersistenceRequest(c);
+test('CREATED confirms durable replay enforcement but never execution authority',async()=>{const v=await invokeHermesMaintainerScmReadPersistence(req(),{createIfAbsent:async()=>({outcome:'CREATED'})});assert.equal(v.outcome,'CREATED');assert.equal(v.durable_replay_enforced,true);assert.equal(v.execution_allowed,false);});
+test('ALREADY_EXISTS fails closed',async()=>{const v=await invokeHermesMaintainerScmReadPersistence(req(),{createIfAbsent:async()=>({outcome:'ALREADY_EXISTS'})});assert.equal(v.durable_replay_enforced,false);assert.deepEqual(v.blockers,['CAPABILITY_ALREADY_CONSUMED']);});
+test('UNKNOWN_OUTCOME fails closed',async()=>{const v=await invokeHermesMaintainerScmReadPersistence(req(),{createIfAbsent:async()=>({outcome:'UNKNOWN_OUTCOME'})});assert.equal(v.execution_allowed,false);assert.deepEqual(v.blockers,['PERSISTENCE_OUTCOME_UNKNOWN']);});
+test('persistence exception becomes unknown outcome',async()=>{const v=await invokeHermesMaintainerScmReadPersistence(req(),{createIfAbsent:async()=>{throw new Error('timeout')}});assert.equal(v.outcome,'UNKNOWN_OUTCOME');assert.equal(v.execution_allowed,false);});
+test('missing persistence blocks without invocation',async()=>{const v=await invokeHermesMaintainerScmReadPersistence(req(),null);assert.equal(v.persistence_invoked,false);assert.deepEqual(v.blockers,['PERSISTENCE_UNAVAILABLE']);});
