@@ -1,0 +1,18 @@
+'use strict';
+const {isNonEmptyString,isPlainObject,uniqueSorted}=require('./read-only-adapter-contract');
+const INPUT_VERSION='hermes_maintainer_trusted_read_binding_v1';
+const CONTRACT_VERSION='hermes_maintainer_read_execution_admission_v1';
+const ALLOWED_OPERATIONS=Object.freeze(['ci_read','repository_code_search','repository_read']);
+function buildHermesMaintainerReadExecutionAdmission(binding){
+ const b=[];
+ if(!isPlainObject(binding)||binding.contract_version!==INPUT_VERSION||binding.status!=='MAINTAINER_TRUSTED_READ_BINDING_PREPARED_STAGING'||binding.binding_valid!==true)b.push('trusted_binding_invalid');
+ for(const k of ['receipt_fingerprint','capability_fingerprint','mission_id','operation','repository','base_ref','executor_id','trusted_adapter_id'])if(!isNonEmptyString(binding?.[k]))b.push(k+'_invalid');
+ if(!ALLOWED_OPERATIONS.includes(binding?.operation))b.push('operation_not_read_only');
+ if(binding?.provider!=='GITHUB'||binding?.trusted_adapter_id!=='github_read_only_staging'||binding?.read_only!==true)b.push('adapter_binding_invalid');
+ if(binding?.credential_reference_required!==true||binding?.credential_reference!==null||binding?.credential_material_present!==false||binding?.credential_resolved!==false||binding?.network_authorized!==false||binding?.credentials_authorized!==false||binding?.write_authorized!==false||binding?.provider_called!==false||binding?.execution_allowed!==false||binding?.execution_performed!==false||binding?.production_allowed!==false)b.push('authority_boundary_invalid');
+ if(!Array.isArray(binding?.blockers)||binding.blockers.length)b.push('trusted_binding_blocked');
+ const blockers=uniqueSorted(b),valid=blockers.length===0;
+ return Object.freeze({contract_version:CONTRACT_VERSION,status:valid?'MAINTAINER_READ_EXECUTION_ADMISSION_PREPARED_STAGING':'MAINTAINER_READ_EXECUTION_ADMISSION_BLOCKED',admission_valid:valid,receipt_fingerprint:binding?.receipt_fingerprint||null,capability_fingerprint:binding?.capability_fingerprint||null,mission_id:binding?.mission_id||null,operation:binding?.operation||null,repository:binding?.repository||null,base_ref:binding?.base_ref||null,executor_id:binding?.executor_id||null,provider:'GITHUB',trusted_adapter_id:binding?.trusted_adapter_id||null,read_only:true,staging_only:true,credential_resolution_permitted:false,network_execution_permitted:false,write_authorized:false,provider_called:false,execution_performed:false,production_allowed:false,blockers:Object.freeze(blockers)});
+}
+function validateHermesMaintainerReadExecutionAdmission(v){const e=[];if(!isPlainObject(v))return{valid:false,errors:['admission_must_be_object']};if(v.contract_version!==CONTRACT_VERSION||v.status!=='MAINTAINER_READ_EXECUTION_ADMISSION_PREPARED_STAGING'||v.admission_valid!==true)e.push('admission_invalid');for(const k of ['receipt_fingerprint','capability_fingerprint','mission_id','operation','repository','base_ref','executor_id','trusted_adapter_id'])if(!isNonEmptyString(v[k]))e.push(k+'_invalid');if(!ALLOWED_OPERATIONS.includes(v.operation)||v.provider!=='GITHUB'||v.trusted_adapter_id!=='github_read_only_staging'||v.read_only!==true||v.staging_only!==true||v.credential_resolution_permitted!==false||v.network_execution_permitted!==false||v.write_authorized!==false||v.provider_called!==false||v.execution_performed!==false||v.production_allowed!==false)e.push('boundary_invalid');if(!Array.isArray(v.blockers)||v.blockers.length)e.push('blockers_invalid');return{valid:e.length===0,errors:uniqueSorted(e)};}
+module.exports={CONTRACT_VERSION,ALLOWED_OPERATIONS,buildHermesMaintainerReadExecutionAdmission,validateHermesMaintainerReadExecutionAdmission};
