@@ -1,9 +1,8 @@
 'use strict';
-const crypto=require('node:crypto');
 const {isNonEmptyString,isPlainObject,uniqueSorted}=require('./read-only-adapter-contract');
 const ADAPTER_VERSION='hermes_maintainer_scm_read_persistence_adapter_v1';
 const CONTRACT_VERSION='hermes_maintainer_scm_read_durable_consumption_receipt_v1';
-function fp(v){return 'sha256:'+crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');}
+function fp(v){return 'receipt-v1:'+Buffer.from(JSON.stringify(v),'utf8').toString('base64url');}
 function buildHermesMaintainerScmReadDurableConsumptionReceipt(request,adapter){
  const b=[];if(!isPlainObject(request)||request.request_valid!==true)b.push('request_invalid');if(!isPlainObject(adapter)||adapter.contract_version!==ADAPTER_VERSION)b.push('adapter_invalid');if(adapter?.outcome!=='CREATED')b.push('persistence_not_created');if(adapter?.persistence_invoked!==true)b.push('persistence_not_invoked');if(adapter?.durable_replay_enforced!==true)b.push('durable_replay_not_enforced');if(adapter?.execution_allowed!==false||adapter?.network_authorized!==false||adapter?.credentials_authorized!==false||adapter?.write_authorized!==false||adapter?.provider_called!==false||adapter?.execution_performed!==false||adapter?.production_allowed!==false)b.push('boundary_invalid');if(!Array.isArray(adapter?.blockers)||adapter.blockers.length)b.push('adapter_blocked');
  const blockers=uniqueSorted(b),confirmed=blockers.length===0,payload={capability_fingerprint:request?.capability_fingerprint||null,consumption_fingerprint:request?.consumption_fingerprint||null,consumption_id:request?.consumption_id||null,mission_id:request?.mission_id||null,operation:request?.scm_operation||null,repository:request?.repository||null,base_ref:request?.base_ref||null,executor_id:request?.executor_id||null,persistence_outcome:adapter?.outcome||null};
