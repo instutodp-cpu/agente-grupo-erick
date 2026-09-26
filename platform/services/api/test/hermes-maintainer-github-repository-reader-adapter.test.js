@@ -1,0 +1,10 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {buildHermesMaintainerGithubRepositoryReaderRequest}=require('../src/core/hermes-maintainer-github-repository-reader-contract');
+const {invokeHermesMaintainerGithubRepositoryReader}=require('../src/core/hermes-maintainer-github-repository-reader-adapter');
+const request=buildHermesMaintainerGithubRepositoryReaderRequest({provider:'GITHUB',repository:'instutodp-cpu/agente-grupo-erick',ref:'main',path:'README.md',method:'GET',read_only:true});
+test('invokes trusted GitHub runtime with exact read-only scope',async()=>{let seen,calls=0;const r=await invokeHermesMaintainerGithubRepositoryReader(request,{readGithubRepositoryPath:async q=>(calls++,seen=q,{ok:true,content:'hello',sha:'abc'})});assert.equal(r.outcome,'SUCCEEDED');assert.equal(calls,1);assert.deepEqual(seen,{repository:request.repository,ref:request.ref,path:request.path,method:'GET',read_only:true});assert.equal(r.network_call_performed,true);assert.equal(r.execution_performed,true);assert.equal(r.credential_material_present,false);assert.equal(r.write_performed,false);assert.equal(r.production_used,false);});
+test('invalid request never invokes runtime',async()=>{let calls=0;const r=await invokeHermesMaintainerGithubRepositoryReader({...request,method:'POST'},{readGithubRepositoryPath:async()=>{calls++;}});assert.equal(r.outcome,'BLOCKED');assert.equal(calls,0);});
+test('missing runtime blocks',async()=>assert.equal((await invokeHermesMaintainerGithubRepositoryReader(request,null)).outcome,'BLOCKED'));
+test('runtime exception fails without exposing error',async()=>{const r=await invokeHermesMaintainerGithubRepositoryReader(request,{readGithubRepositoryPath:async()=>{throw new Error('secret detail')}});assert.equal(r.outcome,'FAILED');assert.equal(JSON.stringify(r).includes('secret detail'),false);assert.equal(r.network_call_performed,true);});
+test('invalid provider response fails closed',async()=>assert.equal((await invokeHermesMaintainerGithubRepositoryReader(request,{readGithubRepositoryPath:async()=>({ok:true,content:Buffer.from('x')})})).outcome,'FAILED'));
