@@ -1,0 +1,9 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {buildHermesMaintainerScmWriteIntent}=require('../src/core/hermes-maintainer-scm-write-intent');
+const {fingerprintHermesMaintainerScmWriteIntent}=require('../src/core/hermes-maintainer-scm-write-intent-fingerprint');
+const {buildHermesMaintainerScmWriteApprovalRequest}=require('../src/core/hermes-maintainer-scm-write-approval-request');
+function prepared(branch='hermes/example-change'){const i=buildHermesMaintainerScmWriteIntent({provider:'GITHUB',operation:'create_branch',repository:'instutodp-cpu/agente-grupo-erick',base_ref:'main',branch_name:branch});return [i,fingerprintHermesMaintainerScmWriteIntent(i)];}
+test('prepares a human approval request bound to the fingerprint without authorizing execution',()=>{const [i,f]=prepared();const r=buildHermesMaintainerScmWriteApprovalRequest(i,f);assert.equal(r.status,'SCM_WRITE_APPROVAL_REQUEST_PREPARED');assert.equal(r.request_valid,true);assert.equal(r.intent_digest,f.intent_digest);assert.equal(r.human_approval_required,true);assert.equal(r.human_approval_present,false);assert.equal(r.execution_authorized,false);assert.equal(r.network_call_performed,false);assert.equal(r.write_performed,false);assert.deepEqual(r.blockers,[]);});
+test('blocks approval request when fingerprint belongs to a different target',()=>{const [i]=prepared();const [,other]=prepared('hermes/other-change');const r=buildHermesMaintainerScmWriteApprovalRequest(i,other);assert.equal(r.request_valid,false);assert.deepEqual(r.blockers,['INTENT_FINGERPRINT_INVALID']);});
+test('approval request never carries credential or side-effect authority',()=>{const [i,f]=prepared();const r=buildHermesMaintainerScmWriteApprovalRequest(i,f);assert.equal(r.credential_material_present,false);assert.equal(r.human_approval_present,false);assert.equal(r.execution_authorized,false);assert.equal(r.production_used,false);});
