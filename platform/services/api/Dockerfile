@@ -6,6 +6,7 @@ WORKDIR /app
 # Copia manifesto primeiro (cache de camada). Sem deps → sem npm install.
 COPY package.json ./
 COPY src ./src
+COPY scripts/hermes-maintainer-staging-readiness-probe.js ./scripts/hermes-maintainer-staging-readiness-probe.js
 
 ENV NODE_ENV=production
 EXPOSE 8080
