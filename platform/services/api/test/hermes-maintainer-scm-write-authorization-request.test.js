@@ -1,0 +1,11 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {buildHermesMaintainerScmWriteIntent}=require('../src/core/hermes-maintainer-scm-write-intent');
+const {fingerprintHermesMaintainerScmWriteIntent}=require('../src/core/hermes-maintainer-scm-write-intent-fingerprint');
+const {buildHermesMaintainerScmWriteApprovalRequest}=require('../src/core/hermes-maintainer-scm-write-approval-request');
+const {bindHermesMaintainerScmWriteApproval}=require('../src/core/hermes-maintainer-scm-write-approval-binding');
+const {buildHermesMaintainerScmWriteAuthorizationRequest}=require('../src/core/hermes-maintainer-scm-write-authorization-request');
+function binding(){const i=buildHermesMaintainerScmWriteIntent({provider:'GITHUB',operation:'create_branch',repository:'instutodp-cpu/agente-grupo-erick',base_ref:'main',branch_name:'hermes/example-change'});const f=fingerprintHermesMaintainerScmWriteIntent(i);const r=buildHermesMaintainerScmWriteApprovalRequest(i,f);return bindHermesMaintainerScmWriteApproval(r,{decision:'APPROVED',intent_digest:r.intent_digest,approval_reference:'human-review-1'});}
+test('prepares authorization request from exact approved binding without granting execution',()=>{const b=binding();const r=buildHermesMaintainerScmWriteAuthorizationRequest(b);assert.equal(r.status,'SCM_WRITE_AUTHORIZATION_REQUEST_PREPARED');assert.equal(r.request_valid,true);assert.equal(r.intent_digest,b.intent_digest);assert.equal(r.approval_reference,b.approval_reference);assert.equal(r.execution_authorized,false);assert.equal(r.authorization_consumed,false);assert.equal(r.network_call_performed,false);assert.equal(r.write_performed,false);});
+test('fails closed for unbound or altered approval state',()=>{const b={...binding(),status:'SCM_WRITE_APPROVAL_BLOCKED'};const r=buildHermesMaintainerScmWriteAuthorizationRequest(b);assert.equal(r.request_valid,false);assert.ok(r.blockers.includes('APPROVAL_BINDING_INVALID'));assert.equal(r.execution_authorized,false);});
+test('authorization request carries no credential or side-effect authority',()=>{const r=buildHermesMaintainerScmWriteAuthorizationRequest(binding());assert.equal(r.credential_material_present,false);assert.equal(r.network_call_performed,false);assert.equal(r.write_performed,false);assert.equal(r.production_used,false);});
