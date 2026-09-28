@@ -1,5 +1,3 @@
-[Reading 38 lines from start (total: 38 lines, 0 remaining)]
-
 'use strict';
 
 const {Pool}=require('pg');
@@ -38,5 +36,3 @@ function createHermesMaintainerGithubWriteOperationalPostgresRuntime({environmen
 }
 
 module.exports={RUNTIME_VERSION,createHermesMaintainerGithubWriteOperationalPostgresRuntime};
-
-[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]
