@@ -7,6 +7,8 @@ const REPOSITORY = 'instutodp-cpu/agente-grupo-erick';
 const URL = `https://api.github.com/repos/${REPOSITORY}/git/refs`;
 const AUTHORIZATION_REFERENCE = 'github_create_branch_staging';
 const OWNERSHIP_SOURCE = 'DURABLE_PERSISTENCE_RECEIPT';
+const DEFAULT_TIMEOUT_MS = 5000;
+const MAX_TIMEOUT_MS = 30000;
 
 const REQUEST_FIELDS = Object.freeze([
   'method',
@@ -75,9 +77,10 @@ function safeResult(fields) {
   });
 }
 
-function createHermesMaintainerGithubCreateBranchTransport({ fetchImpl, resolveAuthorization } = {}) {
+function createHermesMaintainerGithubCreateBranchTransport({ fetchImpl, resolveAuthorization, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl_required');
   if (typeof resolveAuthorization !== 'function') throw new TypeError('resolveAuthorization_required');
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) throw new TypeError('timeoutMs_invalid');
 
   return Object.freeze({
     contract_version: CONTRACT_VERSION,
@@ -117,7 +120,8 @@ function createHermesMaintainerGithubCreateBranchTransport({ fetchImpl, resolveA
             'X-GitHub-Api-Version': '2022-11-28',
             Authorization: authorization
           },
-          body: JSON.stringify(request.body)
+          body: JSON.stringify(request.body),
+          timeout_ms: timeoutMs
         });
       } catch {
         return safeResult({
@@ -153,6 +157,8 @@ function createHermesMaintainerGithubCreateBranchTransport({ fetchImpl, resolveA
 module.exports = {
   AUTHORIZATION_REFERENCE,
   CONTRACT_VERSION,
+  DEFAULT_TIMEOUT_MS,
+  MAX_TIMEOUT_MS,
   METHOD,
   OWNERSHIP_SOURCE,
   PROVIDER,
