@@ -5,8 +5,17 @@ const REPOSITORY='instutodp-cpu/agente-grupo-erick';
 const OPERATION='create_branch';
 const REF_RE=/^refs\/heads\/hermes\/canary\/[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$/;
 const SHA_RE=/^[a-f0-9]{40}$/;
+const CANARY_FIELDS=Object.freeze(['operation','ref','repository','sha']);
 
-function prepareHermesMaintainerGithubWriteCanary({repository,operation,ref,sha}={}){
+function hasExactFields(value){
+ if(!value||typeof value!=='object'||Array.isArray(value))return false;
+ const keys=Object.keys(value).sort();
+ return keys.length===CANARY_FIELDS.length&&keys.every((key,index)=>key===CANARY_FIELDS[index]);
+}
+
+function prepareHermesMaintainerGithubWriteCanary(input={}){
+ if(!hasExactFields(input))return blocked('CANARY_FIELDS_INVALID');
+ const {repository,operation,ref,sha}=input;
  if(repository!==REPOSITORY)return blocked('REPOSITORY_NOT_ALLOWED');
  if(operation!==OPERATION)return blocked('OPERATION_NOT_ALLOWED');
  if(typeof ref!=='string'||!REF_RE.test(ref)||ref.includes('..'))return blocked('REF_NOT_ALLOWED');
