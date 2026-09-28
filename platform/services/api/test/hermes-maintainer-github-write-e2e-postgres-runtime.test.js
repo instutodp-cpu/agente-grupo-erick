@@ -5,7 +5,7 @@ const {createHermesMaintainerGithubWriteE2ePostgresRuntime}=require('../src/runt
 
 test('e2e postgres runtime construction is inert and binds the durable closure',async()=>{
  let poolConstructed=0,ended=0,fetchCalls=0;
- class FakePool{constructor(config){poolConstructed++;this.config=config;}async end(){ended++;}connect(){throw new Error('must remain inert');}}
+ class FakePool{constructor(config){poolConstructed++;this.config=config;}async query(){throw new Error('must remain inert');}async end(){ended++;}connect(){throw new Error('must remain inert');}}
  const runtime=createHermesMaintainerGithubWriteE2ePostgresRuntime({environment:{POSTGRES_PORT:'5432',POSTGRES_USER:'u',POSTGRES_PASSWORD:'p',POSTGRES_DB:'d',HERMES_GITHUB_CREATE_BRANCH_STAGING_TOKEN:'synthetic-token'},PoolClass:FakePool,fetchImpl:async()=>{fetchCalls++;return {status:201};},createTimeoutSignal:()=>new AbortController().signal});
  assert.equal(runtime.runtime_version,'hermes_maintainer_github_write_e2e_postgres_runtime_v1');
  assert.equal(runtime.environment,'staging');assert.equal(runtime.credential_reference,'github_create_branch_staging');
