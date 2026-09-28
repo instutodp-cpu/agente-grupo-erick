@@ -7,7 +7,7 @@ const env={POSTGRES_PORT:'5432',POSTGRES_USER:'u',POSTGRES_PASSWORD:'p',POSTGRES
 
 test('e2e process runtime is inert and preserves execute and close',async()=>{
  let ended=0,fetchCalls=0;
- class FakePool{async query(){throw new Error('must remain inert');}async end(){ended++;}}
+ class FakePool{async query(){throw new Error('must remain inert');}connect(){throw new Error('must remain inert');}async end(){ended++;}}
  const runtime=createHermesMaintainerGithubWriteE2eProcessRuntime({environment:env,PoolClass:FakePool,fetchImpl:async()=>{fetchCalls++;return {status:201};},createTimeoutSignal:()=>new AbortController().signal});
  assert.equal(runtime.process_runtime_version,'hermes_maintainer_github_write_e2e_process_runtime_v1');
  assert.equal(runtime.environment,'staging');assert.equal(runtime.credential_reference,'github_create_branch_staging');
@@ -17,6 +17,6 @@ test('e2e process runtime is inert and preserves execute and close',async()=>{
 });
 
 test('e2e process runtime fails closed without fetch',()=>{
- class FakePool{async query(){throw new Error('must remain inert');}async end(){}}
+ class FakePool{async query(){throw new Error('must remain inert');}connect(){throw new Error('must remain inert');}async end(){}}
  assert.throws(()=>createHermesMaintainerGithubWriteE2eProcessRuntime({environment:env,PoolClass:FakePool,fetchImpl:null,createTimeoutSignal:()=>new AbortController().signal}),/global_fetch_unavailable/);
 });
