@@ -110,6 +110,8 @@ function createHermesMaintainerGithubCreateBranchTransport({ fetchImpl, resolveA
       }
 
       let response;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
         response = await fetchImpl(URL, {
           method: METHOD,
@@ -121,7 +123,7 @@ function createHermesMaintainerGithubCreateBranchTransport({ fetchImpl, resolveA
             Authorization: authorization
           },
           body: JSON.stringify(request.body),
-          timeout_ms: timeoutMs
+          signal: controller.signal
         });
       } catch {
         return safeResult({
@@ -130,6 +132,8 @@ function createHermesMaintainerGithubCreateBranchTransport({ fetchImpl, resolveA
           network_call_performed: true,
           authorization_header_present: true
         });
+      } finally {
+        clearTimeout(timeout);
       }
 
       const providerStatus = Number.isInteger(response?.status) ? response.status : null;
