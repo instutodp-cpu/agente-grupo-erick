@@ -1,5 +1,3 @@
-[Reading 35 lines from start (total: 35 lines, 0 remaining)]
-
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
@@ -35,5 +33,3 @@ test('fails closed for missing or invalid postgres configuration',()=>{
 test('rejects an invalid pool class before any runtime composition',()=>{
  assert.throws(()=>createHermesMaintainerGithubWriteOperationalPostgresRuntime({environment:env,PoolClass:null}),/postgres_pool_class_required/);
 });
-
-[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]
