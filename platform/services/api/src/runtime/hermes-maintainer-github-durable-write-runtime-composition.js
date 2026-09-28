@@ -10,11 +10,24 @@ function createHermesMaintainerGithubDurableWriteRuntimeComposition({environment
  if(typeof fetchImpl!=='function')throw new TypeError('fetchImpl_required');
  if(typeof createTimeoutSignal!=='function')throw new TypeError('createTimeoutSignal_required');
  const credential=createHermesMaintainerGithubWriteCredentialComposition({environment});
+ const scope=credential.defineScope({
+  capability:'github_create_branch_staging',
+  provider:'GITHUB',
+  operation:'create_branch',
+  environment:'staging',
+  repository:'instutodp-cpu/agente-grupo-erick'
+ });
  const transport=createHermesMaintainerGithubCreateBranchTransport({
   fetchImpl,
   createTimeoutSignal,
   timeoutMs,
-  resolveAuthorization:credential.resolve
+  resolveAuthorization:reference=>{
+   if(reference!==credential.credential_reference)return Promise.resolve(null);
+   return credential.resolve(scope).then(result=>({
+    ok:result?.resolution_valid===true&&result?.status==='GITHUB_WRITE_CREDENTIAL_RESOLVED',
+    authorization:result?.authorization
+   }));
+  }
  });
  const boundary=createHermesMaintainerGithubDurableWriteExecutionBoundary({
   executeCreateBranch:transport.createBranch
