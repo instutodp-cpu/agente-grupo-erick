@@ -77,9 +77,10 @@ function safeResult(fields) {
   });
 }
 
-function createHermesMaintainerGithubCreateBranchTransport({ fetchImpl, resolveAuthorization, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+function createHermesMaintainerGithubCreateBranchTransport({ fetchImpl, resolveAuthorization, createTimeoutSignal, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl_required');
   if (typeof resolveAuthorization !== 'function') throw new TypeError('resolveAuthorization_required');
+  if (typeof createTimeoutSignal !== 'function') throw new TypeError('createTimeoutSignal_required');
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_TIMEOUT_MS) throw new TypeError('timeoutMs_invalid');
 
   return Object.freeze({
@@ -109,9 +110,17 @@ function createHermesMaintainerGithubCreateBranchTransport({ fetchImpl, resolveA
         return safeResult({ reason: 'AUTHORIZATION_UNAVAILABLE' });
       }
 
+      let signal;
+      try {
+        signal = createTimeoutSignal(timeoutMs);
+      } catch {
+        return safeResult({ reason: 'TIMEOUT_SIGNAL_UNAVAILABLE' });
+      }
+      if (!signal || typeof signal.aborted !== 'boolean') {
+        return safeResult({ reason: 'TIMEOUT_SIGNAL_UNAVAILABLE' });
+      }
+
       let response;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
         response = await fetchImpl(URL, {
           method: METHOD,
@@ -123,7 +132,7 @@ function createHermesMaintainerGithubCreateBranchTransport({ fetchImpl, resolveA
             Authorization: authorization
           },
           body: JSON.stringify(request.body),
-          signal: controller.signal
+          signal
         });
       } catch {
         return safeResult({
@@ -132,8 +141,6 @@ function createHermesMaintainerGithubCreateBranchTransport({ fetchImpl, resolveA
           network_call_performed: true,
           authorization_header_present: true
         });
-      } finally {
-        clearTimeout(timeout);
       }
 
       const providerStatus = Number.isInteger(response?.status) ? response.status : null;
