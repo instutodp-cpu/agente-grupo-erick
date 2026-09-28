@@ -33,12 +33,23 @@ test('fails closed for repository operation ref and sha drift',()=>{
  assert.equal(prepareHermesMaintainerGithubWriteCanary({...valid(),sha:'ABC'}).reason,'SHA_NOT_ALLOWED');
 });
 
-test('ignores no alternate write surface because only explicit fields are consumed',()=>{
- const input={...valid(),method:'DELETE',url:'https://example.invalid',force:true,body:{ref:'refs/heads/main'}};
- const result=prepareHermesMaintainerGithubWriteCanary(input);
- assert.equal(result.status,'CANARY_PREPARED');
- assert.equal(Object.prototype.hasOwnProperty.call(result,'method'),false);
- assert.equal(Object.prototype.hasOwnProperty.call(result,'url'),false);
- assert.equal(Object.prototype.hasOwnProperty.call(result,'force'),false);
- assert.equal(Object.prototype.hasOwnProperty.call(result,'body'),false);
+test('fails closed when any extra write-surface field is supplied',()=>{
+ for(const extra of [
+  {method:'DELETE'},
+  {url:'https://example.invalid'},
+  {force:true},
+  {body:{ref:'refs/heads/main'}}
+ ]){
+  const result=prepareHermesMaintainerGithubWriteCanary({...valid(),...extra});
+  assert.equal(result.status,'BLOCKED');
+  assert.equal(result.canary_valid,false);
+  assert.equal(result.reason,'CANARY_FIELDS_INVALID');
+ }
+});
+
+test('fails closed when required fields are missing or input is not a plain object',()=>{
+ const {sha,...missingSha}=valid();
+ assert.equal(prepareHermesMaintainerGithubWriteCanary(missingSha).reason,'CANARY_FIELDS_INVALID');
+ assert.equal(prepareHermesMaintainerGithubWriteCanary(null).reason,'CANARY_FIELDS_INVALID');
+ assert.equal(prepareHermesMaintainerGithubWriteCanary([]).reason,'CANARY_FIELDS_INVALID');
 });
