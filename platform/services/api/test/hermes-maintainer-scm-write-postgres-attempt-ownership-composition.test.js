@@ -6,7 +6,7 @@ const {COMPOSITION_VERSION,createHermesMaintainerScmWritePostgresAttemptOwnershi
 const digest='sha256:'+'1'.repeat(64);
 function request(){return {contract_version:'hermes_maintainer_scm_write_attempt_ownership_persistence_contract_v1',status:'SCM_WRITE_ATTEMPT_OWNERSHIP_PERSISTENCE_REQUEST_PREPARED',request_valid:true,persistence_operation:'CREATE_IF_ABSENT',atomic_create_if_absent_required:true,durable_confirmation_required:true,ownership_key:'p1::attempt-ownership',persistence_key:'p1',intent_digest:digest,attempt_reference:'a1',ownership_exclusive:false,execution_authorized:false,network_call_performed:false,write_performed:false,production_used:false};}
 function poolWith(insertRows){
- const client={query:async(sql)=>sql.includes('INSERT INTO')?{rows:insertRows}:{rows:[]},release(){}};
+ const client={query:async(sql)=>sql.includes('INSERT INTO')?{rows:insertRows}:sql.startsWith('SELECT ')?{rows:insertRows.length?[{ownership_key:'p1::attempt-ownership',persistence_key:'p1',intent_digest:digest,attempt_reference:'a1'}]:[]}:{rows:[]},release(){}};
  return {connect:async()=>client,query:async()=>({rows:[{ownership_key:'p1::attempt-ownership',persistence_key:'p1',intent_digest:digest,attempt_reference:'a1'}]})};
 }
 
