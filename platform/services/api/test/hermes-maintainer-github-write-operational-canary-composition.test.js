@@ -1,3 +1,5 @@
+[Reading 58 lines from start (total: 58 lines, 0 remaining)]
+
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
@@ -9,7 +11,7 @@ function canary(){return {contract_version:'hermes_maintainer_github_write_canar
 function input(){return {consumption_reference:'consume-final',attempt_reference:'attempt-final',capability_reference:'cap-final',admission_reference:'admission-final'};}
 function pool(){
  const rows=new Map();
- const client={async query(sql,args){if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK')return {rows:[]};const table=sql.includes('attempt_ownership')?'ownership':'consumption',key=args[0];if(rows.has(table+':'+key))return {rows:[]};const row=table==='ownership'?{ownership_key:args[0],persistence_key:args[1],intent_digest:args[2],authorization_reference:args[3],consumption_reference:args[4],attempt_reference:args[5]}:{persistence_key:args[0],intent_digest:args[1],authorization_reference:args[2],consumption_reference:args[3]};rows.set(table+':'+key,row);return {rows:[row]};},release(){}};
+ const client={async query(sql,args){if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK')return {rows:[]};const table=sql.includes('attempt_ownership')?'ownership':'consumption',key=args[0];if(sql.startsWith('SELECT ')){const row=rows.get(table+':'+key);return {rows:row?[row]:[]};}if(rows.has(table+':'+key))return {rows:[]};const row=table==='ownership'?{ownership_key:args[0],persistence_key:args[1],intent_digest:args[2],authorization_reference:args[3],consumption_reference:args[4],attempt_reference:args[5]}:{persistence_key:args[0],intent_digest:args[1],authorization_reference:args[2],consumption_reference:args[3]};rows.set(table+':'+key,row);return {rows:[row]};},release(){}};
  return {connect:async()=>client,async query(sql,args){const table=sql.includes('attempt_ownership')?'ownership':'consumption',row=rows.get(table+':'+args[0]);return {rows:row?[row]:[]};}};
 }
 
@@ -56,3 +58,5 @@ test('construction is inert',()=>{
  assert.equal(composition.write_performed,false);
  assert.equal(fetchCalls,0);
 });
+
+[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]
