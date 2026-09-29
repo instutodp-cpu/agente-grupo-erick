@@ -5,13 +5,13 @@ const {createHermesMaintainerGithubWriteE2eProcessRuntime}=require('./hermes-mai
 
 const OPERATIONAL_ENTRY_VERSION='hermes_maintainer_github_write_e2e_operational_entry_v1';
 
-async function executeHermesMaintainerGithubWriteE2eOperationalEntry(input,{runtimeOptions={}}={}){
+async function executeHermesMaintainerGithubWriteE2eOperationalEntry(grant,canary,input,{runtimeOptions={}}={}){
  const readiness=await checkHermesMaintainerGithubWriteE2eRuntimeReadiness(runtimeOptions);
  if(readiness.status!=='READY'||readiness.ready!==true)throw new TypeError('e2e_runtime_not_ready');
  let runtime;
  try{
   runtime=createHermesMaintainerGithubWriteE2eProcessRuntime(runtimeOptions);
-  return await runtime.execute(input);
+  return await runtime.execute(grant,canary,input);
  }finally{
   if(runtime)await runtime.close();
  }
