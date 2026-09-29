@@ -5,7 +5,12 @@ const AUTHORIZATION_REFERENCE='github_update_file_hermes_branch_staging';
 const DEFAULT_TIMEOUT_MS=5000,MAX_TIMEOUT_MS=30000;
 function validRequest(r){
  if(!r||Object.keys(r).sort().join(',')!==['admission_reference','attempt_reference','body','capability_reference','intent_digest','method','url'].sort().join(','))return false;
- if(r.method!==METHOD||typeof r.url!=='string'||!r.url.startsWith(`https://api.github.com/repos/${REPOSITORY}/contents/`))return false;
+ if(r.method!==METHOD||typeof r.url!=='string')return false;
+ let parsed;try{parsed=new URL(r.url);}catch{return false;}
+ const prefix=`/repos/${REPOSITORY}/contents/`;if(parsed.protocol!=='https:'||parsed.hostname!=='api.github.com'||parsed.port||parsed.username||parsed.password||parsed.search||parsed.hash||!parsed.pathname.startsWith(prefix))return false;
+ const encodedPath=parsed.pathname.slice(prefix.length);if(!encodedPath)return false;
+ let decodedPath;try{decodedPath=decodeURIComponent(encodedPath);}catch{return false;}
+ if(decodedPath.length>240||decodedPath.startsWith('/')||decodedPath.includes('\\\\')||decodedPath.split('/').some(part=>part===''||part==='.'||part==='..'||part.includes('..')))return false;
  if(!r.body||Object.keys(r.body).sort().join(',')!==['branch','content','message','sha'].sort().join(','))return false;
  if(typeof r.body.branch!=='string'||!/^hermes\/[a-z0-9][a-z0-9._/-]{0,99}$/.test(r.body.branch)||r.body.branch.includes('..'))return false;
  if(typeof r.body.content!=='string'||!r.body.content.length||typeof r.body.message!=='string'||!r.body.message.trim()||r.body.message.length>160||!/^[a-f0-9]{40}$/.test(r.body.sha))return false;
