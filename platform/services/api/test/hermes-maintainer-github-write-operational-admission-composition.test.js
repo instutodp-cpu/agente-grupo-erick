@@ -1,3 +1,5 @@
+[Reading 68 lines from start (total: 68 lines, 0 remaining)]
+
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
@@ -14,7 +16,7 @@ function pool(){
  const client={async query(sql,args){
   if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK')return {rows:[]};
   const table=sql.includes('attempt_ownership')?'ownership':'consumption';
-  const key=args[0];
+  const key=args[0];if(sql.startsWith('SELECT ')){const row=rows.get(table+':'+key);return {rows:row?[row]:[]};}
   if(rows.has(table+':'+key))return {rows:[]};
   if(table==='ownership')rows.set(table+':'+key,{ownership_key:args[0],persistence_key:args[1],intent_digest:args[2],authorization_reference:args[3],consumption_reference:args[4],attempt_reference:args[5]});
   else rows.set(table+':'+key,{persistence_key:args[0],intent_digest:args[1],authorization_reference:args[2],consumption_reference:args[3]});
@@ -66,3 +68,5 @@ test('requires exact operational reference fields',async()=>{
 test('requires injected Postgres pool and never constructs process or GitHub runtime dependencies',()=>{
  assert.throws(()=>createHermesMaintainerGithubWriteOperationalAdmissionComposition(),/postgres_pool_required/);
 });
+
+[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]
