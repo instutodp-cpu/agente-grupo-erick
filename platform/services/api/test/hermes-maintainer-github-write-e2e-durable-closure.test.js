@@ -1,5 +1,3 @@
-[Reading 41 lines from start (total: 41 lines, 0 remaining)]
-
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
@@ -41,5 +39,3 @@ test('construction is inert and requires all existing runtime dependencies',()=>
  assert.equal(composition.composition_version,'hermes_maintainer_github_write_e2e_durable_closure_v1');assert.equal(fetchCalls,0);assert.equal(composition.production_used,false);
  assert.throws(()=>createHermesMaintainerGithubWriteE2eDurableClosure(),/postgres_pool_required/);
 });
-
-[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]

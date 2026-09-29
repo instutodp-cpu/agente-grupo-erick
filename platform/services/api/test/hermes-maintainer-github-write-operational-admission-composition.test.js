@@ -1,5 +1,3 @@
-[Reading 68 lines from start (total: 68 lines, 0 remaining)]
-
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
@@ -68,5 +66,3 @@ test('requires exact operational reference fields',async()=>{
 test('requires injected Postgres pool and never constructs process or GitHub runtime dependencies',()=>{
  assert.throws(()=>createHermesMaintainerGithubWriteOperationalAdmissionComposition(),/postgres_pool_required/);
 });
-
-[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]

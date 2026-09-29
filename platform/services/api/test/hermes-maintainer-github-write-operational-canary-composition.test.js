@@ -1,5 +1,3 @@
-[Reading 58 lines from start (total: 58 lines, 0 remaining)]
-
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
@@ -58,5 +56,3 @@ test('construction is inert',()=>{
  assert.equal(composition.write_performed,false);
  assert.equal(fetchCalls,0);
 });
-
-[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]
