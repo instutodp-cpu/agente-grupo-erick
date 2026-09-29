@@ -27,7 +27,10 @@ function createHermesMaintainerGithubUpdateFileRuntimeComposition({environment,f
    }));
   }
  });
- const boundary=createHermesMaintainerGithubUpdateFileDurableExecutionBoundary({executeUpdateFile:transport.updateFile});
+ const boundary=createHermesMaintainerGithubUpdateFileDurableExecutionBoundary({executeUpdateFile:request=>{
+  const {method,url,body,intent_digest,attempt_reference,capability_reference,admission_reference}=request||{};
+  return transport.updateFile({method,url,body,intent_digest,attempt_reference,capability_reference,admission_reference});
+ }});
  return Object.freeze({
   composition_version:COMPOSITION_VERSION,
   environment:'staging',
