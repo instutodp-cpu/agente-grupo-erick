@@ -1,9 +1,12 @@
 [Unit]
 Description=Hermes update_file one-shot staging canary
 After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=oneshot
+User=hermesadmin
+Group=hermesadmin
 WorkingDirectory=/home/hermesadmin/hermes-main-readiness/platform/services/api
 EnvironmentFile=/home/hermesadmin/.hermes-github-write.env
 EnvironmentFile=/home/hermesadmin/.hermes-write-postgres.env
