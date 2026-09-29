@@ -1,3 +1,5 @@
+[Reading 41 lines from start (total: 41 lines, 0 remaining)]
+
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
@@ -9,7 +11,7 @@ function canary(){return {contract_version:'hermes_maintainer_github_write_canar
 function input(){return {consumption_reference:'consume-e2e',attempt_reference:'attempt-e2e',capability_reference:'cap-e2e',admission_reference:'admission-e2e'};}
 function pool(){
  const rows=new Map();
- const client={async query(sql,args){if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK')return {rows:[]};let table;if(sql.includes('write_finalization'))table='finalization';else if(sql.includes('execution_outcome'))table='outcome';else if(sql.includes('attempt_ownership'))table='ownership';else table='consumption';const key=args[0];if(rows.has(table+':'+key))return {rows:[]};let row;if(table==='finalization')row={finalization_key:args[0],finalization_digest:args[1],outcome_digest:args[2],intent_digest:args[3],attempt_reference:args[4],admission_reference:args[5],repository:args[6],operation:args[7],ref:args[8],sha:args[9],provider_status:args[10]};else if(table==='outcome')row={outcome_key:args[0],outcome_digest:args[1],intent_digest:args[2],attempt_reference:args[3],admission_reference:args[4],repository:args[5],operation:args[6],ref:args[7],sha:args[8],provider_status:args[9]};else if(table==='ownership')row={ownership_key:args[0],persistence_key:args[1],intent_digest:args[2],authorization_reference:args[3],consumption_reference:args[4],attempt_reference:args[5]};else row={persistence_key:args[0],intent_digest:args[1],authorization_reference:args[2],consumption_reference:args[3]};rows.set(table+':'+key,row);return {rows:[row]};},release(){}};
+ const client={async query(sql,args){if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK')return {rows:[]};let table;if(sql.includes('write_finalization'))table='finalization';else if(sql.includes('execution_outcome'))table='outcome';else if(sql.includes('attempt_ownership'))table='ownership';else table='consumption';const key=args[0];if(sql.startsWith('SELECT ')){const row=rows.get(table+':'+key);return {rows:row?[row]:[]};}if(rows.has(table+':'+key))return {rows:[]};let row;if(table==='finalization')row={finalization_key:args[0],finalization_digest:args[1],outcome_digest:args[2],intent_digest:args[3],attempt_reference:args[4],admission_reference:args[5],repository:args[6],operation:args[7],ref:args[8],sha:args[9],provider_status:args[10]};else if(table==='outcome')row={outcome_key:args[0],outcome_digest:args[1],intent_digest:args[2],attempt_reference:args[3],admission_reference:args[4],repository:args[5],operation:args[6],ref:args[7],sha:args[8],provider_status:args[9]};else if(table==='ownership')row={ownership_key:args[0],persistence_key:args[1],intent_digest:args[2],authorization_reference:args[3],consumption_reference:args[4],attempt_reference:args[5]};else row={persistence_key:args[0],intent_digest:args[1],authorization_reference:args[2],consumption_reference:args[3]};rows.set(table+':'+key,row);return {rows:[row]};},release(){}};
  return {connect:async()=>client,async query(sql,args){let table;if(sql.includes('write_finalization'))table='finalization';else if(sql.includes('execution_outcome'))table='outcome';else if(sql.includes('attempt_ownership'))table='ownership';else table='consumption';const row=rows.get(table+':'+args[0]);return {rows:row?[row]:[]};}};
 }
 
@@ -39,3 +41,5 @@ test('construction is inert and requires all existing runtime dependencies',()=>
  assert.equal(composition.composition_version,'hermes_maintainer_github_write_e2e_durable_closure_v1');assert.equal(fetchCalls,0);assert.equal(composition.production_used,false);
  assert.throws(()=>createHermesMaintainerGithubWriteE2eDurableClosure(),/postgres_pool_required/);
 });
+
+[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]
