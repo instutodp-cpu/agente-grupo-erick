@@ -1,0 +1,45 @@
+'use strict';
+const {consumeHermesMaintainerScmWriteAuthorization}=require('../core/hermes-maintainer-scm-write-authorization-consumption');
+const {buildHermesMaintainerScmWritePersistenceRequest}=require('../core/hermes-maintainer-scm-write-persistence-contract');
+const {createHermesMaintainerScmWriteDurableReceipt}=require('../core/hermes-maintainer-scm-write-durable-receipt');
+const {buildHermesMaintainerScmWriteAttemptOwnershipPersistenceRequest}=require('../core/hermes-maintainer-scm-write-attempt-ownership-persistence-contract');
+const {createHermesMaintainerScmWriteDurableAttemptOwnershipReceipt}=require('../core/hermes-maintainer-scm-write-durable-attempt-ownership-receipt');
+const {bindHermesMaintainerScmWriteDurableOwnership}=require('../core/hermes-maintainer-scm-write-durable-ownership-binding');
+const {prepareHermesMaintainerGithubUpdateFileDurableAdmissionHandoff}=require('../core/hermes-maintainer-github-update-file-durable-admission-handoff');
+const {grantHermesMaintainerGithubUpdateFileCapability,CAPABILITY}=require('../core/hermes-maintainer-github-update-file-capability');
+const {prepareHermesMaintainerGithubUpdateFileRequest}=require('../core/hermes-maintainer-github-update-file-request');
+const {admitHermesMaintainerGithubUpdateFileRequest}=require('../core/hermes-maintainer-github-update-file-admission');
+const {admitHermesMaintainerGithubUpdateFileDurableRequest}=require('../core/hermes-maintainer-github-update-file-durable-admission');
+const {createHermesMaintainerScmWritePostgresPersistenceComposition}=require('../core/hermes-maintainer-scm-write-postgres-persistence-composition');
+const {createHermesMaintainerScmWritePostgresAttemptOwnershipComposition}=require('../core/hermes-maintainer-scm-write-postgres-attempt-ownership-composition');
+const COMPOSITION_VERSION='hermes_maintainer_github_update_file_operational_admission_composition_v1';
+const REPOSITORY='instutodp-cpu/agente-grupo-erick';
+function blocked(reason){return Object.freeze({composition_version:COMPOSITION_VERSION,status:'UPDATE_FILE_OPERATIONAL_ADMISSION_BLOCKED',admission_valid:false,execution_authorized:false,network_call_performed:false,write_performed:false,production_used:false,blockers:Object.freeze([reason])});}
+function validGrant(g,target){return g?.contract_version==='hermes_maintainer_scm_write_authorization_grant_v1'&&g?.status==='SCM_WRITE_AUTHORIZATION_GRANTED'&&g?.authorization_valid===true&&g?.execution_authorized===true&&g?.authorization_consumed===false&&g?.operation==='update_file'&&g?.repository===REPOSITORY&&g?.branch_name===target?.branch;}
+function validInput(i){return i&&typeof i==='object'&&['consumption_reference','attempt_reference','capability_reference','admission_reference','path','current_blob_sha','content','message'].every(k=>typeof i[k]==='string'&&i[k].length>0);}
+function createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({pool}={}){
+ const consumption=createHermesMaintainerScmWritePostgresPersistenceComposition({pool});
+ const ownership=createHermesMaintainerScmWritePostgresAttemptOwnershipComposition({pool});
+ return Object.freeze({composition_version:COMPOSITION_VERSION,async prepare(grant,target,input){
+  if(!target||target.repository!==REPOSITORY||target.operation!=='update_file'||typeof target.branch!=='string')return blocked('TARGET_INVALID');
+  if(!validGrant(grant,target))return blocked('AUTHORIZATION_GRANT_SCOPE_INVALID');
+  if(!validInput(input))return blocked('OPERATIONAL_INPUT_INVALID');
+  const consumed=consumeHermesMaintainerScmWriteAuthorization(grant,{intent_digest:grant.intent_digest,authorization_reference:grant.authorization_reference,consumption_reference:input.consumption_reference,already_consumed:false});
+  const persistenceRequest=buildHermesMaintainerScmWritePersistenceRequest(consumed);
+  const persistenceResult=await consumption.adapter.persist(persistenceRequest);
+  const durableReceipt=createHermesMaintainerScmWriteDurableReceipt(persistenceRequest,persistenceResult);
+  if(durableReceipt.receipt_valid!==true)return blocked('DURABLE_CONSUMPTION_NOT_CONFIRMED');
+  const ownershipRequest=buildHermesMaintainerScmWriteAttemptOwnershipPersistenceRequest(durableReceipt,{attempt_reference:input.attempt_reference,intent_digest:durableReceipt.intent_digest,persistence_key:durableReceipt.persistence_key});
+  const ownershipResult=await ownership.adapter.persist(ownershipRequest);
+  const ownershipReceipt=createHermesMaintainerScmWriteDurableAttemptOwnershipReceipt(ownershipRequest,ownershipResult);
+  const binding=bindHermesMaintainerScmWriteDurableOwnership(ownershipReceipt);
+  if(binding.binding_valid!==true)return blocked('DURABLE_OWNERSHIP_NOT_CONFIRMED');
+  const handoff=prepareHermesMaintainerGithubUpdateFileDurableAdmissionHandoff(binding,target);
+  if(handoff.handoff_valid!==true)return blocked('UPDATE_FILE_HANDOFF_INVALID');
+  const capability=grantHermesMaintainerGithubUpdateFileCapability({decision:'GRANTED',capability:CAPABILITY,capability_reference:input.capability_reference,intent_digest:handoff.intent_digest,attempt_reference:handoff.attempt_reference},{repository:REPOSITORY,branch:handoff.branch});
+  const request=prepareHermesMaintainerGithubUpdateFileRequest({repository:REPOSITORY,branch:handoff.branch,path:input.path,current_blob_sha:input.current_blob_sha,content:input.content,message:input.message});
+  const admission=admitHermesMaintainerGithubUpdateFileRequest(capability,request,{decision:'ADMITTED',intent_digest:capability.intent_digest,attempt_reference:capability.attempt_reference,capability_reference:capability.capability_reference,admission_reference:input.admission_reference});
+  return admitHermesMaintainerGithubUpdateFileDurableRequest(admission,{decision:'OWNED',persistence_key:binding.persistence_key,ownership_key:binding.ownership_key,intent_digest:binding.intent_digest,attempt_reference:binding.attempt_reference});
+ }});
+}
+module.exports={COMPOSITION_VERSION,createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition};
