@@ -1,0 +1,6 @@
+BEGIN;
+ALTER TABLE hermes.maintainer_github_update_file_execution_outcome ADD COLUMN IF NOT EXISTS new_blob_sha TEXT, ADD COLUMN IF NOT EXISTS commit_sha TEXT;
+ALTER TABLE hermes.maintainer_github_update_file_execution_outcome ADD CONSTRAINT maintainer_github_update_file_new_blob_sha_check CHECK (new_blob_sha IS NOT NULL AND new_blob_sha ~ '^[a-f0-9]{40}$') NOT VALID, ADD CONSTRAINT maintainer_github_update_file_commit_sha_check CHECK (commit_sha IS NOT NULL AND commit_sha ~ '^[a-f0-9]{40}$') NOT VALID;
+ALTER TABLE hermes.maintainer_github_update_file_finalization ADD COLUMN IF NOT EXISTS new_blob_sha TEXT, ADD COLUMN IF NOT EXISTS commit_sha TEXT;
+ALTER TABLE hermes.maintainer_github_update_file_finalization ADD CONSTRAINT maintainer_github_update_file_finalization_new_blob_sha_check CHECK (new_blob_sha IS NOT NULL AND new_blob_sha ~ '^[a-f0-9]{40}$') NOT VALID, ADD CONSTRAINT maintainer_github_update_file_finalization_commit_sha_check CHECK (commit_sha IS NOT NULL AND commit_sha ~ '^[a-f0-9]{40}$') NOT VALID;
+COMMIT;
