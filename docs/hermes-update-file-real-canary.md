@@ -1,0 +1,1 @@
+Hermes update_file staging canary\nstate: before\n
