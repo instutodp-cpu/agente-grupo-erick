@@ -1,0 +1,15 @@
+[Unit]
+Description=Hermes update_file canary read-only durable-state audit
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=hermesadmin
+Group=hermesadmin
+WorkingDirectory=/home/hermesadmin/hermes-main-readiness/platform/services/api
+EnvironmentFile=/home/hermesadmin/.hermes-write-postgres.env
+ExecStart=/usr/bin/node scripts/hermes-update-file-canary-readonly-audit.js
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
