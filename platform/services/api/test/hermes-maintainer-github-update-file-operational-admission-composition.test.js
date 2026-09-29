@@ -1,0 +1,11 @@
+'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');
+const {prepareHermesMaintainerGithubUpdateFileDurableAdmissionHandoff}=require('../src/core/hermes-maintainer-github-update-file-durable-admission-handoff');
+const {createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition}=require('../src/runtime/hermes-maintainer-github-update-file-operational-admission-composition');
+const digest='sha256:'+'1'.repeat(64);
+function ownership(overrides={}){return {contract_version:'hermes_maintainer_scm_write_durable_ownership_binding_v1',status:'SCM_WRITE_DURABLE_OWNERSHIP_BOUND',binding_valid:true,ownership_source:'DURABLE_PERSISTENCE_RECEIPT',ownership_key:'persist::attempt-ownership',persistence_key:'persist',intent_digest:digest,attempt_reference:'attempt-1',durable_replay_protection:true,ownership_exclusive:true,execution_authorized:false,network_call_performed:false,write_performed:false,production_used:false,...overrides};}
+const target={operation:'update_file',repository:'instutodp-cpu/agente-grupo-erick',branch:'hermes/edit-one'};
+test('prepares isolated update-file handoff from durable ownership',()=>{const r=prepareHermesMaintainerGithubUpdateFileDurableAdmissionHandoff(ownership(),target);assert.equal(r.handoff_valid,true);assert.equal(r.operation,'update_file');assert.equal(r.branch,'hermes/edit-one');assert.equal(r.execution_authorized,false);assert.equal(r.write_performed,false);});
+test('rejects create_branch and unsafe branch scope',()=>{for(const t of [{...target,operation:'create_branch'},{...target,branch:'main'},{...target,branch:'hermes/a../b'}]){const r=prepareHermesMaintainerGithubUpdateFileDurableAdmissionHandoff(ownership(),t);assert.equal(r.handoff_valid,false);}});
+test('rejects non-durable or side-effected ownership',()=>{for(const o of [ownership({ownership_exclusive:false}),ownership({write_performed:true}),ownership({production_used:true})])assert.equal(prepareHermesMaintainerGithubUpdateFileDurableAdmissionHandoff(o,target).handoff_valid,false);});
+test('operational composition requires durable postgres pool',()=>{assert.throws(()=>createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({}),/postgres_pool_required/);});
