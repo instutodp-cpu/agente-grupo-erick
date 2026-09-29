@@ -6,6 +6,7 @@ const DEFAULT_TIMEOUT_MS=5000,MAX_TIMEOUT_MS=30000;
 function validRequest(r){
  if(!r||Object.keys(r).sort().join(',')!==['admission_reference','attempt_reference','body','capability_reference','intent_digest','method','url'].sort().join(','))return false;
  if(r.method!==METHOD||typeof r.url!=='string')return false;
+ const rawUrl=r.url.toLowerCase();if(rawUrl.includes('/../')||rawUrl.includes('%2e')||rawUrl.includes('%2f')||rawUrl.includes('%5c'))return false;
  let parsed;try{parsed=new URL(r.url);}catch{return false;}
  const prefix=`/repos/${REPOSITORY}/contents/`;if(parsed.protocol!=='https:'||parsed.hostname!=='api.github.com'||parsed.port||parsed.username||parsed.password||parsed.search||parsed.hash||!parsed.pathname.startsWith(prefix))return false;
  const encodedPath=parsed.pathname.slice(prefix.length);if(!encodedPath)return false;
