@@ -27,8 +27,12 @@ function createHermesMaintainerGithubUpdateFileTransport({fetchImpl,resolveAutho
   const authorization=resolution?.ok===true&&typeof resolution.authorization==='string'&&resolution.authorization.trim()?resolution.authorization:null;if(!authorization)return safe({reason:'AUTHORIZATION_UNAVAILABLE'});
   let signal;try{signal=createTimeoutSignal(timeoutMs);}catch{return safe({reason:'TIMEOUT_SIGNAL_UNAVAILABLE'});}if(!signal||typeof signal.aborted!=='boolean')return safe({reason:'TIMEOUT_SIGNAL_UNAVAILABLE'});
   let response;try{response=await fetchImpl(request.url,{method:METHOD,redirect:'error',headers:{Accept:'application/vnd.github+json','Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28',Authorization:authorization},body:JSON.stringify(request.body),signal});}catch{return safe({status:'FAILED',reason:'PROVIDER_REQUEST_FAILED',network_call_performed:true,authorization_header_present:true});}
-  const provider_status=Number.isInteger(response?.status)?response.status:null;const updated=provider_status===200;
-  return safe({status:updated?'UPDATED':'FAILED',updated,reason:updated?null:'UPDATE_FILE_NOT_CONFIRMED',provider_status,authorization_header_present:true,network_call_performed:true});
+  const provider_status=Number.isInteger(response?.status)?response.status:null;if(provider_status!==200)return safe({status:'FAILED',reason:'UPDATE_FILE_NOT_CONFIRMED',provider_status,authorization_header_present:true,network_call_performed:true});
+  let payload;try{payload=await response.json();}catch{return safe({status:'FAILED',reason:'PROVIDER_RESPONSE_INVALID',provider_status,authorization_header_present:true,network_call_performed:true});}
+  const new_blob_sha=typeof payload?.content?.sha==='string'&&/^[a-f0-9]{40}$/.test(payload.content.sha)?payload.content.sha:null;
+  const commit_sha=typeof payload?.commit?.sha==='string'&&/^[a-f0-9]{40}$/.test(payload.commit.sha)?payload.commit.sha:null;
+  if(!new_blob_sha||!commit_sha)return safe({status:'FAILED',reason:'PROVIDER_RESULT_IDENTITY_INVALID',provider_status,authorization_header_present:true,network_call_performed:true,response_body_present:true});
+  return safe({status:'UPDATED',updated:true,reason:null,provider_status,new_blob_sha,commit_sha,authorization_header_present:true,network_call_performed:true,response_body_present:true});
  }});
 }
 module.exports={AUTHORIZATION_REFERENCE,CONTRACT_VERSION,DEFAULT_TIMEOUT_MS,MAX_TIMEOUT_MS,METHOD,PROVIDER,REPOSITORY,createHermesMaintainerGithubUpdateFileTransport};
