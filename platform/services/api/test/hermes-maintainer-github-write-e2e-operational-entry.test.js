@@ -1,7 +1,6 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const Module=require('node:module');
 
 function loadEntry({readiness,runtime}){
  const readinessPath=require.resolve('../src/runtime/hermes-maintainer-github-write-e2e-runtime-readiness');
@@ -18,17 +17,17 @@ function loadEntry({readiness,runtime}){
 test('operational entry blocks before runtime execution when readiness is blocked',async()=>{
  let created=0;
  const h=loadEntry({readiness:async()=>({status:'BLOCKED',ready:false}),runtime:()=>{created++;}});
- try{await assert.rejects(()=>h.loaded.executeHermesMaintainerGithubWriteE2eOperationalEntry({}),/e2e_runtime_not_ready/);assert.equal(created,0);}finally{h.restore();}
+ try{await assert.rejects(()=>h.loaded.executeHermesMaintainerGithubWriteE2eOperationalEntry({},{},{}),/e2e_runtime_not_ready/);assert.equal(created,0);}finally{h.restore();}
 });
 
-test('operational entry executes official runtime and closes it',async()=>{
- let closed=0;const input={authorized:true};const result={status:'ok'};
- const h=loadEntry({readiness:async()=>({status:'READY',ready:true}),runtime:()=>({execute:async value=>{assert.equal(value,input);return result;},close:async()=>{closed++;}})});
- try{assert.equal(await h.loaded.executeHermesMaintainerGithubWriteE2eOperationalEntry(input),result);assert.equal(closed,1);}finally{h.restore();}
+test('operational entry preserves grant canary and operational input for official runtime',async()=>{
+ let closed=0;const grant={authorization:true},canary={status:'CANARY_PREPARED'},input={admission_reference:'a'};const result={status:'ok'};
+ const h=loadEntry({readiness:async()=>({status:'READY',ready:true}),runtime:()=>({execute:async(...args)=>{assert.deepEqual(args,[grant,canary,input]);return result;},close:async()=>{closed++;}})});
+ try{assert.equal(await h.loaded.executeHermesMaintainerGithubWriteE2eOperationalEntry(grant,canary,input),result);assert.equal(closed,1);}finally{h.restore();}
 });
 
 test('operational entry closes runtime when execution fails',async()=>{
  let closed=0;
  const h=loadEntry({readiness:async()=>({status:'READY',ready:true}),runtime:()=>({execute:async()=>{throw new Error('execution_failed');},close:async()=>{closed++;}})});
- try{await assert.rejects(()=>h.loaded.executeHermesMaintainerGithubWriteE2eOperationalEntry({}),/execution_failed/);assert.equal(closed,1);}finally{h.restore();}
+ try{await assert.rejects(()=>h.loaded.executeHermesMaintainerGithubWriteE2eOperationalEntry({},{},{}),/execution_failed/);assert.equal(closed,1);}finally{h.restore();}
 });
