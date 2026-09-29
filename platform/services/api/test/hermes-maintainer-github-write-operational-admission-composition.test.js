@@ -14,7 +14,7 @@ function pool(){
  const client={async query(sql,args){
   if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK')return {rows:[]};
   const table=sql.includes('attempt_ownership')?'ownership':'consumption';
-  const key=args[0];
+  const key=args[0];if(sql.startsWith('SELECT ')){const row=rows.get(table+':'+key);return {rows:row?[row]:[]};}
   if(rows.has(table+':'+key))return {rows:[]};
   if(table==='ownership')rows.set(table+':'+key,{ownership_key:args[0],persistence_key:args[1],intent_digest:args[2],authorization_reference:args[3],consumption_reference:args[4],attempt_reference:args[5]});
   else rows.set(table+':'+key,{persistence_key:args[0],intent_digest:args[1],authorization_reference:args[2],consumption_reference:args[3]});

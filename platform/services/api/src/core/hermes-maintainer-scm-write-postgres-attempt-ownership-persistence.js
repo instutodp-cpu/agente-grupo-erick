@@ -19,7 +19,7 @@ function createHermesMaintainerScmWritePostgresAttemptOwnershipPersistence({pool
    if(!inserted||!Array.isArray(inserted.rows))throw new Error('malformed_insert_result');
    if(inserted.rows.length===0){await client.query('ROLLBACK');began=false;return Object.freeze({status:'EXISTS',durable:false});}
    await client.query('COMMIT');began=false;
-   const confirmed=await pool.query(SELECT_SQL,[input.key]);
+   const confirmed=await client.query(SELECT_SQL,[input.key]);
    const row=confirmed?.rows?.[0];
    const matches=confirmed?.rows?.length===1&&row.ownership_key===input.key&&row.persistence_key===input.persistence_key&&row.intent_digest===input.intent_digest&&row.attempt_reference===input.attempt_reference;
    return Object.freeze({status:matches?'CREATED':'UNCONFIRMED',durable:matches});

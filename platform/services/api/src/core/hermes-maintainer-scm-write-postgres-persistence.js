@@ -21,7 +21,7 @@ function createHermesMaintainerScmWritePostgresPersistence({pool}={}){
    if(!inserted||!Array.isArray(inserted.rows))throw new Error('malformed_insert_result');
    if(inserted.rows.length===0){await client.query('ROLLBACK');began=false;return Object.freeze({status:'EXISTS',durable:false});}
    await client.query('COMMIT');began=false;
-   const confirmed=await pool.query(SELECT_SQL,[input.key]);
+   const confirmed=await client.query(SELECT_SQL,[input.key]);
    const row=confirmed?.rows?.[0];
    const matches=confirmed?.rows?.length===1&&row.persistence_key===input.key&&row.intent_digest===input.intent_digest&&row.authorization_reference===input.authorization_reference&&row.consumption_reference===input.consumption_reference;
    return Object.freeze({status:matches?'CREATED':'UNCONFIRMED',durable:matches});

@@ -7,7 +7,7 @@ const digest='sha256:'+'1'.repeat(64);
 const key=digest+'::auth-1';
 function request(){return {contract_version:'hermes_maintainer_scm_write_persistence_contract_v1',status:'SCM_WRITE_PERSISTENCE_REQUEST_PREPARED',request_valid:true,persistence_operation:'CREATE_IF_ABSENT',atomic_create_if_absent_required:true,durable_confirmation_required:true,persistence_key:key,intent_digest:digest,authorization_reference:'auth-1',consumption_reference:'consume-1',execution_authorized:false,network_call_performed:false,write_performed:false,production_used:false};}
 function poolWith(insertRows){
- const client={query:async(sql)=>sql.includes('INSERT INTO')?{rows:insertRows}:{rows:[]},release(){}};
+ const client={query:async(sql)=>sql.includes('INSERT INTO')?{rows:insertRows}:sql.startsWith('SELECT ')?{rows:insertRows.length?[{persistence_key:key,intent_digest:digest,authorization_reference:'auth-1',consumption_reference:'consume-1'}]:[]}:{rows:[]},release(){}};
  return {connect:async()=>client,query:async()=>({rows:[{persistence_key:key,intent_digest:digest,authorization_reference:'auth-1',consumption_reference:'consume-1'}]})};
 }
 
