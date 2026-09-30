@@ -1,0 +1,12 @@
+'use strict';
+const {createHermesMaintainerGithubCreatePullRequestE2eDurableClosure}=require('./hermes-maintainer-github-create-pull-request-e2e-durable-closure');
+const VERSION='hermes_maintainer_github_create_pull_request_operational_acceptance_gate_v1';
+function createHermesMaintainerGithubCreatePullRequestOperationalAcceptanceGate(deps={}){
+ const closure=createHermesMaintainerGithubCreatePullRequestE2eDurableClosure(deps);
+ return Object.freeze({acceptance_version:VERSION,environment:'staging',credential_material_present:false,network_call_performed:false,write_performed:false,production_used:false,async execute(grant,target,input){
+  const result=await closure.execute(grant,target,input);
+  const accepted=result?.status==='CREATE_PULL_REQUEST_E2E_DURABLE_CLOSURE_CONFIRMED'&&result?.closure_valid===true&&result?.durable===true&&result?.network_call_performed===true&&result?.write_performed===true&&result?.production_used===false&&result?.execution?.provider_status===201&&Number.isInteger(result?.execution?.pull_request_number)&&result.execution.pull_request_number>0&&result?.execution?.pull_request_url===`https://github.com/instutodp-cpu/agente-grupo-erick/pull/${result.execution.pull_request_number}`&&result?.receipt?.receipt_valid===true;
+  return Object.freeze({acceptance_version:VERSION,status:accepted?'OPERATIONAL_ACCEPTANCE_CONFIRMED':'OPERATIONAL_ACCEPTANCE_BLOCKED',accepted,durable:accepted,environment:'staging',network_call_performed:result?.network_call_performed===true,write_performed:result?.write_performed===true,production_used:false,execution_status:result?.execution?.status||null,provider_status:result?.execution?.provider_status||null,pull_request_number:result?.execution?.pull_request_number||null,pull_request_url:result?.execution?.pull_request_url||null,receipt_status:result?.receipt?.status||null,blockers:Object.freeze(accepted?[]:['E2E_DURABLE_CLOSURE_NOT_CONFIRMED'])});
+ }});
+}
+module.exports={VERSION,createHermesMaintainerGithubCreatePullRequestOperationalAcceptanceGate};
