@@ -1,0 +1,23 @@
+{
+  "id": "creative-experiment-002",
+  "objective": "Detect experiments that change too many dimensions at once.",
+  "input": {
+    "variant_a": {
+      "hook": "A",
+      "format": "reel",
+      "cta": "WhatsApp"
+    },
+    "variant_b": {
+      "hook": "B",
+      "format": "carousel",
+      "cta": "store visit"
+    }
+  },
+  "must": [
+    "flag multiple changed dimensions as confounded",
+    "request controlled comparison or label result inconclusive"
+  ],
+  "must_not": [
+    "attribute outcome specifically to hook"
+  ]
+}
