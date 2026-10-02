@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingBrandProfile",
+  "type": "object",
+  "required": [
+    "brand_id",
+    "name",
+    "logos",
+    "typography",
+    "colors"
+  ],
+  "properties": {
+    "brand_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "logos": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "asset_ref",
+          "role"
+        ],
+        "properties": {
+          "asset_ref": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "primary",
+              "secondary",
+              "monochrome"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "typography": {
+      "type": "object",
+      "required": [
+        "families",
+        "min_font_px"
+      ],
+      "properties": {
+        "families": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "min_font_px": {
+          "type": "integer",
+          "minimum": 8
+        },
+        "max_font_px": {
+          "type": "integer",
+          "minimum": 8
+        }
+      },
+      "additionalProperties": false
+    },
+    "colors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^#[0-9A-Fa-f]{6}$"
+      }
+    },
+    "prohibited_overrides": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}
