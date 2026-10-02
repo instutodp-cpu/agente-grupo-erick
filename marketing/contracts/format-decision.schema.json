@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingFormatDecision",
+  "type": "object",
+  "required": [
+    "objective",
+    "selected_format",
+    "rationale",
+    "confidence",
+    "alternatives"
+  ],
+  "properties": {
+    "objective": {
+      "type": "string"
+    },
+    "selected_format": {
+      "enum": [
+        "reel",
+        "story",
+        "carousel",
+        "static_post",
+        "ad_creative",
+        "whatsapp_asset"
+      ]
+    },
+    "rationale": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "alternatives": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "format",
+          "reason_not_primary"
+        ],
+        "properties": {
+          "format": {
+            "enum": [
+              "reel",
+              "story",
+              "carousel",
+              "static_post",
+              "ad_creative",
+              "whatsapp_asset"
+            ]
+          },
+          "reason_not_primary": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
