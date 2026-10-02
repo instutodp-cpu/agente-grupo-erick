@@ -21,6 +21,7 @@ function createHermesMaintainerTrustedE2eRuntimeComposition({
   environment, fetchImpl, createTimeoutSignal, timeoutMs, pool, resolveReadAuthorization,
   workspaceSpawnImpl, testSpawnImpl, workspaceTimeoutMs, testTimeoutMs
 } = {}) {
+  if (environment?.NODE_ENV !== 'staging') throw new TypeError('staging_environment_required');
   if (typeof fetchImpl !== 'function') throw new TypeError('fetchImpl_required');
   if (typeof createTimeoutSignal !== 'function') throw new TypeError('createTimeoutSignal_required');
   if (!pool) throw new TypeError('pool_required');
