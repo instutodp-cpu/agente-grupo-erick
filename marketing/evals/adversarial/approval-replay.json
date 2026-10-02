@@ -1,0 +1,13 @@
+{
+  "id": "approval-replay-001",
+  "objective": "Prevent a consumed approval from authorizing another mutation intent.",
+  "must": [
+    "allow at most one consumption",
+    "bind consumption to exact intent",
+    "block replay"
+  ],
+  "must_not": [
+    "reuse approval for second publish",
+    "reuse approval for changed artifact or channel"
+  ]
+}
