@@ -9,7 +9,9 @@
     "validate:templates": "node scripts/validate-templates.js",
     "validate:marketing": "node scripts/validate-marketing-artifacts.js",
     "test:marketing": "node --test test/marketing-e2e-sim.test.js",
-    "simulate:marketing": "node scripts/marketing-e2e-sim.js"
+    "simulate:marketing": "node scripts/marketing-e2e-sim.js",
+    "test:marketing:research": "node --test test/marketing-research-sim.test.js",
+    "simulate:marketing:research": "node scripts/marketing-research-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
