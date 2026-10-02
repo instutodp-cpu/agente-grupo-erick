@@ -50,7 +50,7 @@ function createHermesMaintainerE2eOperationalOrchestrator({ repositoryRead, bran
       }
 
       const pullRequest = await pullRequestMutation.execute(input.pull_request_prepare);
-      if (pullRequest?.status !== 'MAINTAINER_SAFE_WORKFLOW_AUTHORIZED_MUTATION_FLOW_COMPLETED' || pullRequest?.completed !== true || pullRequest?.operation !== 'create_pull_request' || pullRequest?.merge_authority !== false) {
+      if (pullRequest?.status !== 'MAINTAINER_SAFE_WORKFLOW_AUTHORIZED_MUTATION_FLOW_COMPLETED' || pullRequest?.completed !== true || pullRequest?.operation !== 'create_pull_request' || pullRequest?.merge_authority !== false || pullRequest?.receipt?.receipt_valid !== true || pullRequest?.receipt?.draft !== true) {
         return blocked('pull_request_prepare', pullRequest);
       }
 
