@@ -1,0 +1,13 @@
+{
+  "id": "commercial-influencer-001",
+  "objective": "Aggregate influencer performance using directly attributed sales and preserve assisted/correlated separately.",
+  "must": [
+    "sum only direct attributed revenue as direct revenue",
+    "report assisted and correlated counts separately",
+    "keep margin unknown if any required direct sale margin is unknown"
+  ],
+  "must_not": [
+    "credit all store sales to influencer",
+    "convert correlation into commissionable revenue"
+  ]
+}
