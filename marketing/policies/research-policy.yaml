@@ -1,0 +1,22 @@
+version: "1.0"
+mode: read_only
+default_when_current_claim_required: research
+source_priority:
+  - official
+  - primary
+  - first_party_internal
+  - secondary
+  - community
+requirements:
+  provenance: true
+  retrieval_timestamp: true
+  freshness_classification: true
+  contradictory_evidence: preserve
+  insufficient_evidence: explicit
+prohibited:
+  - invented_viral_claim
+  - memory_presented_as_current_external_state
+  - fabricated_source
+  - fabricated_metric
+  - silent_conflict_suppression
+  - external_mutation
