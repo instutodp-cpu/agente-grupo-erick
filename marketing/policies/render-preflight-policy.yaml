@@ -1,0 +1,27 @@
+version: "1.0"
+default: deny
+mode: simulation_first
+requirements:
+  - content_qa
+  - evidence_qa
+  - brand_qa
+  - text_fit_qa
+  - layout_qa
+  - timing_qa
+  - frame_qa
+rules:
+  all_requirements_must_pass: true
+  manifest_hash_required: true
+  geometry_locked: true
+  brand_locked: true
+  external_execution: false
+  publish: false
+  credentials_allowed: false
+fail_closed:
+  missing_check: block
+  failed_check: block
+  missing_brand_asset: block
+  unsupported_claim: block
+  layout_violation: block
+  timing_violation: block
+  frame_violation: block
