@@ -79,3 +79,9 @@ jobs:
 
       - name: Run C03 experiment planner simulation
         run: npm run simulate:marketing:experiments
+
+      - name: Run C04 content production tests
+        run: npm run test:marketing:content
+
+      - name: Run C04 content production simulation
+        run: npm run simulate:marketing:content
