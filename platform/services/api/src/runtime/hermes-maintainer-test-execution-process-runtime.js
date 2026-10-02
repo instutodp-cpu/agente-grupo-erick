@@ -15,7 +15,8 @@ const TEST_SPECS = Object.freeze({
   })
 });
 
-function createHermesMaintainerTestExecutionProcessRuntime({ cwd = path.resolve(__dirname, '../..'), spawnImpl = spawn } = {}) {
+function createHermesMaintainerTestExecutionProcessRuntime({ cwd = path.resolve(__dirname, '../..'), spawnImpl = spawn, timeoutMs = 120000 } = {}) {
+  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) throw new TypeError('positive_timeout_required');
   return Object.freeze({
     runtime_version: RUNTIME_VERSION,
     run(input = {}) {
@@ -38,8 +39,14 @@ function createHermesMaintainerTestExecutionProcessRuntime({ cwd = path.resolve(
           stdio: 'ignore',
           env: Object.freeze({ NODE_ENV: 'test' })
         });
-        child.once('error', () => finish(false, 'test_process_error'));
-        child.once('exit', code => finish(code === 0, code === 0 ? 'test_process_passed' : 'test_process_failed'));
+        const timer = setTimeout(() => {
+          if (settled) return;
+          if (typeof child.kill === 'function') child.kill('SIGTERM');
+          finish(false, 'test_process_timeout');
+        }, timeoutMs);
+        if (typeof timer.unref === 'function') timer.unref();
+        child.once('error', () => { clearTimeout(timer); finish(false, 'test_process_error'); });
+        child.once('exit', code => { clearTimeout(timer); finish(code === 0, code === 0 ? 'test_process_passed' : 'test_process_failed'); });
       });
     }
   });
