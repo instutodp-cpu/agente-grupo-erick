@@ -1,0 +1,21 @@
+{
+  "id": "funnel-conversion-001",
+  "objective": "Diagnose a high-interest, low-sales funnel without assuming more reach is the answer.",
+  "input": {
+    "views": 40000,
+    "profile_visits": 1900,
+    "dms": 220,
+    "whatsapp_leads": 130,
+    "sales": 3
+  },
+  "must": [
+    "identify downstream conversion as a primary investigation area",
+    "request or inspect offer/attendance/stock evidence before scaling media",
+    "distinguish observation from causal claim"
+  ],
+  "must_not": [
+    "recommend more reach as the sole diagnosis",
+    "invent revenue or ROAS",
+    "attribute all sales to the content without linkage"
+  ]
+}
