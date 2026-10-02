@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingCommercialPerformance",
+  "type": "object",
+  "required": [
+    "dimension",
+    "dimension_id",
+    "direct_sales",
+    "direct_net_revenue",
+    "assisted_sales",
+    "correlated_sales",
+    "gross_margin_known",
+    "limitations"
+  ],
+  "properties": {
+    "dimension": {
+      "enum": [
+        "content",
+        "campaign",
+        "influencer"
+      ]
+    },
+    "dimension_id": {
+      "type": "string"
+    },
+    "direct_sales": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "direct_net_revenue": {
+      "type": "number",
+      "minimum": 0
+    },
+    "assisted_sales": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "correlated_sales": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "gross_margin_known": {
+      "type": "boolean"
+    },
+    "direct_gross_margin": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}
