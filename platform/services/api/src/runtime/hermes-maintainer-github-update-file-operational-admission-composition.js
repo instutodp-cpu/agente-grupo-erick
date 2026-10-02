@@ -42,4 +42,5 @@ function createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({
   return admitHermesMaintainerGithubUpdateFileDurableRequest(admission,{decision:'OWNED',persistence_key:binding.persistence_key,ownership_key:binding.ownership_key,intent_digest:binding.intent_digest,attempt_reference:binding.attempt_reference});
  }});
 }
-module.exports={COMPOSITION_VERSION,createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition};
+function preflightHermesMaintainerGithubUpdateFileOperationalAdmission(grant,target,input){if(!target||target.repository!==REPOSITORY||target.operation!=='update_file'||typeof target.branch!=='string')return blocked('TARGET_INVALID');if(!validGrant(grant,target))return blocked('AUTHORIZATION_GRANT_SCOPE_INVALID');if(!validInput(input))return blocked('OPERATIONAL_INPUT_INVALID');return Object.freeze({admission_preflight_valid:true});}
+module.exports={COMPOSITION_VERSION,preflightHermesMaintainerGithubUpdateFileOperationalAdmission,createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition};

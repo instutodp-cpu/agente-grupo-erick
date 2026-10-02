@@ -57,4 +57,5 @@ function createHermesMaintainerGithubWriteOperationalAdmissionComposition({pool}
   return admitHermesMaintainerGithubDurableWriteRequest(request,{decision:'ADMITTED',intent_digest:request.intent_digest,attempt_reference:request.attempt_reference,capability_reference:request.capability_reference,ownership_key:request.ownership_key,admission_reference:input.admission_reference});
  }});
 }
-module.exports={COMPOSITION_VERSION,createHermesMaintainerGithubWriteOperationalAdmissionComposition};
+function preflightHermesMaintainerGithubWriteOperationalAdmission(grant,canary,input){if(!validCanary(canary))return blocked('CANARY_INVALID');if(!validGrant(grant,canary))return blocked('AUTHORIZATION_GRANT_SCOPE_INVALID');if(!exactInput(input))return blocked('OPERATIONAL_INPUT_INVALID');return Object.freeze({admission_preflight_valid:true});}
+module.exports={COMPOSITION_VERSION,preflightHermesMaintainerGithubWriteOperationalAdmission,createHermesMaintainerGithubWriteOperationalAdmissionComposition};

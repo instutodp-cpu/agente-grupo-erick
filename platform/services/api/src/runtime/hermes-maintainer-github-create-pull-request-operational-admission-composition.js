@@ -42,4 +42,5 @@ function createHermesMaintainerGithubCreatePullRequestOperationalAdmissionCompos
   return admitHermesMaintainerGithubCreatePullRequestDurableRequest(admission,{decision:'OWNED',persistence_key:binding.persistence_key,ownership_key:binding.ownership_key,intent_digest:binding.intent_digest,attempt_reference:binding.attempt_reference});
  }});
 }
-module.exports={COMPOSITION_VERSION,createHermesMaintainerGithubCreatePullRequestOperationalAdmissionComposition};
+function preflightHermesMaintainerGithubCreatePullRequestOperationalAdmission(grant,target,input){if(!target||target.repository!==REPOSITORY||target.operation!=='create_pull_request'||target.base!==BASE||target.draft!==true||typeof target.head!=='string')return blocked('TARGET_INVALID');if(!validGrant(grant,target))return blocked('AUTHORIZATION_GRANT_SCOPE_INVALID');if(!validInput(input))return blocked('OPERATIONAL_INPUT_INVALID');return Object.freeze({admission_preflight_valid:true});}
+module.exports={COMPOSITION_VERSION,preflightHermesMaintainerGithubCreatePullRequestOperationalAdmission,createHermesMaintainerGithubCreatePullRequestOperationalAdmissionComposition};
