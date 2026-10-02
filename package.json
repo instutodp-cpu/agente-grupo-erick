@@ -37,7 +37,9 @@
     "test:marketing:distribution-adapters": "node --test test/marketing-distribution-adapter-sim.test.js",
     "simulate:marketing:distribution-adapters": "node scripts/marketing-distribution-adapter-sim.js",
     "test:marketing:distribution-reconcile": "node --test test/marketing-distribution-reconcile-sim.test.js",
-    "simulate:marketing:distribution-reconcile": "node scripts/marketing-distribution-reconcile-sim.js"
+    "simulate:marketing:distribution-reconcile": "node scripts/marketing-distribution-reconcile-sim.js",
+    "test:marketing:approval-lifecycle": "node --test test/marketing-approval-lifecycle-sim.test.js",
+    "simulate:marketing:approval-lifecycle": "node scripts/marketing-approval-lifecycle-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
