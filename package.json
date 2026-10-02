@@ -43,7 +43,9 @@
     "test:marketing:commercial-attribution": "node --test test/marketing-commercial-attribution-sim.test.js",
     "simulate:marketing:commercial-attribution": "node scripts/marketing-commercial-attribution-sim.js",
     "test:marketing:commercial-funnel": "node --test test/marketing-commercial-funnel-sim.test.js",
-    "simulate:marketing:commercial-funnel": "node scripts/marketing-commercial-funnel-sim.js"
+    "simulate:marketing:commercial-funnel": "node scripts/marketing-commercial-funnel-sim.js",
+    "test:marketing:commercial-economics": "node --test test/marketing-commercial-economics-sim.test.js",
+    "simulate:marketing:commercial-economics": "node scripts/marketing-commercial-economics-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
