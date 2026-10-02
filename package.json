@@ -15,7 +15,9 @@
     "test:marketing:sources": "node --test test/marketing-source-planner-sim.test.js",
     "simulate:marketing:sources": "node scripts/marketing-source-planner-sim.js",
     "test:marketing:creative": "node --test test/marketing-creative-sim.test.js",
-    "simulate:marketing:creative": "node scripts/marketing-creative-sim.js"
+    "simulate:marketing:creative": "node scripts/marketing-creative-sim.js",
+    "test:marketing:creative-engine": "node --test test/marketing-creative-engine-sim.test.js",
+    "simulate:marketing:creative-engine": "node scripts/marketing-creative-engine-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
