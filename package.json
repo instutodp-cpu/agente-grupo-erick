@@ -23,7 +23,9 @@
     "test:marketing:content": "node --test test/marketing-content-production-sim.test.js",
     "simulate:marketing:content": "node scripts/marketing-content-production-sim.js",
     "test:marketing:production-qa": "node --test test/marketing-production-qa-sim.test.js",
-    "simulate:marketing:production-qa": "node scripts/marketing-production-qa-sim.js"
+    "simulate:marketing:production-qa": "node scripts/marketing-production-qa-sim.js",
+    "test:marketing:render-safety": "node --test test/marketing-render-safety-sim.test.js",
+    "simulate:marketing:render-safety": "node scripts/marketing-render-safety-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
