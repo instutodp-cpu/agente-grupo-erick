@@ -91,3 +91,9 @@ jobs:
 
       - name: Run C04 production QA simulation
         run: npm run simulate:marketing:production-qa
+
+      - name: Run C05 render safety tests
+        run: npm run test:marketing:render-safety
+
+      - name: Run C05 render safety simulation
+        run: npm run simulate:marketing:render-safety
