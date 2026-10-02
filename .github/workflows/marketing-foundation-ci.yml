@@ -109,3 +109,9 @@ jobs:
 
       - name: Run C05 temporal video QA simulation
         run: npm run simulate:marketing:video-frame-qa
+
+      - name: Run C05 render preflight tests
+        run: npm run test:marketing:render-preflight
+
+      - name: Run C05 render preflight simulation
+        run: npm run simulate:marketing:render-preflight
