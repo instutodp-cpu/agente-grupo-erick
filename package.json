@@ -31,7 +31,9 @@
     "test:marketing:video-frame-qa": "node --test test/marketing-video-frame-qa-sim.test.js",
     "simulate:marketing:video-frame-qa": "node scripts/marketing-video-frame-qa-sim.js",
     "test:marketing:render-preflight": "node --test test/marketing-render-preflight-sim.test.js",
-    "simulate:marketing:render-preflight": "node scripts/marketing-render-preflight-sim.js"
+    "simulate:marketing:render-preflight": "node scripts/marketing-render-preflight-sim.js",
+    "test:marketing:distribution": "node --test test/marketing-distribution-sim.test.js",
+    "simulate:marketing:distribution": "node scripts/marketing-distribution-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
