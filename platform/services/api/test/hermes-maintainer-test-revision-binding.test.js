@@ -10,8 +10,13 @@ const valid = () => ({
   revision_sha: SHA,
   test_id: 'hermes_core_smoke',
   edit_receipt: {
+    contract_version: 'hermes_maintainer_github_update_file_durable_finalization_receipt_v1',
+    status: 'GITHUB_UPDATE_FILE_DURABLE_FINALIZATION_CONFIRMED',
     receipt_valid: true,
+    durable: true,
     repository: 'instutodp-cpu/agente-grupo-erick',
+    operation: 'update_file',
+    provider_status: 200,
     branch: 'hermes/e2e-test-branch',
     commit_sha: SHA,
     production_used: false,
@@ -48,4 +53,12 @@ test('rejects main, malformed revisions and widened finalization state', () => {
   assert.equal(bindHermesMaintainerTestRevision(main).binding_valid, false);
   assert.equal(bindHermesMaintainerTestRevision(malformed).binding_valid, false);
   assert.equal(bindHermesMaintainerTestRevision(widened).binding_valid, false);
+});
+
+
+test('rejects receipt-shaped input that is not the official durable finalization receipt', () => {
+  const fake = valid(); fake.edit_receipt.contract_version = 'fake_receipt_v1';
+  const notDurable = valid(); notDurable.edit_receipt.durable = false;
+  assert.equal(bindHermesMaintainerTestRevision(fake).binding_valid, false);
+  assert.equal(bindHermesMaintainerTestRevision(notDurable).binding_valid, false);
 });
