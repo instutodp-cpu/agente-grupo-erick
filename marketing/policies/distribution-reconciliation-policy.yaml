@@ -1,0 +1,17 @@
+version: "1.0"
+mode: simulation_first
+rules:
+  ambiguous_result_auto_retry: false
+  reconcile_before_retry: true
+  preserve_original_idempotency_key: true
+  confirmed_effect: confirm_success
+  not_found_with_traceable_check: authorize_same_key_retry
+  conflicting_effect: block_conflict
+  unknown: remain_ambiguous
+  audit_append_only: true
+  external_execution: false
+  credentials_in_skill: forbidden
+fail_closed:
+  missing_reconciliation_evidence: remain_ambiguous
+  changed_scope: require_new_approval
+  provider_conflict: block
