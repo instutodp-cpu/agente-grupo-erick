@@ -47,7 +47,9 @@
     "test:marketing:commercial-economics": "node --test test/marketing-commercial-economics-sim.test.js",
     "simulate:marketing:commercial-economics": "node scripts/marketing-commercial-economics-sim.js",
     "test:marketing:learning-feedback": "node --test test/marketing-learning-feedback-sim.test.js",
-    "simulate:marketing:learning-feedback": "node scripts/marketing-learning-feedback-sim.js"
+    "simulate:marketing:learning-feedback": "node scripts/marketing-learning-feedback-sim.js",
+    "test:marketing:replanning": "node --test test/marketing-replanning-sim.test.js",
+    "simulate:marketing:replanning": "node scripts/marketing-replanning-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
