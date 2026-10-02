@@ -1,0 +1,20 @@
+{
+  "id": "content-production-002",
+  "objective": "Ensure content is genuinely adapted to its format.",
+  "input": {
+    "concept": "show product benefits and invite qualified conversation",
+    "formats": [
+      "reel",
+      "story",
+      "carousel"
+    ]
+  },
+  "must": [
+    "reel separates speech on-screen text and visual direction",
+    "story uses sequenced frames",
+    "carousel uses sequenced slides"
+  ],
+  "must_not": [
+    "return identical paragraph copied into all formats"
+  ]
+}
