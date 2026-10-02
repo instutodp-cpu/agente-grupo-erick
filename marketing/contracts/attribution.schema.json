@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ErickRetailAttribution",
+  "type": "object",
+  "required": [
+    "journey_id",
+    "touchpoints",
+    "classification"
+  ],
+  "properties": {
+    "journey_id": {
+      "type": "string"
+    },
+    "customer_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "touchpoints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "touchpoint_id",
+          "channel",
+          "occurred_at"
+        ],
+        "properties": {
+          "touchpoint_id": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "content_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "campaign_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "creative_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "influencer_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "coupon_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    },
+    "classification": {
+      "enum": [
+        "direct_attributed",
+        "assisted",
+        "correlated",
+        "unattributed"
+      ]
+    },
+    "sale": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "sale_id": {
+          "type": "string"
+        },
+        "store_id": {
+          "type": "string"
+        },
+        "gross_revenue": {
+          "type": "number"
+        },
+        "discounts": {
+          "type": "number"
+        },
+        "net_revenue": {
+          "type": "number"
+        },
+        "cogs": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gross_margin": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}
