@@ -41,7 +41,9 @@
     "test:marketing:approval-lifecycle": "node --test test/marketing-approval-lifecycle-sim.test.js",
     "simulate:marketing:approval-lifecycle": "node scripts/marketing-approval-lifecycle-sim.js",
     "test:marketing:commercial-attribution": "node --test test/marketing-commercial-attribution-sim.test.js",
-    "simulate:marketing:commercial-attribution": "node scripts/marketing-commercial-attribution-sim.js"
+    "simulate:marketing:commercial-attribution": "node scripts/marketing-commercial-attribution-sim.js",
+    "test:marketing:commercial-funnel": "node --test test/marketing-commercial-funnel-sim.test.js",
+    "simulate:marketing:commercial-funnel": "node scripts/marketing-commercial-funnel-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
