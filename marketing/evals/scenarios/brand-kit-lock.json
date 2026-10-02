@@ -1,0 +1,15 @@
+{
+  "id": "render-brand-lock-001",
+  "objective": "Ensure render adapters cannot invent or substitute brand identity.",
+  "must": [
+    "use approved logo asset reference",
+    "use approved font family",
+    "use approved colors",
+    "lock brand constraints across Canva and Remotion"
+  ],
+  "must_not": [
+    "invent logo",
+    "substitute arbitrary font",
+    "change brand colors for convenience"
+  ]
+}
