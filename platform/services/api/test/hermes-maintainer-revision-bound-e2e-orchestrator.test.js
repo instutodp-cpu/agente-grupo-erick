@@ -27,7 +27,7 @@ test('tests the exact durable edited revision before creating a Draft PR', async
     repositoryRead: read,
     branchMutation: mutation('create_branch'),
     editMutation: mutation('update_file', editReceipt()),
-    revisionTest: { execute: async binding => { testedBinding = binding; return { status: 'MAINTAINER_REVISION_BOUND_TEST_PASSED', passed: true, test_id: 'hermes_core_smoke', revision_sha: binding.revision_sha, receipt: 'test_process_passed', production_allowed: false, merge_authority: false, human_merge_required: true }; } },
+    revisionTest: { execute: async binding => { testedBinding = binding; return { status: 'MAINTAINER_REVISION_BOUND_TEST_PASSED', passed: true, test_id: 'hermes_core_smoke', revision_sha: binding.revision_sha, receipt: 'test_process_passed', network_authorized_for_test: false, secrets_authorized_for_test: false, write_authorized_for_test: false, production_allowed: false, merge_authority: false, human_merge_required: true }; } },
     pullRequestMutation: { execute: async () => { prCalls += 1; return { status: 'MAINTAINER_SAFE_WORKFLOW_AUTHORIZED_MUTATION_FLOW_COMPLETED', completed: true, operation: 'create_pull_request', merge_authority: false, receipt: { receipt_valid: true, draft: true } }; } }
   });
   const result = await orchestrator.execute({});
@@ -65,7 +65,7 @@ test('failed or mismatched revision test blocks Draft PR creation', async () => 
     repositoryRead: read,
     branchMutation: mutation('create_branch'),
     editMutation: mutation('update_file', editReceipt()),
-    revisionTest: { execute: async () => ({ status: 'MAINTAINER_REVISION_BOUND_TEST_PASSED', passed: true, test_id: 'hermes_core_smoke', revision_sha: 'b'.repeat(40), production_allowed: false, merge_authority: false, human_merge_required: true }) },
+    revisionTest: { execute: async () => ({ status: 'MAINTAINER_REVISION_BOUND_TEST_PASSED', passed: true, test_id: 'hermes_core_smoke', revision_sha: 'b'.repeat(40), network_authorized_for_test: false, secrets_authorized_for_test: false, write_authorized_for_test: false, production_allowed: false, merge_authority: false, human_merge_required: true }) },
     pullRequestMutation: { execute: async () => { prCalls += 1; } }
   });
   const result = await orchestrator.execute({});
@@ -73,4 +73,20 @@ test('failed or mismatched revision test blocks Draft PR creation', async () => 
   assert.equal(result.completed, false);
   assert.equal(prCalls, 0);
   assert.equal(result.draft_pull_request_created, false);
+});
+
+
+test('passed test with unexpected test authority fails closed before Draft PR creation', async () => {
+  let prCalls = 0;
+  const orchestrator = createHermesMaintainerRevisionBoundE2eOrchestrator({
+    repositoryRead: read,
+    branchMutation: mutation('create_branch'),
+    editMutation: mutation('update_file', editReceipt()),
+    revisionTest: { execute: async () => ({ status: 'MAINTAINER_REVISION_BOUND_TEST_PASSED', passed: true, test_id: 'hermes_core_smoke', revision_sha: SHA, network_authorized_for_test: true, secrets_authorized_for_test: false, write_authorized_for_test: false, production_allowed: false, merge_authority: false, human_merge_required: true }) },
+    pullRequestMutation: { execute: async () => { prCalls += 1; } }
+  });
+  const result = await orchestrator.execute({});
+  assert.equal(result.stage, 'test_execution');
+  assert.equal(result.completed, false);
+  assert.equal(prCalls, 0);
 });
