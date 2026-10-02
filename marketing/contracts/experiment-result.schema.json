@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingExperimentResult",
+  "type": "object",
+  "required": [
+    "experiment_id",
+    "observations",
+    "conclusion_level"
+  ],
+  "properties": {
+    "experiment_id": {
+      "type": "string"
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "variant_id",
+          "metric",
+          "value"
+        ],
+        "properties": {
+          "variant_id": {
+            "type": "string"
+          },
+          "metric": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "conclusion_level": {
+      "enum": [
+        "observation",
+        "hypothesis_supported",
+        "tested_insight_candidate",
+        "inconclusive"
+      ]
+    },
+    "learning_eligible": {
+      "type": "boolean"
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}
