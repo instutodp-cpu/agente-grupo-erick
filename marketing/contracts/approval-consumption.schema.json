@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingApprovalConsumption",
+  "type": "object",
+  "required": [
+    "approval_id",
+    "scope_hash",
+    "artifact_hash",
+    "status",
+    "expires_at",
+    "consumption"
+  ],
+  "properties": {
+    "approval_id": {
+      "type": "string"
+    },
+    "scope_hash": {
+      "type": "string"
+    },
+    "artifact_hash": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "approved",
+        "rejected",
+        "expired",
+        "consumed"
+      ]
+    },
+    "expires_at": {
+      "type": "string"
+    },
+    "consumption": {
+      "type": "object",
+      "required": [
+        "single_use",
+        "consumed_at",
+        "consumed_by_intent"
+      ],
+      "properties": {
+        "single_use": {
+          "const": true
+        },
+        "consumed_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "consumed_by_intent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
