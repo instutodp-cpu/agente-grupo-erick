@@ -44,7 +44,6 @@ function createHermesMaintainerTestExecutionProcessRuntime({ cwd = path.resolve(
           if (typeof child.kill === 'function') child.kill('SIGTERM');
           finish(false, 'test_process_timeout');
         }, timeoutMs);
-        if (typeof timer.unref === 'function') timer.unref();
         child.once('error', () => { clearTimeout(timer); finish(false, 'test_process_error'); });
         child.once('exit', code => { clearTimeout(timer); finish(code === 0, code === 0 ? 'test_process_passed' : 'test_process_failed'); });
       });
