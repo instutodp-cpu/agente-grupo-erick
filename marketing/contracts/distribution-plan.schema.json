@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingDistributionPlan",
+  "type": "object",
+  "required": [
+    "plan_id",
+    "artifact_ref",
+    "artifact_hash",
+    "targets",
+    "status"
+  ],
+  "properties": {
+    "plan_id": {
+      "type": "string"
+    },
+    "artifact_ref": {
+      "type": "string"
+    },
+    "artifact_hash": {
+      "type": "string",
+      "minLength": 16
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "target_id",
+          "channel",
+          "action",
+          "risk_level"
+        ],
+        "properties": {
+          "target_id": {
+            "type": "string"
+          },
+          "channel": {
+            "enum": [
+              "instagram",
+              "whatsapp",
+              "meta_ads",
+              "google_ads",
+              "generic"
+            ]
+          },
+          "action": {
+            "enum": [
+              "draft",
+              "publish",
+              "send",
+              "create_campaign_draft",
+              "mutate_campaign",
+              "mutate_budget"
+            ]
+          },
+          "risk_level": {
+            "enum": [
+              "L1",
+              "L2",
+              "L3"
+            ]
+          },
+          "account_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "audience_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scheduled_for": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "blocked_approval",
+        "ready_for_simulation"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
