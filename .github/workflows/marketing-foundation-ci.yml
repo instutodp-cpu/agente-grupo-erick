@@ -97,3 +97,9 @@ jobs:
 
       - name: Run C05 render safety simulation
         run: npm run simulate:marketing:render-safety
+
+      - name: Run C05 brand and text-fit tests
+        run: npm run test:marketing:brand-render
+
+      - name: Run C05 brand and text-fit simulation
+        run: npm run simulate:marketing:brand-render
