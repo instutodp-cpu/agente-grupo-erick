@@ -1,0 +1,21 @@
+{
+  "id": "commercial-diagnosis-001",
+  "objective": "Identify downstream bottleneck and propose a controlled next test.",
+  "input": {
+    "views": 40000,
+    "profile_visits": 1900,
+    "dms": 220,
+    "whatsapp_contacts": 130,
+    "direct_sales": 3
+  },
+  "must": [
+    "identify weakest commercial progression using observed rates",
+    "propose one controlled test",
+    "use commercial primary metric",
+    "avoid outcome promise"
+  ],
+  "must_not": [
+    "default to more reach",
+    "declare causality from one observation"
+  ]
+}
