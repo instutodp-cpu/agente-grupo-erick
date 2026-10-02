@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingRenderSpec",
+  "type": "object",
+  "required": [
+    "render_id",
+    "canvas_profile_id",
+    "adapter_target",
+    "elements",
+    "status"
+  ],
+  "properties": {
+    "render_id": {
+      "type": "string"
+    },
+    "canvas_profile_id": {
+      "type": "string"
+    },
+    "adapter_target": {
+      "enum": [
+        "remotion",
+        "canva",
+        "generic"
+      ]
+    },
+    "brand_profile_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "elements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "text",
+              "caption",
+              "logo",
+              "cta",
+              "image",
+              "video"
+            ]
+          },
+          "x": {
+            "type": "integer"
+          },
+          "y": {
+            "type": "integer"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "content_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "missing_brand_requirements": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "blocked_layout",
+        "blocked_brand",
+        "ready_for_render"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
