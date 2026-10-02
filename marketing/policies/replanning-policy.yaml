@@ -1,0 +1,21 @@
+version: 1
+simulation_only: true
+learning_use:
+  require_rule_validity: active
+  require_exact_scope_match: true
+  minimum_confidence: 0.60
+  historical_learning_is_guarantee: false
+replanning:
+  choose_one_controlled_test: true
+  preserve_current_objective: true
+  prefer_commercial_metric: true
+execution:
+  external_execution: false
+  route_through_c06_approval_gateway: true
+  approval_required: true
+invariants:
+  - never_expand_learned_rule_scope
+  - never_claim_future_outcome
+  - never_auto_publish
+  - never_auto_change_budget
+  - preserve_rejected_rule_reason
