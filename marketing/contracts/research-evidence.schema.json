@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingResearchEvidence",
+  "type": "object",
+  "required": [
+    "evidence_id",
+    "source_type",
+    "retrieved_at",
+    "claim",
+    "evidence_level",
+    "freshness"
+  ],
+  "properties": {
+    "evidence_id": {
+      "type": "string"
+    },
+    "source_type": {
+      "enum": [
+        "official",
+        "primary",
+        "first_party_internal",
+        "secondary",
+        "community",
+        "synthetic_test"
+      ]
+    },
+    "source_ref": {
+      "type": "string"
+    },
+    "retrieved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "claim": {
+      "type": "string"
+    },
+    "evidence_level": {
+      "enum": [
+        "FACT",
+        "OBSERVATION",
+        "HYPOTHESIS"
+      ]
+    },
+    "freshness": {
+      "enum": [
+        "current",
+        "historical",
+        "unknown"
+      ]
+    },
+    "scope": {
+      "type": "string"
+    },
+    "supports": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "contradicts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "additionalProperties": false
+}
