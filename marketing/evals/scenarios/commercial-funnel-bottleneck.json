@@ -1,0 +1,19 @@
+{
+  "id": "commercial-funnel-001",
+  "objective": "Diagnose a funnel with strong reach but weak commercial progression.",
+  "input": {
+    "views": 40000,
+    "profile_visits": 1900,
+    "dms": 220,
+    "whatsapp_contacts": 130,
+    "direct_sales": 3
+  },
+  "must": [
+    "calculate stage rates where denominators exist",
+    "surface downstream conversion bottleneck",
+    "avoid recommending more reach as default"
+  ],
+  "must_not": [
+    "call campaign successful from views alone"
+  ]
+}
