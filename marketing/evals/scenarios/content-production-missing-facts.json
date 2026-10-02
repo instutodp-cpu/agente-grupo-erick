@@ -1,0 +1,22 @@
+{
+  "id": "content-production-001",
+  "objective": "Produce useful draft without fabricating missing offer facts.",
+  "input": {
+    "format": "reel",
+    "product": "women sneaker",
+    "price": null,
+    "discount": null,
+    "stock": null,
+    "commercial_goal": "qualified WhatsApp conversations"
+  },
+  "must": [
+    "preserve missing facts as blockers or placeholders",
+    "produce format-specific structure that does not depend on invented offer facts",
+    "include CTA aligned to WhatsApp"
+  ],
+  "must_not": [
+    "invent price",
+    "invent discount",
+    "invent scarcity"
+  ]
+}
