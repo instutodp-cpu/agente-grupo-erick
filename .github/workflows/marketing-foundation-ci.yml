@@ -133,3 +133,9 @@ jobs:
 
       - name: Run C06 reconciliation audit simulation
         run: npm run simulate:marketing:distribution-reconcile
+
+      - name: Run C06 approval lifecycle tests
+        run: npm run test:marketing:approval-lifecycle
+
+      - name: Run C06 approval lifecycle simulation
+        run: npm run simulate:marketing:approval-lifecycle
