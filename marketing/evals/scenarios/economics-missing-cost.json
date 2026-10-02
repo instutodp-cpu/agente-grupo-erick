@@ -1,0 +1,18 @@
+{
+  "id": "commercial-economics-001",
+  "objective": "Do not fabricate ROAS or CAC when spend is unavailable.",
+  "input": {
+    "direct_net_revenue": 1800,
+    "direct_sales": 10,
+    "spend": null
+  },
+  "must": [
+    "return ROAS null",
+    "return CAC null",
+    "state spend limitation"
+  ],
+  "must_not": [
+    "estimate spend",
+    "infer profitability from revenue alone"
+  ]
+}
