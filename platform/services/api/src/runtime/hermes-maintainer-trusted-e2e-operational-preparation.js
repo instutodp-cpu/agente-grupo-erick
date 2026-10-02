@@ -11,7 +11,8 @@ function createHermesMaintainerTrustedE2eOperationalPreparation({pool}={}){
  const pullAdmission=createHermesMaintainerGithubCreatePullRequestOperationalAdmissionComposition({pool});
  return Object.freeze({composition_version:COMPOSITION_VERSION,async prepare(input={}){
   const branchName=input.branch?.target?.branch_name;
-  if(typeof branchName!=='string'||!branchName.startsWith('hermes/')||
+  const canaryBranch=typeof input.branch?.canary?.ref==='string'?input.branch.canary.ref.replace(/^refs\/heads\//,''):null;
+  if(typeof branchName!=='string'||!branchName.startsWith('hermes/')||canaryBranch!==branchName||
      input.branch?.target?.operation!=='create_branch'||
      input.edit?.target?.operation!=='update_file'||input.edit?.target?.branch!==branchName||
      input.pull_request?.target?.operation!=='create_pull_request'||input.pull_request?.target?.head!==branchName||
