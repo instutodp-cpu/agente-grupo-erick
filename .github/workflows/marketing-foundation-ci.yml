@@ -55,3 +55,9 @@ jobs:
 
       - name: Run C02 research simulation
         run: npm run simulate:marketing:research
+
+      - name: Run C02 source quality tests
+        run: npm run test:marketing:sources
+
+      - name: Run C02 source planner simulation
+        run: npm run simulate:marketing:sources
