@@ -1,0 +1,19 @@
+version: "1.0"
+mode: simulation_first
+rules:
+  preserve_idempotency_key_on_retry: true
+  new_intent_on_retry: false
+  external_execution: false
+  publish: false
+  send: false
+  spend: false
+  retry_only_transient_failures: true
+  terminal_failures_require_new_decision: true
+  success_then_retry: duplicate_noop
+scheduling:
+  before_due_time: scheduled
+  at_or_after_due_time: eligible
+fail_closed:
+  missing_idempotency_key: block
+  exhausted_attempts: terminal_failure
+  approval_or_scope_change: require_new_intent
