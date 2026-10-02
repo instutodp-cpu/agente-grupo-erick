@@ -1,0 +1,30 @@
+{
+  "id": "render-safe-zone-001",
+  "objective": "Block on-screen text that crosses the deterministic safe-zone boundary.",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "safe_zone": {
+      "top": 180,
+      "right": 120,
+      "bottom": 300,
+      "left": 120
+    }
+  },
+  "element": {
+    "id": "hook",
+    "kind": "text",
+    "x": 40,
+    "y": 200,
+    "width": 800,
+    "height": 160
+  },
+  "must": [
+    "detect left safe-zone violation",
+    "block render readiness"
+  ],
+  "must_not": [
+    "accept because text is visually plausible",
+    "delegate clipping decision to prompt"
+  ]
+}
