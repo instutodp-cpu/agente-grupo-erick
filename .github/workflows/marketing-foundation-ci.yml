@@ -7,6 +7,10 @@ on:
       - 'scripts/marketing-e2e-sim.js'
       - 'scripts/validate-marketing-artifacts.js'
       - 'test/marketing-e2e-sim.test.js'
+      - 'test/marketing-research-sim.test.js'
+      - 'scripts/marketing-research-sim.js'
+      - 'test/marketing-research-sim.test.js'
+      - 'scripts/marketing-research-sim.js'
       - 'package.json'
       - '.github/workflows/marketing-foundation-ci.yml'
   push:
@@ -45,3 +49,9 @@ jobs:
 
       - name: Run deterministic marketing simulation
         run: npm run simulate:marketing
+
+      - name: Run C02 research tests
+        run: npm run test:marketing:research
+
+      - name: Run C02 research simulation
+        run: npm run simulate:marketing:research
