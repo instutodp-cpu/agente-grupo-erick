@@ -115,3 +115,9 @@ jobs:
 
       - name: Run C05 render preflight simulation
         run: npm run simulate:marketing:render-preflight
+
+      - name: Run C06 distribution approval tests
+        run: npm run test:marketing:distribution
+
+      - name: Run C06 distribution approval simulation
+        run: npm run simulate:marketing:distribution
