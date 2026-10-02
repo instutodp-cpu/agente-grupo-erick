@@ -48,12 +48,20 @@ function createHermesMaintainerTrustedE2eRuntimeComposition({
   const revisionTest = createHermesMaintainerRevisionBoundTestRuntimeComposition({
     workspaceSpawnImpl, testSpawnImpl, workspaceTimeoutMs, testTimeoutMs
   });
+  const mutationAdapter = Object.freeze({
+    execute: input => mutationFlow.execute(input?.controlled_execution, {
+      ownership: input?.ownership,
+      target: input?.target,
+      authority_evidence: input?.authority_evidence,
+      mutation_input: input?.mutation_input
+    })
+  });
   const orchestrator = createHermesMaintainerRevisionBoundE2eOrchestrator({
     repositoryRead,
-    branchMutation: mutationFlow,
-    editMutation: mutationFlow,
+    branchMutation: mutationAdapter,
+    editMutation: mutationAdapter,
     revisionTest,
-    pullRequestMutation: mutationFlow
+    pullRequestMutation: mutationAdapter
   });
 
   return Object.freeze({
