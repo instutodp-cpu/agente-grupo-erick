@@ -19,7 +19,9 @@
     "test:marketing:creative-engine": "node --test test/marketing-creative-engine-sim.test.js",
     "simulate:marketing:creative-engine": "node scripts/marketing-creative-engine-sim.js",
     "test:marketing:experiments": "node --test test/marketing-experiment-sim.test.js",
-    "simulate:marketing:experiments": "node scripts/marketing-experiment-sim.js"
+    "simulate:marketing:experiments": "node scripts/marketing-experiment-sim.js",
+    "test:marketing:content": "node --test test/marketing-content-production-sim.test.js",
+    "simulate:marketing:content": "node scripts/marketing-content-production-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
