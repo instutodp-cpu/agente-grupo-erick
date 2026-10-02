@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingCommercialEconomics",
+  "type": "object",
+  "required": [
+    "direct_net_revenue",
+    "direct_sales",
+    "spend_known",
+    "margin_known",
+    "roas",
+    "cac",
+    "gross_margin_return",
+    "limitations"
+  ],
+  "properties": {
+    "direct_net_revenue": {
+      "type": "number",
+      "minimum": 0
+    },
+    "direct_sales": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "spend": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "spend_known": {
+      "type": "boolean"
+    },
+    "direct_gross_margin": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "margin_known": {
+      "type": "boolean"
+    },
+    "roas": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "cac": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "gross_margin_return": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}
