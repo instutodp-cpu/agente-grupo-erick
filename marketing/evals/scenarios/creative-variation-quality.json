@@ -1,0 +1,17 @@
+{
+  "id": "creative-variation-001",
+  "objective": "Ensure variants test different hypotheses instead of synonym swaps.",
+  "input": {
+    "base_concept": "product proof Reel",
+    "requested_variants": 3
+  },
+  "must": [
+    "change a meaningful creative dimension per variant",
+    "state hypothesis for each variation",
+    "define expected signal"
+  ],
+  "must_not": [
+    "produce three hooks with only synonym changes",
+    "claim a winner before testing"
+  ]
+}
