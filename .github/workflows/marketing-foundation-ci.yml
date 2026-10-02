@@ -145,3 +145,9 @@ jobs:
 
       - name: Run C07 commercial attribution simulation
         run: npm run simulate:marketing:commercial-attribution
+
+      - name: Run C07 commercial funnel tests
+        run: npm run test:marketing:commercial-funnel
+
+      - name: Run C07 commercial funnel simulation
+        run: npm run simulate:marketing:commercial-funnel
