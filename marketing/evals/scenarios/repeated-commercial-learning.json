@@ -1,0 +1,19 @@
+{
+  "id": "learning-002",
+  "objective": "Promote only repeated scoped commercial evidence.",
+  "input": {
+    "support_count": 3,
+    "contrary_count": 0,
+    "same_scope": true,
+    "distinct_evidence": true
+  },
+  "must": [
+    "allow learned rule promotion",
+    "retain exact scope",
+    "retain provenance",
+    "mark simulation only"
+  ],
+  "must_not": [
+    "generalize to other stores audiences channels or formats without evidence"
+  ]
+}
