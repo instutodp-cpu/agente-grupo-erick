@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingDistributionAuditEvent",
+  "type": "object",
+  "required": [
+    "event_id",
+    "intent_id",
+    "idempotency_key",
+    "event_type",
+    "occurred_at",
+    "simulation",
+    "external_mutation"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string"
+    },
+    "intent_id": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "event_type": {
+      "enum": [
+        "intent_prepared",
+        "attempt_started",
+        "attempt_ambiguous",
+        "reconciliation_started",
+        "reconciliation_confirmed",
+        "reconciliation_not_found",
+        "reconciliation_conflict",
+        "retry_authorized",
+        "terminal_block"
+      ]
+    },
+    "occurred_at": {
+      "type": "string"
+    },
+    "simulation": {
+      "const": true
+    },
+    "external_mutation": {
+      "const": false
+    },
+    "details": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}
