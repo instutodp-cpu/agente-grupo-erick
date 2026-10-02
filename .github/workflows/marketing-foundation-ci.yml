@@ -103,3 +103,9 @@ jobs:
 
       - name: Run C05 brand and text-fit simulation
         run: npm run simulate:marketing:brand-render
+
+      - name: Run C05 temporal video QA tests
+        run: npm run test:marketing:video-frame-qa
+
+      - name: Run C05 temporal video QA simulation
+        run: npm run simulate:marketing:video-frame-qa
