@@ -121,3 +121,9 @@ jobs:
 
       - name: Run C06 distribution approval simulation
         run: npm run simulate:marketing:distribution
+
+      - name: Run C06 distribution adapter tests
+        run: npm run test:marketing:distribution-adapters
+
+      - name: Run C06 distribution adapter simulation
+        run: npm run simulate:marketing:distribution-adapters
