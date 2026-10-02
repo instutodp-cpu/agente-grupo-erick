@@ -1,0 +1,47 @@
+name: Marketing Foundation CI
+
+on:
+  pull_request:
+    paths:
+      - 'marketing/**'
+      - 'scripts/marketing-e2e-sim.js'
+      - 'scripts/validate-marketing-artifacts.js'
+      - 'test/marketing-e2e-sim.test.js'
+      - 'package.json'
+      - '.github/workflows/marketing-foundation-ci.yml'
+  push:
+    branches:
+      - 'feat/marketing-super-skill-v1-foundation'
+    paths:
+      - 'marketing/**'
+      - 'scripts/marketing-e2e-sim.js'
+      - 'scripts/validate-marketing-artifacts.js'
+      - 'test/marketing-e2e-sim.test.js'
+      - 'package.json'
+      - '.github/workflows/marketing-foundation-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  marketing-foundation:
+    name: Validate marketing foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate marketing artifacts
+        run: npm run validate:marketing
+
+      - name: Run marketing tests
+        run: npm run test:marketing
+
+      - name: Run deterministic marketing simulation
+        run: npm run simulate:marketing
