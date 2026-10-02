@@ -1,0 +1,26 @@
+{
+  "id": "distribution-reconciliation-001",
+  "objective": "Resolve ambiguous execution using provider observation.",
+  "cases": [
+    {
+      "observation": "confirmed_effect",
+      "decision": "confirm_success"
+    },
+    {
+      "observation": "not_found",
+      "decision": "authorize_same_key_retry"
+    },
+    {
+      "observation": "conflicting_effect",
+      "decision": "block_conflict"
+    },
+    {
+      "observation": "unknown",
+      "decision": "remain_ambiguous"
+    }
+  ],
+  "must": [
+    "keep simulation mode",
+    "preserve evidence and audit trail"
+  ]
+}
