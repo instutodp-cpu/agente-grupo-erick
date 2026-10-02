@@ -163,3 +163,9 @@ jobs:
 
       - name: Run C07 learning feedback simulation
         run: npm run simulate:marketing:learning-feedback
+
+      - name: Run C07 controlled replanning tests
+        run: npm run test:marketing:replanning
+
+      - name: Run C07 controlled replanning simulation
+        run: npm run simulate:marketing:replanning
