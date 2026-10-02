@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
-    "validate:templates": "node scripts/validate-templates.js"
+    "validate:templates": "node scripts/validate-templates.js",
+    "validate:marketing": "node scripts/validate-marketing-artifacts.js"
   },
   "dependencies": {
     "express": "^4.18.2",
