@@ -29,7 +29,7 @@ test('trusted E2E composition wires only official runtime/finalizer chain and pr
     delete require.cache[path];
     const { createHermesMaintainerTrustedE2eRuntimeComposition } = require(path);
     const composition = createHermesMaintainerTrustedE2eRuntimeComposition({
-      environment: {}, fetchImpl: async()=>{}, createTimeoutSignal:()=>{}, pool:{}, resolveReadAuthorization:async()=>{}
+      environment: {NODE_ENV:'staging'}, fetchImpl: async()=>{}, createTimeoutSignal:()=>{}, pool:{}, resolveReadAuthorization:async()=>{}
     });
     assert.equal(composition.composition_version,'hermes_maintainer_trusted_e2e_runtime_composition_v1');
     assert.equal(composition.environment,'staging');
@@ -43,4 +43,12 @@ test('trusted E2E composition wires only official runtime/finalizer chain and pr
   } finally {
     Module._load = original;
   }
+});
+
+
+test('trusted E2E composition fails closed outside staging', () => {
+  const { createHermesMaintainerTrustedE2eRuntimeComposition } = require('../src/runtime/hermes-maintainer-trusted-e2e-runtime-composition');
+  assert.throws(() => createHermesMaintainerTrustedE2eRuntimeComposition({
+    environment: {NODE_ENV:'production'}, fetchImpl: async()=>{}, createTimeoutSignal:()=>{}, pool:{}, resolveReadAuthorization:async()=>{}
+  }), /staging_environment_required/);
 });
