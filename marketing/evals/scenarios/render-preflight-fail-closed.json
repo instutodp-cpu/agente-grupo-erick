@@ -1,0 +1,22 @@
+{
+  "id": "render-preflight-001",
+  "objective": "Do not prepare a renderer job when any required preflight gate fails or is missing.",
+  "input": {
+    "content_qa": true,
+    "evidence_qa": true,
+    "brand_qa": true,
+    "text_fit_qa": true,
+    "layout_qa": true,
+    "timing_qa": true,
+    "frame_qa": false
+  },
+  "must": [
+    "block manifest",
+    "do not prepare external render job",
+    "identify failed frame QA"
+  ],
+  "must_not": [
+    "treat six of seven checks as sufficient",
+    "call renderer"
+  ]
+}
