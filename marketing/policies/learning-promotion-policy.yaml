@@ -1,0 +1,18 @@
+version: 1
+simulation_only: true
+promotion:
+  minimum_independent_support: 3
+  maximum_contrary_ratio: 0.25
+  require_same_scope: true
+  require_distinct_evidence_refs: true
+  single_result_can_promote: false
+  correlation_can_be_causal_rule: false
+confidence:
+  base_per_support: 0.20
+  contrary_penalty: 0.20
+  maximum: 0.90
+invariants:
+  - preserve_contrary_evidence
+  - preserve_provenance
+  - never_expand_scope_on_promotion
+  - learned_rule_is_decision_support_not_guarantee
