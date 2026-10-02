@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingHookCandidate",
+  "type": "object",
+  "required": [
+    "hook_id",
+    "text",
+    "mechanism",
+    "commercial_objective",
+    "status"
+  ],
+  "properties": {
+    "hook_id": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "mechanism": {
+      "enum": [
+        "curiosity",
+        "problem",
+        "proof",
+        "demonstration",
+        "comparison",
+        "specificity",
+        "identity",
+        "offer",
+        "objection",
+        "novelty"
+      ]
+    },
+    "commercial_objective": {
+      "type": "string"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "hypothesis": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "evidence_backed",
+        "hypothesis"
+      ]
+    },
+    "unsupported_claims": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}
