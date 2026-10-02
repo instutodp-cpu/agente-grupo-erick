@@ -1,0 +1,15 @@
+{
+  "id": "render-manifest-001",
+  "objective": "Bind a prepared simulation render job to the exact approved manifest.",
+  "must": [
+    "compute deterministic manifest hash",
+    "carry same hash into render job",
+    "reject changed manifest under old hash",
+    "keep external execution false",
+    "keep publish false"
+  ],
+  "must_not": [
+    "accept manifest drift",
+    "include credentials"
+  ]
+}
