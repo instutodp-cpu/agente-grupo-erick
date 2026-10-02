@@ -10,6 +10,13 @@ function createHermesMaintainerTrustedE2eOperationalPreparation({pool}={}){
  const editAdmission=createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({pool});
  const pullAdmission=createHermesMaintainerGithubCreatePullRequestOperationalAdmissionComposition({pool});
  return Object.freeze({composition_version:COMPOSITION_VERSION,async prepare(input={}){
+  const branchName=input.branch?.target?.branch_name;
+  if(typeof branchName!=='string'||!branchName.startsWith('hermes/')||
+     input.branch?.target?.operation!=='create_branch'||
+     input.edit?.target?.operation!=='update_file'||input.edit?.target?.branch!==branchName||
+     input.pull_request?.target?.operation!=='create_pull_request'||input.pull_request?.target?.head!==branchName||
+     input.pull_request?.target?.base!=='main'||input.pull_request?.target?.draft!==true)
+    return blocked('workflow_target_preflight');
   const b=await branchAdmission.prepare(input.branch?.grant,input.branch?.canary,input.branch?.operational_input);
   if(b?.admission_valid!==true)return blocked('branch_admission',b);
   const e=await editAdmission.prepare(input.edit?.grant,input.edit?.target,input.edit?.operational_input);
