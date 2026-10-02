@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingAdCreativePackage",
+  "type": "object",
+  "required": [
+    "creative_id",
+    "objective",
+    "primary_text",
+    "headline",
+    "cta",
+    "evidence_refs",
+    "status"
+  ],
+  "properties": {
+    "creative_id": {
+      "type": "string"
+    },
+    "objective": {
+      "type": "string"
+    },
+    "primary_text": {
+      "type": "string"
+    },
+    "headline": {
+      "type": "string"
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cta": {
+      "type": "string"
+    },
+    "landing_or_conversation_target": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "missing_facts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "blocked_missing_facts",
+        "ready_for_qa"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
