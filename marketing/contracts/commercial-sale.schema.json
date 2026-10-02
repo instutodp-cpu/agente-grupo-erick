@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingCommercialSale",
+  "type": "object",
+  "required": [
+    "sale_id",
+    "store_id",
+    "occurred_at",
+    "gross_revenue",
+    "discount",
+    "net_revenue"
+  ],
+  "properties": {
+    "sale_id": {
+      "type": "string"
+    },
+    "customer_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "journey_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "store_id": {
+      "type": "string"
+    },
+    "coupon_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "occurred_at": {
+      "type": "string"
+    },
+    "gross_revenue": {
+      "type": "number",
+      "minimum": 0
+    },
+    "discount": {
+      "type": "number",
+      "minimum": 0
+    },
+    "net_revenue": {
+      "type": "number",
+      "minimum": 0
+    },
+    "cogs": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "gross_margin": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "skus": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
