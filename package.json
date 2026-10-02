@@ -29,7 +29,9 @@
     "test:marketing:brand-render": "node --test test/marketing-brand-render-sim.test.js",
     "simulate:marketing:brand-render": "node scripts/marketing-brand-render-sim.js",
     "test:marketing:video-frame-qa": "node --test test/marketing-video-frame-qa-sim.test.js",
-    "simulate:marketing:video-frame-qa": "node scripts/marketing-video-frame-qa-sim.js"
+    "simulate:marketing:video-frame-qa": "node scripts/marketing-video-frame-qa-sim.js",
+    "test:marketing:render-preflight": "node --test test/marketing-render-preflight-sim.test.js",
+    "simulate:marketing:render-preflight": "node scripts/marketing-render-preflight-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
