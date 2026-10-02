@@ -85,3 +85,9 @@ jobs:
 
       - name: Run C04 content production simulation
         run: npm run simulate:marketing:content
+
+      - name: Run C04 production QA tests
+        run: npm run test:marketing:production-qa
+
+      - name: Run C04 production QA simulation
+        run: npm run simulate:marketing:production-qa
