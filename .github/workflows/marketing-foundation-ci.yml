@@ -127,3 +127,9 @@ jobs:
 
       - name: Run C06 distribution adapter simulation
         run: npm run simulate:marketing:distribution-adapters
+
+      - name: Run C06 reconciliation audit tests
+        run: npm run test:marketing:distribution-reconcile
+
+      - name: Run C06 reconciliation audit simulation
+        run: npm run simulate:marketing:distribution-reconcile
