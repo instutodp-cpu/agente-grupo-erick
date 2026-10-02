@@ -18,7 +18,7 @@ test('trusted E2E composition wires only official runtime/finalizer chain and pr
     if (request.endsWith('hermes-maintainer-safe-workflow-finalization-invocation')) return stub('createHermesMaintainerSafeWorkflowFinalizationInvocation', ({finalizers}) => { calls.push(['finalizers',Object.keys(finalizers)]); return {finalize(){}}; });
     if (request.endsWith('hermes-maintainer-safe-workflow-mutation-orchestration')) return stub('createHermesMaintainerSafeWorkflowMutationOrchestration', () => ({execute(){}}));
     if (request.endsWith('hermes-maintainer-safe-workflow-authorized-mutation-entry')) return stub('createHermesMaintainerSafeWorkflowAuthorizedMutationEntry', () => ({execute(){}}));
-    if (request.endsWith('hermes-maintainer-safe-workflow-authorized-mutation-flow')) return stub('createHermesMaintainerSafeWorkflowAuthorizedMutationFlow', () => ({execute(){}}));
+    if (request.endsWith('hermes-maintainer-safe-workflow-authorized-mutation-flow')) return stub('createHermesMaintainerSafeWorkflowAuthorizedMutationFlow', () => ({execute(...args){calls.push(['mutationFlowExecute',args]);return {}}}));
     if (request.endsWith('hermes-maintainer-github-e2e-read-composition')) return stub('runHermesMaintainerGithubE2eRead', async () => ({outcome:'SUCCEEDED'}));
     if (request.endsWith('hermes-maintainer-revision-bound-test-runtime-composition')) return stub('createHermesMaintainerRevisionBoundTestRuntimeComposition', () => ({execute(){}}));
     if (request.endsWith('hermes-maintainer-revision-bound-e2e-orchestrator')) return stub('createHermesMaintainerRevisionBoundE2eOrchestrator', deps => { calls.push(['orchestrator',deps]); return {execute: async input => ({input})}; });
@@ -40,6 +40,9 @@ test('trusted E2E composition wires only official runtime/finalizer chain and pr
     assert.deepEqual(calls[1],['finalizers',['create_branch','update_file','create_pull_request']]);
     assert.equal(calls[2][1].branchMutation,calls[2][1].editMutation);
     assert.equal(calls[2][1].editMutation,calls[2][1].pullRequestMutation);
+    calls[2][1].branchMutation.execute({controlled_execution:{id:'controlled'},ownership:{id:'owner'},target:{id:'target'},authority_evidence:{id:'evidence'},mutation_input:{id:'mutation'}});
+    const invocation=calls.find(x=>x[0]==='mutationFlowExecute');
+    assert.deepEqual(invocation[1],[{id:'controlled'},{ownership:{id:'owner'},target:{id:'target'},authority_evidence:{id:'evidence'},mutation_input:{id:'mutation'}}]);
   } finally {
     Module._load = original;
   }
