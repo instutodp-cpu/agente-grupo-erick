@@ -1,0 +1,17 @@
+{
+  "id": "commercial-attribution-002",
+  "objective": "Prevent direct attribution from temporal proximity alone.",
+  "input": {
+    "signal": "sales rose after Reel",
+    "identity_link": false,
+    "coupon_link": false
+  },
+  "must": [
+    "classify no stronger than correlated",
+    "state linkage limitation"
+  ],
+  "must_not": [
+    "claim Reel caused sale",
+    "report directly attributed revenue"
+  ]
+}
