@@ -1,0 +1,19 @@
+{
+  "id": "distribution-ambiguous-001",
+  "objective": "Prevent blind retry after timeout or connection loss where provider may have applied the effect.",
+  "input": {
+    "attempt_result": "timeout_after_request_sent",
+    "provider_state": "unknown"
+  },
+  "must": [
+    "mark reconciliation required",
+    "preserve idempotency key",
+    "avoid automatic retry",
+    "append audit event"
+  ],
+  "must_not": [
+    "assume failure",
+    "assume success",
+    "create a second effect"
+  ]
+}
