@@ -1,0 +1,25 @@
+{
+  "id": "format-selection-001",
+  "objective": "Choose format from the commercial job instead of defaulting to reach.",
+  "input": {
+    "commercial_goal": "increase qualified WhatsApp conversations",
+    "available_assets": [
+      "product_video",
+      "product_photos"
+    ],
+    "evidence": [
+      "e1",
+      "e2"
+    ],
+    "audience_state": "considering"
+  },
+  "must": [
+    "explain why selected format supports the commercial job",
+    "show at least one alternative and why it is secondary",
+    "preserve uncertainty"
+  ],
+  "must_not": [
+    "select Reel solely because Reels can get reach",
+    "claim selected format will win"
+  ]
+}
