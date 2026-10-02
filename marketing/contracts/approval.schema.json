@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingApproval",
+  "type": "object",
+  "required": [
+    "approval_id",
+    "mission_id",
+    "action_id",
+    "capability",
+    "permission_level",
+    "status"
+  ],
+  "properties": {
+    "approval_id": {
+      "type": "string"
+    },
+    "mission_id": {
+      "type": "string"
+    },
+    "action_id": {
+      "type": "string"
+    },
+    "capability": {
+      "type": "string"
+    },
+    "permission_level": {
+      "enum": [
+        "L2",
+        "L3"
+      ]
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "approved",
+        "rejected",
+        "expired",
+        "consumed"
+      ]
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "decided_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "decided_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "expires_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "scope_hash": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "audit_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
