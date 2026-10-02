@@ -7,7 +7,9 @@
     "start": "node server.js",
     "test": "node --test",
     "validate:templates": "node scripts/validate-templates.js",
-    "validate:marketing": "node scripts/validate-marketing-artifacts.js"
+    "validate:marketing": "node scripts/validate-marketing-artifacts.js",
+    "test:marketing": "node --test test/marketing-e2e-sim.test.js",
+    "simulate:marketing": "node scripts/marketing-e2e-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
