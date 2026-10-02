@@ -151,3 +151,9 @@ jobs:
 
       - name: Run C07 commercial funnel simulation
         run: npm run simulate:marketing:commercial-funnel
+
+      - name: Run C07 economics diagnosis tests
+        run: npm run test:marketing:commercial-economics
+
+      - name: Run C07 economics diagnosis simulation
+        run: npm run simulate:marketing:commercial-economics
