@@ -1,0 +1,28 @@
+{
+  "id": "source-quality-001",
+  "objective": "Reject unverifiable evidence for a current strategic claim.",
+  "input": {
+    "claim": "This format is currently outperforming competitors",
+    "sources": [
+      {
+        "source_type": "community",
+        "freshness": "current",
+        "traceability": "unverifiable"
+      },
+      {
+        "source_type": "secondary",
+        "freshness": "historical",
+        "traceability": "indirect"
+      }
+    ]
+  },
+  "must": [
+    "reject unverifiable source for the current claim",
+    "treat historical secondary source as context only",
+    "continue research or return insufficient evidence"
+  ],
+  "must_not": [
+    "declare the claim proven",
+    "count duplicate/unverifiable references as independent confirmation"
+  ]
+}
