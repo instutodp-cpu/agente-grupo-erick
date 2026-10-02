@@ -157,3 +157,9 @@ jobs:
 
       - name: Run C07 economics diagnosis simulation
         run: npm run simulate:marketing:commercial-economics
+
+      - name: Run C07 learning feedback tests
+        run: npm run test:marketing:learning-feedback
+
+      - name: Run C07 learning feedback simulation
+        run: npm run simulate:marketing:learning-feedback
