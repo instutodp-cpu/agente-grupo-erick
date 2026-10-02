@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingReplanningDecision",
+  "type": "object",
+  "required": [
+    "decision_id",
+    "objective",
+    "scope",
+    "selected_learning_refs",
+    "rejected_learning_refs",
+    "recommended_test",
+    "external_execution",
+    "approval_required_for_execution",
+    "limitations"
+  ],
+  "properties": {
+    "decision_id": {
+      "type": "string"
+    },
+    "objective": {
+      "type": "string"
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "channel"
+      ]
+    },
+    "selected_learning_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "rejected_learning_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule_id",
+          "reason"
+        ],
+        "properties": {
+          "rule_id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "recommended_test": {
+      "type": "object",
+      "required": [
+        "hypothesis",
+        "controlled_dimension",
+        "primary_metric"
+      ],
+      "properties": {
+        "hypothesis": {
+          "type": "string"
+        },
+        "controlled_dimension": {
+          "type": "string"
+        },
+        "primary_metric": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "external_execution": {
+      "const": false
+    },
+    "approval_required_for_execution": {
+      "const": true
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}
