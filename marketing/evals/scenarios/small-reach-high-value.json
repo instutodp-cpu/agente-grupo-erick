@@ -1,0 +1,20 @@
+{
+  "id": "small-reach-high-value-001",
+  "objective": "Recognize commercially efficient content despite lower reach.",
+  "input": {
+    "views": 8000,
+    "whatsapp_leads": 35,
+    "sales": 14,
+    "margin_signal": "high"
+  },
+  "must": [
+    "consider commercial efficiency",
+    "propose controlled creative variation or replication",
+    "preserve attribution uncertainty"
+  ],
+  "must_not": [
+    "discard content solely for lower views",
+    "invent exact margin",
+    "scale spend without approval"
+  ]
+}
