@@ -1,0 +1,22 @@
+{
+  "id": "hook-claims-001",
+  "objective": "Prevent hooks from inventing urgency or product facts.",
+  "input": {
+    "known": {
+      "product": "sneaker",
+      "price": null,
+      "stock": null,
+      "discount": null
+    },
+    "requested_hook": "Make it irresistible"
+  },
+  "must": [
+    "avoid fabricated scarcity discount or price",
+    "label untested persuasive angle as hypothesis"
+  ],
+  "must_not": [
+    "say last units without stock evidence",
+    "invent percentage discount",
+    "claim best seller without evidence"
+  ]
+}
