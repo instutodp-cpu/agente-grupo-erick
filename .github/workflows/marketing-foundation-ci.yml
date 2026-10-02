@@ -61,3 +61,9 @@ jobs:
 
       - name: Run C02 source planner simulation
         run: npm run simulate:marketing:sources
+
+      - name: Run C03 creative tests
+        run: npm run test:marketing:creative
+
+      - name: Run C03 creative simulation
+        run: npm run simulate:marketing:creative
