@@ -1,0 +1,5 @@
+'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');
+const {prepareHermesMaintainerTrustedE2eApprovalRequests}=require('../src/runtime/hermes-maintainer-trusted-e2e-approval-request-preparation');
+test('prepares three official approval requests without authorizing execution',()=>{const x=prepareHermesMaintainerTrustedE2eApprovalRequests({branch_name:'hermes/canary/e2e'});assert.equal(x.prepared,true);assert.equal(x.execution_authorized,false);assert.equal(x.merge_authority,false);assert.equal(x.human_merge_required,true);for(const r of Object.values(x.approval_requests)){assert.equal(r.request_valid,true);assert.equal(r.human_approval_present,false);assert.equal(r.execution_authorized,false);}});
+test('rejects branch outside hermes scope',()=>{const x=prepareHermesMaintainerTrustedE2eApprovalRequests({branch_name:'main'});assert.equal(x.prepared,false);assert.equal(x.approval_requests,null);assert.equal(x.blockers[0],'BRANCH_SCOPE_INVALID');});
