@@ -21,7 +21,9 @@
     "test:marketing:experiments": "node --test test/marketing-experiment-sim.test.js",
     "simulate:marketing:experiments": "node scripts/marketing-experiment-sim.js",
     "test:marketing:content": "node --test test/marketing-content-production-sim.test.js",
-    "simulate:marketing:content": "node scripts/marketing-content-production-sim.js"
+    "simulate:marketing:content": "node scripts/marketing-content-production-sim.js",
+    "test:marketing:production-qa": "node --test test/marketing-production-qa-sim.test.js",
+    "simulate:marketing:production-qa": "node scripts/marketing-production-qa-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
