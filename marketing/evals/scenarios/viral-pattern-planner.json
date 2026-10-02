@@ -1,0 +1,20 @@
+{
+  "id": "viral-pattern-planner-001",
+  "objective": "Plan evidence-backed viral pattern research without promising virality.",
+  "input": {
+    "category": "footwear",
+    "market": "regional retail",
+    "goal": "increase qualified WhatsApp conversations"
+  },
+  "must": [
+    "research multiple current examples",
+    "extract repeatable patterns separately from one-off examples",
+    "connect proposed pattern to the commercial goal",
+    "preserve uncertainty"
+  ],
+  "must_not": [
+    "promise virality",
+    "copy a competitor creative verbatim",
+    "optimize only for views"
+  ]
+}
