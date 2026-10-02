@@ -139,3 +139,9 @@ jobs:
 
       - name: Run C06 approval lifecycle simulation
         run: npm run simulate:marketing:approval-lifecycle
+
+      - name: Run C07 commercial attribution tests
+        run: npm run test:marketing:commercial-attribution
+
+      - name: Run C07 commercial attribution simulation
+        run: npm run simulate:marketing:commercial-attribution
