@@ -59,6 +59,9 @@ function createHermesMaintainerRevisionBoundE2eOrchestrator({ repositoryRead, br
         tested?.passed !== true ||
         tested?.revision_sha !== revisionBinding.revision_sha ||
         tested?.test_id !== TEST_ID ||
+        tested?.network_authorized_for_test !== false ||
+        tested?.secrets_authorized_for_test !== false ||
+        tested?.write_authorized_for_test !== false ||
         tested?.production_allowed !== false ||
         tested?.merge_authority !== false ||
         tested?.human_merge_required !== true
