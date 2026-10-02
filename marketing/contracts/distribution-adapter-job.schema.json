@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingDistributionAdapterJob",
+  "type": "object",
+  "required": [
+    "job_id",
+    "intent_ref",
+    "adapter",
+    "idempotency_key",
+    "attempt",
+    "max_attempts",
+    "mode",
+    "external_execution",
+    "status"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string"
+    },
+    "intent_ref": {
+      "type": "string"
+    },
+    "adapter": {
+      "enum": [
+        "instagram",
+        "whatsapp",
+        "meta_ads",
+        "google_ads",
+        "generic"
+      ]
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 16
+    },
+    "scheduled_for": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_attempts": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "mode": {
+      "const": "simulation"
+    },
+    "external_execution": {
+      "const": false
+    },
+    "status": {
+      "enum": [
+        "scheduled",
+        "ready",
+        "retryable_failure",
+        "terminal_failure",
+        "simulated_success",
+        "duplicate_noop"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
