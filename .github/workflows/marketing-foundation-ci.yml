@@ -67,3 +67,9 @@ jobs:
 
       - name: Run C03 creative simulation
         run: npm run simulate:marketing:creative
+
+      - name: Run C03 creative engine tests
+        run: npm run test:marketing:creative-engine
+
+      - name: Run C03 creative engine simulation
+        run: npm run simulate:marketing:creative-engine
