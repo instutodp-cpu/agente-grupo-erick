@@ -247,3 +247,9 @@ jobs:
 
       - name: Run C10 activation readiness simulation
         run: npm run simulate:marketing:activation-readiness
+
+      - name: Run C10 sandbox activation tests
+        run: npm run test:marketing:sandbox-activation
+
+      - name: Run C10 sandbox activation simulation
+        run: npm run simulate:marketing:sandbox-activation
