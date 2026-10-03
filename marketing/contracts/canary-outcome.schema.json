@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingCanaryOutcome",
+  "type": "object",
+  "required": [
+    "outcome_id",
+    "envelope_id",
+    "provider_id",
+    "capability_id",
+    "account_scope",
+    "idempotency_key",
+    "provider_result",
+    "effect_status",
+    "operations_observed",
+    "financial_effect_brl",
+    "receipt_ref",
+    "trace_id",
+    "simulation"
+  ],
+  "properties": {
+    "outcome_id": {
+      "type": "string"
+    },
+    "envelope_id": {
+      "type": "string"
+    },
+    "provider_id": {
+      "type": "string"
+    },
+    "capability_id": {
+      "type": "string"
+    },
+    "account_scope": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "provider_result": {
+      "enum": [
+        "success",
+        "not_found",
+        "ambiguous",
+        "conflicting",
+        "failed"
+      ]
+    },
+    "effect_status": {
+      "enum": [
+        "confirmed",
+        "none",
+        "unknown",
+        "conflicting"
+      ]
+    },
+    "operations_observed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "financial_effect_brl": {
+      "type": "number",
+      "minimum": 0
+    },
+    "receipt_ref": {
+      "type": "string"
+    },
+    "trace_id": {
+      "type": "string"
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}
