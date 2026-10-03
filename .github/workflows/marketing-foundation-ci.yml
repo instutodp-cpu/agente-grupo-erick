@@ -229,3 +229,9 @@ jobs:
 
       - name: Run C09 mission concurrency simulation
         run: npm run simulate:marketing:mission-concurrency
+
+      - name: Run C09 mission recovery tests
+        run: npm run test:marketing:mission-recovery
+
+      - name: Run C09 mission recovery simulation
+        run: npm run simulate:marketing:mission-recovery
