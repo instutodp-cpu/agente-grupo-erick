@@ -1,0 +1,15 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {execute,reset}=require('../scripts/marketing-paid-media-adapters-sim');
+const J={job_id:'j',provider:'meta_ads',action:'create_campaign',intent_id:'i',approval_id:'a',scope_hash:'scope',artifact_hash:'artifact',idempotency_key:'1234567890abcdef',currency:'BRL',requested_budget:100,approved_budget_ceiling:100,simulation:true};const A={status:'approved',risk_level:'L3',scope_hash:'scope',artifact_hash:'artifact',consumption:{single_use:true,consumed_at:null,consumed_by_intent:null}};
+test.beforeEach(reset);
+test('Meta Ads within ceiling is simulated',()=>{const r=execute(J,A);assert.equal(r.status,'simulated_accepted');assert.equal(r.financial_effect,false)});
+test('Google Ads uses same L3 boundary',()=>assert.equal(execute({...J,provider:'google_ads'},A).status,'simulated_accepted'));
+test('L2 approval cannot authorize paid media',()=>assert.equal(execute(J,{...A,risk_level:'L2'}).reason,'explicit_l3_approval_required'));
+test('budget above ceiling denied',()=>assert.equal(execute({...J,requested_budget:101},A).reason,'budget_ceiling_exceeded'));
+test('missing ceiling denied',()=>assert.equal(execute({...J,approved_budget_ceiling:null},A).reason,'budget_ceiling_required'));
+test('scope change denied',()=>assert.equal(execute({...J,scope_hash:'other'},A).reason,'scope_mismatch'));
+test('artifact change denied',()=>assert.equal(execute({...J,artifact_hash:'other'},A).reason,'artifact_mismatch'));
+test('approval replay denied',()=>assert.equal(execute(J,{...A,consumption:{single_use:true,consumed_at:'now',consumed_by_intent:'old'}}).reason,'approval_replay'));
+test('non BRL request denied',()=>assert.equal(execute({...J,currency:'USD'},A).reason,'currency_not_allowed'));
+test('real execution denied',()=>assert.equal(execute({...J,simulation:false},A).reason,'simulation_required'));
+test('success repeat is duplicate noop',()=>{execute(J,A);assert.equal(execute(J,A).status,'duplicate_noop')});
+test('ambiguous result requires reconciliation',()=>{const r=execute(J,A,'ambiguous');assert.equal(r.requires_reconciliation,true);assert.equal(r.financial_effect,false)});
