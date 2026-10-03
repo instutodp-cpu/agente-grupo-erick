@@ -19,6 +19,28 @@ function countFiles(rel, predicate = () => true) {
   return count;
 }
 
+function validateEvidence(map) {
+  const errors = [];
+  const states = ['planned','contracted','implemented','tested','proven_e2e','operational'];
+  for (const capability of map.capabilities || []) {
+    let unknownSeen = false;
+    let previous = true;
+    for (const state of states) {
+      const value = capability[state];
+      if (value === null) unknownSeen = true;
+      if (value === true && unknownSeen) errors.push({type:'evidence_gap', capability:capability.id, state});
+      if (value === true && previous === false) errors.push({type:'non_monotonic_evidence', capability:capability.id, state});
+      if (value !== null) previous = value;
+    }
+    if (capability.operational === true && capability.proven_e2e !== true) errors.push({type:'operational_without_e2e', capability:capability.id});
+    if (capability.proven_e2e === true && capability.tested !== true) errors.push({type:'e2e_without_tests', capability:capability.id});
+    if (capability.tested === true && capability.implemented !== true) errors.push({type:'tested_without_implementation', capability:capability.id});
+    if (capability.operational === true && !capability.scope) errors.push({type:'missing_operational_scope', capability:capability.id});
+    if (capability.proven_e2e === true && !capability.evidence_revision) errors.push({type:'missing_e2e_revision', capability:capability.id});
+  }
+  return errors;
+}
+
 function audit() {
   const map = loadMap();
   const errors = [];
@@ -43,17 +65,7 @@ function audit() {
   }
   if (map.rules?.merge_authority !== false) errors.push({type:'unsafe_rule', rule:'merge_authority'});
   if (map.rules?.human_merge_required !== true) errors.push({type:'unsafe_rule', rule:'human_merge_required'});
-  for (const capability of map.capabilities || []) {
-    const states = ['planned','contracted','implemented','tested','proven_e2e','operational'];
-    let unknownSeen = false;
-    for (const state of states) {
-      const value = capability[state];
-      if (value === null) unknownSeen = true;
-      if (value === true && unknownSeen) errors.push({type:'evidence_gap', capability:capability.id, state});
-    }
-    if (capability.operational === true && !capability.scope) errors.push({type:'missing_operational_scope', capability:capability.id});
-    if (capability.proven_e2e === true && !capability.evidence_revision) errors.push({type:'missing_e2e_revision', capability:capability.id});
-  }
+  errors.push(...validateEvidence(map));
   return {status: errors.length ? 'blocked' : 'pass', audited_revision: map.audited_revision, capability_count:(map.capabilities||[]).length, finding_count:(map.findings||[]).length, observed_inventory: observed, errors};
 }
 
@@ -62,4 +74,4 @@ if (require.main === module) {
   process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   process.exitCode = result.status === 'pass' ? 0 : 1;
 }
-module.exports = { audit };
+module.exports = { audit, validateEvidence };
