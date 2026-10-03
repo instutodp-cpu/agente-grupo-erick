@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingRenderAdapterProfile",
+  "type": "object",
+  "required": [
+    "adapter_id",
+    "provider_kind",
+    "operations",
+    "requires_c05_preflight",
+    "credential_mode",
+    "real_provider_enabled"
+  ],
+  "properties": {
+    "adapter_id": {
+      "type": "string"
+    },
+    "provider_kind": {
+      "enum": [
+        "canva_brand_templates",
+        "remotion",
+        "ffmpeg"
+      ]
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "requires_c05_preflight": {
+      "const": true
+    },
+    "credential_mode": {
+      "enum": [
+        "hermes_gateway_only",
+        "none"
+      ]
+    },
+    "real_provider_enabled": {
+      "const": false
+    }
+  },
+  "additionalProperties": false
+}
