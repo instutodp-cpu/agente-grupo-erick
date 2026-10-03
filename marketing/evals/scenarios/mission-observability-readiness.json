@@ -1,0 +1,13 @@
+{
+  "id": "mission-readiness-002",
+  "objective": "Produce traceable stage observations and deterministic simulation-readiness status.",
+  "must": [
+    "include trace and correlation IDs",
+    "record stage duration and failure class",
+    "report failed gates"
+  ],
+  "must_not": [
+    "claim external execution",
+    "hide failed or unknown gates"
+  ]
+}
