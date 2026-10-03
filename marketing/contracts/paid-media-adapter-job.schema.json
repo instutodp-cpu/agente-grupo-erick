@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingPaidMediaAdapterJob",
+  "type": "object",
+  "required": [
+    "job_id",
+    "provider",
+    "action",
+    "intent_id",
+    "approval_id",
+    "scope_hash",
+    "artifact_hash",
+    "idempotency_key",
+    "currency",
+    "requested_budget",
+    "approved_budget_ceiling",
+    "simulation"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string"
+    },
+    "provider": {
+      "enum": [
+        "meta_ads",
+        "google_ads"
+      ]
+    },
+    "action": {
+      "enum": [
+        "create_campaign",
+        "change_budget",
+        "pause_campaign"
+      ]
+    },
+    "intent_id": {
+      "type": "string"
+    },
+    "approval_id": {
+      "type": "string"
+    },
+    "scope_hash": {
+      "type": "string"
+    },
+    "artifact_hash": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 16
+    },
+    "currency": {
+      "const": "BRL"
+    },
+    "requested_budget": {
+      "type": "number",
+      "minimum": 0
+    },
+    "approved_budget_ceiling": {
+      "type": "number",
+      "minimum": 0
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}
