@@ -73,7 +73,9 @@
     "test:marketing:mission-recovery": "node --test test/marketing-mission-recovery-sim.test.js",
     "simulate:marketing:mission-recovery": "node scripts/marketing-mission-recovery-sim.js",
     "test:marketing:mission-readiness": "node --test test/marketing-mission-readiness-sim.test.js",
-    "simulate:marketing:mission-readiness": "node scripts/marketing-mission-readiness-sim.js"
+    "simulate:marketing:mission-readiness": "node scripts/marketing-mission-readiness-sim.js",
+    "test:marketing:activation-readiness": "node --test test/marketing-activation-readiness-sim.test.js",
+    "simulate:marketing:activation-readiness": "node scripts/marketing-activation-readiness-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
