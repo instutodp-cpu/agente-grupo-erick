@@ -1,0 +1,13 @@
+{
+  "id": "production-auth-002",
+  "objective": "Validate a narrowly scoped production authorization before a separate controlled execution step.",
+  "must": [
+    "require sandbox verification",
+    "require explicit authorization",
+    "consume authorization exactly once"
+  ],
+  "must_not": [
+    "silently broaden scope",
+    "equate eligibility with provider execution"
+  ]
+}
