@@ -1,0 +1,19 @@
+version: 1
+simulation_only: true
+real_provider_enabled: false
+credentials:
+  exposed_to_skill: false
+  exposed_to_artifact: false
+routing:
+  require_registered_capability: true
+  require_allowed_action: true
+  unknown_provider: deny
+approval:
+  L0: not_required
+  L1: not_required
+  L2: required_for_external_mutation
+  L3: explicit_required
+execution:
+  mutation_without_approval: deny
+  provider_error: fail_closed
+  preserve_idempotency_key: true
