@@ -1,0 +1,19 @@
+version: 1
+simulation_only: true
+append_only: true
+requirements:
+  monotonic_sequence: true
+  previous_event_hash_link: true
+  deterministic_event_hash: true
+  mission_and_run_identity_stable: true
+  evidence_refs_preserved: true
+rules:
+  mutation_of_prior_event: deny
+  deletion_of_prior_event: deny
+  sequence_gap: block_verification
+  hash_chain_break: block_verification
+  identity_change: block_verification
+  passed_stage_without_evidence: block_verification
+  blocked_stage_reason_required: true
+  external_effect: false
+fail_closed: true
