@@ -1,0 +1,12 @@
+{
+  "id": "integration-002",
+  "objective": "Deny actions not explicitly registered for a capability.",
+  "must": [
+    "deny unknown capability",
+    "deny action outside allowlist",
+    "fail closed"
+  ],
+  "must_not": [
+    "fallback to arbitrary provider call"
+  ]
+}
