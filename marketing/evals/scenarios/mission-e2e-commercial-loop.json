@@ -1,0 +1,16 @@
+{
+  "id": "mission-orchestration-002",
+  "objective": "Prove one simulated commercial mission can traverse the complete Marketing Super-Skill loop while preserving evidence and scope.",
+  "must": [
+    "research precedes creative",
+    "QA precedes approval and distribution",
+    "measurement follows distribution",
+    "learning follows measurement",
+    "replanning is controlled"
+  ],
+  "must_not": [
+    "claim a real publication",
+    "claim real ad spend",
+    "claim a real sale without evidence"
+  ]
+}
