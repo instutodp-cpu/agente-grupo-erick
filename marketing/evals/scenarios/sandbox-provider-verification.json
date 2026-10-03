@@ -1,0 +1,13 @@
+{
+  "id": "sandbox-activation-002",
+  "objective": "Verify provider reachability and declared capability through a controlled sandbox activation session.",
+  "must": [
+    "require prior activation-readiness eligibility",
+    "verify declared capability",
+    "verify idempotency and isolation"
+  ],
+  "must_not": [
+    "produce production effect",
+    "silently accept unknown provider result"
+  ]
+}
