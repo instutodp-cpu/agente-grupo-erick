@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { audit } = require('../scripts/hermes-self-audit');
+const { audit, validateEvidence } = require('../scripts/hermes-self-audit');
 
 test('self-audit readiness evidence is internally safe and anchored', () => {
   const result = audit();
@@ -10,4 +10,22 @@ test('self-audit readiness evidence is internally safe and anchored', () => {
   assert.ok(result.capability_count >= 4);
   assert.ok(result.finding_count >= 5);
   assert.match(result.audited_revision, /^[0-9a-f]{40}$/);
+});
+
+
+test('evidence ladder fails closed on impossible promotions', () => {
+  const base = { id: 'invalid', planned: true, contracted: true, implemented: true, tested: true, proven_e2e: true, operational: true, scope: 'staging', evidence_revision: 'a'.repeat(40) };
+
+  const cases = [
+    [{ ...base, proven_e2e: false }, 'operational_without_e2e'],
+    [{ ...base, tested: false }, 'e2e_without_tests'],
+    [{ ...base, implemented: false }, 'tested_without_implementation'],
+    [{ ...base, scope: '' }, 'missing_operational_scope'],
+    [{ ...base, evidence_revision: '' }, 'missing_e2e_revision']
+  ];
+
+  for (const [capability, expectedType] of cases) {
+    const errors = validateEvidence({ capabilities: [capability] });
+    assert.ok(errors.some(error => error.type === expectedType), expectedType);
+  }
 });
