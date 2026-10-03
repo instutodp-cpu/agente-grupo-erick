@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "simulation_only": true,
+  "capabilities": [
+    {
+      "capability_id": "research.web",
+      "family": "research",
+      "provider": "controlled_research_adapter",
+      "allowed_actions": [
+        "search",
+        "fetch"
+      ],
+      "risk_level": "L0",
+      "real_provider_enabled": false
+    },
+    {
+      "capability_id": "design.render",
+      "family": "design_render",
+      "provider": "controlled_render_adapter",
+      "allowed_actions": [
+        "render"
+      ],
+      "risk_level": "L1",
+      "real_provider_enabled": false
+    },
+    {
+      "capability_id": "social.publish",
+      "family": "publishing",
+      "provider": "controlled_social_adapter",
+      "allowed_actions": [
+        "publish",
+        "schedule"
+      ],
+      "risk_level": "L2",
+      "real_provider_enabled": false
+    },
+    {
+      "capability_id": "whatsapp.send",
+      "family": "messaging",
+      "provider": "controlled_messaging_adapter",
+      "allowed_actions": [
+        "send"
+      ],
+      "risk_level": "L2",
+      "real_provider_enabled": false
+    },
+    {
+      "capability_id": "ads.mutate",
+      "family": "paid_media",
+      "provider": "controlled_ads_adapter",
+      "allowed_actions": [
+        "create_campaign",
+        "change_budget",
+        "pause_campaign"
+      ],
+      "risk_level": "L3",
+      "real_provider_enabled": false
+    },
+    {
+      "capability_id": "analytics.read",
+      "family": "analytics",
+      "provider": "controlled_analytics_adapter",
+      "allowed_actions": [
+        "read_metrics"
+      ],
+      "risk_level": "L0",
+      "real_provider_enabled": false
+    }
+  ]
+}
