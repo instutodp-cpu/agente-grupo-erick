@@ -137,3 +137,5 @@ operational write is needed, or any step would authorize PR-C or real
 execution. A readiness result never replaces human review or explicit future
 authorization for a controlled canary.
 
+
+<!-- trusted-e2e staging canary attempt12: harmless operational proof -->
