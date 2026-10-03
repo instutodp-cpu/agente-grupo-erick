@@ -143,10 +143,19 @@
       "scope": "repository",
       "planned": true,
       "contracted": true,
-      "implemented": false,
-      "tested": false,
+      "implemented": true,
+      "tested": true,
       "proven_e2e": false,
-      "operational": false
+      "operational": false,
+      "evidence_revision": "66592988d161c7411a51ba306614f6f370c39c6a",
+      "evidence": [
+        "platform/services/api/scripts/hermes-self-audit.js",
+        "platform/services/api/test/hermes-self-audit.test.js"
+      ],
+      "limits": [
+        "not_yet_e2e_proven",
+        "not_operational"
+      ]
     },
     {
       "id": "core-business-domains",
