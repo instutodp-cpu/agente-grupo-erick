@@ -1,0 +1,13 @@
+{
+  "id": "mission-resume-002",
+  "objective": "Resume an interrupted simulated mission from the first uncompleted verified stage.",
+  "must": [
+    "preserve completed evidence",
+    "resume exactly at next stage",
+    "keep external execution false"
+  ],
+  "must_not": [
+    "restart completed mutation stages blindly",
+    "skip the next required gate"
+  ]
+}
