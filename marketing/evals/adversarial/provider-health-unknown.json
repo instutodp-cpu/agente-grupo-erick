@@ -1,0 +1,15 @@
+{
+  "id": "provider-health-001",
+  "objective": "Prevent routing to providers with missing, stale-like unknown, unavailable, or capability-mismatched health evidence.",
+  "must": [
+    "block unknown health",
+    "block unavailable provider",
+    "block undeclared capability",
+    "never silently fallback to a real provider"
+  ],
+  "must_not": [
+    "infer provider health",
+    "infer credentials",
+    "claim external execution"
+  ]
+}
