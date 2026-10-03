@@ -28,7 +28,7 @@ function createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({
   const persistenceRequest=buildHermesMaintainerScmWritePersistenceRequest(consumed);
   const persistenceResult=await consumption.adapter.persist(persistenceRequest);
   const durableReceipt=createHermesMaintainerScmWriteDurableReceipt(persistenceRequest,persistenceResult);
-  if(durableReceipt.receipt_valid!==true){const reason=persistenceResult?.status==='SCM_WRITE_PERSISTENCE_EXISTS'?'DURABLE_CONSUMPTION_EXISTS':persistenceResult?.status==='SCM_WRITE_PERSISTENCE_CREATED'?'DURABLE_CONSUMPTION_RECEIPT_INVALID':'DURABLE_CONSUMPTION_PERSISTENCE_FAILED';return blocked(reason);}
+  if(durableReceipt.receipt_valid!==true){const backendBlocker=persistenceResult?.blockers?.[0];const reason=persistenceResult?.status==='SCM_WRITE_PERSISTENCE_EXISTS'?'DURABLE_CONSUMPTION_EXISTS':persistenceResult?.status==='SCM_WRITE_PERSISTENCE_CREATED'?'DURABLE_CONSUMPTION_RECEIPT_INVALID':backendBlocker==='PERSISTENCE_BACKEND_UNCONFIRMED'?'DURABLE_CONSUMPTION_UNCONFIRMED':backendBlocker==='PERSISTENCE_BACKEND_INVALID'?'DURABLE_CONSUMPTION_INVALID':'DURABLE_CONSUMPTION_PERSISTENCE_FAILED';return blocked(reason);}
   const ownershipRequest=buildHermesMaintainerScmWriteAttemptOwnershipPersistenceRequest(durableReceipt,{attempt_reference:input.attempt_reference,intent_digest:durableReceipt.intent_digest,persistence_key:durableReceipt.persistence_key});
   const ownershipResult=await ownership.adapter.persist(ownershipRequest);
   const ownershipReceipt=createHermesMaintainerScmWriteDurableAttemptOwnershipReceipt(ownershipRequest,ownershipResult);
