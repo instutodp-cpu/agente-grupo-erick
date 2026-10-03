@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingMissionAuditEvent",
+  "type": "object",
+  "required": [
+    "event_id",
+    "run_id",
+    "mission_id",
+    "sequence",
+    "event_type",
+    "stage",
+    "decision",
+    "evidence_refs",
+    "previous_event_hash",
+    "event_hash",
+    "simulation",
+    "external_effect"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "mission_id": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "event_type": {
+      "enum": [
+        "stage_passed",
+        "stage_blocked",
+        "checkpoint_created",
+        "resume_allowed",
+        "resume_blocked",
+        "run_completed"
+      ]
+    },
+    "stage": {
+      "type": "string"
+    },
+    "decision": {
+      "type": "string"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "previous_event_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "event_hash": {
+      "type": "string"
+    },
+    "simulation": {
+      "const": true
+    },
+    "external_effect": {
+      "const": false
+    }
+  },
+  "additionalProperties": false
+}
