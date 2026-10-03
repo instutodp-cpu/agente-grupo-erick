@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');
-const sql=fs.readFileSync(path.join(__dirname,'../../platform/migrations/hermes/029_create_accounting_operational_bindings.sql'),'utf8');
+const sql=fs.readFileSync(path.join(__dirname,'../../../migrations/hermes/029_create_accounting_operational_bindings.sql'),'utf8');
 
 test('C24 reuses canonical execution persistence instead of duplicating jobs attempts or leases',()=>{
  assert.match(sql,/REFERENCES hermes\.execution_jobs\(job_reference_id\)/);
