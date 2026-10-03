@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingIntegrationCapability",
+  "type": "object",
+  "required": [
+    "capability_id",
+    "family",
+    "provider",
+    "allowed_actions",
+    "risk_level",
+    "real_provider_enabled"
+  ],
+  "properties": {
+    "capability_id": {
+      "type": "string"
+    },
+    "family": {
+      "enum": [
+        "research",
+        "design_render",
+        "publishing",
+        "messaging",
+        "paid_media",
+        "analytics"
+      ]
+    },
+    "provider": {
+      "type": "string"
+    },
+    "allowed_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "risk_level": {
+      "enum": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "real_provider_enabled": {
+      "const": false
+    }
+  },
+  "additionalProperties": false
+}
