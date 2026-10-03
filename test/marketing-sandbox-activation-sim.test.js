@@ -1,0 +1,13 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {verify,seen}=require('../scripts/marketing-sandbox-activation-sim');const s=()=>({session_id:'s1',environment:'sandbox',idempotency_key:'k1'});const c=()=>({activation_readiness_eligible:true,provider_reachable:true,capability_verified:true,credential_reference_only:true,production_isolation_verified:true});test.beforeEach(()=>seen.clear());
+test('healthy sandbox path verifies',()=>assert.equal(verify(s(),c()).decision,'sandbox_verified'));
+test('production environment is blocked',()=>{const x=s();x.environment='production';assert.equal(verify(x,c()).decision,'blocked')});
+test('missing activation readiness blocks',()=>{const x=c();x.activation_readiness_eligible=false;assert.equal(verify(s(),x).decision,'blocked')});
+test('unreachable provider blocks',()=>{const x=c();x.provider_reachable=false;assert.equal(verify(s(),x).decision,'blocked')});
+test('capability mismatch blocks',()=>{const x=c();x.capability_verified=false;assert.equal(verify(s(),x).decision,'blocked')});
+test('secret exposure blocks',()=>{const x=c();x.secret_value_exposed=true;assert.equal(verify(s(),x).decision,'blocked')});
+test('missing idempotency key blocks',()=>{const x=s();x.idempotency_key='';assert.equal(verify(x,c()).decision,'blocked')});
+test('production endpoint use blocks',()=>{const x=c();x.production_endpoint_used=true;assert.equal(verify(s(),x).decision,'blocked')});
+test('production account use blocks',()=>{const x=c();x.production_account_used=true;assert.equal(verify(s(),x).decision,'blocked')});
+test('unknown provider result blocks',()=>{const x=c();x.provider_result='unknown';assert.equal(verify(s(),x).decision,'blocked')});
+test('same idempotency key becomes duplicate noop',()=>{verify(s(),c());assert.equal(verify(s(),c()).duplicate_noop,true)});
+test('sandbox never creates production effect or authorization',()=>{const d=verify(s(),c());assert.equal(d.production_effect,false);assert.equal(d.production_authorized,false)});
