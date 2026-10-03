@@ -265,3 +265,9 @@ jobs:
 
       - name: Run C10 controlled execution simulation
         run: npm run simulate:marketing:controlled-execution
+
+      - name: Run C10 canary outcome tests
+        run: npm run test:marketing:canary-outcome
+
+      - name: Run C10 canary outcome simulation
+        run: npm run simulate:marketing:canary-outcome
