@@ -1,0 +1,10 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {read,metric}=require('../scripts/marketing-read-adapters-sim');
+const base={source_ref:'src',retrieved_at:'2026-10-02T00:00:00Z'};
+test('Firecrawl search stays simulated',()=>assert.equal(read({...base,adapter_id:'research.firecrawl',operation:'search'}).network_execution,false));
+test('Apify public read is allowed in simulation',()=>assert.equal(read({...base,adapter_id:'research.apify',operation:'search_public_sources'}).status,'simulated_read'));
+test('unknown adapter fails closed',()=>assert.equal(read({...base,adapter_id:'x',operation:'search'}).reason,'unknown_adapter'));
+test('mutation on read adapter is denied',()=>assert.equal(read({...base,adapter_id:'research.firecrawl',operation:'publish'}).reason,'mutation_denied'));
+test('analytics requires account scope',()=>assert.equal(read({...base,adapter_id:'analytics.meta',operation:'read_metrics'}).reason,'account_scope_required'));
+test('analytics preserves account scope',()=>assert.equal(read({...base,adapter_id:'analytics.meta',operation:'read_metrics',account_scope:'acct-1'}).account_scope,'acct-1'));
+test('provenance is preserved',()=>{const r=read({...base,adapter_id:'research.firecrawl',operation:'fetch'});assert.equal(r.source_ref,'src');assert.equal(r.retrieved_at,base.retrieved_at)});
+test('missing metric stays null',()=>{const r=read({...base,adapter_id:'analytics.google_ads',operation:'read_metrics',account_scope:'g1',mock_data:{clicks:2}});assert.equal(metric(r,'revenue'),null)});
