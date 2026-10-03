@@ -18,7 +18,8 @@ function prepareMutation(controlledExecution,target,admission,grant,requestInput
  else if(admission.operation==='update_file')durableHandoff=prepareHermesMaintainerGithubUpdateFileDurableAdmissionHandoff(bridge.ownership,target);
  else if(admission.operation==='create_pull_request')durableHandoff=prepareHermesMaintainerGithubCreatePullRequestDurableAdmissionHandoff(bridge.ownership,target);
  if(durableHandoff?.handoff_valid!==true)return {ok:false,value:durableHandoff};
- const mutationInput=Object.freeze({durable_handoff:durableHandoff,grant,target,request_input:requestInput||null,admission_reference:admission.admission_reference,ownership:bridge.ownership});
+ const capabilityGrant=Object.freeze({decision:'GRANTED',capability:bridge.authority_evidence.capability,intent_digest:bridge.authority_evidence.intent_digest,attempt_reference:bridge.authority_evidence.attempt_reference,capability_reference:bridge.authority_evidence.capability_reference});
+ const mutationInput=Object.freeze({durable_handoff:durableHandoff,grant:capabilityGrant,target,request_input:requestInput||null,admission_reference:admission.admission_reference,ownership:bridge.ownership});
  return {ok:true,value:Object.freeze({controlled_execution:controlledExecution,ownership:bridge.ownership,target,authority_evidence:bridge.authority_evidence,mutation_input:mutationInput})};
 }
 
