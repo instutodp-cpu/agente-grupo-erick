@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingMissionRecoveryCase",
+  "type": "object",
+  "required": [
+    "case_id",
+    "run_id",
+    "stage",
+    "failure_class",
+    "effect_state",
+    "evidence_refs",
+    "status",
+    "simulation"
+  ],
+  "properties": {
+    "case_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "stage": {
+      "type": "string"
+    },
+    "failure_class": {
+      "enum": [
+        "transient",
+        "terminal",
+        "ambiguous",
+        "stuck",
+        "deadline_exceeded"
+      ]
+    },
+    "effect_state": {
+      "enum": [
+        "none",
+        "confirmed",
+        "not_found",
+        "unknown",
+        "conflicting"
+      ]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "enum": [
+        "open",
+        "recovered",
+        "escalated",
+        "blocked"
+      ]
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}
