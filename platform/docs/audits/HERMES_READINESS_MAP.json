@@ -88,6 +88,22 @@
       "type": "historical_documentation",
       "evidence": "platform/docs/HERMES_EXECUTION_PLAN_STAGE_MANIFEST.md",
       "status": "review"
+    },
+    {
+      "id": "F-006",
+      "severity": "high",
+      "type": "ci_scope_gap",
+      "evidence": ".github/workflows/hermes-core-smoke.yml + .github/workflows/marketing-foundation-ci.yml",
+      "status": "open",
+      "detail": "Only two workflow files exist; self-audit runner is currently covered indirectly by core test discovery, not a named readiness gate."
+    },
+    {
+      "id": "F-007",
+      "severity": "medium",
+      "type": "simulation_boundary",
+      "evidence": "platform/docs/HERMES_RUNTIME_*_SIMULATION_CONTRACTS.md",
+      "status": "proven",
+      "detail": "Scheduler, worker, dispatch and queue families have substantial implementation/tests but canonical docs explicitly retain simulation boundaries; operational must not be inferred."
     }
   ],
   "capabilities": [
@@ -140,6 +156,113 @@
       "tested": null,
       "proven_e2e": false,
       "operational": false
+    },
+    {
+      "id": "runtime-scheduler-worker-dispatch-queue",
+      "scope": "simulation contracts",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "limits": [
+        "simulation_boundary"
+      ]
+    },
+    {
+      "id": "agent-orchestration-stack",
+      "scope": "planner/decision/execution-plan",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "limits": [
+        "no_operational_evidence_in_baseline"
+      ]
+    },
+    {
+      "id": "memory-selection",
+      "scope": "core selection",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false
+    },
+    {
+      "id": "model-selection-provider-contracts",
+      "scope": "core model boundary",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false
+    },
+    {
+      "id": "tool-workflow-contracts",
+      "scope": "core contracts",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false
+    },
+    {
+      "id": "public-web-canary",
+      "scope": "non-production canary",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": null,
+      "operational": null,
+      "limits": [
+        "requires_exact_trial_evidence_review"
+      ]
+    },
+    {
+      "id": "transcription-stack",
+      "scope": "provider/transport/runtime",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": null,
+      "operational": null,
+      "limits": [
+        "requires_exact_operational_evidence_review"
+      ]
     }
-  ]
+  ],
+  "inventory": {
+    "platform_docs": 135,
+    "core_source_files": 691,
+    "api_tests": 543,
+    "github_workflows": 2,
+    "marketing_files": 202,
+    "core_family_counts": {
+      "hermes_maintainer": 178,
+      "public_web": 57,
+      "runtime_queue": 36,
+      "transcription_provider": 28,
+      "runtime_execution": 26,
+      "runtime_worker": 19,
+      "runtime_dispatch": 18,
+      "execution_plan": 16,
+      "runtime_scheduler": 14,
+      "execution_authorization": 14,
+      "model_selection": 12,
+      "canonical_governance": 11,
+      "orchestrator_decision": 10,
+      "memory_selection": 10,
+      "execution_gateway": 10,
+      "context_assembly": 10
+    }
+  }
 }
