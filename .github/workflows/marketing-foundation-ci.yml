@@ -217,3 +217,9 @@ jobs:
 
       - name: Run C09 mission resume simulation
         run: npm run simulate:marketing:mission-resume
+
+      - name: Run C09 mission audit tests
+        run: npm run test:marketing:mission-audit
+
+      - name: Run C09 mission audit simulation
+        run: npm run simulate:marketing:mission-audit
