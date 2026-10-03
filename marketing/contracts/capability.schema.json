@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingCapability",
+  "type": "object",
+  "required": [
+    "name",
+    "permission_level",
+    "mutates_external_state",
+    "credential_mode"
+  ],
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "permission_level": {
+      "enum": [
+        "L0",
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "mutates_external_state": {
+      "type": "boolean"
+    },
+    "credential_mode": {
+      "const": "gateway_only"
+    },
+    "provider": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reversible": {
+      "type": "boolean"
+    },
+    "approval_required": {
+      "type": "boolean"
+    },
+    "audit_required": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false
+}

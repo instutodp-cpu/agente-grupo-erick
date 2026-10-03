@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingSandboxActivationSession",
+  "type": "object",
+  "required": [
+    "session_id",
+    "request_id",
+    "provider_id",
+    "capability_id",
+    "environment",
+    "credential_ref",
+    "idempotency_key",
+    "status",
+    "production_effect",
+    "simulation"
+  ],
+  "properties": {
+    "session_id": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "provider_id": {
+      "type": "string"
+    },
+    "capability_id": {
+      "type": "string"
+    },
+    "environment": {
+      "const": "sandbox"
+    },
+    "credential_ref": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "verified",
+        "blocked",
+        "failed"
+      ]
+    },
+    "production_effect": {
+      "const": false
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}

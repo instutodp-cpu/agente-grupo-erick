@@ -1,0 +1,12 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {candidate,promote}=require('../scripts/marketing-learning-feedback-sim');
+const S={channel:'instagram',store_id:'s1',audience:'a1',format:'reel'};
+const obs=(dirs,scope=S)=>dirs.map((direction,i)=>({direction,evidence_ref:'e'+i,scope}));
+test('single win never promotes',()=>{const c=candidate('claim',obs(['support']));assert.notEqual(c.status,'eligible_for_rule');assert.equal(promote(c,obs(['support'])),null)});
+test('three independent supports in same scope are eligible',()=>assert.equal(candidate('claim',obs(['support','support','support'])).status,'eligible_for_rule'));
+test('scope mismatch blocks promotion',()=>{const x=obs(['support','support','support']);x[2]={...x[2],scope:{...S,store_id:'s2'}};assert.equal(candidate('claim',x).status,'promotion_blocked')});
+test('duplicate evidence refs block promotion',()=>{const x=obs(['support','support','support']);x[2].evidence_ref='e1';assert.equal(candidate('claim',x).status,'promotion_blocked')});
+test('contrary ratio above threshold blocks promotion',()=>assert.equal(candidate('claim',obs(['support','support','support','contrary','contrary'])).status,'promotion_blocked'));
+test('contrary evidence is preserved in promoted rule',()=>{const x=obs(['support','support','support','support','support','support','support','support','support','contrary']);const c=candidate('claim',x);assert.equal(c.status,'eligible_for_rule');assert.deepEqual(promote(c,x).contrary_evidence_refs,['e9'])});
+test('promotion preserves exact scope',()=>{const x=obs(['support','support','support']);const r=promote(candidate('claim',x),x);assert.deepEqual(r.scope,S)});
+test('confidence is bounded',()=>{const x=obs(Array(10).fill('support'));const r=promote(candidate('claim',x),x);assert.ok(r.confidence<=.9)});
+test('learned rule remains simulation only',()=>{const x=obs(['support','support','support']);assert.equal(promote(candidate('claim',x),x).provenance.simulation_only,true)});

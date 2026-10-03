@@ -1,0 +1,19 @@
+version: "1.0"
+principles:
+  - raw_evidence_is_immutable
+  - current_claims_require_current_sources
+  - missing_data_must_be_explicit
+  - correlation_is_not_attribution
+  - contradictory_evidence_must_be_preserved
+levels:
+  - FACT
+  - OBSERVATION
+  - HYPOTHESIS
+  - TESTED_INSIGHT
+  - LEARNED_RULE
+learned_rule:
+  requires_repeated_evidence: true
+  requires_scope: true
+  requires_confidence: true
+  requires_validity_window: true
+  requires_provenance: true

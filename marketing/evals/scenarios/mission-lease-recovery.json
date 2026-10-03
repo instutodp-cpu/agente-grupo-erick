@@ -1,0 +1,13 @@
+{
+  "id": "mission-concurrency-002",
+  "objective": "Allow safe recovery after a worker lease expires without replaying a completed transition.",
+  "must": [
+    "permit takeover only after expiration",
+    "preserve mission version",
+    "reject already advanced version"
+  ],
+  "must_not": [
+    "steal active lease",
+    "replay external side effects"
+  ]
+}

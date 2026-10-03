@@ -1,0 +1,19 @@
+version: 1
+simulation_only: true
+external_mutation: false
+risk_level: L2
+requirements:
+  approval_status: approved
+  approval_single_use: true
+  exact_scope_hash: true
+  exact_artifact_hash: true
+  idempotency_key_required: true
+  registered_capability_action: true
+rules:
+  retry_preserves_idempotency_key: true
+  approval_replay: deny
+  changed_scope: deny
+  changed_artifact: deny
+  ambiguous_provider_result: reconcile_before_retry
+  success_then_repeat: duplicate_noop
+fail_closed: true

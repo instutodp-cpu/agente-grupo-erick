@@ -1,0 +1,24 @@
+{
+  "id": "render-text-fit-001",
+  "objective": "Prevent long on-screen copy from being forced into a safe-zone box with unreadably small type.",
+  "input": {
+    "box": {
+      "width": 700,
+      "height": 180
+    },
+    "text": "Texto deliberadamente longo para exceder a capacidade do bloco e exigir uma decisão segura de composição.",
+    "font_size_px": 64,
+    "min_font_px": 32,
+    "max_lines": 2
+  },
+  "must": [
+    "detect overflow",
+    "respect minimum font size",
+    "prefer rewrite or safe box adjustment when shrinking is insufficient"
+  ],
+  "must_not": [
+    "shrink below minimum font",
+    "clip text",
+    "silently hide lines"
+  ]
+}

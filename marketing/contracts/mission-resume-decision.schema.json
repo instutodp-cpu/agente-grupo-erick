@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingMissionResumeDecision",
+  "type": "object",
+  "required": [
+    "run_id",
+    "decision",
+    "resume_stage",
+    "checkpoint_ref",
+    "simulation",
+    "external_execution"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "resume",
+        "blocked_integrity",
+        "blocked_scope",
+        "blocked_sequence",
+        "completed"
+      ]
+    },
+    "resume_stage": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "checkpoint_ref": {
+      "type": "string"
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "simulation": {
+      "const": true
+    },
+    "external_execution": {
+      "const": false
+    }
+  },
+  "additionalProperties": false
+}

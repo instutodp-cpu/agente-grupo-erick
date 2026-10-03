@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingTextFit",
+  "type": "object",
+  "required": [
+    "element_id",
+    "font_family",
+    "font_size_px",
+    "max_lines",
+    "fit_status"
+  ],
+  "properties": {
+    "element_id": {
+      "type": "string"
+    },
+    "font_family": {
+      "type": "string"
+    },
+    "font_size_px": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "max_lines": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "estimated_lines": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "fit_status": {
+      "enum": [
+        "fits",
+        "overflow",
+        "blocked_min_font",
+        "missing_font"
+      ]
+    },
+    "resolution": {
+      "enum": [
+        "none",
+        "reduce_font_within_limits",
+        "rewrite_copy",
+        "expand_box_within_safe_zone",
+        "block"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

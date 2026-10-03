@@ -1,0 +1,16 @@
+version: 1
+simulation_only: true
+fail_closed: true
+rules:
+  one_active_lease_per_run: true
+  lease_holder_required_for_transition: true
+  optimistic_version_match_required: true
+  exactly_one_transition_per_version: true
+  expired_lease_cannot_advance: true
+  released_lease_cannot_advance: true
+  stale_worker_cannot_advance: true
+  duplicate_transition: deny
+  lease_takeover:
+    only_after_expiration: true
+    increments_lease_generation: true
+  external_effect: false

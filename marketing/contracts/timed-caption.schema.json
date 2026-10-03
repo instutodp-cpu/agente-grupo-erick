@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingTimedCaption",
+  "type": "object",
+  "required": [
+    "caption_id",
+    "text",
+    "start_ms",
+    "end_ms",
+    "layout_ref"
+  ],
+  "properties": {
+    "caption_id": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "start_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "end_ms": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "layout_ref": {
+      "type": "string"
+    },
+    "speaker": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "max_lines": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "evidence_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

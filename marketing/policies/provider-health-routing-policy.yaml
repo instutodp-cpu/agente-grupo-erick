@@ -1,0 +1,22 @@
+version: 1
+simulation_only: true
+real_provider_enabled: false
+routing:
+  require_health_evidence: true
+  require_declared_capability: true
+  unknown_health: block
+  unavailable: block
+  degraded:
+    read_only: allow_simulated_if_capability_declared
+    mutation: block
+  healthy: allow_simulated_if_capability_declared
+fallback:
+  silent_real_provider_fallback: deny
+  credential_fallback: deny
+  undeclared_adapter_fallback: deny
+observability:
+  append_only_events: true
+  preserve_adapter_id: true
+  preserve_health_evidence_ref: true
+  external_effect: false
+fail_closed: true

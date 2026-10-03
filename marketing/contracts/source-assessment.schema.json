@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingSourceAssessment",
+  "type": "object",
+  "required": [
+    "source_ref",
+    "source_type",
+    "relevance",
+    "freshness",
+    "traceability",
+    "decision"
+  ],
+  "properties": {
+    "source_ref": {
+      "type": "string"
+    },
+    "source_type": {
+      "enum": [
+        "official",
+        "primary",
+        "first_party_internal",
+        "secondary",
+        "community",
+        "synthetic_test"
+      ]
+    },
+    "relevance": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "freshness": {
+      "enum": [
+        "current",
+        "historical",
+        "unknown"
+      ]
+    },
+    "traceability": {
+      "enum": [
+        "direct",
+        "indirect",
+        "unverifiable"
+      ]
+    },
+    "independence_group": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "decision": {
+      "enum": [
+        "accept",
+        "context_only",
+        "reject"
+      ]
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

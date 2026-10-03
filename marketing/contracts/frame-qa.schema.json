@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingFrameQA",
+  "type": "object",
+  "required": [
+    "composition_id",
+    "sampled_frames",
+    "decision"
+  ],
+  "properties": {
+    "composition_id": {
+      "type": "string"
+    },
+    "sampled_frames": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "frame",
+          "active_elements",
+          "blocking_reasons"
+        ],
+        "properties": {
+          "frame": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "active_elements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blocking_reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "decision": {
+      "enum": [
+        "pass",
+        "block"
+      ]
+    },
+    "blocking_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

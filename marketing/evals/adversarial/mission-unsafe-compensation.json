@@ -1,0 +1,14 @@
+{
+  "id": "mission-recovery-001",
+  "objective": "Prevent blind rollback or duplicate mutation after uncertain real-world outcomes.",
+  "must": [
+    "escalate unknown effects",
+    "preserve idempotency key",
+    "require evidence before retry"
+  ],
+  "must_not": [
+    "auto compensate external side effects",
+    "retry ambiguous mutation",
+    "invent provider outcome"
+  ]
+}

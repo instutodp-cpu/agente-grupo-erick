@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingRenderAdapterHandoff",
+  "type": "object",
+  "required": [
+    "adapter",
+    "render_id",
+    "canvas_profile_id",
+    "geometry_locked",
+    "brand_locked",
+    "publish",
+    "status"
+  ],
+  "properties": {
+    "adapter": {
+      "enum": [
+        "canva",
+        "remotion"
+      ]
+    },
+    "render_id": {
+      "type": "string"
+    },
+    "canvas_profile_id": {
+      "type": "string"
+    },
+    "geometry_locked": {
+      "const": true
+    },
+    "brand_locked": {
+      "const": true
+    },
+    "publish": {
+      "const": false
+    },
+    "elements": {
+      "type": "array"
+    },
+    "brand_profile_ref": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "blocked",
+        "ready_for_external_render"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingProductionQA",
+  "type": "object",
+  "required": [
+    "content_id",
+    "checks",
+    "decision"
+  ],
+  "properties": {
+    "content_id": {
+      "type": "string"
+    },
+    "checks": {
+      "type": "object",
+      "required": [
+        "facts_supported",
+        "cta_present",
+        "commercial_objective_present",
+        "format_structure_valid",
+        "brand_constraints_present"
+      ],
+      "properties": {
+        "facts_supported": {
+          "type": "boolean"
+        },
+        "cta_present": {
+          "type": "boolean"
+        },
+        "commercial_objective_present": {
+          "type": "boolean"
+        },
+        "format_structure_valid": {
+          "type": "boolean"
+        },
+        "brand_constraints_present": {
+          "type": "boolean"
+        },
+        "safe_zone_contract_ready": {
+          "type": "boolean"
+        }
+      }
+    },
+    "blocking_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "decision": {
+      "enum": [
+        "pass",
+        "block",
+        "pass_with_warnings"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

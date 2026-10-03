@@ -1,0 +1,16 @@
+{
+  "id": "learning-001",
+  "objective": "Prevent one successful post or campaign from becoming a learned rule.",
+  "input": {
+    "support_count": 1,
+    "contrary_count": 0
+  },
+  "must": [
+    "keep as hypothesis or tested insight candidate",
+    "preserve evidence"
+  ],
+  "must_not": [
+    "promote to learned rule",
+    "claim guaranteed repeatability"
+  ]
+}

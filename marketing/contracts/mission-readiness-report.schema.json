@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingMissionReadinessReport",
+  "type": "object",
+  "required": [
+    "status",
+    "required_gates",
+    "failed_gates",
+    "warnings",
+    "real_provider_activation_authorized",
+    "simulation"
+  ],
+  "properties": {
+    "status": {
+      "enum": [
+        "ready_for_simulation",
+        "not_ready"
+      ]
+    },
+    "required_gates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "failed_gates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "real_provider_activation_authorized": {
+      "const": false
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}

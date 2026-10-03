@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingMissionRecoveryDecision",
+  "type": "object",
+  "required": [
+    "case_id",
+    "decision",
+    "retry_allowed",
+    "compensation_allowed",
+    "human_required",
+    "external_effect",
+    "simulation"
+  ],
+  "properties": {
+    "case_id": {
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "retry_same_idempotency_key",
+        "resume_from_checkpoint",
+        "confirm_effect_and_continue",
+        "block_terminal",
+        "escalate_ambiguous",
+        "escalate_conflict",
+        "escalate_stuck"
+      ]
+    },
+    "retry_allowed": {
+      "type": "boolean"
+    },
+    "compensation_allowed": {
+      "type": "boolean"
+    },
+    "human_required": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "external_effect": {
+      "const": false
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}

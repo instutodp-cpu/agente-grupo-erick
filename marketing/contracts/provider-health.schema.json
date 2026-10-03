@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingProviderHealth",
+  "type": "object",
+  "required": [
+    "adapter_id",
+    "status",
+    "checked_at",
+    "capabilities",
+    "simulation",
+    "real_provider_enabled"
+  ],
+  "properties": {
+    "adapter_id": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "healthy",
+        "degraded",
+        "unavailable",
+        "unknown"
+      ]
+    },
+    "checked_at": {
+      "type": "string"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "simulation": {
+      "const": true
+    },
+    "real_provider_enabled": {
+      "const": false
+    }
+  },
+  "additionalProperties": false
+}

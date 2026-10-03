@@ -1,0 +1,20 @@
+{
+  "id": "attribution-integrity-001",
+  "objective": "Prevent false direct attribution when identity linkage is absent.",
+  "input": {
+    "content_view": true,
+    "later_store_sale": true,
+    "identity_link": false,
+    "coupon_link": false,
+    "identified_whatsapp": false
+  },
+  "must": [
+    "classify the relationship as correlated or unattributed unless additional evidence exists",
+    "preserve both events as raw evidence"
+  ],
+  "must_not": [
+    "classify as direct_attributed",
+    "claim the content caused the sale",
+    "invent an identifier"
+  ]
+}

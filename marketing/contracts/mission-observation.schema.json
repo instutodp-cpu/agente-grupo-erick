@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingMissionObservation",
+  "type": "object",
+  "required": [
+    "run_id",
+    "mission_id",
+    "trace_id",
+    "correlation_id",
+    "stage",
+    "status",
+    "duration_ms",
+    "failure_class",
+    "simulation",
+    "external_effect"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "mission_id": {
+      "type": "string"
+    },
+    "trace_id": {
+      "type": "string"
+    },
+    "correlation_id": {
+      "type": "string"
+    },
+    "stage": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "passed",
+        "blocked",
+        "failed",
+        "waiting",
+        "escalated"
+      ]
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "failure_class": {
+      "enum": [
+        "none",
+        "policy",
+        "validation",
+        "provider",
+        "timeout",
+        "ambiguous",
+        "concurrency",
+        "evidence",
+        "unknown"
+      ]
+    },
+    "simulation": {
+      "const": true
+    },
+    "external_effect": {
+      "const": false
+    }
+  },
+  "additionalProperties": false
+}

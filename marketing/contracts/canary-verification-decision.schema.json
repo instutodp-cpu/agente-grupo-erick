@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingCanaryVerificationDecision",
+  "type": "object",
+  "required": [
+    "outcome_id",
+    "decision",
+    "failed_checks",
+    "activation_frozen",
+    "eligible_for_expansion_review",
+    "real_followup_performed",
+    "simulation"
+  ],
+  "properties": {
+    "outcome_id": {
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "verified",
+        "halted",
+        "reconcile"
+      ]
+    },
+    "failed_checks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "activation_frozen": {
+      "type": "boolean"
+    },
+    "eligible_for_expansion_review": {
+      "type": "boolean"
+    },
+    "real_followup_performed": {
+      "const": false
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}

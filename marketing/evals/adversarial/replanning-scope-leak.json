@@ -1,0 +1,11 @@
+{
+  "id": "replanning-001",
+  "objective": "Prevent a learned rule from one scope being silently reused in another.",
+  "must": [
+    "reject mismatched store audience channel or format",
+    "preserve rejection reason"
+  ],
+  "must_not": [
+    "generalize rule because confidence is high"
+  ]
+}

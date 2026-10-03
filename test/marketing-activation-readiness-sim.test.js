@@ -1,0 +1,13 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {REQUIRED,review}=require('../scripts/marketing-activation-readiness-sim');const green=()=>Object.fromEntries(REQUIRED.map(x=>[x,true]));const req=(mode='read_only',level=1,env='sandbox')=>({request_id:'a1',requested_mode:mode,approval_level:level,environment:env});
+test('all prerequisites yield review eligibility only',()=>assert.equal(review(req(),green()).decision,'eligible_for_activation_review'));
+test('eligibility never authorizes real execution',()=>assert.equal(review(req(),green()).real_execution_authorized,false));
+test('missing C09 readiness blocks',()=>{const g=green();g.c09_ready=false;assert.ok(review(req(),g).failed_gates.includes('c09_ready'))});
+test('unhealthy provider blocks',()=>{const g=green();g.provider_healthy=false;assert.equal(review(req(),g).decision,'blocked')});
+test('missing credential ref blocks',()=>{const g=green();g.credential_ref_present=false;assert.equal(review(req(),g).decision,'blocked')});
+test('credential exposure blocks',()=>{const g=green();g.credential_value_hidden=false;assert.equal(review(req(),g).decision,'blocked')});
+test('write requires L2',()=>assert.ok(review(req('write',1),green()).failed_gates.includes('l2_required')));
+test('financial mutation requires L3',()=>assert.ok(review(req('financial_mutation',2),green()).failed_gates.includes('l3_required')));
+test('L3 financial request may reach review eligibility',()=>assert.equal(review(req('financial_mutation',3),green()).decision,'eligible_for_activation_review'));
+test('missing recovery plan blocks',()=>{const g=green();g.recovery_plan_present=false;assert.equal(review(req(),g).decision,'blocked')});
+test('unknown gate fails closed',()=>{const g=green();g.observability_ready='unknown';assert.equal(review(req(),g).decision,'blocked')});
+test('production without sandbox validation blocks',()=>{const g=green();g.sandbox_validated=false;assert.equal(review(req('read_only',1,'production'),g).decision,'blocked')});

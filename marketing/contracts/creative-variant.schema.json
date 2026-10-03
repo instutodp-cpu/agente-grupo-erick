@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingCreativeVariant",
+  "type": "object",
+  "required": [
+    "variant_id",
+    "parent_concept_id",
+    "dimension_changed",
+    "hypothesis",
+    "expected_signal"
+  ],
+  "properties": {
+    "variant_id": {
+      "type": "string"
+    },
+    "parent_concept_id": {
+      "type": "string"
+    },
+    "dimension_changed": {
+      "enum": [
+        "hook",
+        "format",
+        "proof",
+        "offer_framing",
+        "cta",
+        "pacing",
+        "visual_structure",
+        "audience_angle"
+      ]
+    },
+    "hypothesis": {
+      "type": "string"
+    },
+    "expected_signal": {
+      "type": "string"
+    },
+    "copy": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

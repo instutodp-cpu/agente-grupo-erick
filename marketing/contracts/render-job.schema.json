@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingRenderJob",
+  "type": "object",
+  "required": [
+    "job_id",
+    "manifest_id",
+    "manifest_hash",
+    "adapter",
+    "mode",
+    "external_execution",
+    "publish",
+    "status"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string"
+    },
+    "manifest_id": {
+      "type": "string"
+    },
+    "manifest_hash": {
+      "type": "string",
+      "minLength": 16
+    },
+    "adapter": {
+      "enum": [
+        "remotion",
+        "canva"
+      ]
+    },
+    "mode": {
+      "const": "simulation"
+    },
+    "external_execution": {
+      "const": false
+    },
+    "publish": {
+      "const": false
+    },
+    "credential_refs": {
+      "type": "array",
+      "maxItems": 0
+    },
+    "status": {
+      "enum": [
+        "prepared",
+        "blocked"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

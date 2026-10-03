@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingPaidMediaAdapterReceipt",
+  "type": "object",
+  "required": [
+    "job_id",
+    "status",
+    "idempotency_key",
+    "external_mutation",
+    "financial_effect",
+    "requires_reconciliation"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "simulated_accepted",
+        "duplicate_noop",
+        "blocked",
+        "ambiguous"
+      ]
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "external_mutation": {
+      "const": false
+    },
+    "financial_effect": {
+      "const": false
+    },
+    "requires_reconciliation": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

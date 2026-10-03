@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingResearchPlan",
+  "type": "object",
+  "required": [
+    "plan_id",
+    "objective",
+    "queries",
+    "stop_conditions",
+    "mode"
+  ],
+  "properties": {
+    "plan_id": {
+      "type": "string"
+    },
+    "objective": {
+      "type": "string"
+    },
+    "mode": {
+      "const": "read_only"
+    },
+    "queries": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "question",
+          "source_classes"
+        ],
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "source_classes": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "official",
+                "primary",
+                "first_party_internal",
+                "secondary",
+                "community"
+              ]
+            }
+          },
+          "freshness_required": {
+            "enum": [
+              "current",
+              "historical_ok"
+            ]
+          }
+        }
+      }
+    },
+    "stop_conditions": {
+      "type": "object",
+      "required": [
+        "minimum_independent_evidence",
+        "require_traceable_source"
+      ],
+      "properties": {
+        "minimum_independent_evidence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "require_traceable_source": {
+          "type": "boolean"
+        },
+        "allow_insufficient_evidence": {
+          "type": "boolean"
+        }
+      }
+    },
+    "output": {
+      "enum": [
+        "competitive_scan",
+        "viral_pattern_scan",
+        "market_reference_scan",
+        "platform_fact_check"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

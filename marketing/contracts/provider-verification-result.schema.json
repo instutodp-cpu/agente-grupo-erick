@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingProviderVerificationResult",
+  "type": "object",
+  "required": [
+    "session_id",
+    "provider_reachable",
+    "capability_verified",
+    "credential_boundary_verified",
+    "idempotency_verified",
+    "production_isolation_verified",
+    "decision",
+    "simulation"
+  ],
+  "properties": {
+    "session_id": {
+      "type": "string"
+    },
+    "provider_reachable": {
+      "type": "boolean"
+    },
+    "capability_verified": {
+      "type": "boolean"
+    },
+    "credential_boundary_verified": {
+      "type": "boolean"
+    },
+    "idempotency_verified": {
+      "type": "boolean"
+    },
+    "production_isolation_verified": {
+      "type": "boolean"
+    },
+    "decision": {
+      "enum": [
+        "sandbox_verified",
+        "blocked"
+      ]
+    },
+    "failed_checks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}

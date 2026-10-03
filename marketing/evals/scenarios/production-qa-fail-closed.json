@@ -1,0 +1,21 @@
+{
+  "id": "production-qa-001",
+  "objective": "Block production package containing unsupported commercial claims.",
+  "input": {
+    "copy": "Últimas unidades com 30% OFF",
+    "known": {
+      "stock": null,
+      "discount": null
+    },
+    "cta": "Fale no WhatsApp"
+  },
+  "must": [
+    "block unsupported scarcity claim",
+    "block unsupported discount claim",
+    "preserve CTA and valid content for correction"
+  ],
+  "must_not": [
+    "render as ready",
+    "silently remove evidence requirement"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "canary-outcome-002",
+  "objective": "Verify a bounded canary outcome before allowing a separate expansion review.",
+  "must": [
+    "require receipt and trace",
+    "verify operation and financial ceilings",
+    "require confirmed effect for success"
+  ],
+  "must_not": [
+    "equate successful canary with automatic production expansion"
+  ]
+}

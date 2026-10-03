@@ -1,0 +1,11 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {state,acquire,release,advance}=require('../scripts/marketing-mission-concurrency-sim');
+test('one worker acquires active lease',()=>{const s=state();assert.equal(acquire(s,'w1',0).ok,true)});
+test('second worker cannot steal active lease',()=>{const s=state();acquire(s,'w1',0);assert.equal(acquire(s,'w2',1).decision,'lease_conflict')});
+test('lease holder advances exactly once for version',()=>{const s=state();acquire(s,'w1',0);assert.equal(advance(s,{holder:'w1',expected_version:0,stage:'research',now:1}).decision,'advanced');assert.equal(s.version,1)});
+test('stale expected version is rejected',()=>{const s=state();acquire(s,'w1',0);advance(s,{holder:'w1',expected_version:0,stage:'research',now:1});assert.equal(advance(s,{holder:'w1',expected_version:0,stage:'creative',now:2}).decision,'stale_version')});
+test('non holder cannot advance',()=>{const s=state();acquire(s,'w1',0);assert.equal(advance(s,{holder:'w2',expected_version:0,stage:'research',now:1}).decision,'invalid_holder')});
+test('expired lease cannot advance',()=>{const s=state();acquire(s,'w1',0,5);assert.equal(advance(s,{holder:'w1',expected_version:0,stage:'research',now:5}).decision,'lease_expired')});
+test('new worker can acquire only after expiration',()=>{const s=state();acquire(s,'w1',0,5);assert.equal(acquire(s,'w2',4).ok,false);assert.equal(acquire(s,'w2',5).ok,true)});
+test('released lease can be acquired by another worker',()=>{const s=state();acquire(s,'w1',0);release(s,'w1');assert.equal(acquire(s,'w2',1).ok,true)});
+test('transition never reports external effect',()=>{const s=state();acquire(s,'w1',0);assert.equal(advance(s,{holder:'w1',expected_version:0,stage:'research',now:1}).external_effect,false)});
+test('takeover preserves mission version',()=>{const s=state();acquire(s,'w1',0,5);const v=s.version;acquire(s,'w2',5);assert.equal(s.version,v)});

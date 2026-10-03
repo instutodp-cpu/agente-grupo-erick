@@ -1,0 +1,29 @@
+version: "1.0"
+default: deny
+levels:
+  L0:
+    description: read/research
+    approval_required: false
+  L1:
+    description: create/simulate without external mutation
+    approval_required: false
+  L2:
+    description: reversible external mutation
+    approval_required: policy
+  L3:
+    description: financial, destructive or high-impact mutation
+    approval_required: true
+capabilities:
+  web.research: L0
+  social.read: L0
+  commerce.read: L0
+  design.render: L1
+  video.render: L1
+  organic.draft: L1
+  organic.publish: L2
+  message.send: L2
+  ads.read: L0
+  ads.draft: L1
+  ads.mutate: L3
+  budget.mutate: L3
+  destructive.delete: L3

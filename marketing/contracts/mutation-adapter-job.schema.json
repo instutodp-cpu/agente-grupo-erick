@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingMutationAdapterJob",
+  "type": "object",
+  "required": [
+    "job_id",
+    "capability_id",
+    "action",
+    "intent_id",
+    "approval_id",
+    "scope_hash",
+    "artifact_hash",
+    "idempotency_key",
+    "simulation"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string"
+    },
+    "capability_id": {
+      "enum": [
+        "social.publish",
+        "whatsapp.send"
+      ]
+    },
+    "action": {
+      "enum": [
+        "publish",
+        "schedule",
+        "send"
+      ]
+    },
+    "intent_id": {
+      "type": "string"
+    },
+    "approval_id": {
+      "type": "string"
+    },
+    "scope_hash": {
+      "type": "string"
+    },
+    "artifact_hash": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 16
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}

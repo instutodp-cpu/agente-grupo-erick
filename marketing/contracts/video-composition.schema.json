@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingVideoComposition",
+  "type": "object",
+  "required": [
+    "composition_id",
+    "fps",
+    "duration_frames",
+    "canvas_profile_id",
+    "tracks",
+    "status"
+  ],
+  "properties": {
+    "composition_id": {
+      "type": "string"
+    },
+    "fps": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "duration_frames": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "canvas_profile_id": {
+      "type": "string"
+    },
+    "tracks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "track_id",
+          "kind",
+          "start_frame",
+          "end_frame",
+          "element_ref"
+        ],
+        "properties": {
+          "track_id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "video",
+              "image",
+              "text",
+              "caption",
+              "logo",
+              "cta",
+              "audio"
+            ]
+          },
+          "start_frame": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "end_frame": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "element_ref": {
+            "type": "string"
+          },
+          "z_index": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "blocked_timing",
+        "blocked_layout",
+        "ready_for_render_qa"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

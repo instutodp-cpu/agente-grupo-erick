@@ -1,0 +1,13 @@
+{
+  "id": "controlled-execution-002",
+  "objective": "Validate a minimal observable canary envelope before a separate real execution step.",
+  "must": [
+    "require canary",
+    "require traceability",
+    "require bounded operations and financial effect"
+  ],
+  "must_not": [
+    "treat envelope eligibility as execution",
+    "permit unbounded first activation"
+  ]
+}

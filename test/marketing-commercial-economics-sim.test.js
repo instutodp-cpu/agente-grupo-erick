@@ -1,0 +1,11 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const {economics,diagnose}=require('../scripts/marketing-commercial-economics-sim');
+test('unknown spend keeps ROAS and CAC null',()=>{const r=economics({direct_net_revenue:1000,direct_sales:5});assert.equal(r.roas,null);assert.equal(r.cac,null);});
+test('known spend computes ROAS and CAC',()=>{const r=economics({direct_net_revenue:1200,direct_sales:6,spend:300});assert.equal(r.roas,4);assert.equal(r.cac,50);});
+test('gross margin return requires known margin',()=>{assert.equal(economics({direct_net_revenue:1200,direct_sales:6,spend:300}).gross_margin_return,null);assert.equal(economics({direct_net_revenue:1200,direct_sales:6,spend:300,direct_gross_margin:600}).gross_margin_return,2);});
+test('zero spend does not produce infinite ROAS',()=>assert.equal(economics({direct_net_revenue:100,direct_sales:1,spend:0}).roas,null));
+test('Grupo Erick sample diagnoses WhatsApp to sale bottleneck',()=>assert.equal(diagnose({views:40000,profile_visits:1900,dms:220,whatsapp_contacts:130,direct_sales:3}).primary_bottleneck,'whatsapp_to_sale'));
+test('diagnosis proposes one controlled commercial test',()=>{const r=diagnose({views:40000,profile_visits:1900,dms:220,whatsapp_contacts:130,direct_sales:3});assert.equal(r.next_test.controlled_dimension,'whatsapp_qualification');assert.match(r.next_test.primary_metric,/direct sales/);});
+test('missing denominator returns insufficient data',()=>assert.equal(diagnose({views:0,profile_visits:0,dms:0,whatsapp_contacts:0,direct_sales:0}).primary_bottleneck,'insufficient_data'));
+test('diagnosis never predicts outcome',()=>assert.equal(diagnose({views:100,profile_visits:10,dms:2,whatsapp_contacts:1,direct_sales:1}).prediction_mode,'decision_support_not_outcome_prediction'));

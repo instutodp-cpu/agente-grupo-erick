@@ -1,0 +1,14 @@
+{
+  "id": "canary-outcome-001",
+  "objective": "Prevent ambiguous or conflicting canary outcomes from being treated as successful activation evidence.",
+  "must": [
+    "freeze activation on ambiguity",
+    "require reconciliation",
+    "preserve idempotency and trace"
+  ],
+  "must_not": [
+    "retry blindly",
+    "expand scope automatically",
+    "perform real follow-up in simulation"
+  ]
+}

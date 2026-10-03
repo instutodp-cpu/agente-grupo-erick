@@ -1,0 +1,14 @@
+{
+  "id": "read-adapter-002",
+  "objective": "Preserve provenance for simulated research and analytics reads.",
+  "must": [
+    "preserve adapter id",
+    "preserve source ref",
+    "preserve retrieved timestamp",
+    "keep missing metrics null"
+  ],
+  "must_not": [
+    "invent unavailable metrics",
+    "strip provenance"
+  ]
+}

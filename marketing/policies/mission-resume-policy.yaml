@@ -1,0 +1,21 @@
+version: 1
+simulation_only: true
+external_execution: false
+requirements:
+  checkpoint_integrity: true
+  exact_scope_hash: true
+  contiguous_completed_stages: true
+  evidence_for_each_completed_stage: true
+  next_stage_matches_sequence: true
+rules:
+  resume_from_last_verified_stage_only: true
+  checkpoint_tampering: block
+  scope_change: block
+  stage_skip: block
+  completed_run: no_resume
+  downstream_side_effect_replay: deny
+audit:
+  append_only_checkpoint_events: true
+  preserve_checkpoint_hash: true
+  preserve_stage_evidence: true
+fail_closed: true

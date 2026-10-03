@@ -1,0 +1,16 @@
+{
+  "id": "mission-orchestration-001",
+  "objective": "Prevent an end-to-end marketing mission from skipping safety, evidence, QA, approval, attribution, or learning gates.",
+  "must": [
+    "execute stages in declared order",
+    "block downstream after failed stage",
+    "require approval before L2/L3 distribution",
+    "keep external execution false"
+  ],
+  "must_not": [
+    "skip QA",
+    "skip approval",
+    "invent attribution",
+    "promote learning from a single result"
+  ]
+}

@@ -1,0 +1,25 @@
+version: 1
+simulation_only: true
+fail_closed: true
+requirements:
+  production_authorization_consumed: true
+  exact_authorization_binding: true
+  canary: true
+  max_operations_defined: true
+  financial_ceiling_defined: true
+  kill_switch_available: true
+  trace_id_required: true
+  observability_live: true
+rules:
+  first_activation_requires_canary: true
+  scope_expansion: deny
+  operation_limit_exceeded: halt
+  financial_ceiling_exceeded: halt
+  anomaly_detected: halt
+  provider_health_degraded: halt
+  kill_switch_on: halt
+  envelope_expired: halt
+  financial_mutation_requires_l3: true
+  real_provider_call_performed: false
+  financial_effect_brl: 0
+  separate_real_execution_step_required: true

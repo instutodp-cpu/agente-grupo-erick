@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingProviderObservation",
+  "type": "object",
+  "required": [
+    "observation_id",
+    "adapter_id",
+    "event_type",
+    "observed_at",
+    "simulation",
+    "external_effect"
+  ],
+  "properties": {
+    "observation_id": {
+      "type": "string"
+    },
+    "adapter_id": {
+      "type": "string"
+    },
+    "event_type": {
+      "enum": [
+        "health_checked",
+        "route_selected",
+        "route_blocked",
+        "provider_degraded",
+        "provider_unavailable"
+      ]
+    },
+    "observed_at": {
+      "type": "string"
+    },
+    "detail": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "simulation": {
+      "const": true
+    },
+    "external_effect": {
+      "const": false
+    }
+  },
+  "additionalProperties": false
+}

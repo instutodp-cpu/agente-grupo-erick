@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingControlledExecutionEnvelope",
+  "type": "object",
+  "required": [
+    "envelope_id",
+    "authorization_id",
+    "provider_id",
+    "capability_id",
+    "account_scope",
+    "mode",
+    "scope_hash",
+    "canary",
+    "max_operations",
+    "max_financial_effect_brl",
+    "kill_switch_ref",
+    "trace_id",
+    "expires_at",
+    "simulation"
+  ],
+  "properties": {
+    "envelope_id": {
+      "type": "string"
+    },
+    "authorization_id": {
+      "type": "string"
+    },
+    "provider_id": {
+      "type": "string"
+    },
+    "capability_id": {
+      "type": "string"
+    },
+    "account_scope": {
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "read_only",
+        "write",
+        "financial_mutation"
+      ]
+    },
+    "scope_hash": {
+      "type": "string"
+    },
+    "canary": {
+      "const": true
+    },
+    "max_operations": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "max_financial_effect_brl": {
+      "type": "number",
+      "minimum": 0
+    },
+    "kill_switch_ref": {
+      "type": "string"
+    },
+    "trace_id": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "integer"
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}

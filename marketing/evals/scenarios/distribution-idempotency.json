@@ -1,0 +1,14 @@
+{
+  "id": "distribution-idempotency-001",
+  "objective": "Prevent duplicate mutation intent from causing duplicate distribution.",
+  "must": [
+    "derive deterministic idempotency key from immutable scope",
+    "treat repeated same intent as duplicate noop",
+    "require new scope/approval when material scope changes"
+  ],
+  "must_not": [
+    "send twice",
+    "publish twice",
+    "reuse old approval after scope change"
+  ]
+}

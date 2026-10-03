@@ -1,0 +1,28 @@
+version: 1
+simulation_only: true
+fail_closed: true
+rules:
+  transient_without_effect:
+    decision: retry_same_idempotency_key
+  confirmed_effect:
+    decision: confirm_effect_and_continue
+    retry: false
+  not_found_with_traceable_evidence:
+    decision: retry_same_idempotency_key
+  ambiguous_or_unknown:
+    decision: escalate_ambiguous
+    retry: false
+  conflicting_effect:
+    decision: escalate_conflict
+    retry: false
+  terminal_failure:
+    decision: block_terminal
+    retry: false
+  stuck_or_deadline_exceeded:
+    decision: escalate_stuck
+  compensation:
+    automatic_external_rollback: deny
+    require_explicit_safe_compensation_contract: true
+  preserve_original_idempotency_key: true
+  preserve_audit_trace: true
+  external_effect: false

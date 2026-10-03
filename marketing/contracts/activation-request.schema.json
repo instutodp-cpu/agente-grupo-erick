@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingActivationRequest",
+  "type": "object",
+  "required": [
+    "request_id",
+    "capability_id",
+    "provider_id",
+    "environment",
+    "requested_mode",
+    "requested_by",
+    "approval_ref",
+    "readiness_ref",
+    "credential_ref",
+    "simulation"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string"
+    },
+    "capability_id": {
+      "type": "string"
+    },
+    "provider_id": {
+      "type": "string"
+    },
+    "environment": {
+      "enum": [
+        "sandbox",
+        "production"
+      ]
+    },
+    "requested_mode": {
+      "enum": [
+        "read_only",
+        "write",
+        "financial_mutation"
+      ]
+    },
+    "requested_by": {
+      "type": "string"
+    },
+    "approval_ref": {
+      "type": "string"
+    },
+    "readiness_ref": {
+      "type": "string"
+    },
+    "credential_ref": {
+      "type": "string"
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}

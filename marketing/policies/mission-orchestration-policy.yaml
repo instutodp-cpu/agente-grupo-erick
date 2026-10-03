@@ -1,0 +1,26 @@
+version: 1
+mode: simulation
+external_execution: false
+ordered_stages:
+  - objective
+  - research
+  - creative
+  - production
+  - qa
+  - approval
+  - distribution
+  - measurement
+  - learning
+  - replanning
+rules:
+  stage_skip: deny
+  failed_stage: block_downstream
+  missing_required_evidence: block
+  l2_l3_without_approval: block
+  qa_failure_before_distribution: block
+  attribution_without_evidence: block
+  learning_without_repeated_evidence: block
+  replanning_without_active_learning: block
+  preserve_stage_evidence_refs: true
+  preserve_scope: true
+  simulation_only: true

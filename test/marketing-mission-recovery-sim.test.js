@@ -1,0 +1,13 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {decide}=require('../scripts/marketing-mission-recovery-sim');
+const c=(failure_class,effect_state,extra={})=>({case_id:'c1',failure_class,effect_state,...extra});
+test('transient no-effect failure retries',()=>{const d=decide(c('transient','none'));assert.equal(d.decision,'retry_same_idempotency_key');assert.equal(d.retry_allowed,true)});
+test('confirmed effect continues without retry',()=>{const d=decide(c('transient','confirmed'));assert.equal(d.decision,'confirm_effect_and_continue');assert.equal(d.retry_allowed,false)});
+test('unknown effect escalates',()=>{const d=decide(c('ambiguous','unknown'));assert.equal(d.decision,'escalate_ambiguous');assert.equal(d.human_required,true)});
+test('conflicting effect escalates',()=>assert.equal(decide(c('ambiguous','conflicting')).decision,'escalate_conflict'));
+test('terminal failure blocks',()=>assert.equal(decide(c('terminal','none')).decision,'block_terminal'));
+test('stuck mission escalates',()=>assert.equal(decide(c('stuck','none')).decision,'escalate_stuck'));
+test('deadline exceeded escalates',()=>assert.equal(decide(c('deadline_exceeded','none')).decision,'escalate_stuck'));
+test('not found retries only with traceable evidence',()=>assert.equal(decide(c('transient','not_found',{traceable_evidence:true})).retry_allowed,true));
+test('not found without evidence fails closed',()=>assert.equal(decide(c('transient','not_found')).decision,'escalate_ambiguous'));
+test('automatic compensation is never authorized',()=>{for(const x of [c('transient','none'),c('ambiguous','unknown'),c('terminal','none')])assert.equal(decide(x).compensation_allowed,false)});
+test('recovery decisions never report external effect',()=>assert.equal(decide(c('transient','none')).external_effect,false));

@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingCreativeExperiment",
+  "type": "object",
+  "required": [
+    "experiment_id",
+    "commercial_objective",
+    "hypothesis",
+    "primary_metric",
+    "variants",
+    "status"
+  ],
+  "properties": {
+    "experiment_id": {
+      "type": "string"
+    },
+    "commercial_objective": {
+      "type": "string"
+    },
+    "hypothesis": {
+      "type": "string"
+    },
+    "primary_metric": {
+      "type": "string"
+    },
+    "guardrail_metrics": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "controlled_dimensions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "variants": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": [
+          "variant_id",
+          "dimension_changed"
+        ],
+        "properties": {
+          "variant_id": {
+            "type": "string"
+          },
+          "dimension_changed": {
+            "enum": [
+              "hook",
+              "format",
+              "proof",
+              "offer_framing",
+              "cta",
+              "pacing",
+              "visual_structure",
+              "audience_angle"
+            ]
+          },
+          "change_description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "minimum_repetitions_for_learning": {
+      "type": "integer",
+      "minimum": 2
+    },
+    "status": {
+      "enum": [
+        "planned",
+        "running",
+        "completed",
+        "inconclusive"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

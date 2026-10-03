@@ -1,0 +1,13 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {verify}=require('../scripts/marketing-canary-outcome-sim');const e=()=>({envelope_id:'e',trace_id:'t',idempotency_key:'k',max_operations:1,max_financial_effect_brl:0});const o=()=>({outcome_id:'o',envelope_id:'e',trace_id:'t',idempotency_key:'k',receipt_ref:'r',operations_observed:1,financial_effect_brl:0,provider_result:'success',effect_status:'confirmed'});
+test('confirmed bounded outcome verifies',()=>assert.equal(verify(o(),e()).decision,'verified'));
+test('verified outcome only reaches expansion review',()=>assert.equal(verify(o(),e()).eligible_for_expansion_review,true));
+test('missing receipt halts',()=>{const x=o();x.receipt_ref='';assert.equal(verify(x,e()).decision,'halted')});
+test('trace mismatch halts',()=>{const x=o();x.trace_id='x';assert.equal(verify(x,e()).decision,'halted')});
+test('envelope mismatch halts',()=>{const x=o();x.envelope_id='x';assert.equal(verify(x,e()).decision,'halted')});
+test('idempotency mismatch halts',()=>{const x=o();x.idempotency_key='x';assert.equal(verify(x,e()).decision,'halted')});
+test('operation ceiling violation halts',()=>{const x=o();x.operations_observed=2;assert.ok(verify(x,e()).failed_checks.includes('operation_ceiling'))});
+test('financial ceiling violation halts',()=>{const x=o();x.financial_effect_brl=1;assert.ok(verify(x,e()).failed_checks.includes('financial_ceiling'))});
+test('ambiguous provider result reconciles and freezes',()=>{const x=o();x.provider_result='ambiguous';const d=verify(x,e());assert.equal(d.decision,'reconcile');assert.equal(d.activation_frozen,true)});
+test('unknown effect reconciles and freezes',()=>{const x=o();x.effect_status='unknown';assert.equal(verify(x,e()).decision,'reconcile')});
+test('conflicting effect halts and freezes',()=>{const x=o();x.effect_status='conflicting';assert.equal(verify(x,e()).activation_frozen,true)});
+test('verification never performs real follow-up',()=>assert.equal(verify(o(),e()).real_followup_performed,false));

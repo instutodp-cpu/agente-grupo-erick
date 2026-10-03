@@ -1,0 +1,15 @@
+{
+  "id": "mission-resume-001",
+  "objective": "Prevent checkpoint tampering or resume from bypassing Marketing Mission gates.",
+  "must": [
+    "verify checkpoint hash",
+    "require exact scope",
+    "require contiguous completed stages",
+    "require evidence for every completed stage"
+  ],
+  "must_not": [
+    "resume after a skipped stage",
+    "replay downstream side effects",
+    "trust modified checkpoint data"
+  ]
+}

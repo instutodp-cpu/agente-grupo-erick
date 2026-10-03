@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingWhatsAppAsset",
+  "type": "object",
+  "required": [
+    "asset_id",
+    "job",
+    "message",
+    "cta",
+    "status"
+  ],
+  "properties": {
+    "asset_id": {
+      "type": "string"
+    },
+    "job": {
+      "enum": [
+        "conversation_opener",
+        "product_followup",
+        "offer_asset",
+        "group_asset",
+        "retargeting_draft"
+      ]
+    },
+    "message": {
+      "type": "string"
+    },
+    "cta": {
+      "type": "string"
+    },
+    "product_context": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "missing_facts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "blocked_missing_facts",
+        "ready_for_qa"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

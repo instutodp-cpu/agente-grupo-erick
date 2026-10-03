@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "simulation_only": true,
+  "adapters": [
+    {
+      "adapter_id": "render.canva",
+      "provider_kind": "canva_brand_templates",
+      "operations": [
+        "render_static",
+        "render_carousel"
+      ],
+      "requires_c05_preflight": true,
+      "credential_mode": "hermes_gateway_only",
+      "real_provider_enabled": false
+    },
+    {
+      "adapter_id": "render.remotion",
+      "provider_kind": "remotion",
+      "operations": [
+        "render_video"
+      ],
+      "requires_c05_preflight": true,
+      "credential_mode": "none",
+      "real_provider_enabled": false
+    },
+    {
+      "adapter_id": "render.ffmpeg",
+      "provider_kind": "ffmpeg",
+      "operations": [
+        "transcode_video",
+        "burn_captions"
+      ],
+      "requires_c05_preflight": true,
+      "credential_mode": "none",
+      "real_provider_enabled": false
+    }
+  ]
+}

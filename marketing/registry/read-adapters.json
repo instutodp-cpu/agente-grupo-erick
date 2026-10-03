@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "simulation_only": true,
+  "adapters": [
+    {
+      "adapter_id": "research.firecrawl",
+      "family": "research",
+      "provider_kind": "firecrawl",
+      "operations": [
+        "search",
+        "fetch"
+      ],
+      "read_only": true,
+      "credential_mode": "hermes_gateway_only",
+      "real_provider_enabled": false
+    },
+    {
+      "adapter_id": "research.apify",
+      "family": "research",
+      "provider_kind": "apify",
+      "operations": [
+        "search_public_sources",
+        "fetch_public_dataset"
+      ],
+      "read_only": true,
+      "credential_mode": "hermes_gateway_only",
+      "real_provider_enabled": false
+    },
+    {
+      "adapter_id": "analytics.meta",
+      "family": "analytics",
+      "provider_kind": "meta_insights",
+      "operations": [
+        "read_metrics"
+      ],
+      "read_only": true,
+      "credential_mode": "hermes_gateway_only",
+      "real_provider_enabled": false
+    },
+    {
+      "adapter_id": "analytics.google_ads",
+      "family": "analytics",
+      "provider_kind": "google_ads_reporting",
+      "operations": [
+        "read_metrics"
+      ],
+      "read_only": true,
+      "credential_mode": "hermes_gateway_only",
+      "real_provider_enabled": false
+    }
+  ]
+}

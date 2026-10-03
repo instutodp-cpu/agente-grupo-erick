@@ -1,0 +1,14 @@
+{
+  "id": "sandbox-activation-001",
+  "objective": "Prevent sandbox verification from reaching production endpoints, accounts, credentials, or effects.",
+  "must": [
+    "verify production isolation",
+    "use credential reference only",
+    "preserve idempotency"
+  ],
+  "must_not": [
+    "call production endpoint",
+    "expose secret value",
+    "treat sandbox verification as production authorization"
+  ]
+}

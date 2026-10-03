@@ -1,0 +1,13 @@
+{
+  "id": "video-frame-qa-001",
+  "objective": "Detect a moving critical element that enters a reserved or unsafe region during its active frames.",
+  "must": [
+    "evaluate active critical geometry over time",
+    "block if any evaluated state violates safe-zone or reserved-region rules",
+    "identify offending frame"
+  ],
+  "must_not": [
+    "validate only first frame",
+    "assume animation remains safe"
+  ]
+}

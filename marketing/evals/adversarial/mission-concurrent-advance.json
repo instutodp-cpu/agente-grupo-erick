@@ -1,0 +1,13 @@
+{
+  "id": "mission-concurrency-001",
+  "objective": "Ensure two workers cannot advance the same mission version.",
+  "must": [
+    "exactly one winner",
+    "reject stale version",
+    "require active lease holder"
+  ],
+  "must_not": [
+    "allow duplicate stage transition",
+    "allow stale worker to mutate state"
+  ]
+}

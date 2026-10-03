@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingRenderManifest",
+  "type": "object",
+  "required": [
+    "manifest_id",
+    "content_id",
+    "render_spec_ref",
+    "canvas_profile_ref",
+    "brand_profile_ref",
+    "preflight",
+    "status"
+  ],
+  "properties": {
+    "manifest_id": {
+      "type": "string"
+    },
+    "content_id": {
+      "type": "string"
+    },
+    "render_spec_ref": {
+      "type": "string"
+    },
+    "canvas_profile_ref": {
+      "type": "string"
+    },
+    "brand_profile_ref": {
+      "type": "string"
+    },
+    "asset_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "required": [
+        "content_qa",
+        "evidence_qa",
+        "brand_qa",
+        "text_fit_qa",
+        "layout_qa",
+        "timing_qa",
+        "frame_qa"
+      ],
+      "properties": {
+        "content_qa": {
+          "type": "boolean"
+        },
+        "evidence_qa": {
+          "type": "boolean"
+        },
+        "brand_qa": {
+          "type": "boolean"
+        },
+        "text_fit_qa": {
+          "type": "boolean"
+        },
+        "layout_qa": {
+          "type": "boolean"
+        },
+        "timing_qa": {
+          "type": "boolean"
+        },
+        "frame_qa": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "manifest_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "blocked_preflight",
+        "ready_for_render_job"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

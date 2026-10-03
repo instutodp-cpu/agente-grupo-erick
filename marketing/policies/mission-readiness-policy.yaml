@@ -1,0 +1,22 @@
+version: 1
+simulation_only: true
+required_gates:
+  - orchestration_e2e
+  - checkpoint_resume
+  - audit_trace
+  - concurrency_control
+  - recovery_escalation
+  - observability
+rules:
+  all_required_gates_must_pass: true
+  unknown_gate_state: fail_closed
+  failed_gate: not_ready
+  readiness_scope: simulation
+  real_provider_activation_authorized: false
+  ci_green_does_not_authorize_real_execution: true
+observability:
+  trace_id_required: true
+  correlation_id_required: true
+  stage_duration_required: true
+  failure_taxonomy_required: true
+  external_effect: false

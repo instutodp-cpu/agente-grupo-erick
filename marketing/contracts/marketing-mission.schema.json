@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingMission",
+  "type": "object",
+  "required": [
+    "mission_id",
+    "objective",
+    "scope",
+    "mode",
+    "status"
+  ],
+  "properties": {
+    "mission_id": {
+      "type": "string"
+    },
+    "objective": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "tenant_id"
+      ],
+      "properties": {
+        "tenant_id": {
+          "type": "string"
+        },
+        "store_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "mode": {
+      "enum": [
+        "simulation",
+        "draft",
+        "execution"
+      ]
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "researching",
+        "planning",
+        "awaiting_approval",
+        "executing",
+        "measuring",
+        "completed",
+        "blocked"
+      ]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "hypotheses": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "proposed_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "action_id",
+          "capability",
+          "permission_level"
+        ],
+        "properties": {
+          "action_id": {
+            "type": "string"
+          },
+          "capability": {
+            "type": "string"
+          },
+          "permission_level": {
+            "enum": [
+              "L0",
+              "L1",
+              "L2",
+              "L3"
+            ]
+          },
+          "approval_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "success_metrics": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

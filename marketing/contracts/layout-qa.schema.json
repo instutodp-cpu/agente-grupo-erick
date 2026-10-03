@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingLayoutQA",
+  "type": "object",
+  "required": [
+    "render_id",
+    "element_results",
+    "decision"
+  ],
+  "properties": {
+    "render_id": {
+      "type": "string"
+    },
+    "element_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "element_id",
+          "inside_canvas",
+          "inside_safe_zone",
+          "overlaps_reserved_region"
+        ],
+        "properties": {
+          "element_id": {
+            "type": "string"
+          },
+          "inside_canvas": {
+            "type": "boolean"
+          },
+          "inside_safe_zone": {
+            "type": "boolean"
+          },
+          "overlaps_reserved_region": {
+            "type": "boolean"
+          },
+          "blocking_reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "decision": {
+      "enum": [
+        "pass",
+        "block"
+      ]
+    },
+    "blocking_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

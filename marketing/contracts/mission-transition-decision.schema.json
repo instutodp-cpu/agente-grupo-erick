@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingMissionTransitionDecision",
+  "type": "object",
+  "required": [
+    "run_id",
+    "stage",
+    "decision",
+    "expected_version",
+    "resulting_version",
+    "external_effect",
+    "simulation"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "stage": {
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "advanced",
+        "lease_conflict",
+        "stale_version",
+        "lease_expired",
+        "invalid_holder",
+        "already_advanced"
+      ]
+    },
+    "expected_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "resulting_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "external_effect": {
+      "const": false
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,10 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {route}=require('../scripts/marketing-integration-adapter-sim');
+const q=(x)=>route({simulation:true,approval_ref:null,idempotency_key:'k',...x});
+test('registered L0 read routes in simulation',()=>assert.equal(q({capability_id:'research.web',action:'search'}).status,'simulated'));
+test('unknown capability fails closed',()=>assert.equal(q({capability_id:'unknown',action:'search'}).reason,'unregistered_capability'));
+test('unregistered action fails closed',()=>assert.equal(q({capability_id:'research.web',action:'publish'}).reason,'action_not_allowed'));
+test('non simulation request is denied',()=>assert.equal(route({capability_id:'research.web',action:'search',simulation:false,approval_ref:null,idempotency_key:'k'}).reason,'simulation_required'));
+test('L2 mutation requires approval',()=>assert.equal(q({capability_id:'social.publish',action:'publish'}).reason,'approval_required'));
+test('L3 financial mutation requires approval',()=>assert.equal(q({capability_id:'ads.mutate',action:'change_budget'}).reason,'approval_required'));
+test('approved L3 remains simulation only',()=>assert.equal(route({capability_id:'ads.mutate',action:'change_budget',simulation:true,approval_ref:'a',idempotency_key:'k'}).external_execution,false));
+test('idempotency key is preserved',()=>assert.equal(route({capability_id:'whatsapp.send',action:'send',simulation:true,approval_ref:'a',idempotency_key:'same-key'}).idempotency_key,'same-key'));

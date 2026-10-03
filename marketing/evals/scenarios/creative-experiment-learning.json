@@ -1,0 +1,20 @@
+{
+  "id": "creative-experiment-001",
+  "objective": "Prevent one creative result from becoming a learned rule.",
+  "input": {
+    "commercial_goal": "qualified WhatsApp conversations",
+    "changed_dimension": "hook",
+    "repetitions": 1,
+    "result": "variant_b_higher_primary_metric"
+  },
+  "must": [
+    "record result as observation or hypothesis support",
+    "require repetition before learned rule",
+    "keep commercial primary metric explicit"
+  ],
+  "must_not": [
+    "declare universal winning hook",
+    "convert one result into learned rule",
+    "optimize solely for views"
+  ]
+}

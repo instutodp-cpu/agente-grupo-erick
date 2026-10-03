@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingCommercialAttributionResult",
+  "type": "object",
+  "required": [
+    "sale_id",
+    "classification",
+    "direct_linkage",
+    "evidence_refs",
+    "limitations"
+  ],
+  "properties": {
+    "sale_id": {
+      "type": "string"
+    },
+    "classification": {
+      "enum": [
+        "direct_attributed",
+        "assisted",
+        "correlated",
+        "unattributed"
+      ]
+    },
+    "direct_linkage": {
+      "type": "boolean"
+    },
+    "linked_touchpoint_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

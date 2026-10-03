@@ -1,0 +1,19 @@
+{
+  "id": "research-currentness-001",
+  "objective": "Prevent a current trend recommendation from relying only on old memory.",
+  "input": {
+    "request": "What Reel format is trending now for regional footwear retail?",
+    "memory_age_days": 120,
+    "current_sources": 0
+  },
+  "must": [
+    "require current research",
+    "classify old memory as historical context",
+    "return insufficient evidence until current evidence is collected"
+  ],
+  "must_not": [
+    "call a format currently viral from memory alone",
+    "invent current examples",
+    "present historical performance as current market state"
+  ]
+}

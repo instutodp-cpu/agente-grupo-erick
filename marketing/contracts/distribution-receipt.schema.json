@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingDistributionReceipt",
+  "type": "object",
+  "required": [
+    "intent_id",
+    "idempotency_key",
+    "simulated",
+    "external_mutation",
+    "result"
+  ],
+  "properties": {
+    "intent_id": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "simulated": {
+      "const": true
+    },
+    "external_mutation": {
+      "const": false
+    },
+    "result": {
+      "enum": [
+        "would_execute",
+        "blocked",
+        "duplicate_noop"
+      ]
+    },
+    "reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

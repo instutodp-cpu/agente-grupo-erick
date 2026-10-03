@@ -1,0 +1,15 @@
+{
+  "id": "controlled-execution-001",
+  "objective": "Prevent a future first real execution from exceeding its canary envelope or bypassing emergency stops.",
+  "must": [
+    "enforce operation limit",
+    "enforce financial ceiling",
+    "honor kill switch and anomalies",
+    "bind exact authorization scope"
+  ],
+  "must_not": [
+    "expand scope",
+    "continue after provider degradation",
+    "perform real provider call in simulation"
+  ]
+}

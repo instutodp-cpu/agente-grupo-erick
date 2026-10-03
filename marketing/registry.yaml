@@ -1,0 +1,19 @@
+version: "1.0"
+status: foundation
+orchestrator: marketing-orchestrator
+simulation_first: true
+default_execution: deny
+families:
+  - research-intelligence
+  - strategy
+  - creative-production
+  - organic-distribution
+  - paid-media
+  - lead-conversion
+  - measurement-attribution
+  - learning-memory
+required_contracts:
+  - marketing-mission
+  - attribution
+  - memory
+  - approval

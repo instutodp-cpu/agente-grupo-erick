@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingDistributionAttemptReceipt",
+  "type": "object",
+  "required": [
+    "job_id",
+    "idempotency_key",
+    "attempt",
+    "simulated",
+    "external_mutation",
+    "outcome"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "simulated": {
+      "const": true
+    },
+    "external_mutation": {
+      "const": false
+    },
+    "outcome": {
+      "enum": [
+        "scheduled",
+        "would_execute",
+        "retryable_failure",
+        "terminal_failure",
+        "duplicate_noop"
+      ]
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "retry_same_idempotency_key": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false
+}

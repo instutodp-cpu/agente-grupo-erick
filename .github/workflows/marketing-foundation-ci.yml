@@ -1,0 +1,291 @@
+name: Marketing Foundation CI
+
+on:
+  pull_request:
+    paths:
+      - 'marketing/**'
+      - 'scripts/marketing-e2e-sim.js'
+      - 'scripts/validate-marketing-artifacts.js'
+      - 'test/marketing-e2e-sim.test.js'
+      - 'test/marketing-research-sim.test.js'
+      - 'scripts/marketing-research-sim.js'
+      - 'test/marketing-research-sim.test.js'
+      - 'scripts/marketing-research-sim.js'
+      - 'package.json'
+      - '.github/workflows/marketing-foundation-ci.yml'
+  push:
+    branches:
+      - 'feat/marketing-super-skill-v1-foundation'
+    paths:
+      - 'marketing/**'
+      - 'scripts/marketing-e2e-sim.js'
+      - 'scripts/validate-marketing-artifacts.js'
+      - 'test/marketing-e2e-sim.test.js'
+      - 'package.json'
+      - '.github/workflows/marketing-foundation-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  marketing-foundation:
+    name: Validate marketing foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate marketing artifacts
+        run: npm run validate:marketing
+
+      - name: Run marketing tests
+        run: npm run test:marketing
+
+      - name: Run deterministic marketing simulation
+        run: npm run simulate:marketing
+
+      - name: Run C02 research tests
+        run: npm run test:marketing:research
+
+      - name: Run C02 research simulation
+        run: npm run simulate:marketing:research
+
+      - name: Run C02 source quality tests
+        run: npm run test:marketing:sources
+
+      - name: Run C02 source planner simulation
+        run: npm run simulate:marketing:sources
+
+      - name: Run C03 creative tests
+        run: npm run test:marketing:creative
+
+      - name: Run C03 creative simulation
+        run: npm run simulate:marketing:creative
+
+      - name: Run C03 creative engine tests
+        run: npm run test:marketing:creative-engine
+
+      - name: Run C03 creative engine simulation
+        run: npm run simulate:marketing:creative-engine
+
+      - name: Run C03 experiment planner tests
+        run: npm run test:marketing:experiments
+
+      - name: Run C03 experiment planner simulation
+        run: npm run simulate:marketing:experiments
+
+      - name: Run C04 content production tests
+        run: npm run test:marketing:content
+
+      - name: Run C04 content production simulation
+        run: npm run simulate:marketing:content
+
+      - name: Run C04 production QA tests
+        run: npm run test:marketing:production-qa
+
+      - name: Run C04 production QA simulation
+        run: npm run simulate:marketing:production-qa
+
+      - name: Run C05 render safety tests
+        run: npm run test:marketing:render-safety
+
+      - name: Run C05 render safety simulation
+        run: npm run simulate:marketing:render-safety
+
+      - name: Run C05 brand and text-fit tests
+        run: npm run test:marketing:brand-render
+
+      - name: Run C05 brand and text-fit simulation
+        run: npm run simulate:marketing:brand-render
+
+      - name: Run C05 temporal video QA tests
+        run: npm run test:marketing:video-frame-qa
+
+      - name: Run C05 temporal video QA simulation
+        run: npm run simulate:marketing:video-frame-qa
+
+      - name: Run C05 render preflight tests
+        run: npm run test:marketing:render-preflight
+
+      - name: Run C05 render preflight simulation
+        run: npm run simulate:marketing:render-preflight
+
+      - name: Run C06 distribution approval tests
+        run: npm run test:marketing:distribution
+
+      - name: Run C06 distribution approval simulation
+        run: npm run simulate:marketing:distribution
+
+      - name: Run C06 distribution adapter tests
+        run: npm run test:marketing:distribution-adapters
+
+      - name: Run C06 distribution adapter simulation
+        run: npm run simulate:marketing:distribution-adapters
+
+      - name: Run C06 reconciliation audit tests
+        run: npm run test:marketing:distribution-reconcile
+
+      - name: Run C06 reconciliation audit simulation
+        run: npm run simulate:marketing:distribution-reconcile
+
+      - name: Run C06 approval lifecycle tests
+        run: npm run test:marketing:approval-lifecycle
+
+      - name: Run C06 approval lifecycle simulation
+        run: npm run simulate:marketing:approval-lifecycle
+
+      - name: Run C07 commercial attribution tests
+        run: npm run test:marketing:commercial-attribution
+
+      - name: Run C07 commercial attribution simulation
+        run: npm run simulate:marketing:commercial-attribution
+
+      - name: Run C07 commercial funnel tests
+        run: npm run test:marketing:commercial-funnel
+
+      - name: Run C07 commercial funnel simulation
+        run: npm run simulate:marketing:commercial-funnel
+
+      - name: Run C07 economics diagnosis tests
+        run: npm run test:marketing:commercial-economics
+
+      - name: Run C07 economics diagnosis simulation
+        run: npm run simulate:marketing:commercial-economics
+
+      - name: Run C07 learning feedback tests
+        run: npm run test:marketing:learning-feedback
+
+      - name: Run C07 learning feedback simulation
+        run: npm run simulate:marketing:learning-feedback
+
+      - name: Run C07 controlled replanning tests
+        run: npm run test:marketing:replanning
+
+      - name: Run C07 controlled replanning simulation
+        run: npm run simulate:marketing:replanning
+
+      - name: Run strategy decision tests
+        run: npm run test:marketing:strategy
+
+      - name: Run strategy decision simulation
+        run: npm run simulate:marketing:strategy
+
+      - name: Run lead conversion tests
+        run: npm run test:marketing:lead-conversion
+
+      - name: Run lead conversion simulation
+        run: npm run simulate:marketing:lead-conversion
+
+      - name: Run goal cycle tests
+        run: npm run test:marketing:goal-cycle
+
+      - name: Run goal cycle simulation
+        run: npm run simulate:marketing:goal-cycle
+
+      - name: Run C08 integration adapter tests
+        run: npm run test:marketing:integration-adapters
+
+      - name: Run C08 integration adapter simulation
+        run: npm run simulate:marketing:integration-adapters
+
+      - name: Run C08 read adapter tests
+        run: npm run test:marketing:read-adapters
+
+      - name: Run C08 read adapter simulation
+        run: npm run simulate:marketing:read-adapters
+
+      - name: Run C08 render adapter tests
+        run: npm run test:marketing:render-adapters
+
+      - name: Run C08 render adapter simulation
+        run: npm run simulate:marketing:render-adapters
+
+      - name: Run C08 mutation adapter tests
+        run: npm run test:marketing:mutation-adapters
+
+      - name: Run C08 mutation adapter simulation
+        run: npm run simulate:marketing:mutation-adapters
+
+      - name: Run C08 paid media adapter tests
+        run: npm run test:marketing:paid-media-adapters
+
+      - name: Run C08 paid media adapter simulation
+        run: npm run simulate:marketing:paid-media-adapters
+
+      - name: Run C08 provider health tests
+        run: npm run test:marketing:provider-health
+
+      - name: Run C08 provider health simulation
+        run: npm run simulate:marketing:provider-health
+
+      - name: Run C09 mission orchestration tests
+        run: npm run test:marketing:mission-orchestration
+
+      - name: Run C09 mission orchestration simulation
+        run: npm run simulate:marketing:mission-orchestration
+
+      - name: Run C09 mission resume tests
+        run: npm run test:marketing:mission-resume
+
+      - name: Run C09 mission resume simulation
+        run: npm run simulate:marketing:mission-resume
+
+      - name: Run C09 mission audit tests
+        run: npm run test:marketing:mission-audit
+
+      - name: Run C09 mission audit simulation
+        run: npm run simulate:marketing:mission-audit
+
+      - name: Run C09 mission concurrency tests
+        run: npm run test:marketing:mission-concurrency
+
+      - name: Run C09 mission concurrency simulation
+        run: npm run simulate:marketing:mission-concurrency
+
+      - name: Run C09 mission recovery tests
+        run: npm run test:marketing:mission-recovery
+
+      - name: Run C09 mission recovery simulation
+        run: npm run simulate:marketing:mission-recovery
+
+      - name: Run C09 mission readiness tests
+        run: npm run test:marketing:mission-readiness
+
+      - name: Run C09 mission readiness simulation
+        run: npm run simulate:marketing:mission-readiness
+
+      - name: Run C10 activation readiness tests
+        run: npm run test:marketing:activation-readiness
+
+      - name: Run C10 activation readiness simulation
+        run: npm run simulate:marketing:activation-readiness
+
+      - name: Run C10 sandbox activation tests
+        run: npm run test:marketing:sandbox-activation
+
+      - name: Run C10 sandbox activation simulation
+        run: npm run simulate:marketing:sandbox-activation
+
+      - name: Run C10 production authorization tests
+        run: npm run test:marketing:production-authorization
+
+      - name: Run C10 production authorization simulation
+        run: npm run simulate:marketing:production-authorization
+
+      - name: Run C10 controlled execution tests
+        run: npm run test:marketing:controlled-execution
+
+      - name: Run C10 controlled execution simulation
+        run: npm run simulate:marketing:controlled-execution
+
+      - name: Run C10 canary outcome tests
+        run: npm run test:marketing:canary-outcome
+
+      - name: Run C10 canary outcome simulation
+        run: npm run simulate:marketing:canary-outcome

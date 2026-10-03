@@ -1,0 +1,13 @@
+{
+  "id": "commercial-attribution-001",
+  "objective": "Classify a sale with a unique influencer coupon carried into the sale as directly attributed.",
+  "must": [
+    "require matching coupon evidence",
+    "link exact touchpoint and sale",
+    "preserve revenue as observed"
+  ],
+  "must_not": [
+    "attribute unrelated sales to influencer",
+    "infer margin when COGS is missing"
+  ]
+}

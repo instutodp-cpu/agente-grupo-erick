@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingCreativeScore",
+  "type": "object",
+  "required": [
+    "creative_id",
+    "dimensions",
+    "total",
+    "confidence",
+    "prediction_mode"
+  ],
+  "properties": {
+    "creative_id": {
+      "type": "string"
+    },
+    "dimensions": {
+      "type": "object",
+      "required": [
+        "commercial_alignment",
+        "evidence_grounding",
+        "hook_clarity",
+        "cta_alignment",
+        "brand_fit",
+        "testability"
+      ],
+      "properties": {
+        "commercial_alignment": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence_grounding": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "hook_clarity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "cta_alignment": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "brand_fit": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "testability": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "total": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "prediction_mode": {
+      "const": "decision_support_not_outcome_prediction"
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

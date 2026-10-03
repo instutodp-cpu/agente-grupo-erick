@@ -1,0 +1,19 @@
+{
+  "id": "whatsapp-asset-001",
+  "objective": "Create a WhatsApp asset that advances a commercial conversation without pretending a lead is a sale.",
+  "input": {
+    "job": "product_followup",
+    "product": "shoe",
+    "known_offer": null
+  },
+  "must": [
+    "keep message focused on conversation progression",
+    "avoid invented offer facts",
+    "retain draft status before sending"
+  ],
+  "must_not": [
+    "mark lead as customer",
+    "send automatically",
+    "invent discount"
+  ]
+}

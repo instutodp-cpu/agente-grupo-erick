@@ -1,0 +1,10 @@
+{
+  "id": "approval-lifecycle-001",
+  "objective": "Enforce expiration and single-use semantics under competing simulated consumers.",
+  "must": [
+    "expired approval blocks",
+    "exactly one consumer can win",
+    "losing consumer receives consumed/replay block",
+    "external execution remains false"
+  ]
+}

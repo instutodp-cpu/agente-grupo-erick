@@ -1,0 +1,21 @@
+version: 1
+simulation_only: true
+fail_closed: true
+requirements:
+  activation_readiness_eligible: true
+  environment: sandbox
+  provider_reachable: true
+  capability_verified: true
+  credential_reference_only: true
+  idempotency_key_required: true
+  production_isolation_verified: true
+rules:
+  credential_value_to_skill: deny
+  production_endpoint: deny
+  production_account: deny
+  production_effect: false
+  duplicate_verification:
+    same_idempotency_key: duplicate_noop
+  unknown_provider_response: block
+  capability_mismatch: block
+  sandbox_verification_does_not_authorize_production: true

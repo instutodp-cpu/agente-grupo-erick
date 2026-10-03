@@ -1,0 +1,14 @@
+{
+  "id": "render-adapter-001",
+  "objective": "Keep Canva and Remotion handoffs governed by the same normalized geometry and brand constraints.",
+  "must": [
+    "same canvas profile",
+    "same element geometry",
+    "same missing brand requirements",
+    "same QA decision"
+  ],
+  "must_not": [
+    "let an adapter bypass layout QA",
+    "publish as part of rendering"
+  ]
+}

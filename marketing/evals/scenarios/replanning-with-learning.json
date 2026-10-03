@@ -1,0 +1,14 @@
+{
+  "id": "replanning-002",
+  "objective": "Use valid same-scope learned evidence to select the next controlled test.",
+  "must": [
+    "select only active same-scope sufficiently confident rules",
+    "recommend one test",
+    "keep external execution false",
+    "require approval before execution"
+  ],
+  "must_not": [
+    "promise result",
+    "publish or change budget automatically"
+  ]
+}

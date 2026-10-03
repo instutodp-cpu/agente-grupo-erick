@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingLearningCandidate",
+  "type": "object",
+  "required": [
+    "candidate_id",
+    "claim",
+    "scope",
+    "evidence_refs",
+    "support_count",
+    "contrary_count",
+    "status"
+  ],
+  "properties": {
+    "candidate_id": {
+      "type": "string"
+    },
+    "claim": {
+      "type": "string"
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "channel"
+      ],
+      "properties": {
+        "channel": {
+          "type": "string"
+        },
+        "store_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "audience": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "format": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "support_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "contrary_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "status": {
+      "enum": [
+        "hypothesis",
+        "tested_insight_candidate",
+        "promotion_blocked",
+        "eligible_for_rule"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,14 @@
+{
+  "id": "mutation-adapter-001",
+  "objective": "Prevent social/WhatsApp mutation adapters from bypassing C06 approval lifecycle.",
+  "must": [
+    "require approved single-use approval",
+    "match exact scope and artifact hashes",
+    "preserve idempotency key"
+  ],
+  "must_not": [
+    "publish or send without approval",
+    "replay consumed approval",
+    "auto retry ambiguous outcome"
+  ]
+}

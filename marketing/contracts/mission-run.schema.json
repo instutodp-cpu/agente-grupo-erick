@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingMissionRun",
+  "type": "object",
+  "required": [
+    "run_id",
+    "mission_id",
+    "mode",
+    "current_stage",
+    "stage_results",
+    "external_execution"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "mission_id": {
+      "type": "string"
+    },
+    "mode": {
+      "const": "simulation"
+    },
+    "current_stage": {
+      "enum": [
+        "objective",
+        "research",
+        "creative",
+        "production",
+        "qa",
+        "approval",
+        "distribution",
+        "measurement",
+        "learning",
+        "replanning",
+        "completed",
+        "blocked"
+      ]
+    },
+    "stage_results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "stage",
+          "status"
+        ],
+        "properties": {
+          "stage": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "passed",
+              "blocked",
+              "pending"
+            ]
+          },
+          "evidence_ref": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "external_execution": {
+      "const": false
+    }
+  },
+  "additionalProperties": false
+}

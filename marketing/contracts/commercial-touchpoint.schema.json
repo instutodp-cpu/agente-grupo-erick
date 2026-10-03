@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingCommercialTouchpoint",
+  "type": "object",
+  "required": [
+    "touchpoint_id",
+    "journey_id",
+    "channel",
+    "occurred_at",
+    "event_type"
+  ],
+  "properties": {
+    "touchpoint_id": {
+      "type": "string"
+    },
+    "journey_id": {
+      "type": "string"
+    },
+    "customer_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "channel": {
+      "enum": [
+        "instagram",
+        "whatsapp",
+        "store",
+        "meta_ads",
+        "google_ads",
+        "influencer",
+        "other"
+      ]
+    },
+    "event_type": {
+      "enum": [
+        "view",
+        "engagement",
+        "profile_visit",
+        "dm",
+        "whatsapp_contact",
+        "product_interest",
+        "store_visit",
+        "coupon_presented",
+        "purchase_signal"
+      ]
+    },
+    "content_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "campaign_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "influencer_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "coupon_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "store_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "occurred_at": {
+      "type": "string"
+    },
+    "evidence_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

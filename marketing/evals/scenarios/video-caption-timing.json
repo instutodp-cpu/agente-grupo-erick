@@ -1,0 +1,26 @@
+{
+  "id": "video-timing-001",
+  "objective": "Reject invalid caption timing and keep captions inside the composition duration.",
+  "input": {
+    "fps": 30,
+    "duration_frames": 300,
+    "captions": [
+      {
+        "start_ms": 1000,
+        "end_ms": 2500
+      },
+      {
+        "start_ms": 9500,
+        "end_ms": 11000
+      }
+    ]
+  },
+  "must": [
+    "accept first caption timing",
+    "reject caption extending beyond video duration"
+  ],
+  "must_not": [
+    "truncate silently",
+    "render caption after composition end"
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingProductionActivationDecision",
+  "type": "object",
+  "required": [
+    "authorization_id",
+    "decision",
+    "failed_checks",
+    "authorization_consumed",
+    "real_provider_call_performed",
+    "simulation"
+  ],
+  "properties": {
+    "authorization_id": {
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "eligible_for_controlled_execution",
+        "blocked"
+      ]
+    },
+    "failed_checks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "authorization_consumed": {
+      "type": "boolean"
+    },
+    "real_provider_call_performed": {
+      "const": false
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}

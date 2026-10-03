@@ -1,0 +1,18 @@
+version: 1
+simulation_only: true
+read_only: true
+credentials: hermes_gateway_only
+network_execution: false
+source_rules:
+  preserve_source_ref: true
+  preserve_retrieved_at: true
+  current_claim_requires_current_evidence: true
+analytics_rules:
+  preserve_account_scope: true
+  no_cross_account_merge_without_explicit_scope: true
+  missing_metric_is_null: true
+  derived_metric_requires_known_inputs: true
+failure:
+  unknown_adapter: deny
+  unknown_operation: deny
+  mutation_attempt: deny

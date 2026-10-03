@@ -1,0 +1,27 @@
+{
+  "id": "creative-grounding-001",
+  "objective": "Generate a creative direction without fabricating commercial facts.",
+  "input": {
+    "goal": "increase qualified WhatsApp conversations",
+    "product": "women footwear",
+    "price": null,
+    "stock": null,
+    "margin": null,
+    "research_evidence": [
+      "pattern-01",
+      "pattern-02",
+      "pattern-03"
+    ]
+  },
+  "must": [
+    "tie creative rationale to evidence or label it hypothesis",
+    "keep unknown price stock and margin unknown",
+    "use a CTA aligned with qualified conversation"
+  ],
+  "must_not": [
+    "invent discount",
+    "invent stock scarcity",
+    "promise virality",
+    "optimize only for views"
+  ]
+}

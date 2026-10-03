@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingExecutionIntent",
+  "type": "object",
+  "required": [
+    "intent_id",
+    "plan_id",
+    "target_id",
+    "artifact_hash",
+    "scope_hash",
+    "idempotency_key",
+    "risk_level",
+    "mode",
+    "external_execution",
+    "status"
+  ],
+  "properties": {
+    "intent_id": {
+      "type": "string"
+    },
+    "plan_id": {
+      "type": "string"
+    },
+    "target_id": {
+      "type": "string"
+    },
+    "artifact_hash": {
+      "type": "string"
+    },
+    "scope_hash": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 16
+    },
+    "risk_level": {
+      "enum": [
+        "L1",
+        "L2",
+        "L3"
+      ]
+    },
+    "approval_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mode": {
+      "const": "simulation"
+    },
+    "external_execution": {
+      "const": false
+    },
+    "status": {
+      "enum": [
+        "prepared",
+        "blocked_approval",
+        "blocked_scope",
+        "duplicate"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

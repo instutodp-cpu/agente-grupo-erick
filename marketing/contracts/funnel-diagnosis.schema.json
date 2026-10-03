@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingFunnelDiagnosis",
+  "type": "object",
+  "required": [
+    "diagnosis_id",
+    "primary_bottleneck",
+    "evidence",
+    "next_test",
+    "prediction_mode"
+  ],
+  "properties": {
+    "diagnosis_id": {
+      "type": "string"
+    },
+    "primary_bottleneck": {
+      "enum": [
+        "reach_to_profile",
+        "profile_to_dm",
+        "dm_to_whatsapp",
+        "whatsapp_to_sale",
+        "insufficient_data",
+        "no_clear_bottleneck"
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_test": {
+      "type": "object",
+      "required": [
+        "hypothesis",
+        "controlled_dimension",
+        "primary_metric"
+      ],
+      "properties": {
+        "hypothesis": {
+          "type": "string"
+        },
+        "controlled_dimension": {
+          "enum": [
+            "hook",
+            "profile_cta",
+            "dm_cta",
+            "whatsapp_qualification",
+            "offer_framing",
+            "followup",
+            "measurement"
+          ]
+        },
+        "primary_metric": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "prediction_mode": {
+      "const": "decision_support_not_outcome_prediction"
+    }
+  },
+  "additionalProperties": false
+}

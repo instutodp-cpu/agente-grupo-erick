@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingDistributionReconciliation",
+  "type": "object",
+  "required": [
+    "reconciliation_id",
+    "intent_id",
+    "idempotency_key",
+    "provider_observation",
+    "decision",
+    "external_execution"
+  ],
+  "properties": {
+    "reconciliation_id": {
+      "type": "string"
+    },
+    "intent_id": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "provider_observation": {
+      "enum": [
+        "confirmed_effect",
+        "not_found",
+        "conflicting_effect",
+        "unknown"
+      ]
+    },
+    "provider_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "decision": {
+      "enum": [
+        "confirm_success",
+        "authorize_same_key_retry",
+        "block_conflict",
+        "remain_ambiguous"
+      ]
+    },
+    "external_execution": {
+      "const": false
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

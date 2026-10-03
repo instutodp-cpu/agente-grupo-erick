@@ -1,0 +1,19 @@
+version: 1
+simulation_only: true
+real_provider_enabled: false
+requirements:
+  c05_preflight_passed: true
+  brand_profile_ref_required: true
+  render_manifest_ref_required: true
+  artifact_hash_required: true
+fail_closed_on:
+  - safe_zone_failure
+  - text_fit_failure
+  - brand_profile_missing
+  - manifest_missing
+  - artifact_hash_missing
+  - timed_caption_failure
+output:
+  external_render: false
+  approvable_only_if_preflight_passed: true
+  preserve_artifact_hash: true

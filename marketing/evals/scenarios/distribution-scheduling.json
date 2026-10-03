@@ -1,0 +1,13 @@
+{
+  "id": "distribution-schedule-001",
+  "objective": "Keep a future distribution intent scheduled until its due time without external execution.",
+  "must": [
+    "return scheduled before due time",
+    "preserve approval scope and idempotency key",
+    "become simulation-eligible at due time"
+  ],
+  "must_not": [
+    "execute early",
+    "change schedule silently"
+  ]
+}

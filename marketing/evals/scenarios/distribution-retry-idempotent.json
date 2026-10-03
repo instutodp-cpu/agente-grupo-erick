@@ -1,0 +1,15 @@
+{
+  "id": "distribution-retry-001",
+  "objective": "Retry a transient simulated provider failure without creating a second effect.",
+  "must": [
+    "preserve exact idempotency key",
+    "increment attempt",
+    "return duplicate noop after prior success",
+    "keep external mutation false"
+  ],
+  "must_not": [
+    "create new intent for transient retry",
+    "publish twice",
+    "send twice"
+  ]
+}

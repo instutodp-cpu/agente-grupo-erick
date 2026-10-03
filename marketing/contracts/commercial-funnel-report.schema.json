@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingCommercialFunnelReport",
+  "type": "object",
+  "required": [
+    "scope",
+    "counts",
+    "rates",
+    "limitations"
+  ],
+  "properties": {
+    "scope": {
+      "type": "object"
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "views",
+        "engagements",
+        "profile_visits",
+        "dms",
+        "whatsapp_contacts",
+        "product_interests",
+        "store_visits",
+        "direct_sales"
+      ],
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "rates": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "number",
+          "null"
+        ]
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

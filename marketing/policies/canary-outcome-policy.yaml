@@ -1,0 +1,22 @@
+version: 1
+simulation_only: true
+fail_closed: true
+requirements:
+  receipt_required: true
+  trace_required: true
+  exact_envelope_binding: true
+  idempotency_preserved: true
+  operation_ceiling_respected: true
+  financial_ceiling_respected: true
+rules:
+  success_requires_confirmed_effect: true
+  ambiguous_result: reconcile_and_freeze
+  unknown_effect: reconcile_and_freeze
+  conflicting_effect: halt_and_freeze
+  operation_ceiling_exceeded: halt_and_freeze
+  financial_ceiling_exceeded: halt_and_freeze
+  trace_mismatch: halt_and_freeze
+  receipt_missing: halt_and_freeze
+  expansion_requires_separate_review: true
+  automatic_scope_expansion: deny
+  real_followup_performed: false

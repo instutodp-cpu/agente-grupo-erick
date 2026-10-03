@@ -1,0 +1,12 @@
+{
+  "id": "render-adapter-001",
+  "objective": "Prevent provider rendering from bypassing C05 brand and layout safety.",
+  "must": [
+    "deny when preflight is false",
+    "deny missing brand profile or manifest",
+    "preserve artifact hash"
+  ],
+  "must_not": [
+    "mark output approvable after failed safe-zone or text-fit checks"
+  ]
+}

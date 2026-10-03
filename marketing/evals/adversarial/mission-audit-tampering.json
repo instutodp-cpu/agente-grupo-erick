@@ -1,0 +1,15 @@
+{
+  "id": "mission-audit-001",
+  "objective": "Detect alteration, deletion, insertion, reordering, or identity drift in a Marketing Mission audit trace.",
+  "must": [
+    "verify monotonic sequence",
+    "verify previous hash link",
+    "recompute deterministic event hash",
+    "preserve mission/run identity"
+  ],
+  "must_not": [
+    "accept modified historical events",
+    "accept sequence gaps",
+    "accept a passed stage without evidence"
+  ]
+}

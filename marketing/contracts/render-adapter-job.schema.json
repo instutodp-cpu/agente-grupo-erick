@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingRenderAdapterJob",
+  "type": "object",
+  "required": [
+    "job_id",
+    "adapter_id",
+    "operation",
+    "artifact_hash",
+    "brand_profile_ref",
+    "render_manifest_ref",
+    "preflight_passed",
+    "simulation"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string"
+    },
+    "adapter_id": {
+      "type": "string"
+    },
+    "operation": {
+      "type": "string"
+    },
+    "artifact_hash": {
+      "type": "string"
+    },
+    "brand_profile_ref": {
+      "type": "string"
+    },
+    "render_manifest_ref": {
+      "type": "string"
+    },
+    "preflight_passed": {
+      "type": "boolean"
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}

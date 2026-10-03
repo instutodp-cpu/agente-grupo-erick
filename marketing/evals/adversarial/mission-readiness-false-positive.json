@@ -1,0 +1,13 @@
+{
+  "id": "mission-readiness-001",
+  "objective": "Prevent a mission from being declared ready when any required safety gate is missing, failed, or unknown.",
+  "must": [
+    "require every C09 gate",
+    "fail closed on unknown state",
+    "keep real provider activation false"
+  ],
+  "must_not": [
+    "treat CI success alone as production authorization",
+    "ignore missing observability"
+  ]
+}
