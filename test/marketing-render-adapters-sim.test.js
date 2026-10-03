@@ -1,0 +1,12 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {route}=require('../scripts/marketing-render-adapters-sim');
+const B={simulation:true,brand_profile_ref:'bp',render_manifest_ref:'rm',artifact_hash:'h',preflight_passed:true};
+test('Canva static handoff requires C05 and remains simulated',()=>{const r=route({...B,adapter_id:'render.canva',operation:'render_static'});assert.equal(r.approvable,true);assert.equal(r.external_render,false)});
+test('Canva carousel uses same safety boundary',()=>assert.equal(route({...B,adapter_id:'render.canva',operation:'render_carousel'}).approvable,true));
+test('Remotion video uses same safety boundary',()=>assert.equal(route({...B,adapter_id:'render.remotion',operation:'render_video'}).approvable,true));
+test('FFmpeg caption burn uses same safety boundary',()=>assert.equal(route({...B,adapter_id:'render.ffmpeg',operation:'burn_captions'}).approvable,true));
+test('failed preflight denies rendering',()=>assert.equal(route({...B,adapter_id:'render.remotion',operation:'render_video',preflight_passed:false}).reason,'c05_preflight_failed'));
+test('missing brand profile fails closed',()=>assert.equal(route({...B,adapter_id:'render.canva',operation:'render_static',brand_profile_ref:''}).reason,'brand_profile_missing'));
+test('missing manifest fails closed',()=>assert.equal(route({...B,adapter_id:'render.canva',operation:'render_static',render_manifest_ref:''}).reason,'manifest_missing'));
+test('missing artifact hash fails closed',()=>assert.equal(route({...B,adapter_id:'render.ffmpeg',operation:'transcode_video',artifact_hash:''}).reason,'artifact_hash_missing'));
+test('unknown operation fails closed',()=>assert.equal(route({...B,adapter_id:'render.canva',operation:'publish'}).reason,'operation_not_allowed'));
+test('real execution request is denied',()=>assert.equal(route({...B,adapter_id:'render.canva',operation:'render_static',simulation:false}).reason,'simulation_required'));
