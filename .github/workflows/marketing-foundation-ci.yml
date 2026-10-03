@@ -176,6 +176,12 @@ jobs:
       - name: Run strategy decision simulation
         run: npm run simulate:marketing:strategy
 
+      - name: Run lead conversion tests
+        run: npm run test:marketing:lead-conversion
+
+      - name: Run lead conversion simulation
+        run: npm run simulate:marketing:lead-conversion
+
       - name: Run C08 integration adapter tests
         run: npm run test:marketing:integration-adapters
 
