@@ -259,3 +259,9 @@ jobs:
 
       - name: Run C10 production authorization simulation
         run: npm run simulate:marketing:production-authorization
+
+      - name: Run C10 controlled execution tests
+        run: npm run test:marketing:controlled-execution
+
+      - name: Run C10 controlled execution simulation
+        run: npm run simulate:marketing:controlled-execution
