@@ -53,7 +53,7 @@ function createHermesMaintainerRevisionBoundTestRuntimeComposition({ workspaceSp
       ) return blocked('workspace_receipt_invalid', revisionBinding.revision_sha || null);
 
       const runner = createHermesMaintainerTestExecutionProcessRuntime({
-        cwd: workspace.workspace_path,
+        cwd: workspace.workspace_path + '/platform/services/api',
         spawnImpl: testSpawnImpl,
         timeoutMs: testTimeoutMs
       });
