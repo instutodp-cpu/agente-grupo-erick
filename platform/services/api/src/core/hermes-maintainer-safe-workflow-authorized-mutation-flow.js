@@ -5,7 +5,6 @@ function blocked(stage,value){return Object.freeze({contract_version:CONTRACT_VE
 function createHermesMaintainerSafeWorkflowAuthorizedMutationFlow({authorizedMutationEntry}={}){
  if(typeof authorizedMutationEntry?.execute!=='function')throw new TypeError('authorizedMutationEntry_required');
  return Object.freeze({contract_version:CONTRACT_VERSION,async execute(controlledExecution,{ownership,target,authority_evidence,mutation_input}={}){
-  if(!authority_evidence)return blocked('authority_evidence_missing');
   const entry=prepareHermesMaintainerSafeWorkflowAuthorityEntry(controlledExecution,{ownership,target,authority_evidence});
   if(!entry.prepared)return blocked('authority_entry',entry);
   const result=await authorizedMutationEntry.execute(entry.authority_requirement,authority_evidence,mutation_input);
