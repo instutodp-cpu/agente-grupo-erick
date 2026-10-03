@@ -8,6 +8,16 @@ const MAP = path.join(ROOT, 'platform/docs/audits/HERMES_READINESS_MAP.json');
 
 function exists(rel) { return fs.existsSync(path.join(ROOT, rel)); }
 function loadMap() { return JSON.parse(fs.readFileSync(MAP, 'utf8')); }
+function countFiles(rel, predicate = () => true) {
+  const root = path.join(ROOT, rel);
+  let count = 0;
+  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
+    const child = path.join(rel, entry.name);
+    if (entry.isDirectory()) count += countFiles(child, predicate);
+    else if (predicate(child)) count += 1;
+  }
+  return count;
+}
 
 function audit() {
   const map = loadMap();
@@ -19,6 +29,18 @@ function audit() {
     'marketing/registry.yaml'
   ];
   for (const file of required) if (!exists(file)) errors.push({type:'missing_anchor', file});
+  const observed = {
+    platform_docs: countFiles('platform/docs'),
+    core_source_files: countFiles('platform/services/api/src/core'),
+    api_tests: countFiles('platform/services/api/test'),
+    github_workflows: countFiles('.github/workflows'),
+    marketing_files: countFiles('marketing')
+  };
+  for (const [key, expected] of Object.entries(map.inventory || {})) {
+    if (typeof expected === 'number' && observed[key] !== expected) {
+      errors.push({type:'inventory_drift', key, expected, observed:observed[key]});
+    }
+  }
   if (map.rules?.merge_authority !== false) errors.push({type:'unsafe_rule', rule:'merge_authority'});
   if (map.rules?.human_merge_required !== true) errors.push({type:'unsafe_rule', rule:'human_merge_required'});
   for (const capability of map.capabilities || []) {
@@ -32,7 +54,7 @@ function audit() {
     if (capability.operational === true && !capability.scope) errors.push({type:'missing_operational_scope', capability:capability.id});
     if (capability.proven_e2e === true && !capability.evidence_revision) errors.push({type:'missing_e2e_revision', capability:capability.id});
   }
-  return {status: errors.length ? 'blocked' : 'pass', audited_revision: map.audited_revision, capability_count:(map.capabilities||[]).length, finding_count:(map.findings||[]).length, errors};
+  return {status: errors.length ? 'blocked' : 'pass', audited_revision: map.audited_revision, capability_count:(map.capabilities||[]).length, finding_count:(map.findings||[]).length, observed_inventory: observed, errors};
 }
 
 if (require.main === module) {
