@@ -193,3 +193,9 @@ jobs:
 
       - name: Run C08 mutation adapter simulation
         run: npm run simulate:marketing:mutation-adapters
+
+      - name: Run C08 paid media adapter tests
+        run: npm run test:marketing:paid-media-adapters
+
+      - name: Run C08 paid media adapter simulation
+        run: npm run simulate:marketing:paid-media-adapters
