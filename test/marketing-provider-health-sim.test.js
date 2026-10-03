@@ -1,0 +1,12 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {route,observe}=require('../scripts/marketing-provider-health-sim');
+const H={adapter_id:'research.firecrawl',status:'healthy',capabilities:['research.web'],simulation:true,real_provider_enabled:false};const R={capability:'research.web',mutation:false,health_evidence_ref:'health:1'};
+test('healthy declared capability routes simulated',()=>{const r=route(R,H);assert.equal(r.decision,'route_simulated');assert.equal(r.external_execution,false)});
+test('missing health blocks',()=>assert.equal(route(R,null).decision,'blocked_unknown'));
+test('unknown health blocks',()=>assert.equal(route(R,{...H,status:'unknown'}).decision,'blocked_unknown'));
+test('unavailable provider blocks',()=>assert.equal(route(R,{...H,status:'unavailable'}).decision,'blocked_unavailable'));
+test('undeclared capability blocks',()=>assert.equal(route({...R,capability:'analytics.read'},H).decision,'blocked_capability'));
+test('degraded read only can route simulated',()=>assert.equal(route(R,{...H,status:'degraded'}).decision,'route_simulated'));
+test('degraded mutation blocks',()=>assert.equal(route({...R,capability:'social.publish',mutation:true},{...H,status:'degraded',capabilities:['social.publish']}).decision,'blocked_unavailable'));
+test('unsafe real-enabled evidence blocks',()=>assert.equal(route(R,{...H,real_provider_enabled:true}).decision,'blocked_unknown'));
+test('health evidence ref preserved',()=>assert.equal(route(R,H).health_evidence_ref,'health:1'));
+test('observation has no external effect',()=>{const o=observe('o1','research.firecrawl','health_checked');assert.equal(o.external_effect,false);assert.equal(o.simulation,true)});
