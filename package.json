@@ -53,7 +53,9 @@
     "test:marketing:integration-adapters": "node --test test/marketing-integration-adapter-sim.test.js",
     "simulate:marketing:integration-adapters": "node scripts/marketing-integration-adapter-sim.js",
     "test:marketing:read-adapters": "node --test test/marketing-read-adapters-sim.test.js",
-    "simulate:marketing:read-adapters": "node scripts/marketing-read-adapters-sim.js"
+    "simulate:marketing:read-adapters": "node scripts/marketing-read-adapters-sim.js",
+    "test:marketing:render-adapters": "node --test test/marketing-render-adapters-sim.test.js",
+    "simulate:marketing:render-adapters": "node scripts/marketing-render-adapters-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
