@@ -59,7 +59,8 @@
       "severity": "high",
       "type": "stale_registry",
       "evidence": "platform/services/api/src/capabilities/registry.js",
-      "status": "open"
+      "status": "classified",
+      "detail": "The central capability registry is the intent-router availability surface, not global readiness. Its planned state must not be interpreted as absence of internal implementation; global evidence remains in this readiness map."
     },
     {
       "id": "F-002",
