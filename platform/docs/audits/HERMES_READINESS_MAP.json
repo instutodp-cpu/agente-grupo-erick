@@ -220,10 +220,12 @@
       "contracted": true,
       "implemented": true,
       "tested": true,
-      "proven_e2e": null,
-      "operational": null,
+      "proven_e2e": false,
+      "operational": false,
       "limits": [
-        "requires_exact_trial_evidence_review"
+        "readiness_only_evidence",
+        "historical_fake_dry_run_not_operational_proof",
+        "human_authorization_required"
       ]
     },
     {
@@ -233,10 +235,13 @@
       "contracted": true,
       "implemented": true,
       "tested": true,
-      "proven_e2e": null,
-      "operational": null,
+      "proven_e2e": false,
+      "operational": false,
       "limits": [
-        "requires_exact_operational_evidence_review"
+        "synthetic_only",
+        "real_provider_disabled",
+        "external_network_disabled",
+        "production_blocked"
       ]
     }
   ],
