@@ -1,0 +1,11 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {append,verify,sample}=require('../scripts/marketing-mission-audit-sim');
+test('valid trace verifies',()=>assert.equal(verify(sample()).status,'verified'));
+test('audit events have no external effect',()=>assert.equal(sample()[0].external_effect,false));
+test('sequence gap detected',()=>{const t=sample();t[1]={...t[1],sequence:3};assert.equal(verify(t).status,'broken_sequence')});
+test('modified decision breaks hash chain',()=>{const t=sample();t[0]={...t[0],decision:'changed'};assert.equal(verify(t).status,'broken_hash_chain')});
+test('previous hash link tampering detected',()=>{const t=sample();t[1]={...t[1],previous_event_hash:'fake'};assert.equal(verify(t).status,'broken_hash_chain')});
+test('run identity drift detected',()=>{const t=sample();t[1]={...t[1],run_id:'other'};assert.equal(verify(t).status,'scope_mismatch')});
+test('mission identity drift detected',()=>{const t=sample();t[1]={...t[1],mission_id:'other'};assert.equal(verify(t).status,'scope_mismatch')});
+test('passed stage cannot be appended without evidence',()=>assert.throws(()=>append([],{event_id:'x',run_id:'r',mission_id:'m',event_type:'stage_passed',stage:'qa',decision:'passed',evidence_refs:[]})));
+test('blocked event preserves reason',()=>{const t=append([],{event_id:'b',run_id:'r',mission_id:'m',event_type:'stage_blocked',stage:'qa',decision:'qa_failed',evidence_refs:[]});assert.equal(t[0].decision,'qa_failed')});
+test('deleting historical event is detected by sequence/link',()=>{let t=sample();t=append(t,{event_id:'e3',run_id:'r1',mission_id:'m1',event_type:'stage_passed',stage:'creative',decision:'passed',evidence_refs:['creative:1']});t.splice(1,1);assert.notEqual(verify(t).status,'verified')});
