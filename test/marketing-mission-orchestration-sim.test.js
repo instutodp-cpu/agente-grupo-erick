@@ -1,0 +1,11 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {runMission,sample}=require('../scripts/marketing-mission-orchestration-sim');
+test('complete simulated mission traverses all stages',()=>{const r=runMission(sample());assert.equal(r.current_stage,'completed');assert.equal(r.stage_results.length,10);assert.equal(r.external_execution,false)});
+test('missing research blocks before creative',()=>{const r=runMission({...sample(),research_evidence:null});assert.equal(r.current_stage,'research');assert.equal(r.stage_results.length,2)});
+test('missing production blocks before QA',()=>assert.equal(runMission({...sample(),production_ref:null}).current_stage,'production'));
+test('QA failure blocks before approval/distribution',()=>{const r=runMission({...sample(),qa_passed:false});assert.equal(r.current_stage,'qa');assert.equal(r.stage_results.some(x=>x.stage==='distribution'),false)});
+test('L2 without approval blocks',()=>assert.equal(runMission({...sample(),approval_valid:false}).current_stage,'approval'));
+test('L3 without approval blocks',()=>assert.equal(runMission({...sample(),risk_level:'L3',approval_valid:false}).current_stage,'approval'));
+test('non simulated distribution blocks',()=>assert.equal(runMission({...sample(),distribution_simulated:false}).current_stage,'distribution'));
+test('missing measurement evidence blocks learning',()=>assert.equal(runMission({...sample(),measurement_ref:null}).current_stage,'measurement'));
+test('ineligible learning blocks replanning',()=>assert.equal(runMission({...sample(),learning_eligible:false}).current_stage,'learning'));
+test('replanning requires active learned rule',()=>assert.equal(runMission({...sample(),active_learning:false}).current_stage,'replanning'));
