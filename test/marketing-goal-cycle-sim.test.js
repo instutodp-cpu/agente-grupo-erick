@@ -1,0 +1,4 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {runGoalCycle}=require('../scripts/marketing-goal-cycle-sim');
+const scope={channel:'instagram',store_id:'barreiros',audience:'women-25-35',format:'reel'};
+test('goal cycle fails closed at strategy without current evidence',()=>{const r=runGoalCycle({strategy:{objective:'sales',scope,research:[]},conversion:{},learning:{claim:'x',observations:[]}});assert.equal(r.status,'blocked');assert.equal(r.blocked_stage,'strategy');assert.equal(r.external_execution,false)});
+test('goal cycle fails closed at lead conversion without consent',()=>{const r=runGoalCycle({strategy:{objective:'sales',scope,research:[{evidence_ref:'e',current:true}]},conversion:{mission_id:'m',lead:{lead_id:'l'}},learning:{claim:'x',observations:[]}});assert.equal(r.blocked_stage,'lead_conversion');assert.equal(r.external_execution,false)});
