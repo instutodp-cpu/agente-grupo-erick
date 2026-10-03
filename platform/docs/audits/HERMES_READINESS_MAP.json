@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0",
+  "mission": "hermes-self-audit-readiness",
+  "evidence_states": ["planned","contracted","implemented","tested","proven_e2e","operational"],
+  "rules": {
+    "infer_higher_state": false,
+    "require_exact_revision_for_e2e": true,
+    "require_environment_boundary_for_operational": true,
+    "default_deny": true,
+    "merge_authority": false,
+    "human_merge_required": true
+  },
+  "autonomy_levels": {
+    "A0": ["read","audit"],
+    "A1": ["plan","map_evidence","simulate"],
+    "A2": ["create_branch","edit","commit","test","inspect_ci","self_correct","draft_pr"],
+    "A3": ["approved_scoped_external_action"],
+    "A4": ["merge_main","production_publish","financial_spend","customer_message","destructive_action","secret_or_permission_change"]
+  },
+  "protected_levels": ["A3","A4"],
+  "required_findings": [
+    "duplicate_or_overlapping",
+    "stale_or_superseded",
+    "planned_not_implemented",
+    "implemented_without_contract",
+    "tested_without_runtime_binding",
+    "implemented_without_meaningful_test",
+    "ci_proof_scope",
+    "e2e_evidence",
+    "operational_evidence",
+    "restriction_review_candidates",
+    "dependency_risk_value_gaps"
+  ],
+  "capabilities": []
+}
