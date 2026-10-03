@@ -19,8 +19,9 @@ test('C26 postgres persists accounting capability defaults fail closed and durab
   const flag=(await pool.query("SELECT enabled,real_provider_enabled FROM hermes.accounting_capability_flags WHERE tenant_id='tenant-c26'")).rows[0];
   assert.deepEqual(flag,{enabled:false,real_provider_enabled:false});
   const fakeJob='c26-job-'+Date.now();
+  const durableRecord={job_reference:{id:fakeJob},identity_scope:{tenant_id:'tenant-c26',organization_id:'org-c26',project_id:'accounting',session_reference_id:'period-2026-10',agent_id:'accounting',actor_id:'human-c26'},logical_job_identity:{digest:'logical-c26'},idempotency_reference:{fingerprint:'runtime-idem-c26'},runtime_execution_job_durable_fingerprint:'fp-c26',runtime_execution_job_durable_digest:'digest-c26',admission_reference:{id:'admission-c26'}};
   await pool.query(`INSERT INTO hermes.execution_jobs(job_reference_id,tenant_id,organization_id,project_id,session_reference_id,agent_id,actor_id,logical_identity_digest,idempotency_fingerprint,record_fingerprint,record_digest,admission_reference_id,revision,state,contract_version,schema_version,durable_record)
- VALUES($1,'tenant-c26','org-c26','accounting','period-2026-10','accounting','human-c26','logical-c26','runtime-idem-c26','fp-c26','digest-c26','admission-c26',1,'MATERIALIZED','test-v1',3,'{}'::jsonb)`,[fakeJob]);
+ VALUES($1,'tenant-c26','org-c26','accounting','period-2026-10','accounting','human-c26','logical-c26','runtime-idem-c26','fp-c26','digest-c26','admission-c26',1,'ADMITTED','runtime_execution_job_durable_contract_v1',3,$2::jsonb)`,[fakeJob,JSON.stringify(durableRecord)]);
   await pool.query("INSERT INTO hermes.accounting_execution_bindings(binding_id,tenant_id,capability,operation_id,idempotency_key,execution_job_reference_id) VALUES('b1','tenant-c26','FINANCIAL_EXECUTION','op1','accounting-idem-c26',$1)",[fakeJob]);
   await assert.rejects(pool.query("INSERT INTO hermes.accounting_execution_bindings(binding_id,tenant_id,capability,operation_id,idempotency_key,execution_job_reference_id) VALUES('b2','tenant-c26','FINANCIAL_EXECUTION','op2','accounting-idem-c26',$1)",[fakeJob]),e=>e.code==='23505');
  }finally{await pool.end();}
