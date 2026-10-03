@@ -54,6 +54,8 @@
     "simulate:marketing:strategy": "node scripts/marketing-strategy-sim.js",
     "test:marketing:lead-conversion": "node --test test/marketing-lead-conversion-sim.test.js",
     "simulate:marketing:lead-conversion": "node scripts/marketing-lead-conversion-sim.js",
+    "test:marketing:goal-cycle": "node --test test/marketing-goal-cycle-sim.test.js",
+    "simulate:marketing:goal-cycle": "node scripts/marketing-goal-cycle-sim.js",
     "test:marketing:integration-adapters": "node --test test/marketing-integration-adapter-sim.test.js",
     "simulate:marketing:integration-adapters": "node scripts/marketing-integration-adapter-sim.js",
     "test:marketing:read-adapters": "node --test test/marketing-read-adapters-sim.test.js",
