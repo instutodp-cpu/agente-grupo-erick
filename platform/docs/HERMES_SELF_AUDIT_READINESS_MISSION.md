@@ -100,3 +100,15 @@ The audit must inspect at minimum:
 ## Safety invariants
 
 Simulation-first where external side effects are unnecessary. Default deny. No invented approval, grant, credential, operational evidence or E2E proof. Secrets are referenced, never exposed. Destructive actions, spend, customer communication, production publication and merge remain protected human boundaries.
+
+
+## Source-of-truth separation
+
+The audit MUST preserve distinct authorities instead of collapsing them into one status:
+
+- intent-router capability registry: whether a domain is enabled on that routing surface;
+- domain registries: domain-specific contracts and activation policy;
+- readiness map: evidence state across planned, contracted, implemented, tested, proven E2E and operational;
+- runtime evidence: exact-revision proof for a bounded environment and scope.
+
+A routing status such as `planned` MUST NOT be interpreted as proof that internal implementation is absent. Conversely, internal implementation or tests MUST NOT make a domain routable or operational.
