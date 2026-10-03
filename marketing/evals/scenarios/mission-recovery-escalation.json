@@ -1,0 +1,13 @@
+{
+  "id": "mission-recovery-002",
+  "objective": "Recover deterministic failures and escalate uncertain or stuck missions safely.",
+  "must": [
+    "retry transient no-effect failures with same key",
+    "continue confirmed effects",
+    "escalate ambiguity/conflict/stuck cases"
+  ],
+  "must_not": [
+    "silently abandon stuck mission",
+    "convert uncertainty into success"
+  ]
+}
