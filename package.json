@@ -49,7 +49,9 @@
     "test:marketing:learning-feedback": "node --test test/marketing-learning-feedback-sim.test.js",
     "simulate:marketing:learning-feedback": "node scripts/marketing-learning-feedback-sim.js",
     "test:marketing:replanning": "node --test test/marketing-replanning-sim.test.js",
-    "simulate:marketing:replanning": "node scripts/marketing-replanning-sim.js"
+    "simulate:marketing:replanning": "node scripts/marketing-replanning-sim.js",
+    "test:marketing:integration-adapters": "node --test test/marketing-integration-adapter-sim.test.js",
+    "simulate:marketing:integration-adapters": "node scripts/marketing-integration-adapter-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
