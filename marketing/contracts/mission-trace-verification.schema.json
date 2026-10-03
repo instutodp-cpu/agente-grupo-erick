@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingMissionTraceVerification",
+  "type": "object",
+  "required": [
+    "run_id",
+    "status",
+    "verified_events",
+    "last_event_hash",
+    "simulation"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "verified",
+        "broken_sequence",
+        "broken_hash_chain",
+        "scope_mismatch",
+        "missing_evidence"
+      ]
+    },
+    "verified_events": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_event_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}
