@@ -1,0 +1,14 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {authorize}=require('../scripts/marketing-production-authorization-sim');
+const a=()=>({authorization_id:'a',provider_id:'p',capability_id:'c',account_scope:'acct',mode:'write',scope_hash:'h',status:'active',expires_at:100});const r=()=>({provider_id:'p',capability_id:'c',account_scope:'acct',mode:'write',scope_hash:'h',approval_level:2});const g=()=>({activation_readiness_verified:true,sandbox_verified:true,explicit_production_authorization:true,kill_switch_on:false});
+test('exact authorization yields execution eligibility only',()=>assert.equal(authorize(a(),r(),g(),1).decision,'eligible_for_controlled_execution'));
+test('authorization is consumed exactly once',()=>{const x=a();authorize(x,r(),g(),1);assert.equal(authorize(x,r(),g(),2).decision,'blocked')});
+test('expired authorization blocks',()=>assert.ok(authorize(a(),r(),g(),100).failed_checks.includes('expired')));
+test('revoked authorization blocks',()=>{const x=a();x.status='revoked';assert.equal(authorize(x,r(),g(),1).decision,'blocked')});
+test('provider drift blocks',()=>{const x=r();x.provider_id='other';assert.equal(authorize(a(),x,g(),1).decision,'blocked')});
+test('account drift blocks',()=>{const x=r();x.account_scope='other';assert.equal(authorize(a(),x,g(),1).decision,'blocked')});
+test('mode drift blocks',()=>{const x=r();x.mode='read_only';assert.equal(authorize(a(),x,g(),1).decision,'blocked')});
+test('scope hash drift blocks',()=>{const x=r();x.scope_hash='other';assert.equal(authorize(a(),x,g(),1).decision,'blocked')});
+test('kill switch blocks',()=>{const x=g();x.kill_switch_on=true;assert.ok(authorize(a(),r(),x,1).failed_checks.includes('kill_switch'))});
+test('missing sandbox verification blocks',()=>{const x=g();x.sandbox_verified=false;assert.equal(authorize(a(),r(),x,1).decision,'blocked')});
+test('financial mutation requires L3',()=>{const x=a();x.mode='financial_mutation';const y=r();y.mode='financial_mutation';y.approval_level=2;assert.ok(authorize(x,y,g(),1).failed_checks.includes('l3_required'))});
+test('authorization gate never calls real provider',()=>assert.equal(authorize(a(),r(),g(),1).real_provider_call_performed,false));
