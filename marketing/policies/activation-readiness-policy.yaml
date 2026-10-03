@@ -1,0 +1,23 @@
+version: 1
+simulation_only: true
+fail_closed: true
+required:
+  c09_readiness: ready_for_simulation
+  provider_registered: true
+  provider_health: healthy
+  capability_declared: true
+  credential_reference_present: true
+  credential_value_exposed_to_skill: false
+  environment_explicit: true
+  approval_valid: true
+  approval_scope_exact: true
+  rollback_or_recovery_plan_present: true
+  observability_ready: true
+rules:
+  sandbox_before_production: true
+  write_requires_l2_or_higher: true
+  financial_mutation_requires_l3: true
+  unknown_gate: block
+  failed_gate: block
+  real_execution_authorized: false
+  activation_requires_separate_explicit_step: true
