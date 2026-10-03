@@ -235,3 +235,9 @@ jobs:
 
       - name: Run C09 mission recovery simulation
         run: npm run simulate:marketing:mission-recovery
+
+      - name: Run C09 mission readiness tests
+        run: npm run test:marketing:mission-readiness
+
+      - name: Run C09 mission readiness simulation
+        run: npm run simulate:marketing:mission-readiness
