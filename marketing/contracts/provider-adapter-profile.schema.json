@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingProviderAdapterProfile",
+  "type": "object",
+  "required": [
+    "adapter_id",
+    "family",
+    "provider_kind",
+    "operations",
+    "read_only",
+    "credential_mode",
+    "real_provider_enabled"
+  ],
+  "properties": {
+    "adapter_id": {
+      "type": "string"
+    },
+    "family": {
+      "enum": [
+        "research",
+        "analytics"
+      ]
+    },
+    "provider_kind": {
+      "type": "string"
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "read_only": {
+      "const": true
+    },
+    "credential_mode": {
+      "const": "hermes_gateway_only"
+    },
+    "real_provider_enabled": {
+      "const": false
+    }
+  },
+  "additionalProperties": false
+}
