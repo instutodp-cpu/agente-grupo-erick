@@ -50,6 +50,8 @@
     "simulate:marketing:learning-feedback": "node scripts/marketing-learning-feedback-sim.js",
     "test:marketing:replanning": "node --test test/marketing-replanning-sim.test.js",
     "simulate:marketing:replanning": "node scripts/marketing-replanning-sim.js",
+    "test:marketing:strategy": "node --test test/marketing-strategy-sim.test.js",
+    "simulate:marketing:strategy": "node scripts/marketing-strategy-sim.js",
     "test:marketing:integration-adapters": "node --test test/marketing-integration-adapter-sim.test.js",
     "simulate:marketing:integration-adapters": "node scripts/marketing-integration-adapter-sim.js",
     "test:marketing:read-adapters": "node --test test/marketing-read-adapters-sim.test.js",
