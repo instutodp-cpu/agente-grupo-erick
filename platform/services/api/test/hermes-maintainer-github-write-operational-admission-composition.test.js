@@ -44,7 +44,7 @@ test('durable consumption makes replay fail closed even though operational compo
  const replay=await composition.prepare(grant(),canary(),input());
  assert.equal(first.admission_valid,true);
  assert.equal(replay.status,'OPERATIONAL_ADMISSION_BLOCKED');
- assert.deepEqual(replay.blockers,['DURABLE_CONSUMPTION_NOT_CONFIRMED']);
+ assert.deepEqual(replay.blockers,['DURABLE_CONSUMPTION_EXISTS']);
  assert.equal(replay.execution_authorized,false);
  assert.equal(replay.network_call_performed,false);
  assert.equal(replay.write_performed,false);

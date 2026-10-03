@@ -43,7 +43,7 @@ function createHermesMaintainerGithubWriteOperationalAdmissionComposition({pool}
   const persistenceRequest=buildHermesMaintainerScmWritePersistenceRequest(consumed);
   const persistenceResult=await consumption.adapter.persist(persistenceRequest);
   const durableReceipt=createHermesMaintainerScmWriteDurableReceipt(persistenceRequest,persistenceResult);
-  if(durableReceipt.receipt_valid!==true)return blocked('DURABLE_CONSUMPTION_NOT_CONFIRMED');
+  if(durableReceipt.receipt_valid!==true){const reason=persistenceResult?.status==='SCM_WRITE_PERSISTENCE_EXISTS'?'DURABLE_CONSUMPTION_EXISTS':persistenceResult?.status==='SCM_WRITE_PERSISTENCE_CREATED'?'DURABLE_CONSUMPTION_RECEIPT_INVALID':'DURABLE_CONSUMPTION_PERSISTENCE_FAILED';return blocked(reason);}
 
   const ownershipRequest=buildHermesMaintainerScmWriteAttemptOwnershipPersistenceRequest(durableReceipt,{attempt_reference:input.attempt_reference,intent_digest:durableReceipt.intent_digest,persistence_key:durableReceipt.persistence_key});
   const ownershipResult=await ownership.adapter.persist(ownershipRequest);
