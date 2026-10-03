@@ -1,0 +1,13 @@
+{
+  "id": "provider-health-002",
+  "objective": "Route simulated capabilities only when explicit provider health evidence supports the requested capability.",
+  "must": [
+    "healthy declared capability routes in simulation",
+    "degraded mutation blocks",
+    "degraded read-only may route in simulation",
+    "observation preserves selected adapter and health evidence"
+  ],
+  "must_not": [
+    "turn health discovery into real provider activation"
+  ]
+}
