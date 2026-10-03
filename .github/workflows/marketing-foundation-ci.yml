@@ -182,6 +182,12 @@ jobs:
       - name: Run lead conversion simulation
         run: npm run simulate:marketing:lead-conversion
 
+      - name: Run goal cycle tests
+        run: npm run test:marketing:goal-cycle
+
+      - name: Run goal cycle simulation
+        run: npm run simulate:marketing:goal-cycle
+
       - name: Run C08 integration adapter tests
         run: npm run test:marketing:integration-adapters
 
