@@ -241,9 +241,9 @@
     }
   ],
   "inventory": {
-    "platform_docs": 135,
+    "platform_docs": 136,
     "core_source_files": 691,
-    "api_tests": 543,
+    "api_tests": 544,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
