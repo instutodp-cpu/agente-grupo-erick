@@ -1,0 +1,9 @@
+'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');
+const {prepareHermesMaintainerTrustedE2eApprovalRequests}=require('../src/runtime/hermes-maintainer-trusted-e2e-approval-request-preparation');
+const {bindHermesMaintainerTrustedE2eHumanApprovals}=require('../src/runtime/hermes-maintainer-trusted-e2e-human-approval-binding');
+function prepared(){return prepareHermesMaintainerTrustedE2eApprovalRequests({branch_name:'hermes/canary/e2e'}).approval_requests}
+function decisions(r){return {branch:{decision:'APPROVED',intent_digest:r.branch.intent_digest,approval_reference:'human:branch:1'},edit:{decision:'APPROVED',intent_digest:r.edit.intent_digest,approval_reference:'human:edit:1'},pull_request:{decision:'APPROVED',intent_digest:r.pull_request.intent_digest,approval_reference:'human:pr:1'}}}
+test('binds three explicit human decisions without authorizing execution',()=>{const r=prepared(),x=bindHermesMaintainerTrustedE2eHumanApprovals({approval_requests:r,decisions:decisions(r)});assert.equal(x.bound,true);assert.equal(x.execution_authorized,false);assert.equal(x.merge_authority,false);assert.equal(x.human_merge_required,true);for(const b of Object.values(x.approval_bindings)){assert.equal(b.approval_valid,true);assert.equal(b.human_approval_present,true);assert.equal(b.execution_authorized,false);}});
+test('fails closed when any decision is missing',()=>{const r=prepared(),d=decisions(r);delete d.edit;const x=bindHermesMaintainerTrustedE2eHumanApprovals({approval_requests:r,decisions:d});assert.equal(x.bound,false);assert.equal(x.blockers[0],'HUMAN_DECISIONS_MISSING');});
+test('fails closed when a decision digest does not match its request',()=>{const r=prepared(),d=decisions(r);d.pull_request.intent_digest=r.branch.intent_digest;const x=bindHermesMaintainerTrustedE2eHumanApprovals({approval_requests:r,decisions:d});assert.equal(x.bound,false);assert.equal(x.blockers[0],'HUMAN_APPROVAL_INVALID');});
