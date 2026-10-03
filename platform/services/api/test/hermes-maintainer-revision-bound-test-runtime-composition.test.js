@@ -42,7 +42,7 @@ test('runs the allowlisted smoke test from the exact verified revision workspace
   assert.equal(result.status, 'MAINTAINER_REVISION_BOUND_TEST_PASSED');
   assert.equal(result.passed, true);
   assert.equal(result.revision_sha, SHA);
-  assert.equal(testInvocation.options.cwd, '/tmp/hermes-maintainer-test-workspaces/' + SHA);
+  assert.equal(testInvocation.options.cwd, '/tmp/hermes-maintainer-test-workspaces/' + SHA + '/platform/services/api');
   assert.equal(testInvocation.options.shell, false);
   assert.deepEqual(testInvocation.options.env, { NODE_ENV: 'test' });
   assert.equal(result.network_authorized_for_test, false);

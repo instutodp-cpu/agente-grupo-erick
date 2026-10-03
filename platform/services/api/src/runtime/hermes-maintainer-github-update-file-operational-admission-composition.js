@@ -28,7 +28,7 @@ function createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({
   const persistenceRequest=buildHermesMaintainerScmWritePersistenceRequest(consumed);
   const persistenceResult=await consumption.adapter.persist(persistenceRequest);
   const durableReceipt=createHermesMaintainerScmWriteDurableReceipt(persistenceRequest,persistenceResult);
-  if(durableReceipt.receipt_valid!==true)return blocked('DURABLE_CONSUMPTION_NOT_CONFIRMED');
+  if(durableReceipt.receipt_valid!==true){const backendBlocker=persistenceResult?.blockers?.[0];const reason=persistenceResult?.status==='SCM_WRITE_PERSISTENCE_EXISTS'?'DURABLE_CONSUMPTION_EXISTS':persistenceResult?.status==='SCM_WRITE_PERSISTENCE_CREATED'?'DURABLE_CONSUMPTION_RECEIPT_INVALID':backendBlocker==='PERSISTENCE_BACKEND_UNCONFIRMED'?'DURABLE_CONSUMPTION_UNCONFIRMED':backendBlocker==='PERSISTENCE_BACKEND_INVALID'?'DURABLE_CONSUMPTION_INVALID':'DURABLE_CONSUMPTION_PERSISTENCE_FAILED';return blocked(reason);}
   const ownershipRequest=buildHermesMaintainerScmWriteAttemptOwnershipPersistenceRequest(durableReceipt,{attempt_reference:input.attempt_reference,intent_digest:durableReceipt.intent_digest,persistence_key:durableReceipt.persistence_key});
   const ownershipResult=await ownership.adapter.persist(ownershipRequest);
   const ownershipReceipt=createHermesMaintainerScmWriteDurableAttemptOwnershipReceipt(ownershipRequest,ownershipResult);
@@ -42,4 +42,5 @@ function createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({
   return admitHermesMaintainerGithubUpdateFileDurableRequest(admission,{decision:'OWNED',persistence_key:binding.persistence_key,ownership_key:binding.ownership_key,intent_digest:binding.intent_digest,attempt_reference:binding.attempt_reference});
  }});
 }
-module.exports={COMPOSITION_VERSION,createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition};
+function preflightHermesMaintainerGithubUpdateFileOperationalAdmission(grant,target,input){if(!target||target.repository!==REPOSITORY||target.operation!=='update_file'||typeof target.branch!=='string')return blocked('TARGET_INVALID');if(!validGrant(grant,target))return blocked('AUTHORIZATION_GRANT_SCOPE_INVALID');if(!validInput(input))return blocked('OPERATIONAL_INPUT_INVALID');return Object.freeze({admission_preflight_valid:true});}
+module.exports={COMPOSITION_VERSION,preflightHermesMaintainerGithubUpdateFileOperationalAdmission,createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition};
