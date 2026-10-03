@@ -211,3 +211,9 @@ jobs:
 
       - name: Run C09 mission orchestration simulation
         run: npm run simulate:marketing:mission-orchestration
+
+      - name: Run C09 mission resume tests
+        run: npm run test:marketing:mission-resume
+
+      - name: Run C09 mission resume simulation
+        run: npm run simulate:marketing:mission-resume
