@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingCanaryExecutionDecision",
+  "type": "object",
+  "required": [
+    "envelope_id",
+    "decision",
+    "failed_checks",
+    "remaining_operations",
+    "real_provider_call_performed",
+    "financial_effect_brl",
+    "simulation"
+  ],
+  "properties": {
+    "envelope_id": {
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "eligible_for_canary_execution",
+        "halted"
+      ]
+    },
+    "failed_checks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "remaining_operations": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "real_provider_call_performed": {
+      "const": false
+    },
+    "financial_effect_brl": {
+      "const": 0
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}
