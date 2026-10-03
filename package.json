@@ -67,7 +67,9 @@
     "test:marketing:mission-resume": "node --test test/marketing-mission-resume-sim.test.js",
     "simulate:marketing:mission-resume": "node scripts/marketing-mission-resume-sim.js",
     "test:marketing:mission-audit": "node --test test/marketing-mission-audit-sim.test.js",
-    "simulate:marketing:mission-audit": "node scripts/marketing-mission-audit-sim.js"
+    "simulate:marketing:mission-audit": "node scripts/marketing-mission-audit-sim.js",
+    "test:marketing:mission-concurrency": "node --test test/marketing-mission-concurrency-sim.test.js",
+    "simulate:marketing:mission-concurrency": "node scripts/marketing-mission-concurrency-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
