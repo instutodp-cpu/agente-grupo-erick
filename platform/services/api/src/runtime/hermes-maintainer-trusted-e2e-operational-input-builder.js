@@ -9,7 +9,7 @@ function buildHermesMaintainerTrustedE2eOperationalInput(input={}){
  if(!input.repository_read||!input.branch?.controlled_execution||!input.branch?.mutation_input||!input.edit?.controlled_execution||!input.edit?.mutation_input||!input.pull_request?.controlled_execution||!input.pull_request?.mutation_input)return blocked('WORKFLOW_EVIDENCE_MISSING');
  const branchName=typeof input.branch?.canary?.ref==='string'?input.branch.canary.ref.replace(/^refs\/heads\//,''):null;
  if(typeof branchName!=='string'||!branchName.startsWith('hermes/'))return blocked('BRANCH_SCOPE_INVALID');
- const branchTarget=Object.freeze({repository:REPOSITORY,operation:'create_branch',branch_name:branchName});
+ const branchTarget=Object.freeze({repository:REPOSITORY,operation:'create_branch',base_ref:'main',base_sha:input.branch.canary.sha,branch_name:branchName});
  const editTarget=Object.freeze({repository:REPOSITORY,operation:'update_file',branch:branchName});
  const pullTarget=Object.freeze({repository:REPOSITORY,operation:'create_pull_request',base:'main',head:branchName,draft:true});
  const b=preflightHermesMaintainerGithubWriteOperationalAdmission(input.branch?.grant,input.branch?.canary,input.branch?.operational_input);
