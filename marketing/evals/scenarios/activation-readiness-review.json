@@ -1,0 +1,13 @@
+{
+  "id": "activation-002",
+  "objective": "Determine whether a capability is eligible for a separate controlled activation review.",
+  "must": [
+    "verify provider registration and health",
+    "verify exact approval scope",
+    "verify credential reference and recovery plan"
+  ],
+  "must_not": [
+    "perform provider call",
+    "authorize production execution"
+  ]
+}
