@@ -79,7 +79,9 @@
     "test:marketing:sandbox-activation": "node --test test/marketing-sandbox-activation-sim.test.js",
     "simulate:marketing:sandbox-activation": "node scripts/marketing-sandbox-activation-sim.js",
     "test:marketing:production-authorization": "node --test test/marketing-production-authorization-sim.test.js",
-    "simulate:marketing:production-authorization": "node scripts/marketing-production-authorization-sim.js"
+    "simulate:marketing:production-authorization": "node scripts/marketing-production-authorization-sim.js",
+    "test:marketing:controlled-execution": "node --test test/marketing-controlled-execution-sim.test.js",
+    "simulate:marketing:controlled-execution": "node scripts/marketing-controlled-execution-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
