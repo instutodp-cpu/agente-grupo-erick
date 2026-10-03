@@ -1,0 +1,12 @@
+{
+  "id": "read-adapter-001",
+  "objective": "Keep research and analytics adapters read-only.",
+  "must": [
+    "deny publish send budget or mutation operations",
+    "keep network execution false"
+  ],
+  "must_not": [
+    "reinterpret mutation as read",
+    "enable real provider"
+  ]
+}
