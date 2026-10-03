@@ -253,3 +253,9 @@ jobs:
 
       - name: Run C10 sandbox activation simulation
         run: npm run simulate:marketing:sandbox-activation
+
+      - name: Run C10 production authorization tests
+        run: npm run test:marketing:production-authorization
+
+      - name: Run C10 production authorization simulation
+        run: npm run simulate:marketing:production-authorization
