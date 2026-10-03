@@ -199,3 +199,9 @@ jobs:
 
       - name: Run C08 paid media adapter simulation
         run: npm run simulate:marketing:paid-media-adapters
+
+      - name: Run C08 provider health tests
+        run: npm run test:marketing:provider-health
+
+      - name: Run C08 provider health simulation
+        run: npm run simulate:marketing:provider-health
