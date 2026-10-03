@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingMissionLease",
+  "type": "object",
+  "required": [
+    "run_id",
+    "mission_id",
+    "holder_id",
+    "lease_id",
+    "version",
+    "acquired_at",
+    "expires_at",
+    "status",
+    "simulation"
+  ],
+  "properties": {
+    "run_id": {
+      "type": "string"
+    },
+    "mission_id": {
+      "type": "string"
+    },
+    "holder_id": {
+      "type": "string"
+    },
+    "lease_id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "acquired_at": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "released",
+        "expired"
+      ]
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}
