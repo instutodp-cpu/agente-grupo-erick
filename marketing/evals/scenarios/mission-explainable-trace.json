@@ -1,0 +1,13 @@
+{
+  "id": "mission-audit-002",
+  "objective": "Provide a verifiable explanation trail for why a simulated mission advanced, blocked, resumed, or completed.",
+  "must": [
+    "link each event to stage and decision",
+    "preserve evidence refs",
+    "verify the complete hash chain"
+  ],
+  "must_not": [
+    "claim external effects",
+    "rewrite prior audit history"
+  ]
+}
