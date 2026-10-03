@@ -1,0 +1,13 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {evaluate}=require('../scripts/marketing-controlled-execution-sim');const e=()=>({envelope_id:'e',canary:true,trace_id:'t',expires_at:100,max_operations:1,max_financial_effect_brl:0,mode:'write'});const s=()=>({production_authorization_consumed:true,exact_authorization_binding:true,observability_live:true,provider_health:'healthy',operations_attempted:1,approval_level:2});
+test('bounded canary becomes eligible only',()=>assert.equal(evaluate(e(),s(),1).decision,'eligible_for_canary_execution'));
+test('missing canary halts',()=>{const x=e();x.canary=false;assert.equal(evaluate(x,s(),1).decision,'halted')});
+test('scope binding failure halts',()=>{const x=s();x.exact_authorization_binding=false;assert.equal(evaluate(e(),x,1).decision,'halted')});
+test('kill switch halts',()=>{const x=s();x.kill_switch_on=true;assert.ok(evaluate(e(),x,1).failed_checks.includes('kill_switch'))});
+test('anomaly halts',()=>{const x=s();x.anomaly_detected=true;assert.equal(evaluate(e(),x,1).decision,'halted')});
+test('degraded provider halts',()=>{const x=s();x.provider_health='degraded';assert.equal(evaluate(e(),x,1).decision,'halted')});
+test('expired envelope halts',()=>assert.ok(evaluate(e(),s(),100).failed_checks.includes('expired')));
+test('operation ceiling halts',()=>{const x=s();x.operations_attempted=2;assert.ok(evaluate(e(),x,1).failed_checks.includes('operation_limit'))});
+test('financial ceiling halts',()=>{const x=s();x.requested_financial_effect_brl=1;assert.ok(evaluate(e(),x,1).failed_checks.includes('financial_ceiling'))});
+test('financial mutation requires L3',()=>{const x=e();x.mode='financial_mutation';x.max_financial_effect_brl=10;const y=s();y.approval_level=2;assert.ok(evaluate(x,y,1).failed_checks.includes('l3_required'))});
+test('missing observability halts',()=>{const x=s();x.observability_live=false;assert.equal(evaluate(e(),x,1).decision,'halted')});
+test('simulation never calls provider or creates financial effect',()=>{const d=evaluate(e(),s(),1);assert.equal(d.real_provider_call_performed,false);assert.equal(d.financial_effect_brl,0)});
