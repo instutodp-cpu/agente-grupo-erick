@@ -241,3 +241,9 @@ jobs:
 
       - name: Run C09 mission readiness simulation
         run: npm run simulate:marketing:mission-readiness
+
+      - name: Run C10 activation readiness tests
+        run: npm run test:marketing:activation-readiness
+
+      - name: Run C10 activation readiness simulation
+        run: npm run simulate:marketing:activation-readiness
