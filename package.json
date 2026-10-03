@@ -57,7 +57,9 @@
     "test:marketing:render-adapters": "node --test test/marketing-render-adapters-sim.test.js",
     "simulate:marketing:render-adapters": "node scripts/marketing-render-adapters-sim.js",
     "test:marketing:mutation-adapters": "node --test test/marketing-mutation-adapters-sim.test.js",
-    "simulate:marketing:mutation-adapters": "node scripts/marketing-mutation-adapters-sim.js"
+    "simulate:marketing:mutation-adapters": "node scripts/marketing-mutation-adapters-sim.js",
+    "test:marketing:paid-media-adapters": "node --test test/marketing-paid-media-adapters-sim.test.js",
+    "simulate:marketing:paid-media-adapters": "node scripts/marketing-paid-media-adapters-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
