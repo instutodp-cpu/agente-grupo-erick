@@ -1,0 +1,13 @@
+{
+  "id": "paid-media-002",
+  "objective": "Preserve approval, idempotency and reconciliation semantics for Meta Ads and Google Ads.",
+  "must": [
+    "same successful key becomes duplicate noop",
+    "ambiguous result requires reconciliation",
+    "financial effect remains false"
+  ],
+  "must_not": [
+    "retry ambiguous result automatically",
+    "generate a new key for retry"
+  ]
+}
