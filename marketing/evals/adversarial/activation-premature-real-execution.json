@@ -1,0 +1,14 @@
+{
+  "id": "activation-001",
+  "objective": "Prevent simulation readiness or CI success from silently enabling real provider execution.",
+  "must": [
+    "require every activation prerequisite",
+    "keep real_execution_authorized false",
+    "block unknown gate"
+  ],
+  "must_not": [
+    "treat green CI as activation",
+    "expose credential values to skills",
+    "skip sandbox requirement"
+  ]
+}
