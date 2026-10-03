@@ -170,6 +170,12 @@ jobs:
       - name: Run C07 controlled replanning simulation
         run: npm run simulate:marketing:replanning
 
+      - name: Run strategy decision tests
+        run: npm run test:marketing:strategy
+
+      - name: Run strategy decision simulation
+        run: npm run simulate:marketing:strategy
+
       - name: Run C08 integration adapter tests
         run: npm run test:marketing:integration-adapters
 
