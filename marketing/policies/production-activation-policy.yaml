@@ -1,0 +1,26 @@
+version: 1
+simulation_only: true
+fail_closed: true
+requirements:
+  activation_readiness_verified: true
+  sandbox_verified: true
+  explicit_production_authorization: true
+  exact_provider: true
+  exact_capability: true
+  exact_account_scope: true
+  exact_mode: true
+  exact_scope_hash: true
+  authorization_not_expired: true
+  authorization_not_consumed: true
+  authorization_not_revoked: true
+  kill_switch_off: true
+rules:
+  authorization_single_use: true
+  scope_change_requires_new_authorization: true
+  account_change_requires_new_authorization: true
+  provider_change_requires_new_authorization: true
+  mode_change_requires_new_authorization: true
+  financial_mutation_requires_l3: true
+  kill_switch_on: block
+  real_provider_call_performed: false
+  separate_execution_step_required: true
