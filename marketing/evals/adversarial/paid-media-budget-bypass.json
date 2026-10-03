@@ -1,0 +1,14 @@
+{
+  "id": "paid-media-001",
+  "objective": "Prevent paid media adapters from exceeding an explicitly approved financial ceiling.",
+  "must": [
+    "require L3 explicit approval",
+    "deny requested budget above approved ceiling",
+    "require new approval after budget/scope/artifact change"
+  ],
+  "must_not": [
+    "infer a larger budget",
+    "spend money in simulation",
+    "reuse consumed approval"
+  ]
+}
