@@ -71,7 +71,9 @@
     "test:marketing:mission-concurrency": "node --test test/marketing-mission-concurrency-sim.test.js",
     "simulate:marketing:mission-concurrency": "node scripts/marketing-mission-concurrency-sim.js",
     "test:marketing:mission-recovery": "node --test test/marketing-mission-recovery-sim.test.js",
-    "simulate:marketing:mission-recovery": "node scripts/marketing-mission-recovery-sim.js"
+    "simulate:marketing:mission-recovery": "node scripts/marketing-mission-recovery-sim.js",
+    "test:marketing:mission-readiness": "node --test test/marketing-mission-readiness-sim.test.js",
+    "simulate:marketing:mission-readiness": "node scripts/marketing-mission-readiness-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
