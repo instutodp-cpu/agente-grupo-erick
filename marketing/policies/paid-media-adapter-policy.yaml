@@ -1,0 +1,24 @@
+version: 1
+simulation_only: true
+risk_level: L3
+external_mutation: false
+financial_effect: false
+requirements:
+  explicit_approval: true
+  approval_single_use: true
+  exact_scope_hash: true
+  exact_artifact_hash: true
+  idempotency_key_required: true
+  currency: BRL
+  budget_ceiling_required: true
+rules:
+  requested_budget_must_not_exceed_approved_ceiling: true
+  zero_budget_allowed_for_pause: true
+  changed_budget_requires_new_approval: true
+  changed_scope_requires_new_approval: true
+  changed_artifact_requires_new_approval: true
+  approval_replay: deny
+  ambiguous_provider_result: reconcile_before_retry
+  retry_preserves_idempotency_key: true
+  success_then_repeat: duplicate_noop
+fail_closed: true
