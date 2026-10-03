@@ -61,7 +61,9 @@
     "test:marketing:paid-media-adapters": "node --test test/marketing-paid-media-adapters-sim.test.js",
     "simulate:marketing:paid-media-adapters": "node scripts/marketing-paid-media-adapters-sim.js",
     "test:marketing:provider-health": "node --test test/marketing-provider-health-sim.test.js",
-    "simulate:marketing:provider-health": "node scripts/marketing-provider-health-sim.js"
+    "simulate:marketing:provider-health": "node scripts/marketing-provider-health-sim.js",
+    "test:marketing:mission-orchestration": "node --test test/marketing-mission-orchestration-sim.test.js",
+    "simulate:marketing:mission-orchestration": "node scripts/marketing-mission-orchestration-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
