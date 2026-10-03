@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingMissionCheckpoint",
+  "type": "object",
+  "required": [
+    "checkpoint_id",
+    "run_id",
+    "mission_id",
+    "scope_hash",
+    "completed_stages",
+    "next_stage",
+    "stage_evidence",
+    "checkpoint_hash",
+    "simulation",
+    "external_execution"
+  ],
+  "properties": {
+    "checkpoint_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "mission_id": {
+      "type": "string"
+    },
+    "scope_hash": {
+      "type": "string"
+    },
+    "completed_stages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "next_stage": {
+      "type": "string"
+    },
+    "stage_evidence": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "checkpoint_hash": {
+      "type": "string"
+    },
+    "simulation": {
+      "const": true
+    },
+    "external_execution": {
+      "const": false
+    }
+  },
+  "additionalProperties": false
+}
