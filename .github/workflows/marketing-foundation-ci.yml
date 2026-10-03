@@ -181,3 +181,9 @@ jobs:
 
       - name: Run C08 read adapter simulation
         run: npm run simulate:marketing:read-adapters
+
+      - name: Run C08 render adapter tests
+        run: npm run test:marketing:render-adapters
+
+      - name: Run C08 render adapter simulation
+        run: npm run simulate:marketing:render-adapters
