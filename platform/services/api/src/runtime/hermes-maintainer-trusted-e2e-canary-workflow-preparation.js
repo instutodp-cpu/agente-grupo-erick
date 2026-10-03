@@ -1,15 +1,24 @@
 'use strict';
 
 const { bridgeHermesMaintainerOperationalAuthorityEvidence } = require('../core/hermes-maintainer-operational-authority-evidence-bridge');
+const { prepareHermesMaintainerScmWriteDurableAdmissionHandoff } = require('../core/hermes-maintainer-scm-write-durable-admission-handoff');
+const { prepareHermesMaintainerGithubUpdateFileDurableAdmissionHandoff } = require('../core/hermes-maintainer-github-update-file-durable-admission-handoff');
+const { prepareHermesMaintainerGithubCreatePullRequestDurableAdmissionHandoff } = require('../core/hermes-maintainer-github-create-pull-request-durable-admission-handoff');
 
 const CONTRACT_VERSION='hermes_maintainer_trusted_e2e_canary_workflow_preparation_v1';
 const REPOSITORY='instutodp-cpu/agente-grupo-erick';
 
 function blocked(stage,value){return Object.freeze({contract_version:CONTRACT_VERSION,status:'MAINTAINER_TRUSTED_E2E_CANARY_WORKFLOW_PREPARATION_BLOCKED',prepared:false,stage,value:value||null,workflow:null,production_used:false,merge_authority:false,human_merge_required:true});}
 
-function prepareMutation(controlledExecution,target,admission,grant,mutationInput){
+function prepareMutation(controlledExecution,target,admission,grant,requestInput){
  const bridge=bridgeHermesMaintainerOperationalAuthorityEvidence(admission,grant);
  if(bridge.bridge_valid!==true)return {ok:false,value:bridge};
+ let durableHandoff=null;
+ if(admission.operation==='create_branch')durableHandoff=prepareHermesMaintainerScmWriteDurableAdmissionHandoff(bridge.ownership,target);
+ else if(admission.operation==='update_file')durableHandoff=prepareHermesMaintainerGithubUpdateFileDurableAdmissionHandoff(bridge.ownership,target);
+ else if(admission.operation==='create_pull_request')durableHandoff=prepareHermesMaintainerGithubCreatePullRequestDurableAdmissionHandoff(bridge.ownership,target);
+ if(durableHandoff?.handoff_valid!==true)return {ok:false,value:durableHandoff};
+ const mutationInput=Object.freeze({durable_handoff:durableHandoff,grant,target,request_input:requestInput||null,admission_reference:admission.admission_reference,ownership:bridge.ownership});
  return {ok:true,value:Object.freeze({controlled_execution:controlledExecution,ownership:bridge.ownership,target,authority_evidence:bridge.authority_evidence,mutation_input:mutationInput})};
 }
 
