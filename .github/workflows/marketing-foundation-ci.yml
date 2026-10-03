@@ -223,3 +223,9 @@ jobs:
 
       - name: Run C09 mission audit simulation
         run: npm run simulate:marketing:mission-audit
+
+      - name: Run C09 mission concurrency tests
+        run: npm run test:marketing:mission-concurrency
+
+      - name: Run C09 mission concurrency simulation
+        run: npm run simulate:marketing:mission-concurrency
