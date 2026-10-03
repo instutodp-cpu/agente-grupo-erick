@@ -205,3 +205,9 @@ jobs:
 
       - name: Run C08 provider health simulation
         run: npm run simulate:marketing:provider-health
+
+      - name: Run C09 mission orchestration tests
+        run: npm run test:marketing:mission-orchestration
+
+      - name: Run C09 mission orchestration simulation
+        run: npm run simulate:marketing:mission-orchestration
