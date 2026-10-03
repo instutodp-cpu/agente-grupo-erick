@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingProductionActivationAuthorization",
+  "type": "object",
+  "required": [
+    "authorization_id",
+    "request_id",
+    "provider_id",
+    "capability_id",
+    "account_scope",
+    "mode",
+    "scope_hash",
+    "approved_by",
+    "issued_at",
+    "expires_at",
+    "status",
+    "single_use",
+    "simulation"
+  ],
+  "properties": {
+    "authorization_id": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "provider_id": {
+      "type": "string"
+    },
+    "capability_id": {
+      "type": "string"
+    },
+    "account_scope": {
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "read_only",
+        "write",
+        "financial_mutation"
+      ]
+    },
+    "scope_hash": {
+      "type": "string"
+    },
+    "approved_by": {
+      "type": "string"
+    },
+    "issued_at": {
+      "type": "integer"
+    },
+    "expires_at": {
+      "type": "integer"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "consumed",
+        "revoked",
+        "expired"
+      ]
+    },
+    "single_use": {
+      "const": true
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}
