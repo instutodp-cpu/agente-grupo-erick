@@ -1,0 +1,13 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {execute,reset}=require('../scripts/marketing-mutation-adapters-sim');
+const J={job_id:'j',capability_id:'social.publish',action:'publish',intent_id:'i',approval_id:'a',scope_hash:'scope',artifact_hash:'artifact',idempotency_key:'1234567890abcdef',simulation:true};const A={status:'approved',scope_hash:'scope',artifact_hash:'artifact',consumption:{single_use:true,consumed_at:null,consumed_by_intent:null}};
+test.beforeEach(reset);
+test('social publish is simulated with exact approval',()=>{const r=execute(J,A);assert.equal(r.status,'simulated_accepted');assert.equal(r.external_mutation,false)});
+test('WhatsApp send uses same L2 boundary',()=>assert.equal(execute({...J,capability_id:'whatsapp.send',action:'send'},A).status,'simulated_accepted'));
+test('missing approval denied',()=>assert.equal(execute(J,null).reason,'approval_required'));
+test('consumed approval replay denied',()=>assert.equal(execute(J,{...A,consumption:{single_use:true,consumed_at:'now',consumed_by_intent:'old'}}).reason,'approval_replay'));
+test('scope change denied',()=>assert.equal(execute({...J,scope_hash:'other'},A).reason,'scope_mismatch'));
+test('artifact change denied',()=>assert.equal(execute({...J,artifact_hash:'other'},A).reason,'artifact_mismatch'));
+test('unregistered action denied',()=>assert.equal(execute({...J,action:'delete'},A).reason,'unregistered_action'));
+test('real execution denied',()=>assert.equal(execute({...J,simulation:false},A).reason,'simulation_required'));
+test('success repeat is duplicate noop',()=>{execute(J,A);assert.equal(execute(J,A).status,'duplicate_noop')});
+test('ambiguous result requires reconciliation and no mutation claim',()=>{const r=execute(J,A,'ambiguous');assert.equal(r.status,'ambiguous');assert.equal(r.requires_reconciliation,true);assert.equal(r.external_mutation,false)});
