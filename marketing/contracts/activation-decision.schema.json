@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MarketingActivationDecision",
+  "type": "object",
+  "required": [
+    "request_id",
+    "decision",
+    "failed_gates",
+    "real_execution_authorized",
+    "simulation"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "eligible_for_activation_review",
+        "blocked"
+      ]
+    },
+    "failed_gates": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "real_execution_authorized": {
+      "const": false
+    },
+    "reason": {
+      "type": "string"
+    },
+    "simulation": {
+      "const": true
+    }
+  },
+  "additionalProperties": false
+}
