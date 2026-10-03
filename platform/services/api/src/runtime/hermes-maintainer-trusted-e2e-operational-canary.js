@@ -7,6 +7,7 @@ function createHermesMaintainerTrustedE2eOperationalCanary(options={}){
  const preparation=createHermesMaintainerTrustedE2eOperationalPreparation({pool:options.pool});
  return Object.freeze({composition_version:COMPOSITION_VERSION,async execute(input={}){
   if(input.confirmation!==CONFIRMATION)return blocked('explicit_confirmation');
+  if(options.environment?.NODE_ENV!=='staging')return blocked('staging_environment');
   const prepared=await preparation.prepare(input.operational);
   if(prepared?.prepared!==true)return blocked('operational_preparation',prepared);
   const result=await runHermesMaintainerTrustedE2eStagingCanary({...options,input:{confirmation:CONFIRMATION,workflow:prepared.workflow}});
