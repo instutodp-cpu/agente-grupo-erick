@@ -77,7 +77,9 @@
     "test:marketing:activation-readiness": "node --test test/marketing-activation-readiness-sim.test.js",
     "simulate:marketing:activation-readiness": "node scripts/marketing-activation-readiness-sim.js",
     "test:marketing:sandbox-activation": "node --test test/marketing-sandbox-activation-sim.test.js",
-    "simulate:marketing:sandbox-activation": "node scripts/marketing-sandbox-activation-sim.js"
+    "simulate:marketing:sandbox-activation": "node scripts/marketing-sandbox-activation-sim.js",
+    "test:marketing:production-authorization": "node --test test/marketing-production-authorization-sim.test.js",
+    "simulate:marketing:production-authorization": "node scripts/marketing-production-authorization-sim.js"
   },
   "dependencies": {
     "express": "^4.18.2",
