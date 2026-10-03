@@ -1,0 +1,12 @@
+{
+  "id": "mutation-adapter-002",
+  "objective": "Preserve C06 idempotency and reconciliation semantics at provider adapter boundary.",
+  "must": [
+    "repeat success becomes duplicate noop",
+    "ambiguous result requires reconciliation",
+    "external mutation remains false in simulation"
+  ],
+  "must_not": [
+    "create a new idempotency key on retry"
+  ]
+}
