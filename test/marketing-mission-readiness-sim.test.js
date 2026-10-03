@@ -1,0 +1,14 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {REQUIRED,observe,readiness,summarize}=require('../scripts/marketing-mission-readiness-sim');
+const green=()=>Object.fromEntries(REQUIRED.map(x=>[x,true]));
+test('all gates produce simulation readiness',()=>assert.equal(readiness(green()).status,'ready_for_simulation'));
+test('missing gate fails closed',()=>{const g=green();delete g.audit_trace;assert.equal(readiness(g).status,'not_ready')});
+test('false gate is reported',()=>{const g=green();g.recovery_escalation=false;assert.deepEqual(readiness(g).failed_gates,['recovery_escalation'])});
+test('unknown gate fails closed',()=>{const g=green();g.observability='unknown';assert.equal(readiness(g).status,'not_ready')});
+test('readiness never authorizes real providers',()=>assert.equal(readiness(green()).real_provider_activation_authorized,false));
+test('observation requires trace id',()=>assert.throws(()=>observe({correlation_id:'c',duration_ms:1,status:'passed'})));
+test('observation requires correlation id',()=>assert.throws(()=>observe({trace_id:'t',duration_ms:1,status:'passed'})));
+test('negative duration rejected',()=>assert.throws(()=>observe({trace_id:'t',correlation_id:'c',duration_ms:-1,status:'failed'})));
+test('observation has no external effect',()=>assert.equal(observe({trace_id:'t',correlation_id:'c',duration_ms:1,status:'passed'}).external_effect,false));
+test('failure taxonomy is preserved',()=>assert.equal(observe({trace_id:'t',correlation_id:'c',duration_ms:1,status:'failed',failure_class:'provider'}).failure_class,'provider'));
+test('summary aggregates duration and failures',()=>{const s=summarize([observe({trace_id:'t',correlation_id:'c',duration_ms:10,status:'passed'}),observe({trace_id:'t',correlation_id:'c',duration_ms:5,status:'failed',failure_class:'timeout'})]);assert.equal(s.total_duration_ms,15);assert.equal(s.by_failure.timeout,1)});
+test('readiness warning explicitly limits scope',()=>assert.match(readiness(green()).warnings[0],/Simulation readiness only/));
