@@ -1,0 +1,15 @@
+{
+  "id": "production-auth-001",
+  "objective": "Prevent replay, scope drift, expiration bypass, or kill-switch bypass of production activation authorization.",
+  "must": [
+    "single-use authorization",
+    "exact scope match",
+    "honor expiration and revocation",
+    "honor kill switch"
+  ],
+  "must_not": [
+    "reuse consumed authorization",
+    "authorize changed account/provider/mode",
+    "perform real provider call"
+  ]
+}
