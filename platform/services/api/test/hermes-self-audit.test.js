@@ -29,3 +29,11 @@ test('evidence ladder fails closed on impossible promotions', () => {
     assert.ok(errors.some(error => error.type === expectedType), expectedType);
   }
 });
+
+
+test('A2 autonomy canary remains bounded below protected authority', () => {
+  const result = audit();
+  assert.equal(result.status, 'pass');
+  assert.equal(result.errors.some(error => String(error.type).startsWith('missing_a2_')), false);
+  assert.equal(result.errors.some(error => error.type === 'a2_canary_not_ready'), false);
+});
