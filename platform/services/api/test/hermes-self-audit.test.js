@@ -1,5 +1,3 @@
-[Reading 52 lines from start (total: 52 lines, 0 remaining)]
-
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
