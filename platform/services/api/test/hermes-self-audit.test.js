@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { audit, validateEvidence, collectEvidenceInventory } = require('../scripts/hermes-self-audit');
+const { audit, validateEvidence, collectEvidenceInventory, validateAuthoritySeparation } = require('../scripts/hermes-self-audit');
 
 test('self-audit readiness evidence is internally safe and anchored', () => {
   const result = audit();
@@ -49,4 +49,8 @@ test('self-audit produces repository evidence inventory instead of relying only 
     assert.ok(gap.implementation_files > 0);
     assert.equal(gap.test_files, 0);
   }
+});
+
+test('router, domain registry and readiness evidence remain separate authorities', () => {
+  assert.deepEqual(validateAuthoritySeparation(), []);
 });
