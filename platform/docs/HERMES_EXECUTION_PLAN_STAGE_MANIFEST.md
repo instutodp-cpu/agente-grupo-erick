@@ -1,3 +1,5 @@
+> **Classificação de autoridade (2026-10-04):** este documento preserva contexto e proveniência da etapa/PR que introduziu o Stage Manifest. Linguagem de "próxima etapa" aqui é histórica e não constitui roadmap atual nem autoridade de readiness. Contratos implementados continuam normativos para seu escopo técnico; maturidade atual é determinada pelo readiness map e por evidência de runtime.
+
 # Hermes Agent Core - Execution Plan Stage Manifest Integrity
 
 ## Objetivo
