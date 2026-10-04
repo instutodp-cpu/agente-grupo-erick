@@ -84,8 +84,16 @@ function validateAuthoritySeparation() {
   const router = fs.readFileSync(path.join(ROOT, 'platform/services/api/src/capabilities/registry.js'), 'utf8');
   const marketing = fs.readFileSync(path.join(ROOT, 'marketing/registry.yaml'), 'utf8');
   const errors = [];
-  if (!/intent-router/.test(router)) errors.push({type:'router_authority_undefined'});
+  const readiness = fs.readFileSync(MAP, 'utf8');
+  const routerAuthorityDefined =
+    /autoridade apenas para disponibilidade no/.test(router) &&
+    /NÃO é autoridade global de readiness/.test(router) &&
+    /registros de domínio, readiness map e evidência de runtime/.test(router);
+  if (!routerAuthorityDefined) errors.push({type:'router_authority_undefined'});
   if (!/status:\s*foundation/.test(marketing) || !/default_execution:\s*deny/.test(marketing)) errors.push({type:'marketing_domain_authority_undefined'});
+  if (!/"planned"/.test(readiness) || !/"proven_e2e"/.test(readiness) || !/"operational"/.test(readiness)) {
+    errors.push({type:'readiness_authority_undefined'});
+  }
   return errors;
 }
 
