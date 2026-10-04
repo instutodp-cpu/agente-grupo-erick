@@ -59,6 +59,27 @@ function collectEvidenceInventory() {
   };
 }
 
+function collectDirectTestBindings() {
+  const testsRoot = path.join(ROOT, 'platform/services/api/test');
+  const walk = (root, rel = '') => fs.readdirSync(path.join(root, rel), { withFileTypes: true }).flatMap(entry => {
+    const child = path.join(rel, entry.name);
+    return entry.isDirectory() ? walk(root, child) : [child.replaceAll('\\\\', '/')];
+  });
+  const bindings = new Map();
+  for (const testFile of walk(testsRoot)) {
+    const source = fs.readFileSync(path.join(testsRoot, testFile), 'utf8');
+    const pattern = /['"]\.\.\/src\/core\/([^'"]+)['"]/g;
+    for (const match of source.matchAll(pattern)) {
+      const implementation = match[1].replace(/\.js$/, '');
+      if (!bindings.has(implementation)) bindings.set(implementation, new Set());
+      bindings.get(implementation).add(testFile);
+    }
+  }
+  return [...bindings.entries()]
+    .map(([implementation, testFiles]) => ({ implementation, test_files: [...testFiles].sort() }))
+    .sort((left, right) => left.implementation.localeCompare(right.implementation));
+}
+
 function validateAuthoritySeparation() {
   const router = fs.readFileSync(path.join(ROOT, 'platform/services/api/src/capabilities/registry.js'), 'utf8');
   const marketing = fs.readFileSync(path.join(ROOT, 'marketing/registry.yaml'), 'utf8');
@@ -135,4 +156,4 @@ if (require.main === module) {
   process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   process.exitCode = result.status === 'pass' ? 0 : 1;
 }
-module.exports = { audit, validateEvidence, collectEvidenceInventory, validateAuthoritySeparation };
+module.exports = { audit, validateEvidence, collectEvidenceInventory, collectDirectTestBindings, validateAuthoritySeparation };
