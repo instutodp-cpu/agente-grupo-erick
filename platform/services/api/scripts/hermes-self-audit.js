@@ -1,5 +1,3 @@
-[Reading 128 lines from start (total: 128 lines, 0 remaining)]
-
 'use strict';
 
 const fs = require('node:fs');
