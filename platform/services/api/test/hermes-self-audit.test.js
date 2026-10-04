@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { audit, validateEvidence, collectEvidenceInventory, validateAuthoritySeparation } = require('../scripts/hermes-self-audit');
+const { audit, validateEvidence, collectEvidenceInventory, collectDirectTestBindings, validateAuthoritySeparation } = require('../scripts/hermes-self-audit');
 
 test('self-audit readiness evidence is internally safe and anchored', () => {
   const result = audit();
@@ -48,6 +48,16 @@ test('self-audit produces repository evidence inventory instead of relying only 
   for (const gap of inventory.test_binding_candidates) {
     assert.ok(gap.implementation_files > 0);
     assert.equal(gap.test_files, 0);
+  }
+});
+
+test('direct implementation-to-test bindings use explicit core references without promoting missing evidence', () => {
+  const bindings = collectDirectTestBindings();
+  assert.ok(bindings.length > 0);
+  for (const binding of bindings) {
+    assert.ok(binding.implementation.length > 0);
+    assert.ok(binding.test_files.length > 0);
+    assert.deepEqual(binding.test_files, [...binding.test_files].sort());
   }
 });
 
