@@ -1,9 +1,8 @@
 
-// Test-only helper that builds a fully self-consistent "golden" RuntimeExecutionSimulationRequest
-// bundle on top of PR #102's own golden ExecutionGatewayRequest bundle -- every runtime_* nested
-// reference materialized 1:1 from the Gateway's already-accepted stage manifest / dependency graph
-// / binding ledger, exactly the way execution-plan-engine.js itself derives per-stage
-// side_effect_classification/risk_classification from task_reference + compensation_references.
+// Production assembler for a fully self-consistent RuntimeExecutionSimulationRequest.
+// It materializes runtime references 1:1 from an accepted simulation Gateway outcome plus the
+// canonical same-run ExecutionPlanRequest/ExecutionPlan artifacts. It never grants execution or
+// production authority.
 const { buildRuntimeExecutionSimulationPolicy } = require('./runtime-execution-simulation-policy');
 const { buildRuntimeExecutionSimulationRequest } = require('./runtime-execution-simulation-request');
 const { buildRuntimeStageSimulationReference } = require('./runtime-stage-simulation-reference');

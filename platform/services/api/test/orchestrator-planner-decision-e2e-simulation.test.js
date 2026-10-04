@@ -40,6 +40,8 @@ const {buildExecutionGatewayRequest}=require('../src/core/execution-gateway-requ
 const {evaluateExecutionGatewayRequest,computeGatewayPackageDigest}=require('../src/core/execution-gateway-boundary');
 const {assembleGatewayRuntimeSimulationRequest}=require('../src/core/gateway-runtime-simulation-assembler');
 const {evaluateRuntimeExecutionSimulationRequest}=require('../src/core/runtime-execution-package');
+const {assembleRuntimeReadinessRequest,assembleRuntimeAdmissionRequest}=require('../src/core/runtime-readiness-admission-assembler');
+const {evaluateRuntimeReadinessRequest,evaluateRuntimeAdmissionRequest}=require('../src/core/runtime-admission-boundary');
 
 
 test('same-run planner evidence bundle reaches ready simulation',()=>{
@@ -289,4 +291,19 @@ test('same-run planner evidence bundle reaches ready simulation',()=>{
  assert.equal(runtime.runtimePackage.execution_started,false);
  assert.equal(runtime.runtimePackage.executed,false);
  assert.equal(runtime.runtimePackage.production_blocked,true);
+ const readinessBase=assembleRuntimeReadinessRequest({executionPlanRequest:executionRequest,executionOutcome:execution,gatewayOutcome:gateway,gatewayPackageReference:gatewayPackage,architectureGateEvidenceReference:ciEvidence,runtimeAssembly,runtimeOutcome:runtime});
+ const provisionalReplay=readinessBase.buildReplay(readinessBase.readinessRequestFingerprint,'sha256:'+('0'.repeat(64)));
+ const provisionalReadinessRequest=readinessBase.buildReadinessRequestWithReplay(provisionalReplay);
+ const provisionalReadiness=evaluateRuntimeReadinessRequest(provisionalReadinessRequest,{});
+ assert.equal(provisionalReadiness.decision.status,'RUNTIME_READY_SIMULATION');
+ const admissionAssembly=assembleRuntimeAdmissionRequest(readinessBase,provisionalReadiness);
+ const readiness=evaluateRuntimeReadinessRequest(admissionAssembly.readinessRequest,{});
+ assert.equal(readiness.decision.status,'RUNTIME_READY_SIMULATION');
+ const finalAdmissionAssembly=assembleRuntimeAdmissionRequest(readinessBase,readiness);
+ const admission=evaluateRuntimeAdmissionRequest(finalAdmissionAssembly.admissionRequest,{});
+ assert.equal(admission.decision.status,'RUNTIME_ADMITTED_SIMULATION');
+ assert.equal(admission.decision.execution_authorized,false);
+ assert.equal(admission.decision.execution_started,false);
+ assert.equal(admission.decision.executed,false);
+ assert.equal(admission.decision.production_blocked,true);
 });
