@@ -2,8 +2,10 @@
 
 // Registro central de capacidades — mapeia cada domínio já classificado pelo
 // intent-router (services/api/src/core/intent-router.js) para metadados de
-// execução futura. Nenhuma capacidade está implementada ainda: todas em
-// status "planned", sem adapters conectados nem ações reais.
+// execução futura. Este registro é autoridade apenas para disponibilidade no
+// intent-router; status "planned" aqui NÃO é autoridade global de readiness,
+// implementação, testes, E2E ou operação. Essas evidências pertencem aos
+// registros de domínio, readiness map e evidência de runtime.
 
 const DEFAULT_PLANNED_MESSAGE = 'Intencao identificada; execucao ainda nao implementada.';
 const FALLBACK_PLANNED_MESSAGE = 'Nao encontrei uma capacidade especifica para essa mensagem; nenhuma acao foi executada.';
