@@ -65,6 +65,16 @@ function audit() {
   }
   if (map.rules?.merge_authority !== false) errors.push({type:'unsafe_rule', rule:'merge_authority'});
   if (map.rules?.human_merge_required !== true) errors.push({type:'unsafe_rule', rule:'human_merge_required'});
+  const canary = map.autonomy?.a2_canary;
+  if (map.autonomy?.candidate === 'A2') {
+    if (canary?.status !== 'ready_for_execution') errors.push({type:'a2_canary_not_ready'});
+    for (const control of ['isolated_branch','exact_revision_test','draft_pr_only','merge_authority_false','human_merge_required','production_false']) {
+      if (!canary?.required_controls?.includes(control)) errors.push({type:'missing_a2_control', control});
+    }
+    for (const forbidden of ['merge','production_publish','financial_spend','customer_message','destructive_action','secret_or_permission_change']) {
+      if (!canary?.forbidden?.includes(forbidden)) errors.push({type:'missing_a2_forbidden_boundary', boundary:forbidden});
+    }
+  }
   errors.push(...validateEvidence(map));
   return {status: errors.length ? 'blocked' : 'pass', audited_revision: map.audited_revision, capability_count:(map.capabilities||[]).length, finding_count:(map.findings||[]).length, observed_inventory: observed, errors};
 }
