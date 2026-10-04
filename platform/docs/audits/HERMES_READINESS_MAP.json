@@ -172,11 +172,23 @@
       "id": "core-business-domains",
       "scope": "compras/financeiro/treinamento",
       "planned": true,
-      "contracted": null,
-      "implemented": null,
-      "tested": null,
+      "contracted": true,
+      "implemented": false,
+      "tested": false,
       "proven_e2e": false,
-      "operational": false
+      "operational": false,
+      "evidence": [
+        "platform/docs/INTERNAL_BUSINESS_API_READ_ONLY.md",
+        "platform/docs/PERMISSION_MATRIX.md",
+        "platform/services/api/src/core/domain-mock-adapter-registry.js",
+        "platform/docs/audits/HERMES_CORE_BUSINESS_DOMAINS_MISSION.md"
+      ],
+      "limits": [
+        "generic_mock_boundary_only",
+        "no_domain_specific_datastore_implementation",
+        "simulation_first",
+        "no_operational_evidence"
+      ]
     },
     {
       "id": "runtime-scheduler-worker-dispatch-queue",
@@ -267,7 +279,7 @@
     }
   ],
   "inventory": {
-    "platform_docs": 136,
+    "platform_docs": 137,
     "core_source_files": 691,
     "api_tests": 544,
     "github_workflows": 2,
