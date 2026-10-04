@@ -1,5 +1,7 @@
 # Hermes Core Governance Check Report
 
+> **Atualização de implementação (2026-10-04):** a descrição abaixo registra o contrato histórico desta fase. Um scanner determinístico agora existe em `platform/services/api/scripts/hermes-self-audit.js`, possui testes dedicados e é executado como gate nomeado no workflow `Hermes Core smoke test`. Isso não autoriza execução real nem transforma este documento em evidência operacional; readiness continua no mapa próprio e E2E/runtime exigem evidência separada.
+
 Contrato oficial do relatório de governanca do Hermes Core. Esta fase existe
 apenas para documentar como o core sera verificado no futuro; nao implementa
 scanner real, auditoria automatica real, CI gate novo obrigatorio ou qualquer
