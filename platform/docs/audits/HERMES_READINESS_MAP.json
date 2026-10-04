@@ -1,0 +1,349 @@
+[Reading 345 lines from start (total: 345 lines, 0 remaining)]
+
+{
+  "schema_version": "1.0",
+  "mission": "hermes-self-audit-readiness",
+  "audited_revision": "043f2a80cf97ed1099fdf139ab0254e39fd5e13c",
+  "evidence_states": [
+    "planned",
+    "contracted",
+    "implemented",
+    "tested",
+    "proven_e2e",
+    "operational"
+  ],
+  "rules": {
+    "infer_higher_state": false,
+    "require_exact_revision_for_e2e": true,
+    "require_environment_boundary_for_operational": true,
+    "default_deny": true,
+    "merge_authority": false,
+    "human_merge_required": true
+  },
+  "autonomy_levels": {
+    "A0": [
+      "read",
+      "audit"
+    ],
+    "A1": [
+      "plan",
+      "map_evidence",
+      "simulate"
+    ],
+    "A2": [
+      "create_branch",
+      "edit",
+      "commit",
+      "test",
+      "inspect_ci",
+      "self_correct",
+      "draft_pr"
+    ],
+    "A3": [
+      "approved_scoped_external_action"
+    ],
+    "A4": [
+      "merge_main",
+      "production_publish",
+      "financial_spend",
+      "customer_message",
+      "destructive_action",
+      "secret_or_permission_change"
+    ]
+  },
+  "protected_levels": [
+    "A3",
+    "A4"
+  ],
+  "findings": [
+    {
+      "id": "F-001",
+      "severity": "high",
+      "type": "stale_registry",
+      "evidence": "platform/services/api/src/capabilities/registry.js",
+      "status": "classified",
+      "detail": "The central capability registry is the intent-router availability surface, not global readiness. Its planned state must not be interpreted as absence of internal implementation; global evidence remains in this readiness map."
+    },
+    {
+      "id": "F-002",
+      "severity": "high",
+      "type": "missing_automation",
+      "evidence": "platform/docs/GOVERNANCE_CHECK_REPORT.md",
+      "status": "open"
+    },
+    {
+      "id": "F-003",
+      "severity": "high",
+      "type": "split_truth_source",
+      "evidence": "marketing/registry.yaml",
+      "status": "open"
+    },
+    {
+      "id": "F-004",
+      "severity": "critical",
+      "type": "operational_evidence",
+      "evidence": "maintainer canary attempt13 / PR #528",
+      "status": "proven"
+    },
+    {
+      "id": "F-005",
+      "severity": "medium",
+      "type": "historical_documentation",
+      "evidence": "platform/docs/HERMES_EXECUTION_PLAN_STAGE_MANIFEST.md",
+      "status": "review"
+    },
+    {
+      "id": "F-006",
+      "severity": "high",
+      "type": "ci_scope_gap",
+      "evidence": ".github/workflows/hermes-core-smoke.yml + .github/workflows/marketing-foundation-ci.yml",
+      "status": "open",
+      "detail": "Only two workflow files exist; self-audit runner is currently covered indirectly by core test discovery, not a named readiness gate."
+    },
+    {
+      "id": "F-007",
+      "severity": "medium",
+      "type": "simulation_boundary",
+      "evidence": "platform/docs/HERMES_RUNTIME_*_SIMULATION_CONTRACTS.md",
+      "status": "proven",
+      "detail": "Scheduler, worker, dispatch and queue families have substantial implementation/tests but canonical docs explicitly retain simulation boundaries; operational must not be inferred."
+    },
+    {
+      "id": "F-008",
+      "severity": "high",
+      "type": "evidence_binding_gap",
+      "evidence": "platform/services/api/scripts/hermes-self-audit.js",
+      "status": "classified",
+      "detail": "Automated inventory now discovers contract/document/code counts and implementation families. Prefix-only test matching is treated as candidate evidence requiring reconciliation, never as proof that a component is untested."
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "hermes-maintainer-github-bounded",
+      "scope": "staging/scoped",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": true,
+      "operational": true,
+      "evidence_revision": "a5dcd628e0562d52f12ee811a4aeaa9205ead5da",
+      "limits": [
+        "no_merge_authority",
+        "human_merge_required"
+      ]
+    },
+    {
+      "id": "marketing-foundation",
+      "scope": "simulation-first",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "evidence_revision": "ad37a8a572903b231f6791da131167d818aba86f",
+      "limits": [
+        "external_execution_false",
+        "default_execution_deny"
+      ]
+    },
+    {
+      "id": "automated-global-self-audit",
+      "scope": "repository",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "evidence_revision": "66592988d161c7411a51ba306614f6f370c39c6a",
+      "evidence": [
+        "platform/services/api/scripts/hermes-self-audit.js",
+        "platform/services/api/test/hermes-self-audit.test.js"
+      ],
+      "limits": [
+        "not_yet_e2e_proven",
+        "not_operational"
+      ]
+    },
+    {
+      "id": "core-business-domains",
+      "scope": "compras/financeiro/treinamento",
+      "planned": true,
+      "contracted": null,
+      "implemented": null,
+      "tested": null,
+      "proven_e2e": false,
+      "operational": false
+    },
+    {
+      "id": "runtime-scheduler-worker-dispatch-queue",
+      "scope": "simulation contracts",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "limits": [
+        "simulation_boundary"
+      ]
+    },
+    {
+      "id": "agent-orchestration-stack",
+      "scope": "planner/decision/execution-plan",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "limits": [
+        "no_operational_evidence_in_baseline"
+      ]
+    },
+    {
+      "id": "memory-selection",
+      "scope": "core selection",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false
+    },
+    {
+      "id": "model-selection-provider-contracts",
+      "scope": "core model boundary",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false
+    },
+    {
+      "id": "tool-workflow-contracts",
+      "scope": "core contracts",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false
+    },
+    {
+      "id": "public-web-canary",
+      "scope": "non-production canary",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "limits": [
+        "readiness_only_evidence",
+        "historical_fake_dry_run_not_operational_proof",
+        "human_authorization_required"
+      ]
+    },
+    {
+      "id": "transcription-stack",
+      "scope": "provider/transport/runtime",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "limits": [
+        "synthetic_only",
+        "real_provider_disabled",
+        "external_network_disabled",
+        "production_blocked"
+      ]
+    }
+  ],
+  "inventory": {
+    "platform_docs": 136,
+    "core_source_files": 691,
+    "api_tests": 544,
+    "github_workflows": 2,
+    "marketing_files": 202,
+    "core_family_counts": {
+      "hermes_maintainer": 178,
+      "public_web": 57,
+      "runtime_queue": 36,
+      "transcription_provider": 28,
+      "runtime_execution": 26,
+      "runtime_worker": 19,
+      "runtime_dispatch": 18,
+      "execution_plan": 16,
+      "runtime_scheduler": 14,
+      "execution_authorization": 14,
+      "model_selection": 12,
+      "canonical_governance": 11,
+      "orchestrator_decision": 10,
+      "memory_selection": 10,
+      "execution_gateway": 10,
+      "context_assembly": 10
+    }
+  },
+  "autonomy": {
+    "current_max_level": "A2_proven_bounded",
+    "authorized_now": [
+      "A0",
+      "A1"
+    ],
+    "candidate": "A2",
+    "protected_level": "A4",
+    "a2_canary": {
+      "status": "proven_to_human_boundary",
+      "objective": "From one bounded repository objective, independently audit, plan, create an isolated branch, make a harmless real change, test the exact resulting revision, inspect/correct CI if needed, create a Draft PR, attach evidence, and stop before merge.",
+      "execution_path": "hermes-maintainer-github-bounded",
+      "prerequisite_capability": "hermes-maintainer-github-bounded",
+      "prerequisite_e2e_revision": "a5dcd628e0562d52f12ee811a4aeaa9205ead5da",
+      "required_controls": [
+        "bounded_objective",
+        "isolated_branch",
+        "harmless_change",
+        "exact_revision_test",
+        "draft_pr_only",
+        "merge_authority_false",
+        "human_merge_required",
+        "production_false"
+      ],
+      "pass_requires": [
+        "audit_evidence",
+        "plan_evidence",
+        "branch_receipt",
+        "edit_receipt",
+        "exact_revision_test_receipt",
+        "ci_evidence",
+        "draft_pr_receipt",
+        "final_stop_at_human_boundary"
+      ],
+      "forbidden": [
+        "merge",
+        "production_publish",
+        "financial_spend",
+        "customer_message",
+        "destructive_action",
+        "secret_or_permission_change"
+      ],
+      "evidence": {
+        "draft_pr": 530,
+        "base_revision": "a587b0d0fba603a286c673ff1f89ebc670e885a9",
+        "initial_revision": "6fb7e0a8f2867db6d4e8bd2fde103d7dae09e82f",
+        "corrected_revision": "4767ae4546b39c0c5c56bc1111519ab3103a0e16",
+        "ci_run": 37164249309,
+        "ci_conclusion": "success",
+        "self_correction": "inventory_drift platform_docs 136 -> 137",
+        "stopped_before_merge": true
+      }
+    }
+  }
+}
+
+[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]
