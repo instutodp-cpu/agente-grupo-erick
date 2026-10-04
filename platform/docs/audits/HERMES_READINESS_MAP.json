@@ -211,6 +211,31 @@
       ]
     },
     {
+      "id": "runtime-queue-worker-dispatch-handoff",
+      "scope": "simulation queue admission/materialization/placement -> worker assignment -> dispatch -> public-web canary handoff",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": true,
+      "operational": false,
+      "evidence_revision": "29dfa7d066004865d721af9ba8ea4028e0225dd5",
+      "evidence": [
+        "platform/services/api/test/helpers/runtime-queue-placement-simulation-test-data.js",
+        "platform/services/api/test/helpers/public-web-canary-queued-handoff-test-helper.js",
+        "platform/services/api/test/public-web-canary-queued-simulation-boundary.test.js",
+        "CI #1484 at 29dfa7d066004865d721af9ba8ea4028e0225dd5"
+      ],
+      "limits": [
+        "simulation_only",
+        "scheduler_not_in_this_e2e_scope",
+        "no_real_queue_or_worker",
+        "no_real_provider",
+        "no_operational_evidence",
+        "protected_actions_remain_human_gated"
+      ]
+    },
+    {
       "id": "agent-orchestration-stack",
       "scope": "planner/decision/execution-plan",
       "planned": true,
