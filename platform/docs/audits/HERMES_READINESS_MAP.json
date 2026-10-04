@@ -297,27 +297,29 @@
     },
     {
       "id": "orchestration-planner-authorization-execution-plan",
-      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine",
+      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence",
       "planned": true,
       "contracted": true,
       "implemented": true,
       "tested": true,
       "proven_e2e": true,
       "operational": false,
-      "evidence_revision": "177dfc405506d9df42112c95ecbd777e4263d70e",
+      "evidence_revision": "da8aa2e955814a40e27a1e5d7a23d64993d9020e",
       "evidence": [
         "platform/services/api/src/core/execution-plan-request-assembler.js",
-        "platform/services/api/test/execution-plan-request-assembler.test.js",
+        "platform/services/api/src/core/architecture-gate-ci-evidence-assembler.js",
+        "platform/services/api/src/core/execution-plan-engine.js exposes its exact validated binding ledger to the downstream gateway composition",
         "platform/services/api/test/orchestrator-planner-decision-e2e-simulation.test.js",
-        "CI run 37225269360 success at 177dfc405506d9df42112c95ecbd777e4263d70e"
+        "CI run 37227297250 success at da8aa2e955814a40e27a1e5d7a23d64993d9020e",
+        "local focused regression 115/115 passed before readiness promotion"
       ],
       "limits": [
         "simulation_only",
+        "architecture_ci_evidence_is_external_and_revision_bound",
         "execution_authorized_false",
         "execution_started_false",
         "executed_false",
         "production_blocked_true",
-        "gateway_not_in_this_same_run_e2e_scope",
         "no_real_execution",
         "no_operational_evidence",
         "protected_actions_remain_human_gated"

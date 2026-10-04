@@ -31,6 +31,13 @@ const {buildAuthorizationScopeReference}=require('../src/core/execution-authoriz
 const {buildExecutionPlanPolicyReference}=require('../src/core/execution-plan-request');
 const {assembleExecutionPlanRequest}=require('../src/core/execution-plan-request-assembler');
 const {evaluateExecutionPlanRequest}=require('../src/core/execution-plan-engine');
+const {assembleArchitectureGateEvidenceFromCi}=require('../src/core/architecture-gate-ci-evidence-assembler');
+const {buildExecutionGatewayFreshnessReference}=require('../src/core/execution-gateway-freshness-reference');
+const {buildExecutionGatewayReplayReference}=require('../src/core/execution-gateway-replay-reference');
+const {buildExecutionGatewayPackageReference}=require('../src/core/execution-gateway-package-reference');
+const {buildExecutionGatewayPolicy}=require('../src/core/execution-gateway-policy');
+const {buildExecutionGatewayRequest}=require('../src/core/execution-gateway-request');
+const {evaluateExecutionGatewayRequest,computeGatewayPackageDigest}=require('../src/core/execution-gateway-boundary');
 
 
 test('same-run planner evidence bundle reaches ready simulation',()=>{
@@ -209,4 +216,63 @@ test('same-run planner evidence bundle reaches ready simulation',()=>{
  assert.equal(execution.result.status,'EXECUTION_PLAN_PREPARED_SIMULATION');
  assert.notEqual(execution.result.status,'VALIDATION_FAILED');
  assert.notEqual(execution.result.status,'REGISTRY_BLOCKED');
+
+ // The gateway receives the exact plan/result produced above in this same run. Architecture/CI
+ // evidence is external by design, but is bound to the previously verified PR revision/run.
+ const gatewayBindingLedger=execution.bindingLedger;
+ assert.equal(gatewayBindingLedger.binding_ledger_id,execution.plan.binding_ledger_id);
+ assert.equal(gatewayBindingLedger.ledger_fingerprint,execution.plan.binding_ledger_fingerprint);
+ const ciEvidence=assembleArchitectureGateEvidenceFromCi({
+  architecture_gate_evidence_reference_id:execution.plan.execution_plan_id+'-verified-ci',repository_id:'repo-agente-grupo-erick',
+  repository_full_name:'instutodp-cpu/agente-grupo-erick',default_branch:'main',commit_sha:'da8aa2e955814a40e27a1e5d7a23d64993d9020e',
+  head_commit_sha:'da8aa2e955814a40e27a1e5d7a23d64993d9020e',base_commit_sha:'043f2a80cf97ed1099fdf139ab0254e39fd5e13c',
+  workflow_id:'hermes-core-smoke',workflow_name:'Hermes Core smoke test',workflow_version:'v1',workflow_run_id:'37227297250',workflow_run_attempt:1,
+  workflow_run_status:'COMPLETED',workflow_run_conclusion:'SUCCESS',trigger_type:'PULL_REQUEST_REFERENCE',ruleset_id:'hermes-core-smoke',ruleset_version:'1',
+  gates:[{gate_result_id:'hermes-core-smoke-da8aa2e',gate_id:'HERMES_CORE_SMOKE',gate_version:'v1',status:'PASSED',severity:'CRITICAL',required:true}],
+  evidence_created_logical_sequence:4,maximum_valid_sequences:1000,current_logical_sequence:4
+ });
+ const freshness=buildExecutionGatewayFreshnessReference({freshness_reference_id:execution.plan.execution_plan_id+'-freshness',
+  execution_plan_id:execution.plan.execution_plan_id,authorization_decision_id:execution.plan.authorization_decision_id,
+  registry_snapshot_reference_id:executionRequest.registry_snapshot_reference.registry_snapshot_reference_id,
+  architecture_gate_evidence_reference_id:ciEvidence.architecture_gate_evidence_reference_id,created_logical_sequence:4,current_logical_sequence:4,maximum_valid_sequences:1000});
+ const gatewayRequestId=execution.plan.execution_plan_id+'-gateway-request';
+ const replay=buildExecutionGatewayReplayReference({gateway_replay_reference_id:execution.plan.execution_plan_id+'-replay',
+  execution_plan_id:execution.plan.execution_plan_id,execution_plan_fingerprint:execution.plan.plan_fingerprint,gateway_request_id:gatewayRequestId,
+  gateway_request_fingerprint:'same-run-gateway-request-fingerprint',idempotency_reference_id:idempotency.idempotency_reference_id,
+  idempotency_fingerprint:idempotency.idempotency_fingerprint,expected_gateway_attempt:1,maximum_gateway_attempts:1,
+  prior_gateway_decision_ids:[],prior_gateway_decision_fingerprints:[]});
+ const gatewayAuthDecision={...auth.decision};
+ const gatewayDigest=computeGatewayPackageDigest({plan:execution.plan,result:execution.result,authorizationDecision:gatewayAuthDecision,
+  provenanceReference:provenance,scopeReference:scopeRef,snapshotReference:executionRequest.registry_snapshot_reference,
+  stageManifestReference:stageManifest,dependencyGraphReference:dependencyGraph,bindingLedger:gatewayBindingLedger,
+  validationLedger:execution.validationLedger,evidenceReference:ciEvidence});
+ const gatewayPackage=buildExecutionGatewayPackageReference({gateway_package_reference_id:execution.plan.execution_plan_id+'-gateway-package',
+  execution_plan_id:execution.plan.execution_plan_id,execution_plan_request_id:executionRequest.execution_plan_request_id,execution_plan_result_id:execution.result.result_id,
+  authorization_decision_id:execution.plan.authorization_decision_id,authorization_provenance_reference_id:provenance.authorization_provenance_reference_id,
+  authorization_scope_reference_id:scopeRef.authorization_scope_reference_id,registry_snapshot_reference_id:executionRequest.registry_snapshot_reference.registry_snapshot_reference_id,
+  stage_manifest_reference_id:stageManifest.stage_manifest_reference_id,dependency_graph_reference_id:dependencyGraph.dependency_graph_reference_id,
+  binding_ledger_id:gatewayBindingLedger.binding_ledger_id,validation_ledger_id:execution.validationLedger.validation_ledger_id,
+  architecture_gate_evidence_reference_id:ciEvidence.architecture_gate_evidence_reference_id,tenant_id:p.tenant_id,organization_id:p.organization_id,
+  project_id:p.project_id,session_reference_id:p.session_reference_id,agent_id:p.agent_id,actor_id:actor.actor_id,
+  execution_plan_status:execution.plan.execution_plan_status,execution_plan_result_status:execution.result.status,
+  execution_plan_fingerprint:execution.plan.plan_fingerprint,execution_plan_result_fingerprint:execution.result.execution_plan_fingerprint,
+  authorization_fingerprint:stablePayload(gatewayAuthDecision),authorization_provenance_fingerprint:execution.plan.authorization_provenance_fingerprint,
+  authorization_scope_fingerprint:execution.plan.authorization_scope_fingerprint,registry_snapshot_fingerprint:execution.plan.registry_snapshot_fingerprint,
+  stage_manifest_fingerprint:execution.plan.stage_manifest_fingerprint,dependency_graph_fingerprint:dependencyGraph.graph_fingerprint,
+  binding_ledger_fingerprint:gatewayBindingLedger.ledger_fingerprint,validation_ledger_fingerprint:execution.validationLedger.ledger_fingerprint,
+  architecture_gate_evidence_fingerprint:ciEvidence.evidence_fingerprint,package_digest:gatewayDigest});
+ const gatewayRequest=buildExecutionGatewayRequest({gateway_request_id:gatewayRequestId,gateway_policy:buildExecutionGatewayPolicy({gateway_policy_id:'gateway-policy-same-run'}),
+  gateway_package_reference:gatewayPackage,execution_plan_reference:execution.plan,execution_plan_result_reference:execution.result,
+  authorization_decision_reference:gatewayAuthDecision,authorization_provenance_reference:provenance,authorization_scope_reference:scopeRef,
+  registry_snapshot_reference:executionRequest.registry_snapshot_reference,stage_manifest_reference:stageManifest,dependency_graph_reference:dependencyGraph,
+  binding_ledger_reference:gatewayBindingLedger,validation_ledger_reference:execution.validationLedger,architecture_gate_evidence_reference:ciEvidence,
+  freshness_reference:freshness,replay_reference:replay,correlation_id:plannerRequest.correlation_id,causation_id:plannerRequest.causation_id,
+  trace_id:plannerRequest.trace_id,logical_sequence:4,expected_gateway_registry_version:1,simulation_context:plannerRequest.simulation_context});
+ const gateway=evaluateExecutionGatewayRequest(gatewayRequest,{});
+ assert.equal(gateway.decision.status,'GATEWAY_ACCEPTED_SIMULATION');
+ assert.equal(gateway.decision.gateway_accepted_in_simulation,true);
+ assert.equal(gateway.decision.execution_authorized,false);
+ assert.equal(gateway.decision.executed,false);
+ assert.equal(gateway.decision.production_blocked,true);
+ assert.equal(ciEvidence.workflow_run_reference.workflow_run_id,'37227297250');
 });

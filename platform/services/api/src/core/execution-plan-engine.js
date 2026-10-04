@@ -1030,7 +1030,7 @@ function buildOutcome(request, status, reasonCodes, context, materialized, trace
   // plan/result/audit -- not just its id/fingerprint/summary-flags -- so a caller (and this PR's
   // own required tests) can inspect exactly which stage was genuinely reached and marked, never
   // merely trusting the summary. Still simulation-only, still no execution.
-  return { plan, result, audit, bindingResult, bindingAudit, validationLedger };
+  return { plan, result, audit, bindingResult, bindingAudit, bindingLedger: ledger, validationLedger };
 }
 
 module.exports = {
