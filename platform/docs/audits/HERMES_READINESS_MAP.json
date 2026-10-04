@@ -273,6 +273,27 @@
       "evidence_revision": "475a7cce09b088d949e0f7e62d728012d3b6ae68"
     },
     {
+      "id": "orchestration-authorization-boundary",
+      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "evidence": [
+        "platform/services/api/test/orchestrator-planner-decision-e2e-simulation.test.js"
+      ],
+      "limits": [
+        "execution_plan_and_gateway_not_in_this_e2e_scope",
+        "simulation_only",
+        "execution_authorized_false",
+        "no_real_execution",
+        "no_operational_evidence",
+        "protected_actions_remain_human_gated"
+      ]
+    },
+    {
       "id": "orchestration-execution-plan-gateway",
       "scope": "execution plan stage manifest -> execution plan engine -> execution gateway",
       "planned": true,
