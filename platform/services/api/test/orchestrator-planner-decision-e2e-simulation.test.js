@@ -38,6 +38,8 @@ const {buildExecutionGatewayPackageReference}=require('../src/core/execution-gat
 const {buildExecutionGatewayPolicy}=require('../src/core/execution-gateway-policy');
 const {buildExecutionGatewayRequest}=require('../src/core/execution-gateway-request');
 const {evaluateExecutionGatewayRequest,computeGatewayPackageDigest}=require('../src/core/execution-gateway-boundary');
+const {assembleGatewayRuntimeSimulationRequest}=require('../src/core/gateway-runtime-simulation-assembler');
+const {evaluateRuntimeExecutionSimulationRequest}=require('../src/core/runtime-execution-package');
 
 
 test('same-run planner evidence bundle reaches ready simulation',()=>{
@@ -275,4 +277,16 @@ test('same-run planner evidence bundle reaches ready simulation',()=>{
  assert.equal(gateway.decision.executed,false);
  assert.equal(gateway.decision.production_blocked,true);
  assert.equal(ciEvidence.workflow_run_reference.workflow_run_id,'37227297250');
+ const runtimeAssembly=assembleGatewayRuntimeSimulationRequest({
+  executionPlanRequest:executionRequest,executionOutcome:execution,gatewayOutcome:gateway,gatewayPackageReference:gatewayPackage,
+  stageManifestReference:stageManifest,dependencyGraphReference:dependencyGraph,authorizationProvenanceReference:provenance,
+  authorizationScopeReference:scopeRef,registrySnapshotReference:executionRequest.registry_snapshot_reference
+ });
+ const runtime=evaluateRuntimeExecutionSimulationRequest(runtimeAssembly.runtimeRequest,{});
+ assert.equal(runtime.runtimePackage.runtime_status,'RUNTIME_PACKAGE_PREPARED_SIMULATION');
+ assert.equal(runtime.runtimePackage.runtime_enabled,false);
+ assert.equal(runtime.runtimePackage.execution_authorized,false);
+ assert.equal(runtime.runtimePackage.execution_started,false);
+ assert.equal(runtime.runtimePackage.executed,false);
+ assert.equal(runtime.runtimePackage.production_blocked,true);
 });

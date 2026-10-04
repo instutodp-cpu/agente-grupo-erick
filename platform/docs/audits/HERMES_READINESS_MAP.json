@@ -297,21 +297,23 @@
     },
     {
       "id": "orchestration-planner-authorization-execution-plan",
-      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence",
+      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence -> canonical gateway-to-runtime assembler -> runtime execution simulation boundary",
       "planned": true,
       "contracted": true,
       "implemented": true,
       "tested": true,
       "proven_e2e": true,
       "operational": false,
-      "evidence_revision": "da8aa2e955814a40e27a1e5d7a23d64993d9020e",
+      "evidence_revision": "223868e8065c9443dea5a40aaa082ef88bfcb7d4",
       "evidence": [
         "platform/services/api/src/core/execution-plan-request-assembler.js",
         "platform/services/api/src/core/architecture-gate-ci-evidence-assembler.js",
-        "platform/services/api/src/core/execution-plan-engine.js exposes its exact validated binding ledger to the downstream gateway composition",
+        "platform/services/api/src/core/execution-plan-engine.js exposes its exact validated binding ledger to downstream composition",
+        "platform/services/api/src/core/gateway-runtime-simulation-assembler.js",
+        "platform/services/api/test/gateway-runtime-simulation-assembler.test.js",
         "platform/services/api/test/orchestrator-planner-decision-e2e-simulation.test.js",
-        "CI run 37227297250 success at da8aa2e955814a40e27a1e5d7a23d64993d9020e",
-        "local focused regression 115/115 passed before readiness promotion"
+        "CI run 37229042342 success at 223868e8065c9443dea5a40aaa082ef88bfcb7d4 for the preceding same-run gateway proof",
+        "local focused regression 117/117 passed for gateway-to-runtime composition before readiness promotion"
       ],
       "limits": [
         "simulation_only",
@@ -412,8 +414,8 @@
   ],
   "inventory": {
     "platform_docs": 137,
-    "core_source_files": 696,
-    "api_tests": 554,
+    "core_source_files": 697,
+    "api_tests": 555,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
