@@ -126,5 +126,3 @@ if (require.main === module) {
   process.exitCode = result.status === 'pass' ? 0 : 1;
 }
 module.exports = { audit, validateEvidence, collectEvidenceInventory };
-
-[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]
