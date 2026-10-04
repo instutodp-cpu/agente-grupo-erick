@@ -59,6 +59,15 @@ function collectEvidenceInventory() {
   };
 }
 
+function validateAuthoritySeparation() {
+  const router = fs.readFileSync(path.join(ROOT, 'platform/services/api/src/capabilities/registry.js'), 'utf8');
+  const marketing = fs.readFileSync(path.join(ROOT, 'marketing/registry.yaml'), 'utf8');
+  const errors = [];
+  if (!/intent-router/.test(router)) errors.push({type:'router_authority_undefined'});
+  if (!/status:\s*foundation/.test(marketing) || !/default_execution:\s*deny/.test(marketing)) errors.push({type:'marketing_domain_authority_undefined'});
+  return errors;
+}
+
 function validateEvidence(map) {
   const errors = [];
   const states = ['planned','contracted','implemented','tested','proven_e2e','operational'];
@@ -116,6 +125,7 @@ function audit() {
     }
   }
   errors.push(...validateEvidence(map));
+  errors.push(...validateAuthoritySeparation());
   const evidenceInventory = collectEvidenceInventory();
   return {status: errors.length ? 'blocked' : 'pass', audited_revision: map.audited_revision, capability_count:(map.capabilities||[]).length, finding_count:(map.findings||[]).length, observed_inventory: observed, evidence_inventory: evidenceInventory, errors};
 }
@@ -125,4 +135,4 @@ if (require.main === module) {
   process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   process.exitCode = result.status === 'pass' ? 0 : 1;
 }
-module.exports = { audit, validateEvidence, collectEvidenceInventory };
+module.exports = { audit, validateEvidence, collectEvidenceInventory, validateAuthoritySeparation };
