@@ -1,5 +1,3 @@
-[Reading 345 lines from start (total: 345 lines, 0 remaining)]
-
 {
   "schema_version": "1.0",
   "mission": "hermes-self-audit-readiness",
@@ -345,5 +343,3 @@
     }
   }
 }
-
-[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]
