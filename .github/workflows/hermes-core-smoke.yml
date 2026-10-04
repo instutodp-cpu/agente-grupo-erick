@@ -47,6 +47,10 @@ jobs:
         working-directory: platform/services/api
         run: node scripts/discover-tests.js --audit
 
+      - name: Hermes self-audit readiness gate
+        working-directory: platform/services/api
+        run: node scripts/hermes-self-audit.js
+
       - name: Architecture gates
         working-directory: platform/services/api
         run: node scripts/run-architecture-gates.js
