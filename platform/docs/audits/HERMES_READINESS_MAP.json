@@ -114,8 +114,8 @@
       "severity": "high",
       "type": "evidence_binding_gap",
       "evidence": "platform/services/api/scripts/hermes-self-audit.js",
-      "status": "classified",
-      "detail": "Automated inventory now discovers contract/document/code counts and implementation families. Prefix-only test matching is treated as candidate evidence requiring reconciliation, never as proof that a component is untested."
+      "status": "resolved",
+      "detail": "Evidence reconciliation now separates explicit static test-to-core references from filename-prefix candidates. The scanner observed 686 direct bindings at revision 0757193ccdb4195485a9600c766b73c0bedea899; 209 prefix-only candidates remain reconciliation candidates and are explicitly not proof that an implementation is untested. No capability readiness state is promoted from this evidence alone."
     }
   ],
   "capabilities": [
