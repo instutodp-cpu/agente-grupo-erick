@@ -1,3 +1,5 @@
+[Reading 128 lines from start (total: 128 lines, 0 remaining)]
+
 'use strict';
 
 const fs = require('node:fs');
@@ -17,6 +19,46 @@ function countFiles(rel, predicate = () => true) {
     else if (predicate(child)) count += 1;
   }
   return count;
+}
+
+function collectEvidenceInventory() {
+  const docsRoot = path.join(ROOT, 'platform/docs');
+  const coreRoot = path.join(ROOT, 'platform/services/api/src/core');
+  const testsRoot = path.join(ROOT, 'platform/services/api/test');
+  const walk = (root, rel = '') => fs.readdirSync(path.join(root, rel), { withFileTypes: true }).flatMap(entry => {
+    const child = path.join(rel, entry.name);
+    return entry.isDirectory() ? walk(root, child) : [child.replaceAll('\\', '/')];
+  });
+  const docs = walk(docsRoot);
+  const core = walk(coreRoot);
+  const tests = walk(testsRoot);
+  const contractDocs = docs.filter(file => /contract|registry|manifest/i.test(file));
+  const contractCode = core.filter(file => /contract|registry|manifest/i.test(file));
+  const families = {};
+  for (const file of core) {
+    const name = path.basename(file);
+    const family = name
+      .replace(/\.(js|json|yaml|yml)$/, '')
+      .replace(/-(contract|registry|manifest|policy|adapter|engine|boundary|reference|composition|readiness|request|response|package|plan|audit).*$/, '');
+    families[family] = families[family] || { implementation_files: 0, test_files: 0 };
+    families[family].implementation_files += 1;
+  }
+  for (const file of tests) {
+    const name = path.basename(file).replace(/\.test\.js$/, '');
+    for (const family of Object.keys(families)) {
+      if (name === family || name.startsWith(family + '-')) families[family].test_files += 1;
+    }
+  }
+  const implementationWithoutTests = Object.entries(families)
+    .filter(([, evidence]) => evidence.implementation_files > 0 && evidence.test_files === 0)
+    .map(([family, evidence]) => ({ family, ...evidence }))
+    .sort((a,b) => b.implementation_files - a.implementation_files || a.family.localeCompare(b.family));
+  return {
+    contract_docs: contractDocs.length,
+    contract_code: contractCode.length,
+    implementation_families: Object.keys(families).length,
+    test_binding_candidates: implementationWithoutTests
+  };
 }
 
 function validateEvidence(map) {
@@ -76,7 +118,8 @@ function audit() {
     }
   }
   errors.push(...validateEvidence(map));
-  return {status: errors.length ? 'blocked' : 'pass', audited_revision: map.audited_revision, capability_count:(map.capabilities||[]).length, finding_count:(map.findings||[]).length, observed_inventory: observed, errors};
+  const evidenceInventory = collectEvidenceInventory();
+  return {status: errors.length ? 'blocked' : 'pass', audited_revision: map.audited_revision, capability_count:(map.capabilities||[]).length, finding_count:(map.findings||[]).length, observed_inventory: observed, evidence_inventory: evidenceInventory, errors};
 }
 
 if (require.main === module) {
@@ -84,4 +127,6 @@ if (require.main === module) {
   process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   process.exitCode = result.status === 'pass' ? 0 : 1;
 }
-module.exports = { audit, validateEvidence };
+module.exports = { audit, validateEvidence, collectEvidenceInventory };
+
+[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]
