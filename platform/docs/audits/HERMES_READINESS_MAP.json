@@ -255,12 +255,13 @@
       "contracted": true,
       "implemented": true,
       "tested": true,
-      "proven_e2e": false,
+      "proven_e2e": true,
       "operational": false,
       "evidence": [
         "platform/services/api/src/core/orchestrator-plan-reference.js",
         "platform/services/api/test/orchestrator-planner-reference-bridge.test.js",
-        "platform/services/api/test/orchestrator-planner-decision-e2e-simulation.test.js"
+        "platform/services/api/test/orchestrator-planner-decision-e2e-simulation.test.js",
+        "CI #1488 success at 475a7cce09b088d949e0f7e62d728012d3b6ae68"
       ],
       "limits": [
         "execution_plan_and_gateway_not_in_this_e2e_scope",
@@ -268,7 +269,8 @@
         "simulation_only",
         "no_execution_authority",
         "no_operational_evidence"
-      ]
+      ],
+      "evidence_revision": "475a7cce09b088d949e0f7e62d728012d3b6ae68"
     },
     {
       "id": "orchestration-execution-plan-gateway",
