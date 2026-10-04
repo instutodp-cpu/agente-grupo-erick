@@ -67,7 +67,7 @@ function audit() {
   if (map.rules?.human_merge_required !== true) errors.push({type:'unsafe_rule', rule:'human_merge_required'});
   const canary = map.autonomy?.a2_canary;
   if (map.autonomy?.candidate === 'A2') {
-    if (canary?.status !== 'ready_for_execution') errors.push({type:'a2_canary_not_ready'});
+    if (!['ready_for_execution','proven_to_human_boundary'].includes(canary?.status)) errors.push({type:'a2_canary_not_ready'});
     for (const control of ['isolated_branch','exact_revision_test','draft_pr_only','merge_authority_false','human_merge_required','production_false']) {
       if (!canary?.required_controls?.includes(control)) errors.push({type:'missing_a2_control', control});
     }
