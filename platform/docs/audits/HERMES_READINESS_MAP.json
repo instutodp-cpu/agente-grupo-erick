@@ -173,22 +173,27 @@
       "scope": "compras/financeiro/treinamento",
       "planned": true,
       "contracted": true,
-      "implemented": false,
-      "tested": false,
+      "implemented": true,
+      "tested": true,
       "proven_e2e": false,
       "operational": false,
       "evidence": [
         "platform/docs/INTERNAL_BUSINESS_API_READ_ONLY.md",
         "platform/docs/PERMISSION_MATRIX.md",
-        "platform/services/api/src/core/domain-mock-adapter-registry.js",
-        "platform/docs/audits/HERMES_CORE_BUSINESS_DOMAINS_MISSION.md"
+        "platform/services/api/src/core/compras-purchase-summary.js",
+        "platform/services/api/src/core/financeiro-financial-summary.js",
+        "platform/services/api/src/core/treinamento-training-progress-summary.js",
+        "platform/services/api/src/adapters/internal-business/grupo-erick-domain-read-adapters.js",
+        "platform/services/api/test/grupo-erick-domain-read-adapters.test.js",
+        "CI #1481 at 0a0bda448ba95d2b11493fb915419a772106f4e6"
       ],
       "limits": [
-        "generic_mock_boundary_only",
-        "no_domain_specific_datastore_implementation",
         "simulation_first",
+        "e2e_specific_proof_pending",
+        "no_real_datastore_provider",
         "no_operational_evidence"
-      ]
+      ],
+      "evidence_revision": "0a0bda448ba95d2b11493fb915419a772106f4e6"
     },
     {
       "id": "runtime-scheduler-worker-dispatch-queue",
@@ -281,7 +286,7 @@
   "inventory": {
     "platform_docs": 137,
     "core_source_files": 694,
-    "api_tests": 548,
+    "api_tests": 549,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
