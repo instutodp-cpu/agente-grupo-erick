@@ -269,6 +269,26 @@ function decomposeMultiAgent(context, agentStageCount, approvalRequired) {
   return { stages, dependencies, criteria };
 }
 
+function distributeEstimate(total, count, index) {
+  if (!Number.isInteger(total) || total < 0 || !Number.isInteger(count) || count < 1) return 0;
+  const base = Math.floor(total / count);
+  return base + (index < (total % count) ? 1 : 0);
+}
+
+function applyConservedStageEstimates(stages, task) {
+  const count = stages.length;
+  if (count === 0) return stages;
+  return stages.map((stage, index) => ({
+    ...stage,
+    estimated_input_tokens: distributeEstimate(task.estimated_input_tokens, count, index),
+    estimated_output_tokens: distributeEstimate(task.estimated_output_tokens, count, index),
+    estimated_total_tokens:
+      distributeEstimate(task.estimated_input_tokens, count, index) +
+      distributeEstimate(task.estimated_output_tokens, count, index),
+    estimated_cost_minor_units: distributeEstimate(task.estimated_cost_minor_units, count, index)
+  }));
+}
+
 function countStagesByType(stages) {
   const counts = {
     stage_count: stages.length,
@@ -415,7 +435,8 @@ function evaluateOrchestratorPlanningRequest(request) {
     decomposition = decomposeLinear(context, templateForTaskType(task.task_type), approvalRequired);
   }
 
-  const { stages, dependencies, criteria } = decomposition;
+  const { dependencies, criteria } = decomposition;
+  const stages = applyConservedStageEstimates(decomposition.stages, task);
 
   if (stages.length > task.maximum_stages || stages.length > planningPolicy.maximum_stages) {
     return buildBlockedOutcome(request, 'POLICY_BLOCKED', ['stage_count_exceeds_maximum_stages']);

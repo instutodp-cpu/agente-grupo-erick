@@ -21,6 +21,16 @@ const {buildExecutionAuthorizationApprovalReference}=require('../src/core/execut
 const {buildExecutionAuthorizationBudgetReference}=require('../src/core/execution-authorization-budget-reference');
 const {buildExecutionAuthorizationExpiration}=require('../src/core/execution-authorization-expiration');
 const {evaluateExecutionAuthorizationRequest}=require('../src/core/execution-authorization-boundary');
+const {buildStageRecord,buildOrchestratorStageManifestReference}=require('../src/core/orchestrator-stage-manifest-reference');
+const {buildDependencyRecord,buildExecutionPlanDependencyGraphReference}=require('../src/core/execution-plan-dependency-graph-reference');
+const {buildExecutionPlanBudget}=require('../src/core/execution-plan-budget');
+const {buildExecutionPlanIdempotency}=require('../src/core/execution-plan-idempotency');
+const {buildExecutionPlanStopCondition}=require('../src/core/execution-plan-stop-condition');
+const {buildAuthorizationProvenanceReference}=require('../src/core/execution-authorization-provenance-reference');
+const {buildAuthorizationScopeReference}=require('../src/core/execution-authorization-scope-reference');
+const {buildExecutionPlanPolicyReference}=require('../src/core/execution-plan-request');
+const {assembleExecutionPlanRequest}=require('../src/core/execution-plan-request-assembler');
+const {evaluateExecutionPlanRequest}=require('../src/core/execution-plan-engine');
 
 
 test('same-run planner evidence bundle reaches ready simulation',()=>{
@@ -59,18 +69,18 @@ test('same-run planner evidence bundle reaches ready simulation',()=>{
   bundle_fingerprint:stablePayload(e.bundle)
  });
  const task=buildExecutionAuthorizationTaskReference({
-  task_reference_id:'taskref-same-run',planning_result_id:p.planning_result_id,plan_id:p.plan_id,
+  task_reference_id:plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_id,planning_result_id:p.planning_result_id,plan_id:p.plan_id,
   agent_id:p.agent_id,tenant_id:p.tenant_id,organization_id:p.organization_id,project_id:p.project_id,
-  session_reference_id:p.session_reference_id,task_id:'task-same-run',task_type:'CODE_REFERENCE',
-  task_complexity:'TIER_2_SIMPLE',risk_classification:'LOW',data_classification:'INTERNAL',
-  requires_human_approval:false,logical_sequence:1
+  session_reference_id:p.session_reference_id,task_id:plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_id,task_type:plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_type,
+  task_complexity:plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_complexity,risk_classification:plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_risk,data_classification:plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_data_classification,
+  requires_human_approval:plannerFixture.scenarios['no-llm-plan'].request.task_definition.requires_human_approval,logical_sequence:1
  });
  const policy=buildExecutionAuthorizationPolicy({authorization_policy_id:'policy-same-run'});
  const scope=buildExecutionAuthorizationScope({
   scope_id:'scope-same-run',tenant_id:p.tenant_id,organization_id:p.organization_id,
   allowed_agent_ids:[p.agent_id],allowed_project_ids:[p.project_id],allowed_session_reference_ids:[p.session_reference_id],
   allowed_plan_ids:[p.plan_id],allowed_actor_ids:['actor-same-run'],allowed_actor_roles:['MANAGER'],
-  allowed_task_types:['CODE_REFERENCE'],allowed_risk_classifications:['LOW'],
+  allowed_task_types:[plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_type],allowed_risk_classifications:['LOW'],
   maximum_authorized_cost_minor_units:1000,maximum_authorized_tokens:10000
  });
  const actor=buildExecutionAuthorizationActorContext({
@@ -107,4 +117,96 @@ test('same-run planner evidence bundle reaches ready simulation',()=>{
  assert.equal(auth.decision.execution_started,false);
  assert.equal(auth.decision.executed,false);
  assert.equal(auth.decision.production_blocked,true);
+
+ const plannerRequest=structuredClone(plannerFixture.scenarios['no-llm-plan'].request);
+ const stageRecords=out.stages.map((stage)=>buildStageRecord(stage));
+ const stageManifest=buildOrchestratorStageManifestReference({
+  stage_manifest_reference_id:'stage-manifest-same-run',planning_result_id:p.planning_result_id,
+  orchestration_plan_id:p.plan_id,tenant_id:p.tenant_id,organization_id:p.organization_id,
+  project_id:p.project_id,session_reference_id:p.session_reference_id,agent_id:p.agent_id,
+  stage_records:stageRecords,logical_sequence:3
+ });
+ const dependencyRecords=out.dependencies.map((dependency)=>buildDependencyRecord(dependency));
+ const dependencyGraph=buildExecutionPlanDependencyGraphReference({
+  dependency_graph_reference_id:'dependency-graph-same-run',execution_plan_id:p.plan_id,
+  planning_result_id:p.planning_result_id,orchestration_plan_id:p.plan_id,tenant_id:p.tenant_id,
+  organization_id:p.organization_id,project_id:p.project_id,session_reference_id:p.session_reference_id,
+  stage_ids:p.stage_ids,dependency_records:dependencyRecords,logical_sequence:3
+ });
+ const planBudget=buildExecutionPlanBudget({
+  execution_budget_id:'execution-budget-same-run',execution_plan_id:p.plan_id,
+  budget_authorization_id:authBudget.budget_authorization_id,maximum_total_tokens:authBudget.maximum_authorized_tokens,
+  estimated_total_tokens:p.estimated_total_tokens,maximum_input_tokens:10000,estimated_input_tokens:stageRecords.reduce((n,x)=>n+x.estimated_input_tokens,0),
+  maximum_output_tokens:10000,estimated_output_tokens:stageRecords.reduce((n,x)=>n+x.estimated_output_tokens,0),
+  maximum_total_cost_minor_units:authBudget.maximum_authorized_cost_minor_units,
+  estimated_total_cost_minor_units:p.estimated_total_cost_minor_units,reserved_memory_tokens:0,reserved_context_tokens:0,
+  reserved_output_tokens:0,maximum_model_stages:10,maximum_tool_stages:10,maximum_workflow_stages:10,
+  maximum_parallel_stages:10,maximum_attempts_reference:1
+ });
+ const idempotency=buildExecutionPlanIdempotency({
+  idempotency_reference_id:'idempotency-same-run',execution_plan_id:p.plan_id,
+  authorization_decision_id:auth.decision.authorization_decision_id,tenant_id:p.tenant_id,
+  organization_id:p.organization_id,project_id:p.project_id,session_reference_id:p.session_reference_id,
+  idempotency_key_reference:'same-run-e2e-key',request_fingerprint:auth.decision.request_fingerprint,
+  plan_fingerprint:p.plan_fingerprint,expected_execution_attempt:0,maximum_execution_attempts:1,
+  replay_allowed:false,idempotency_validated:true
+ });
+ const stopConditions=stageRecords.map((stage,index)=>buildExecutionPlanStopCondition({
+  stop_condition_id:'stop-same-run-'+index,execution_plan_id:p.plan_id,execution_stage_id:stage.stage_id,
+  condition_type:'BUDGET_EXCEEDED_REFERENCE',condition_priority:index,blocking:true,terminal:false,
+  evaluation_reference_id:'budget-evaluator-same-run'
+ }));
+ const scopeRef=buildAuthorizationScopeReference({
+  authorization_scope_reference_id:'scope-ref-same-run',authorization_scope_id:scope.scope_id,
+  authorization_decision_id:auth.decision.authorization_decision_id,tenant_id:p.tenant_id,
+  organization_id:p.organization_id,project_id:p.project_id,session_reference_id:p.session_reference_id,
+  agent_id:p.agent_id,actor_id:actor.actor_id,actor_role:actor.actor_role,allowed_plan_ids:[p.plan_id],
+  allowed_task_reference_ids:[task.task_reference_id],allowed_agent_ids:[p.agent_id],
+  allowed_model_reference_ids:[...new Set(stageRecords.map(x=>x.model_selection_reference_id).filter(Boolean))].sort(),
+  allowed_tool_reference_ids:[...new Set(stageRecords.flatMap(x=>x.tool_reference_ids||[]))].sort(),allowed_workflow_reference_ids:[...new Set(stageRecords.map(x=>x.workflow_reference_id).filter(Boolean))].sort(),
+  allowed_capability_types:[],allowed_stage_types:[...new Set(stageRecords.map(x=>x.stage_type))].sort(),
+  allowed_risk_classifications:[task.risk_classification],maximum_authorized_tokens:authBudget.maximum_authorized_tokens,
+  maximum_authorized_cost_minor_units:authBudget.maximum_authorized_cost_minor_units,scope_validated:true
+ });
+ const provenance=buildAuthorizationProvenanceReference({
+  authorization_provenance_reference_id:'provenance-same-run',authorization_decision_id:auth.decision.authorization_decision_id,
+  authorization_request_id:authRequest.authorization_request_id,authorization_policy_id:policy.authorization_policy_id,
+  authorization_scope_id:scope.scope_id,actor_id:actor.actor_id,actor_role:actor.actor_role,
+  approval_reference_id:authApproval.approval_reference_id,budget_authorization_id:authBudget.budget_authorization_id,
+  expiration_evaluation_id:expiration.expiration_evaluation_id,planning_result_id:p.planning_result_id,plan_id:p.plan_id,
+  task_reference_id:task.task_reference_id,agent_id:p.agent_id,tenant_id:p.tenant_id,organization_id:p.organization_id,
+  project_id:p.project_id,session_reference_id:p.session_reference_id,
+  authorization_decision_fingerprint:stablePayload(auth.decision),
+  authorization_request_fingerprint:auth.decision.request_fingerprint,
+  authorization_policy_fingerprint:stablePayload(policy),authorization_scope_fingerprint:scopeRef.scope_fingerprint,
+  actor_fingerprint:actor.actor_fingerprint,approval_fingerprint:authApproval.approval_fingerprint,
+  budget_authorization_fingerprint:planBudget.budget_fingerprint,expiration_fingerprint:auth.decision.expiration_fingerprint,
+  planning_result_fingerprint:p.planning_result_fingerprint,orchestration_plan_fingerprint:p.plan_fingerprint,
+  task_fingerprint:task.task_fingerprint,logical_sequence:3,provenance_validated:true
+ });
+ const executionRequest=assembleExecutionPlanRequest({
+  authorization_result:auth,execution_plan_request_id:'execution-plan-request-same-run',
+  orchestrator_decision_reference:decisionRef,readiness_evidence_bundle_reference:bundleRef,
+  planning_result_reference:p,orchestration_plan_reference:plan,task_reference:task,
+  memory_selection_reference:plannerRequest.memory_selection_decision_reference,
+  context_assembly_reference:plannerRequest.context_assembly_result_reference,
+  model_selection_reference:plannerRequest.model_selection_decision_reference,
+  tool_decision_references:plannerRequest.tool_decision_references,workflow_decision_reference:plannerRequest.workflow_decision_reference,
+  execution_plan_policy_reference:buildExecutionPlanPolicyReference({policy_reference_id:'execution-policy-same-run'}),
+  execution_plan_budget:planBudget,idempotency_policy_reference:idempotency,stop_condition_references:stopConditions,
+  compensation_references:[],dependency_graph_reference:dependencyGraph,stage_manifest_reference:stageManifest,
+  authorization_provenance_reference:provenance,authorization_scope_reference:scopeRef,
+  registry_snapshot_seed:{registry_snapshot_reference_id:'snapshot-same-run',observed_registry_version:plannerRequest.expected_registry_version,
+   registry_entity_versions:{execution_plan_request:1,stage_manifest:1,dependency_graph:1,provenance:1,scope:1,execution_plan_budget:1,idempotency_policy:1},
+   snapshot_validated:true,logical_sequence:3},
+  correlation_id:plannerRequest.correlation_id,causation_id:plannerRequest.causation_id,trace_id:plannerRequest.trace_id,
+  logical_sequence:3,expected_registry_version:plannerRequest.expected_registry_version,simulation_context:plannerRequest.simulation_context
+ });
+ const execution=evaluateExecutionPlanRequest(executionRequest,{});
+ assert.equal(execution.result.execution_authorized,false);
+ assert.equal(execution.result.executed,false);
+ assert.equal(execution.result.production_blocked,true);
+ assert.equal(execution.result.status,'EXECUTION_PLAN_PREPARED_SIMULATION');
+ assert.notEqual(execution.result.status,'VALIDATION_FAILED');
+ assert.notEqual(execution.result.status,'REGISTRY_BLOCKED');
 });
