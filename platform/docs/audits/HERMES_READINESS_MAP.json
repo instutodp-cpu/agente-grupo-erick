@@ -175,7 +175,7 @@
       "contracted": true,
       "implemented": true,
       "tested": true,
-      "proven_e2e": false,
+      "proven_e2e": true,
       "operational": false,
       "evidence": [
         "platform/docs/INTERNAL_BUSINESS_API_READ_ONLY.md",
@@ -185,15 +185,17 @@
         "platform/services/api/src/core/treinamento-training-progress-summary.js",
         "platform/services/api/src/adapters/internal-business/grupo-erick-domain-read-adapters.js",
         "platform/services/api/test/grupo-erick-domain-read-adapters.test.js",
-        "CI #1481 at 0a0bda448ba95d2b11493fb915419a772106f4e6"
+        "CI #1481 at 0a0bda448ba95d2b11493fb915419a772106f4e6",
+        "platform/services/api/test/grupo-erick-business-domains-e2e-simulation.test.js",
+        "CI #1482 at b78da51165db747b1f24974fda36443064c9b019"
       ],
       "limits": [
-        "simulation_first",
-        "e2e_specific_proof_pending",
+        "proven_e2e_scope_is_local_simulated_datastore_only",
         "no_real_datastore_provider",
-        "no_operational_evidence"
+        "no_operational_evidence",
+        "protected_actions_remain_human_gated"
       ],
-      "evidence_revision": "0a0bda448ba95d2b11493fb915419a772106f4e6"
+      "evidence_revision": "b78da51165db747b1f24974fda36443064c9b019"
     },
     {
       "id": "runtime-scheduler-worker-dispatch-queue",
