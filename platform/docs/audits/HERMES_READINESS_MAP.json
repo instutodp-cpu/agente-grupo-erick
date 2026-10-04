@@ -67,14 +67,16 @@
       "severity": "high",
       "type": "missing_automation",
       "evidence": "platform/docs/GOVERNANCE_CHECK_REPORT.md",
-      "status": "open"
+      "status": "resolved",
+      "detail": "A deterministic self-audit scanner now exists, has dedicated tests, and is invoked by the named Hermes self-audit readiness gate inside the required core CI workflow. This proves repository automation only; it does not prove E2E or operational runtime."
     },
     {
       "id": "F-003",
       "severity": "high",
       "type": "split_truth_source",
       "evidence": "marketing/registry.yaml",
-      "status": "open"
+      "status": "classified",
+      "detail": "Authority separation is explicit and test-enforced: the core capability registry describes intent-router availability only; marketing/registry.yaml is the Marketing domain contract/policy surface; this readiness map records maturity; runtime evidence alone proves real execution."
     },
     {
       "id": "F-004",
@@ -88,15 +90,16 @@
       "severity": "medium",
       "type": "historical_documentation",
       "evidence": "platform/docs/HERMES_EXECUTION_PLAN_STAGE_MANIFEST.md",
-      "status": "review"
+      "status": "classified",
+      "detail": "The execution-plan stage manifest document is explicitly marked as historical/provenance for roadmap language while its implemented technical contracts remain normative within their scope."
     },
     {
       "id": "F-006",
       "severity": "high",
       "type": "ci_scope_gap",
       "evidence": ".github/workflows/hermes-core-smoke.yml + .github/workflows/marketing-foundation-ci.yml",
-      "status": "open",
-      "detail": "Only two workflow files exist; self-audit runner is currently covered indirectly by core test discovery, not a named readiness gate."
+      "status": "resolved",
+      "detail": "The existing Hermes Core smoke workflow now contains a named Hermes self-audit readiness gate. No extra workflow was created, so required CI remains centralized and the workflow inventory stays at two."
     },
     {
       "id": "F-007",
