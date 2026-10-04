@@ -249,6 +249,27 @@
       ]
     },
     {
+      "id": "planner-reference-bridge",
+      "scope": "real planner output -> canonical planning/orchestration references for downstream decision/execution contracts",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "evidence": [
+        "platform/services/api/src/core/orchestrator-plan-reference.js",
+        "platform/services/api/test/orchestrator-planner-reference-bridge.test.js"
+      ],
+      "limits": [
+        "decision_evidence_bundle_not_yet_rebound_from_same_planner_run",
+        "agent_orchestration_stack_not_promoted",
+        "simulation_only",
+        "no_execution_authority",
+        "no_operational_evidence"
+      ]
+    },
+    {
       "id": "orchestration-execution-plan-gateway",
       "scope": "execution plan stage manifest -> execution plan engine -> execution gateway",
       "planned": true,
@@ -336,7 +357,7 @@
   "inventory": {
     "platform_docs": 137,
     "core_source_files": 694,
-    "api_tests": 550,
+    "api_tests": 551,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
