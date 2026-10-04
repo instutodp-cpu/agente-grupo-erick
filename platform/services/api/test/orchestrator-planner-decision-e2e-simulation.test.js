@@ -42,6 +42,8 @@ const {assembleGatewayRuntimeSimulationRequest}=require('../src/core/gateway-run
 const {evaluateRuntimeExecutionSimulationRequest}=require('../src/core/runtime-execution-package');
 const {assembleRuntimeReadinessRequest,assembleRuntimeAdmissionRequest}=require('../src/core/runtime-readiness-admission-assembler');
 const {evaluateRuntimeReadinessRequest,evaluateRuntimeAdmissionRequest}=require('../src/core/runtime-admission-boundary');
+const {assembleRuntimeSchedulerRequest}=require('../src/core/runtime-scheduler-assembler');
+const {evaluateRuntimeSchedulerRequest}=require('../src/core/runtime-scheduler-boundary');
 
 
 test('same-run planner evidence bundle reaches ready simulation',()=>{
@@ -306,4 +308,13 @@ test('same-run planner evidence bundle reaches ready simulation',()=>{
  assert.equal(admission.decision.execution_started,false);
  assert.equal(admission.decision.executed,false);
  assert.equal(admission.decision.production_blocked,true);
+ const schedulerRequest=assembleRuntimeSchedulerRequest({executionPlanRequest:executionRequest,runtimeAssembly,runtimeOutcome:runtime,readinessOutcome:readiness,admissionAssembly:finalAdmissionAssembly,admissionOutcome:admission});
+ const scheduler=evaluateRuntimeSchedulerRequest(schedulerRequest,{});
+ assert.equal(scheduler.decision.status,'SCHEDULER_PACKAGE_PREPARED_SIMULATION');
+ assert.equal(scheduler.decision.scheduler_started,false);
+ assert.equal(scheduler.decision.queue_created,false);
+ assert.equal(scheduler.decision.worker_started,false);
+ assert.equal(scheduler.decision.stage_dispatched,false);
+ assert.equal(scheduler.decision.executed,false);
+ assert.equal(scheduler.decision.production_blocked,true);
 });

@@ -297,14 +297,14 @@
     },
     {
       "id": "orchestration-planner-authorization-execution-plan",
-      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence -> canonical gateway-to-runtime assembler -> runtime execution simulation boundary -> runtime readiness -> runtime admission",
+      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence -> canonical gateway-to-runtime assembler -> runtime execution simulation boundary -> runtime readiness -> runtime admission -> runtime scheduler simulation boundary",
       "planned": true,
       "contracted": true,
       "implemented": true,
       "tested": true,
       "proven_e2e": true,
       "operational": false,
-      "evidence_revision": "aceba979da9b4ee07541f17b419670eccb3d3698",
+      "evidence_revision": "65759319470e51bcd637368def54948fa10f14d3",
       "evidence": [
         "platform/services/api/src/core/execution-plan-request-assembler.js",
         "platform/services/api/src/core/architecture-gate-ci-evidence-assembler.js",
@@ -316,7 +316,10 @@
         "local focused regression 117/117 passed for gateway-to-runtime composition before readiness promotion",
         "platform/services/api/src/core/runtime-readiness-admission-assembler.js",
         "platform/services/api/test/runtime-readiness-admission-simulation-assembler.test.js",
-        "same-run E2E proves RUNTIME_READY_SIMULATION -> RUNTIME_ADMITTED_SIMULATION while execution remains unauthorized and production blocked"
+        "same-run E2E proves RUNTIME_READY_SIMULATION -> RUNTIME_ADMITTED_SIMULATION while execution remains unauthorized and production blocked",
+        "platform/services/api/src/core/runtime-scheduler-assembler.js",
+        "platform/services/api/test/runtime-scheduler-simulation-assembler.test.js",
+        "same-run E2E proves SCHEDULER_PACKAGE_PREPARED_SIMULATION while scheduler/queue/worker/dispatch/execution remain inactive and production blocked"
       ],
       "limits": [
         "simulation_only",
@@ -417,8 +420,8 @@
   ],
   "inventory": {
     "platform_docs": 137,
-    "core_source_files": 698,
-    "api_tests": 556,
+    "core_source_files": 699,
+    "api_tests": 557,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
