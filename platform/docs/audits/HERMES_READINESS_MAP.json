@@ -249,6 +249,29 @@
       ]
     },
     {
+      "id": "orchestration-execution-plan-gateway",
+      "scope": "execution plan stage manifest -> execution plan engine -> execution gateway",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": true,
+      "operational": false,
+      "evidence_revision": "8d241ab597b62b0a23246995b1e81f9867332e75",
+      "evidence": [
+        "platform/services/api/test/orchestration-execution-plan-gateway-e2e-simulation.test.js",
+        "platform/services/api/test/helpers/execution-gateway-test-data.js"
+      ],
+      "limits": [
+        "simulation_only",
+        "planner_to_decision_to_execution_plan_adapter_not_proven",
+        "agent_orchestration_stack_not_promoted",
+        "no_real_execution",
+        "no_operational_evidence",
+        "protected_actions_remain_human_gated"
+      ]
+    },
+    {
       "id": "memory-selection",
       "scope": "core selection",
       "planned": true,
@@ -313,7 +336,7 @@
   "inventory": {
     "platform_docs": 137,
     "core_source_files": 694,
-    "api_tests": 549,
+    "api_tests": 550,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
