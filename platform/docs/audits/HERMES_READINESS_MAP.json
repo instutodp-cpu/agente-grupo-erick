@@ -1,3 +1,5 @@
+[Reading 345 lines from start (total: 345 lines, 0 remaining)]
+
 {
   "schema_version": "1.0",
   "mission": "hermes-self-audit-readiness",
@@ -105,6 +107,14 @@
       "evidence": "platform/docs/HERMES_RUNTIME_*_SIMULATION_CONTRACTS.md",
       "status": "proven",
       "detail": "Scheduler, worker, dispatch and queue families have substantial implementation/tests but canonical docs explicitly retain simulation boundaries; operational must not be inferred."
+    },
+    {
+      "id": "F-008",
+      "severity": "high",
+      "type": "evidence_binding_gap",
+      "evidence": "platform/services/api/scripts/hermes-self-audit.js",
+      "status": "classified",
+      "detail": "Automated inventory now discovers contract/document/code counts and implementation families. Prefix-only test matching is treated as candidate evidence requiring reconciliation, never as proof that a component is untested."
     }
   ],
   "capabilities": [
@@ -335,3 +345,5 @@
     }
   }
 }
+
+[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]
