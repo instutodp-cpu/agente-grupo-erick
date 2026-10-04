@@ -50,5 +50,3 @@ test('self-audit produces repository evidence inventory instead of relying only 
     assert.equal(gap.test_files, 0);
   }
 });
-
-[executed on device: srv1908789 (f7221c38-fb4d-4cfd-9516-dc87ebcc0f21)]
