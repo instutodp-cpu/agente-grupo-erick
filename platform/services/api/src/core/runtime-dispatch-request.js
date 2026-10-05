@@ -2,6 +2,7 @@
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
 const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
+const { computeCanonicalContentDigest, isCanonicalContentDigest } = require('./canonical-content-digest');
 const { validateAgentSimulationContext } = require('./agent-context-contract');
 const { validateRuntimeDispatchPolicy } = require('./runtime-dispatch-policy');
 const { validateRuntimeWorkerAssignmentRequest } = require('./runtime-worker-assignment-request');
@@ -160,11 +161,8 @@ function validateRuntimeDispatchRequest(request) {
   }
 
   if (request.validator_version !== RUNTIME_DISPATCH_REQUEST_VALIDATOR_VERSION) errors.push('validator_version_invalid');
-  try {
-    stablePayload(request);
-  } catch (error) {
-    errors.push(`payload_not_serializable::${error.message}`);
-  }
+  const serializabilityDigest = computeCanonicalContentDigest(request);
+  if (!isCanonicalContentDigest(serializabilityDigest)) errors.push(`payload_not_serializable::${serializabilityDigest}`);
   errors.push(...findAgentCoreOperationalMaterial(request));
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }

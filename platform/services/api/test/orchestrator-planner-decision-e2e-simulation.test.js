@@ -46,6 +46,8 @@ const {assembleRuntimeSchedulerRequest}=require('../src/core/runtime-scheduler-a
 const {evaluateRuntimeSchedulerRequest}=require('../src/core/runtime-scheduler-boundary');
 const {assembleRuntimeWorkerAssignmentRequest}=require('../src/core/runtime-worker-assignment-assembler');
 const {evaluateRuntimeWorkerAssignmentRequest}=require('../src/core/runtime-worker-assignment-boundary');
+const {assembleRuntimeDispatchRequest}=require('../src/core/runtime-dispatch-assembler');
+const {evaluateRuntimeDispatchRequest}=require('../src/core/runtime-dispatch-boundary');
 
 
 test('same-run planner evidence bundle reaches ready simulation',()=>{
@@ -328,4 +330,14 @@ test('same-run planner evidence bundle reaches ready simulation',()=>{
  assert.equal(workerAssignment.decision.stage_dispatched,false);
  assert.equal(workerAssignment.decision.executed,false);
  assert.equal(workerAssignment.decision.production_blocked,true);
+ const dispatchRequest=assembleRuntimeDispatchRequest({workerAssignmentRequest,workerAssignmentOutcome:workerAssignment,schedulerDependencyRefs:scheduler.schedulerDependencyRefs});
+ const dispatch=evaluateRuntimeDispatchRequest(dispatchRequest,{});
+ assert.equal(dispatch.decision.status,'DISPATCH_PACKAGE_PREPARED_SIMULATION');
+ assert.equal(dispatch.decision.dispatch_applied,false);
+ assert.equal(dispatch.decision.worker_reserved,false);
+ assert.equal(dispatch.decision.worker_started,false);
+ assert.equal(dispatch.decision.stage_dispatched,false);
+ assert.equal(dispatch.decision.stage_started,false);
+ assert.equal(dispatch.decision.executed,false);
+ assert.equal(dispatch.decision.production_blocked,true);
 });

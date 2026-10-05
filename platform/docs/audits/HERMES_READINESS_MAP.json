@@ -297,14 +297,14 @@
     },
     {
       "id": "orchestration-planner-authorization-execution-plan",
-      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence -> canonical gateway-to-runtime assembler -> runtime execution simulation boundary -> runtime readiness -> runtime admission -> runtime scheduler simulation boundary -> runtime worker assignment simulation boundary",
+      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence -> canonical gateway-to-runtime assembler -> runtime execution simulation boundary -> runtime readiness -> runtime admission -> runtime scheduler simulation boundary -> runtime worker assignment simulation boundary -> runtime dispatch simulation boundary",
       "planned": true,
       "contracted": true,
       "implemented": true,
       "tested": true,
       "proven_e2e": true,
       "operational": false,
-      "evidence_revision": "65759319470e51bcd637368def54948fa10f14d3",
+      "evidence_revision": "234aa7df2558a79b011125e98493c9bb5787aa8f",
       "evidence": [
         "platform/services/api/src/core/execution-plan-request-assembler.js",
         "platform/services/api/src/core/architecture-gate-ci-evidence-assembler.js",
@@ -322,7 +322,11 @@
         "same-run E2E proves SCHEDULER_PACKAGE_PREPARED_SIMULATION while scheduler/queue/worker/dispatch/execution remain inactive and production blocked",
         "platform/services/api/src/core/runtime-worker-assignment-assembler.js",
         "platform/services/api/test/runtime-worker-assignment-simulation-assembler.test.js",
-        "same-run E2E proves WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION while worker assignment/reservation/start, dispatch and execution remain inactive and production blocked"
+        "same-run E2E proves WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION while worker assignment/reservation/start, dispatch and execution remain inactive and production blocked",
+        "platform/services/api/src/core/runtime-dispatch-assembler.js",
+        "platform/services/api/test/runtime-dispatch-simulation-assembler.test.js",
+        "same-run E2E proves DISPATCH_PACKAGE_PREPARED_SIMULATION while dispatch/worker/stage/execution remain inactive and production blocked",
+        "local combined regression 169/169 passed for same-run composition through dispatch before CI delivery"
       ],
       "limits": [
         "simulation_only",
@@ -423,8 +427,8 @@
   ],
   "inventory": {
     "platform_docs": 137,
-    "core_source_files": 700,
-    "api_tests": 558,
+    "core_source_files": 701,
+    "api_tests": 559,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
