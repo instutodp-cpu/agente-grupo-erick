@@ -297,7 +297,7 @@
     },
     {
       "id": "orchestration-planner-authorization-execution-plan",
-      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence -> canonical gateway-to-runtime assembler -> runtime execution simulation boundary -> runtime readiness -> runtime admission -> runtime scheduler simulation boundary",
+      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence -> canonical gateway-to-runtime assembler -> runtime execution simulation boundary -> runtime readiness -> runtime admission -> runtime scheduler simulation boundary -> runtime worker assignment simulation boundary",
       "planned": true,
       "contracted": true,
       "implemented": true,
@@ -319,7 +319,10 @@
         "same-run E2E proves RUNTIME_READY_SIMULATION -> RUNTIME_ADMITTED_SIMULATION while execution remains unauthorized and production blocked",
         "platform/services/api/src/core/runtime-scheduler-assembler.js",
         "platform/services/api/test/runtime-scheduler-simulation-assembler.test.js",
-        "same-run E2E proves SCHEDULER_PACKAGE_PREPARED_SIMULATION while scheduler/queue/worker/dispatch/execution remain inactive and production blocked"
+        "same-run E2E proves SCHEDULER_PACKAGE_PREPARED_SIMULATION while scheduler/queue/worker/dispatch/execution remain inactive and production blocked",
+        "platform/services/api/src/core/runtime-worker-assignment-assembler.js",
+        "platform/services/api/test/runtime-worker-assignment-simulation-assembler.test.js",
+        "same-run E2E proves WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION while worker assignment/reservation/start, dispatch and execution remain inactive and production blocked"
       ],
       "limits": [
         "simulation_only",
@@ -420,8 +423,8 @@
   ],
   "inventory": {
     "platform_docs": 137,
-    "core_source_files": 699,
-    "api_tests": 557,
+    "core_source_files": 700,
+    "api_tests": 558,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {

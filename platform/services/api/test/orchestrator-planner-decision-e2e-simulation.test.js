@@ -44,10 +44,12 @@ const {assembleRuntimeReadinessRequest,assembleRuntimeAdmissionRequest}=require(
 const {evaluateRuntimeReadinessRequest,evaluateRuntimeAdmissionRequest}=require('../src/core/runtime-admission-boundary');
 const {assembleRuntimeSchedulerRequest}=require('../src/core/runtime-scheduler-assembler');
 const {evaluateRuntimeSchedulerRequest}=require('../src/core/runtime-scheduler-boundary');
+const {assembleRuntimeWorkerAssignmentRequest}=require('../src/core/runtime-worker-assignment-assembler');
+const {evaluateRuntimeWorkerAssignmentRequest}=require('../src/core/runtime-worker-assignment-boundary');
 
 
 test('same-run planner evidence bundle reaches ready simulation',()=>{
- const out=evaluateOrchestratorPlanningRequest(structuredClone(plannerFixture.scenarios['no-llm-plan'].request));
+ const out=evaluateOrchestratorPlanningRequest(structuredClone(plannerFixture.scenarios['deterministic-plan'].request));
  const p=buildPlanningResultReferenceFromPlannerOutput(out), plan=buildOrchestrationPlanReferenceFromPlannerOutput(out);
  const base=structuredClone(decisionFixture.scenarios['ready-no-llm-decision'].request);
  const common={planning_result_id:p.planning_result_id,plan_id:p.plan_id,tenant_id:p.tenant_id,organization_id:p.organization_id,logical_sequence:1};
@@ -82,18 +84,18 @@ test('same-run planner evidence bundle reaches ready simulation',()=>{
   bundle_fingerprint:stablePayload(e.bundle)
  });
  const task=buildExecutionAuthorizationTaskReference({
-  task_reference_id:plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_id,planning_result_id:p.planning_result_id,plan_id:p.plan_id,
+  task_reference_id:plannerFixture.scenarios['deterministic-plan'].request.task_definition.task_id,planning_result_id:p.planning_result_id,plan_id:p.plan_id,
   agent_id:p.agent_id,tenant_id:p.tenant_id,organization_id:p.organization_id,project_id:p.project_id,
-  session_reference_id:p.session_reference_id,task_id:plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_id,task_type:plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_type,
-  task_complexity:plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_complexity,risk_classification:plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_risk,data_classification:plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_data_classification,
-  requires_human_approval:plannerFixture.scenarios['no-llm-plan'].request.task_definition.requires_human_approval,logical_sequence:1
+  session_reference_id:p.session_reference_id,task_id:plannerFixture.scenarios['deterministic-plan'].request.task_definition.task_id,task_type:plannerFixture.scenarios['deterministic-plan'].request.task_definition.task_type,
+  task_complexity:plannerFixture.scenarios['deterministic-plan'].request.task_definition.task_complexity,risk_classification:plannerFixture.scenarios['deterministic-plan'].request.task_definition.task_risk,data_classification:plannerFixture.scenarios['deterministic-plan'].request.task_definition.task_data_classification,
+  requires_human_approval:plannerFixture.scenarios['deterministic-plan'].request.task_definition.requires_human_approval,logical_sequence:1
  });
  const policy=buildExecutionAuthorizationPolicy({authorization_policy_id:'policy-same-run'});
  const scope=buildExecutionAuthorizationScope({
   scope_id:'scope-same-run',tenant_id:p.tenant_id,organization_id:p.organization_id,
   allowed_agent_ids:[p.agent_id],allowed_project_ids:[p.project_id],allowed_session_reference_ids:[p.session_reference_id],
   allowed_plan_ids:[p.plan_id],allowed_actor_ids:['actor-same-run'],allowed_actor_roles:['MANAGER'],
-  allowed_task_types:[plannerFixture.scenarios['no-llm-plan'].request.task_definition.task_type],allowed_risk_classifications:['LOW'],
+  allowed_task_types:[plannerFixture.scenarios['deterministic-plan'].request.task_definition.task_type],allowed_risk_classifications:['LOW'],
   maximum_authorized_cost_minor_units:1000,maximum_authorized_tokens:10000
  });
  const actor=buildExecutionAuthorizationActorContext({
@@ -131,7 +133,7 @@ test('same-run planner evidence bundle reaches ready simulation',()=>{
  assert.equal(auth.decision.executed,false);
  assert.equal(auth.decision.production_blocked,true);
 
- const plannerRequest=structuredClone(plannerFixture.scenarios['no-llm-plan'].request);
+ const plannerRequest=structuredClone(plannerFixture.scenarios['deterministic-plan'].request);
  const stageRecords=out.stages.map((stage)=>buildStageRecord(stage));
  const stageManifest=buildOrchestratorStageManifestReference({
   stage_manifest_reference_id:'stage-manifest-same-run',planning_result_id:p.planning_result_id,
@@ -317,4 +319,13 @@ test('same-run planner evidence bundle reaches ready simulation',()=>{
  assert.equal(scheduler.decision.stage_dispatched,false);
  assert.equal(scheduler.decision.executed,false);
  assert.equal(scheduler.decision.production_blocked,true);
+ const workerAssignmentRequest=assembleRuntimeWorkerAssignmentRequest({schedulerRequest,schedulerOutcome:scheduler});
+ const workerAssignment=evaluateRuntimeWorkerAssignmentRequest(workerAssignmentRequest,{});
+ assert.equal(workerAssignment.decision.status,'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
+ assert.equal(workerAssignment.decision.worker_assignment_applied,false);
+ assert.equal(workerAssignment.decision.worker_reserved,false);
+ assert.equal(workerAssignment.decision.worker_started,false);
+ assert.equal(workerAssignment.decision.stage_dispatched,false);
+ assert.equal(workerAssignment.decision.executed,false);
+ assert.equal(workerAssignment.decision.production_blocked,true);
 });
