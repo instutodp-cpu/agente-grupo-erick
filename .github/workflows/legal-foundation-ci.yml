@@ -1,0 +1,39 @@
+name: Legal Foundation CI
+
+on:
+  pull_request:
+    paths:
+      - 'legal/**'
+      - 'src/hermes/legal/**'
+      - 'scripts/validate-legal-foundation.js'
+      - 'test/legal-*-sim.test.js'
+      - '.github/workflows/legal-foundation-ci.yml'
+  push:
+    branches:
+      - 'feat/hermes-legal-domain'
+    paths:
+      - 'legal/**'
+      - 'src/hermes/legal/**'
+      - 'scripts/validate-legal-foundation.js'
+      - 'test/legal-*-sim.test.js'
+      - '.github/workflows/legal-foundation-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  legal-foundation:
+    name: Validate legal foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate legal artifacts
+        run: node scripts/validate-legal-foundation.js
+      - name: Run legal foundation simulations
+        run: node --test test/legal-foundation-sim.test.js
