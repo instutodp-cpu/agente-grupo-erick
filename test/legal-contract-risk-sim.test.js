@@ -1,0 +1,13 @@
+const test=require('node:test');const assert=require('node:assert/strict');
+const {validatePlaybookRule,compareClauseToRule,canPresentAsLegalViolation}=require('../src/hermes/legal/contract-risk-engine');
+const clause={clause_id:'cl1',clause_type:'penalty',fragment_refs:['f1']};
+const internal={rule_id:'r1',version:'1',clause_type:'penalty',policy_origin:'internal_preference',authority_refs:[],severity:'medium',review_required:true,conditions:{penalty_percent:{max:10}}};
+test('internal playbook rule is valid without legal authority',()=>assert.equal(validatePlaybookRule(internal).valid,true));
+test('authority-backed rule without authority provenance fails closed',()=>assert.equal(validatePlaybookRule({...internal,policy_origin:'legal_authority_backed'}).valid,false));
+test('internal preference cannot carry authority refs and masquerade as law',()=>assert.equal(validatePlaybookRule({...internal,authority_refs:['law1']}).valid,false));
+test('clause within playbook creates no risk',()=>assert.equal(compareClauseToRule(clause,internal,{penalty_percent:5}).risk,null));
+test('clause above internal threshold creates playbook deviation',()=>assert.equal(compareClauseToRule(clause,internal,{penalty_percent:20}).risk.source_kind,'playbook_deviation'));
+test('playbook deviation preserves clause fragment provenance',()=>assert.deepEqual(compareClauseToRule(clause,internal,{penalty_percent:20}).risk.fragment_refs,['f1']));
+test('internal deviation cannot be presented as legal violation',()=>assert.equal(canPresentAsLegalViolation(compareClauseToRule(clause,internal,{penalty_percent:20}).risk),false));
+test('authority-backed deviation can be identified only with authority ref',()=>{const rule={...internal,rule_id:'r2',policy_origin:'legal_authority_backed',authority_refs:['authority-1']};const risk=compareClauseToRule(clause,rule,{penalty_percent:20}).risk;assert.equal(canPresentAsLegalViolation(risk),true);});
+test('non-applicable clause type does not create false risk',()=>assert.equal(compareClauseToRule({...clause,clause_type:'payment'},internal,{penalty_percent:99}).risk,null));
