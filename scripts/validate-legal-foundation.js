@@ -10,7 +10,8 @@ const required = [
   'legal/contracts/legal-evidence-bundle.schema.json',
   'legal/contracts/legal-source-snapshot.schema.json',
   'legal/contracts/legal-authority.schema.json',
-  'legal/contracts/legal-evidence.schema.json'
+  'legal/contracts/legal-evidence.schema.json',
+  'legal/contracts/legal-retrieval-query.schema.json'
 ];
 
 for (const file of required) {
