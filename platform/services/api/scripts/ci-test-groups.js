@@ -54,6 +54,7 @@ const GROUPS = Object.freeze({
     'test/canonical-governance-authority-grant-revocation-persistence-postgres.integration.test.js',
     'test/canonical-governance-authority-grant-resolution-postgres.integration.test.js',
     'test/runtime-execution-job-admission-postgres.integration.test.js',
+    'test/accounting-postgres-runtime-e2e.integration.test.js',
     'test/runtime-execution-attempt-persistence-postgres.integration.test.js',
     'test/runtime-execution-attempt-admission-postgres.integration.test.js',
     'test/runtime-execution-attempt-claim-canonical-identity.test.js',
