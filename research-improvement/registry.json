@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "domain": "research_continuous_improvement",
+  "name": "Hermes Research & Continuous Improvement",
+  "kind": "transversal_capability",
+  "status": "foundation",
+  "agent": false,
+  "orchestrator": false,
+  "control_plane": "maestro",
+  "execution_plane": "hermes",
+  "simulation_first": true,
+  "default_execution": "deny",
+  "merge_authority": false,
+  "human_merge_required": true,
+  "scopes": ["domain_radar","hermes_radar","process_radar","strategy_radar","dependency_radar","readiness_radar","incident_triggered"],
+  "reuse": {
+    "self_audit": "platform/docs/HERMES_SELF_AUDIT_READINESS_MISSION.md",
+    "scheduler": "platform/docs/HERMES_RUNTIME_SCHEDULER_SIMULATION_CONTRACTS.md",
+    "simulation": "platform/docs/HERMES_RUNTIME_EXECUTION_SIMULATION_CONTRACTS.md",
+    "marketing_research_policy": "marketing/policies/research-policy.yaml",
+    "marketing_research_skill": "marketing/skills/research-intelligence/SKILL.md"
+  },
+  "protected_actions": ["merge_main","production_publish","financial_spend_or_mutation","external_customer_message","destructive_action","secret_or_permission_change","authority_expansion"],
+  "increments": ["RCI-01","RCI-02","RCI-03","RCI-04","RCI-05","RCI-06","RCI-07","RCI-08","RCI-09","RCI-10","RCI-11","RCI-12","RCI-13"]
+}
