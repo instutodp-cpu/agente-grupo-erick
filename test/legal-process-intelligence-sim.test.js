@@ -1,0 +1,12 @@
+const test=require('node:test');const assert=require('node:assert/strict');
+const {normalizeProcessEvent,buildTimeline,assessProcessEvent,detectDeadlineCandidate}=require('../src/hermes/legal/process-intelligence');
+const {mapDataJudMovement}=require('../src/hermes/legal/adapters/datajud-sim');
+const e=(o={})=>normalizeProcessEvent({processId:'p1',sourceId:'cnj_datajud',sourceSnapshotRef:'s1',externalEventRef:'1',eventType:'movement',occurredAt:'2026-10-06T10:00:00Z',...o});
+test('DataJud movement is mapped explicitly as metadata only',()=>assert.equal(mapDataJudMovement({id:10,nome:'Publicacao',dataHora:'2026-10-06T10:00:00Z'},{processId:'p1',sourceSnapshotRef:'s1'}).content_scope,'metadata_only'));
+test('metadata movement cannot certify judicial decision',()=>assert.equal(assessProcessEvent(e()).can_certify_decision,false));
+test('metadata movement cannot confirm deadline',()=>assert.equal(assessProcessEvent(e()).can_confirm_deadline,false));
+test('process event preserves source snapshot provenance',()=>assert.equal(e().source_snapshot_ref,'s1'));
+test('timeline is ordered chronologically',()=>{const a=e({externalEventRef:'a',occurredAt:'2026-10-06T12:00:00Z'}),b=e({externalEventRef:'b',occurredAt:'2026-10-05T12:00:00Z'});assert.deepEqual(buildTimeline([a,b]).map(x=>x.event_id),[b.event_id,a.event_id]);});
+test('timeline deduplicates stable event ids',()=>assert.equal(buildTimeline([e(),e()]).length,1));
+test('process event may create only an unconfirmed deadline candidate',()=>{const d=detectDeadlineCandidate(e());assert.equal(d.status,'candidate');assert.equal(d.confirmed,false);});
+test('verified decision content can certify decision only after verification',()=>{const x={...e(),content_scope:'verified_decision',verification_status:'verified'};assert.equal(assessProcessEvent(x).can_certify_decision,true);assert.equal(assessProcessEvent(x).can_confirm_deadline,false);});
