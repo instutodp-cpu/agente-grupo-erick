@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalClausePlaybookRule",
+  "type": "object",
+  "required": [
+    "rule_id",
+    "version",
+    "clause_type",
+    "policy_origin",
+    "severity",
+    "review_required"
+  ],
+  "properties": {
+    "rule_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "clause_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "policy_origin": {
+      "enum": [
+        "internal_preference",
+        "legal_authority_backed"
+      ]
+    },
+    "authority_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "severity": {
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "review_required": {
+      "type": "boolean"
+    },
+    "conditions": {
+      "type": "object"
+    },
+    "recommendation": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
