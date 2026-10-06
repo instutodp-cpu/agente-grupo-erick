@@ -48,6 +48,8 @@ const {assembleRuntimeWorkerAssignmentRequest}=require('../src/core/runtime-work
 const {evaluateRuntimeWorkerAssignmentRequest}=require('../src/core/runtime-worker-assignment-boundary');
 const {assembleRuntimeDispatchRequest}=require('../src/core/runtime-dispatch-assembler');
 const {evaluateRuntimeDispatchRequest}=require('../src/core/runtime-dispatch-boundary');
+const {assembleRuntimeQueueAdmissionRequest}=require('../src/core/runtime-queue-admission-assembler');
+const {evaluateRuntimeQueueAdmissionRequest}=require('../src/core/runtime-queue-admission-boundary');
 
 
 test('same-run planner evidence bundle reaches ready simulation',()=>{
@@ -321,7 +323,7 @@ test('same-run planner evidence bundle reaches ready simulation',()=>{
  assert.equal(scheduler.decision.stage_dispatched,false);
  assert.equal(scheduler.decision.executed,false);
  assert.equal(scheduler.decision.production_blocked,true);
- const workerAssignmentRequest=assembleRuntimeWorkerAssignmentRequest({schedulerRequest,schedulerOutcome:scheduler});
+ const workerAssignmentRequest=assembleRuntimeWorkerAssignmentRequest({schedulerRequest,schedulerOutcome:scheduler,registrySnapshotReference:executionRequest.registry_snapshot_reference});
  const workerAssignment=evaluateRuntimeWorkerAssignmentRequest(workerAssignmentRequest,{});
  assert.equal(workerAssignment.decision.status,'WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION');
  assert.equal(workerAssignment.decision.worker_assignment_applied,false);
@@ -340,4 +342,16 @@ test('same-run planner evidence bundle reaches ready simulation',()=>{
  assert.equal(dispatch.decision.stage_started,false);
  assert.equal(dispatch.decision.executed,false);
  assert.equal(dispatch.decision.production_blocked,true);
+ const queueAdmissionRequest=assembleRuntimeQueueAdmissionRequest({dispatchRequest,dispatchOutcome:dispatch});
+ const queueAdmission=evaluateRuntimeQueueAdmissionRequest(queueAdmissionRequest,{});
+ assert.equal(queueAdmission.decision.status,'QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION', JSON.stringify({status:queueAdmission.decision.status,reason_codes:queueAdmission.decision.reason_codes || null}));
+ assert.equal(queueAdmission.decision.queue_admission_applied,false);
+ assert.equal(queueAdmission.decision.queue_created,false);
+ assert.equal(queueAdmission.decision.queue_item_created,false);
+ assert.equal(queueAdmission.decision.worker_reserved,false);
+ assert.equal(queueAdmission.decision.worker_started,false);
+ assert.equal(queueAdmission.decision.stage_dispatched,false);
+ assert.equal(queueAdmission.decision.stage_started,false);
+ assert.equal(queueAdmission.decision.executed,false);
+ assert.equal(queueAdmission.decision.production_blocked,true);
 });

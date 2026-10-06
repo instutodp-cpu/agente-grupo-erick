@@ -297,7 +297,7 @@
     },
     {
       "id": "orchestration-planner-authorization-execution-plan",
-      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence -> canonical gateway-to-runtime assembler -> runtime execution simulation boundary -> runtime readiness -> runtime admission -> runtime scheduler simulation boundary -> runtime worker assignment simulation boundary -> runtime dispatch simulation boundary",
+      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence -> canonical gateway-to-runtime assembler -> runtime execution simulation boundary -> runtime readiness -> runtime admission -> runtime scheduler simulation boundary -> runtime worker assignment simulation boundary -> runtime dispatch simulation boundary -> runtime queue admission simulation boundary",
       "planned": true,
       "contracted": true,
       "implemented": true,
@@ -326,7 +326,13 @@
         "platform/services/api/src/core/runtime-dispatch-assembler.js",
         "platform/services/api/test/runtime-dispatch-simulation-assembler.test.js",
         "same-run E2E proves DISPATCH_PACKAGE_PREPARED_SIMULATION while dispatch/worker/stage/execution remain inactive and production blocked",
-        "local combined regression 169/169 passed for same-run composition through dispatch before CI delivery"
+        "local combined regression 169/169 passed for same-run composition through dispatch before CI delivery",
+        "platform/services/api/src/core/runtime-queue-admission-assembler.js",
+        "platform/services/api/test/runtime-queue-admission-simulation-assembler.test.js",
+        "local focused Dispatch + Queue Admission regression 228/228 passed with exit code 0",
+        "clean default-heap same-run E2E passed with exit code 0 and proves QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION",
+        "same-run preserves canonical Registry Snapshot logical_sequence through readiness -> admission -> scheduler -> worker assignment -> dispatch -> queue admission",
+        "Queue Admission remains declarative: queue/item/worker/stage/execution operational flags false and production_blocked true"
       ],
       "limits": [
         "simulation_only",
@@ -427,8 +433,8 @@
   ],
   "inventory": {
     "platform_docs": 137,
-    "core_source_files": 701,
-    "api_tests": 559,
+    "core_source_files": 702,
+    "api_tests": 560,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {

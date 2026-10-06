@@ -8,7 +8,7 @@ const { buildRuntimeWorkerHealthReference } = require('./runtime-worker-health-r
 const { buildRuntimeWorkerAssignmentRequest } = require('./runtime-worker-assignment-request');
 
 function assembleRuntimeWorkerAssignmentRequest(input = {}) {
-  const { schedulerRequest, schedulerOutcome } = input;
+  const { schedulerRequest, schedulerOutcome, registrySnapshotReference = null } = input;
   if (!schedulerRequest || !schedulerOutcome) throw new Error('runtime_worker_assignment_assembler_missing_input');
   if (schedulerOutcome.decision.status !== 'SCHEDULER_PACKAGE_PREPARED_SIMULATION') {
     throw new Error('runtime_worker_assignment_assembler_scheduler_not_prepared');
@@ -79,7 +79,7 @@ function assembleRuntimeWorkerAssignmentRequest(input = {}) {
     idempotency_reference: schedulerRequest.idempotency_reference, runtime_worker_references: [worker], runtime_worker_capability_references: [capability],
     runtime_worker_capacity_references: [capacity], runtime_worker_health_references: [health], runtime_worker_network_policy_references: [],
     runtime_worker_secret_policy_references: [], network_permission_policy_references: [], secret_resolution_policy_references: [], stage_policy_requirement_references: [],
-    model_selection_decision_references: [], tool_contract_references: [], workflow_contract_references: [], registry_snapshot_reference: null,
+    model_selection_decision_references: [], tool_contract_references: [], workflow_contract_references: [], registry_snapshot_reference: registrySnapshotReference,
     correlation_id: schedulerRequest.correlation_id, causation_id: schedulerRequest.causation_id, trace_id: schedulerRequest.trace_id,
     logical_sequence: schedulerRequest.logical_sequence, expected_worker_assignment_registry_version: 1, simulation_context: schedulerRequest.simulation_context
   });

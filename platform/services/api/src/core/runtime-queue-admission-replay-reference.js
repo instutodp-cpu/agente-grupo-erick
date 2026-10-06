@@ -1,7 +1,14 @@
 'use strict';
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
-const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
+const { exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
+const { computeCanonicalContentDigest, isCanonicalContentDigest } = require('./canonical-content-digest');
+
+// Builder-created references have their replay fingerprint computed immediately before validation.
+// Remember only that exact object identity so validation does not materialize the same potentially
+// large upstream fingerprint graph a second time. External/reconstructed objects still take the
+// full fingerprint-validation path.
+const BUILDER_COMPUTED_REPLAY_FINGERPRINTS = new WeakMap();
 
 // pr108: the Queue Admission layer's own Replay Reference -- "Não reutilizar Dispatch Replay como
 // se fosse Queue Admission Replay." Binds to the exact Dispatch Package fingerprint+digest and
@@ -50,7 +57,7 @@ function isUniqueStringList(list, maxItems = MAX_LIST_ITEMS) {
 
 function computeQueueAdmissionReplayFingerprint(reference) {
   const { replay_fingerprint, ...rest } = reference;
-  return stablePayload(rest);
+  return computeCanonicalContentDigest(rest);
 }
 
 function validateRuntimeQueueAdmissionReplayReference(reference) {
@@ -94,12 +101,18 @@ function validateRuntimeQueueAdmissionReplayReference(reference) {
   }
   if (reference.validator_version !== RUNTIME_QUEUE_ADMISSION_REPLAY_REFERENCE_VALIDATOR_VERSION) errors.push('validator_version_invalid');
   try {
-    stablePayload(reference);
+    const serializabilityDigest = computeCanonicalContentDigest(reference);
+    if (!isCanonicalContentDigest(serializabilityDigest)) errors.push(`payload_not_serializable::${serializabilityDigest}`);
   } catch (error) {
     errors.push(`payload_not_serializable::${error.message}`);
   }
   try {
-    if (computeQueueAdmissionReplayFingerprint(reference) !== reference.replay_fingerprint) errors.push('replay_fingerprint_mismatch');
+    const builderFingerprint = BUILDER_COMPUTED_REPLAY_FINGERPRINTS.get(reference);
+    if (builderFingerprint !== undefined) {
+      if (builderFingerprint !== reference.replay_fingerprint) errors.push('replay_fingerprint_mismatch');
+    } else if (computeQueueAdmissionReplayFingerprint(reference) !== reference.replay_fingerprint) {
+      errors.push('replay_fingerprint_mismatch');
+    }
   } catch (error) {
     errors.push('replay_fingerprint_mismatch');
   }
@@ -137,12 +150,19 @@ function buildRuntimeQueueAdmissionReplayReference(input = {}) {
     validator_version: RUNTIME_QUEUE_ADMISSION_REPLAY_REFERENCE_VALIDATOR_VERSION
   };
   reference.replay_fingerprint = computeQueueAdmissionReplayFingerprint(reference);
+  BUILDER_COMPUTED_REPLAY_FINGERPRINTS.set(reference, reference.replay_fingerprint);
 
   const validation = validateRuntimeQueueAdmissionReplayReference(reference);
   if (!validation.valid) {
     throw new Error(`runtime_queue_admission_replay_reference_construction_invalid::${JSON.stringify(validation.errors)}`);
   }
-  return cloneFrozen(reference);
+  // Validation above covers the complete contract. Freeze the only mutable containers directly
+  // instead of canonical-cloning the full reference and its potentially large fingerprint strings.
+  reference.prior_queue_admission_decision_ids = Object.freeze([...reference.prior_queue_admission_decision_ids]);
+  reference.prior_queue_admission_decision_fingerprints = Object.freeze([...reference.prior_queue_admission_decision_fingerprints]);
+  reference.prior_queue_admission_package_ids = Object.freeze([...reference.prior_queue_admission_package_ids]);
+  reference.prior_queue_admission_package_fingerprints = Object.freeze([...reference.prior_queue_admission_package_fingerprints]);
+  return Object.freeze(reference);
 }
 
 module.exports = {
