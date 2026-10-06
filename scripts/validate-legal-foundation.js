@@ -7,7 +7,8 @@ const required = [
   'legal/contracts/legal-effect.schema.json',
   'legal/contracts/legal-source.schema.json',
   'legal/contracts/legal-claim.schema.json',
-  'legal/contracts/legal-evidence-bundle.schema.json'
+  'legal/contracts/legal-evidence-bundle.schema.json',
+  'legal/contracts/legal-source-snapshot.schema.json'
 ];
 
 for (const file of required) {
