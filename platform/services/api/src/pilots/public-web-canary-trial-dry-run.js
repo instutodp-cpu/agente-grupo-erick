@@ -238,6 +238,38 @@ function createSyntheticCanaryContext(plan, overrides = {}) {
   return context;
 }
 
+function createOperationalCanaryContext(plan, bindings = {}) {
+  const required = ['adapterRegistry','lifecycleRegistry','configurationRegistry','secretReferenceRegistry','secretResolver','readinessResult','featureFlagResolver','killSwitchResolver','auditSink'];
+  const missing = required.filter((name) => !bindings[name]);
+  if (!plan || plan.environment !== 'staging' || bindings.production === true || bindings.production_allowed === true) return Object.freeze({ ok:false, status:'PUBLIC_WEB_CANARY_OPERATIONAL_CONTEXT_BLOCKED', blocked_reason:'staging_zero_production_required', production_allowed:false, external_network_called:false });
+  if (missing.length) return Object.freeze({ ok:false, status:'PUBLIC_WEB_CANARY_OPERATIONAL_CONTEXT_BLOCKED', blocked_reason:'operational_binding_missing', missing_dependencies:Object.freeze(missing), production_allowed:false, external_network_called:false });
+  const context = {
+    canarySessionRegistry: bindings.canarySessionRegistry || createPublicWebCanarySessionRegistry({ clock: bindings.clock }),
+    targetAllowlist: bindings.targetAllowlist || createPublicWebCanaryTargetAllowlist({ clock: bindings.clock || (() => nowIso(bindings)) }),
+    adapterRegistry: bindings.adapterRegistry,
+    lifecycleRegistry: bindings.lifecycleRegistry,
+    configurationRegistry: bindings.configurationRegistry,
+    secretReferenceRegistry: bindings.secretReferenceRegistry,
+    secretResolver: bindings.secretResolver,
+    readinessResult: bindings.readinessResult,
+    rateLimitBudget: bindings.rateLimitBudget || createPublicWebPilotBudget({ clock: bindings.clock }),
+    costBudget: bindings.costBudget || createPublicWebPilotBudget({ clock: bindings.clock }),
+    featureFlagResolver: bindings.featureFlagResolver,
+    killSwitchResolver: bindings.killSwitchResolver,
+    tenantAllowlist: bindings.tenantAllowlist || [plan.tenant_id],
+    workspaceAllowlist: bindings.workspaceAllowlist || [plan.workspace_type],
+    userAllowlist: bindings.userAllowlist || [plan.user_id],
+    operatorPolicy: bindings.operatorPolicy || createPublicWebCanaryOperatorPolicy(),
+    auditSink: bindings.auditSink,
+    requireDurableAudit: true,
+    clock: bindings.clock,
+    production_allowed: false,
+    external_network_called: false
+  };
+  context.readiness_evidence_id = hashCanaryEvidence(context.readinessResult);
+  return Object.freeze({ ok:true, status:'PUBLIC_WEB_CANARY_OPERATIONAL_CONTEXT_READY_NOT_EXECUTED', context:Object.freeze(context), production_allowed:false, execution_authorized:false, external_network_called:false });
+}
+
 function buildCanaryRequestFromPlan(plan, context, ids = {}) {
   const preflightSnapshot = context.preflight && context.preflight.binding_snapshot || {};
   const lifecycle = context.lifecycleRegistry && typeof context.lifecycleRegistry.getConnector === 'function'
@@ -442,6 +474,7 @@ module.exports = {
   buildRunnerRequest,
   createPublicWebCanaryTrialDryRun,
   createSyntheticCanaryContext,
+  createOperationalCanaryContext,
   fakeNodeHttpsClient,
   prepareOperationalCanarySession,
   runTrialDryRun
