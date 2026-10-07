@@ -15,7 +15,7 @@ function createPublicWebCanaryOperationalControls({environment=process.env}={}){
   resolveReference(ref,ctx){const valid=this.canResolve(ref)&&ctx&&ctx.environment==='staging'&&ctx.purpose==='public_web_canary_execution';return Object.freeze({resolved:valid,reference_id:valid?REFERENCE_ID:null,exportable:false,credential_material_present:false,blocked_reason:valid?null:'staging_secret_access_context_invalid'});}
  });
  return Object.freeze({target:target.config,secretReference:reference,secretReferenceRegistry,secretResolver,
-  canaryFeatureFlagResolver:async()=>envTrue(environment,FLAG),canaryKillSwitchResolver:async()=>!Object.prototype.hasOwnProperty.call(environment,KILL)||envTrue(environment,KILL),
+  canaryFeatureFlagResolver:()=>envTrue(environment,FLAG),canaryKillSwitchResolver:()=>!Object.prototype.hasOwnProperty.call(environment,KILL)||envTrue(environment,KILL),
   featureFlagResolver:async(key)=>key===BASE_FLAG?envTrue(environment,BASE_FLAG):key===FLAG?envTrue(environment,FLAG):false,killSwitchResolver:async(key)=>key===BASE_KILL?(!Object.prototype.hasOwnProperty.call(environment,BASE_KILL)||envTrue(environment,BASE_KILL)):key===KILL?(!Object.prototype.hasOwnProperty.call(environment,KILL)||envTrue(environment,KILL)):true,
   flag_environment_key:FLAG,kill_switch_environment_key:KILL,base_flag_environment_key:BASE_FLAG,base_kill_switch_environment_key:BASE_KILL,production_allowed:false,credential_material_present:false});
 }
