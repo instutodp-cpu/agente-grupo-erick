@@ -4,6 +4,7 @@ const { createPostgresPublicWebCanaryAuditPersistence } = require('../adapters/p
 const { createPublicWebCanaryPersistentAuditSink } = require('../core/public-web-canary-persistent-audit-sink');
 const { createPublicWebCanaryStagingBootstrap } = require('./public-web-canary-staging-bootstrap');
 const { createPublicWebCanaryOperationalControls } = require('./public-web-canary-operational-controls');
+const { createPublicWebCanaryOperationalBindings } = require('./public-web-canary-operational-bindings');
 const { createOperationalCanaryContext } = require('./public-web-canary-trial-dry-run');
 const { prepareEmailReauthOperationalExecution } = require('../core/public-web-canary-email-reauth-operational-preparation');
 
@@ -16,10 +17,11 @@ function createPublicWebCanaryOperationalPostgresBootstrap({environment=process.
   if(!Number.isInteger(port)||port<1||port>65535) throw new TypeError('postgres_environment_invalid');
   const pool=new PoolClass({host:'127.0.0.1',port,user:required(environment,'POSTGRES_USER'),password:required(environment,'POSTGRES_PASSWORD'),database:required(environment,'POSTGRES_DB')});
   const controls=createPublicWebCanaryOperationalControls({environment});
+  const bindings=createPublicWebCanaryOperationalBindings({controls,clock:runtime.clock});
   const persistence=createPostgresPublicWebCanaryAuditPersistence({pool});
   const auditSink=createPublicWebCanaryPersistentAuditSink({persistence});
   if(runtime.production_allowed===true||runtime.production===true) { pool.end(); return Object.freeze({version:VERSION,bootstrap:Object.freeze({ok:false,blocked_reason:'production_blocked'}),controls,credential_material_present:false,network_call_performed:false,async close(){}}); }
-  const staging=createPublicWebCanaryStagingBootstrap({...runtime,...controls,featureFlagResolver:controls.canaryFeatureFlagResolver,killSwitchResolver:controls.canaryKillSwitchResolver,auditSink,requireDurableAudit:true});
+  const staging=createPublicWebCanaryStagingBootstrap({...runtime,...bindings,...controls,featureFlagResolver:controls.canaryFeatureFlagResolver,killSwitchResolver:controls.canaryKillSwitchResolver,auditSink,requireDurableAudit:true});
   let closed=false;
   function prepareEmailReauthExecution({durableComposition,plan,requested_at}={}) {
     if(!staging.ok) return Object.freeze({ok:false,status:'PUBLIC_WEB_CANARY_EMAIL_REAUTH_OPERATIONAL_PREPARATION_BLOCKED',reason:'operational_bootstrap_not_ready',execution_authorized:false,external_network_called:false,production_allowed:false});
