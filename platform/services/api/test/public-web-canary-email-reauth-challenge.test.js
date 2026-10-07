@@ -1,0 +1,5 @@
+'use strict';const test=require('node:test');const assert=require('node:assert/strict');const {createChallenge}=require('../scripts/public-web-canary-email-reauth-challenge');
+class Pool{constructor(){this.rows=[]}connect(){return Promise.resolve({query:async()=>({rowCount:1,rows:[{challenge_id:'x'}]}),release(){}})}end(){return Promise.resolve()}}
+const env={POSTGRES_PORT:'5432',POSTGRES_USER:'u',POSTGRES_PASSWORD:'opaque',POSTGRES_DB:'d'};
+test('creates fixed staging challenge without execution authority',async()=>{const r=await createChallenge({PoolClass:Pool,env,clock:()=> '2026-10-07T03:30:00.000Z'});assert.equal(r.ok,true);assert.match(r.action_digest,/^sha256:[0-9a-f]{64}$/);assert.equal(r.production_allowed,false);assert.equal(r.execution_authorized,false);assert.equal(r.identity_alias,'owner-primary-email');});
+test('fails closed without database configuration',async()=>{await assert.rejects(()=>createChallenge({PoolClass:Pool,env:{},clock:()=> '2026-10-07T03:30:00.000Z'}),/postgres_configuration_missing/)});
