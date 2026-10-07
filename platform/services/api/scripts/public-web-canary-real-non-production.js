@@ -75,12 +75,15 @@ async function executeOperationalCanary(options = {}) {
   const killed = await runtime.killSwitchResolver('public_web_canary_real_non_production');
   if (killed !== false) return { ok: false, status: 'kill_switch_active', executed: false, real_provider_called: false };
 
+  const composition = raw.operationalComposition;
+  if (!composition || composition.ok !== true || composition.status !== 'PUBLIC_WEB_CANARY_EMAIL_REAUTH_OPERATIONAL_BRIDGE_READY_NOT_CONFIRMED' || composition.execution_authorized !== false || composition.external_network_called !== false || composition.production_allowed !== false || !composition.chain || !composition.bridgeInput || Object.prototype.hasOwnProperty.call(composition.bridgeInput, 'activation_confirmation')) return { ok:false, status:'operational_composition_required', executed:false, real_provider_called:false };
+
   const confirmation = await confirmationReader();
   if (confirmation !== REQUIRED_CONFIRMATION) return { ok: false, status: 'exact_human_confirmation_required', executed: false, real_provider_called: false };
 
-  const bridgeInput = Object.freeze({ ...(raw.bridgeInput || {}), activation_confirmation: confirmation });
+  const bridgeInput = Object.freeze({ ...composition.bridgeInput, activation_confirmation: confirmation });
   const bridge = createPublicWebCanaryRealNonProductionExecutionBridge({ clock: runtime.clock });
-  return bridge.execute({ chain: raw.chain, bridgeInput, runtime });
+  return bridge.execute({ chain: composition.chain, bridgeInput, runtime });
 }
 
 async function main() {
