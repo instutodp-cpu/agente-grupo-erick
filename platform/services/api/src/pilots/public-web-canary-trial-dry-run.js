@@ -407,7 +407,7 @@ function prepareEmailReauthOperationalCanarySession(plan, context = {}, operatio
   const created = context.canarySessionRegistry.requestCanary(request);
   if (!created.ok) return { ok:false, stage:'request', result:created };
   const validated = context.canarySessionRegistry.validateCanary({canary_session_id:request.canary_session_id,change_id:request.change_id+':validate',request_id:request.request_id+':validate',expected_version:created.session.version},context);
-  if (!validated.ok) return { ok:false, stage:'validate', result:validated };
+  if (!validated.ok || validated.session?.canary_state !== 'approved_pending') return { ok:false, stage:'validate', result:validated };
   const approved = context.canarySessionRegistry.approveCanaryWithEmailReauth({canary_session_id:request.canary_session_id,change_id:request.change_id+':approve-email',request_id:request.request_id+':approve-email',expected_version:validated.session.version,grantResult:grant},context);
   if (!approved.ok) return { ok:false, stage:'approve-email', result:approved };
   const active = context.canarySessionRegistry.activateCanary({canary_session_id:request.canary_session_id,change_id:request.change_id+':activate',request_id:request.request_id+':activate',expected_version:approved.session.version},context);
