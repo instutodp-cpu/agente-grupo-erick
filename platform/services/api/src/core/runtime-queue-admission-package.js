@@ -119,7 +119,7 @@ function isSortedUniqueList(list, maxItems = MAX_LIST_ITEMS) {
 
 function computeQueueAdmissionPackageFingerprint(pkg) {
   const { queue_admission_package_fingerprint, queue_admission_package_digest, ...rest } = pkg;
-  return stablePayload(rest);
+  return computeCanonicalContentDigest(rest);
 }
 
 function computeQueueAdmissionPackageDigest(pkg) {

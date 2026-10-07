@@ -1,6 +1,7 @@
 'use strict';
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
+const { computeCanonicalContentDigest } = require('./canonical-content-digest');
 const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
 
 // pr110: "A ordem global deve preservar integralmente a ordem oficial da PR109." `ordered_
@@ -61,7 +62,7 @@ const RUNTIME_QUEUE_PLACEMENT_ORDER_REFERENCE_SAFE_FLAGS = Object.freeze({
 
 function computePlacementOrderFingerprint(reference) {
   const { placement_order_fingerprint, ...rest } = reference;
-  return stablePayload(rest);
+  return computeCanonicalContentDigest(rest);
 }
 
 function validateRuntimeQueuePlacementOrderReference(reference) {

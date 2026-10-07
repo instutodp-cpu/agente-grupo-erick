@@ -297,7 +297,7 @@
     },
     {
       "id": "orchestration-planner-authorization-execution-plan",
-      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence -> canonical gateway-to-runtime assembler -> runtime execution simulation boundary -> runtime readiness -> runtime admission -> runtime scheduler simulation boundary -> runtime worker assignment simulation boundary -> runtime dispatch simulation boundary -> runtime queue admission simulation boundary",
+      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence -> canonical gateway-to-runtime assembler -> runtime execution simulation boundary -> runtime readiness -> runtime admission -> runtime scheduler simulation boundary -> runtime worker assignment simulation boundary -> runtime dispatch simulation boundary -> runtime queue admission simulation boundary -> runtime queue materialization simulation boundary -> runtime queue placement simulation boundary",
       "planned": true,
       "contracted": true,
       "implemented": true,
@@ -332,7 +332,15 @@
         "local focused Dispatch + Queue Admission regression 228/228 passed with exit code 0",
         "clean default-heap same-run E2E passed with exit code 0 and proves QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION",
         "same-run preserves canonical Registry Snapshot logical_sequence through readiness -> admission -> scheduler -> worker assignment -> dispatch -> queue admission",
-        "Queue Admission remains declarative: queue/item/worker/stage/execution operational flags false and production_blocked true"
+        "Queue Admission remains declarative: queue/item/worker/stage/execution operational flags false and production_blocked true",
+        "platform/services/api/src/core/runtime-queue-materialization-assembler.js",
+        "platform/services/api/src/core/runtime-queue-placement-assembler.js",
+        "platform/services/api/test/runtime-queue-materialization-placement-simulation-assemblers.test.js",
+        "local Materialization + Placement assembler regression 3/3 passed with exit code 0",
+        "local combined Admission + Materialization + Placement contract regression 283/283 passed with exit code 0 after fixed-size canonical SHA-256 fingerprint migration",
+        "clean default-heap same-run E2E passed 1/1 with exit code 0 in 1729s and proves QUEUE_MATERIALIZATION_PACKAGE_PREPARED_SIMULATION -> QUEUE_PLACEMENT_PACKAGE_PREPARED_SIMULATION without OOM",
+        "same-run preserves simulation-only fail-closed behavior through queue materialization and queue placement; operational remains false and production_blocked true",
+        "queue admission/materialization/placement fingerprints are fixed-size canonical SHA-256 digests rather than recursively embedded canonical JSON payloads"
       ],
       "limits": [
         "simulation_only",

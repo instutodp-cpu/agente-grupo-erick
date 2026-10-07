@@ -1,7 +1,8 @@
 'use strict';
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
-const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
+const { exactFields, findAgentCoreOperationalMaterial } = require('./agent-identity-contract');
+const { computeCanonicalContentDigest, isCanonicalContentDigest } = require('./canonical-content-digest');
 const { validateAgentSimulationContext } = require('./agent-context-contract');
 const { validateRuntimeQueueAdmissionPackage } = require('./runtime-queue-admission-package');
 const { validateRuntimeQueueAdmissionEntryReference } = require('./runtime-queue-admission-entry-reference');
@@ -72,11 +73,8 @@ function validateRuntimeQueueMaterializationRequest(request) {
   }
 
   if (request.validator_version !== RUNTIME_QUEUE_MATERIALIZATION_REQUEST_VALIDATOR_VERSION) errors.push('validator_version_invalid');
-  try {
-    stablePayload(request);
-  } catch (error) {
-    errors.push(`payload_not_serializable::${error.message}`);
-  }
+  const serializabilityDigest = computeCanonicalContentDigest(request);
+  if (!isCanonicalContentDigest(serializabilityDigest)) errors.push('payload_not_serializable::' + serializabilityDigest);
   errors.push(...findAgentCoreOperationalMaterial(request));
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }
@@ -102,7 +100,12 @@ function buildRuntimeQueueMaterializationRequest(input = {}) {
   if (!validation.valid) {
     throw new Error(`runtime_queue_materialization_request_construction_invalid::${JSON.stringify(validation.errors)}`);
   }
-  return cloneFrozen(request);
+  // Aggregation boundary: preserve already validated immutable predecessor references.
+  // Re-cloning the nested lineage duplicates the execution graph in a genuine same-run.
+  for (const [field] of LIST_NESTED_REFERENCE_VALIDATORS) {
+    request[field] = Object.freeze([...request[field]]);
+  }
+  return Object.freeze(request);
 }
 
 module.exports = {

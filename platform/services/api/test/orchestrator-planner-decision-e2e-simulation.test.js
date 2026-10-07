@@ -50,6 +50,10 @@ const {assembleRuntimeDispatchRequest}=require('../src/core/runtime-dispatch-ass
 const {evaluateRuntimeDispatchRequest}=require('../src/core/runtime-dispatch-boundary');
 const {assembleRuntimeQueueAdmissionRequest}=require('../src/core/runtime-queue-admission-assembler');
 const {evaluateRuntimeQueueAdmissionRequest}=require('../src/core/runtime-queue-admission-boundary');
+const {assembleRuntimeQueueMaterializationRequest}=require('../src/core/runtime-queue-materialization-assembler');
+const {evaluateRuntimeQueueMaterializationRequest}=require('../src/core/runtime-queue-materialization-boundary');
+const {assembleRuntimeQueuePlacementRequest}=require('../src/core/runtime-queue-placement-assembler');
+const {evaluateRuntimeQueuePlacementRequest}=require('../src/core/runtime-queue-placement-boundary');
 
 
 test('same-run planner evidence bundle reaches ready simulation',()=>{
@@ -354,4 +358,28 @@ test('same-run planner evidence bundle reaches ready simulation',()=>{
  assert.equal(queueAdmission.decision.stage_started,false);
  assert.equal(queueAdmission.decision.executed,false);
  assert.equal(queueAdmission.decision.production_blocked,true);
+ const queueMaterializationRequest=assembleRuntimeQueueMaterializationRequest({queueAdmissionRequest,queueAdmissionOutcome:queueAdmission});
+ const queueMaterialization=evaluateRuntimeQueueMaterializationRequest(queueMaterializationRequest,{});
+ assert.equal(queueMaterialization.decision.status,'QUEUE_MATERIALIZATION_PACKAGE_PREPARED_SIMULATION');
+ assert.equal(queueMaterialization.decision.queue_materialization_applied,false);
+ assert.equal(queueMaterialization.decision.queue_created,false);
+ assert.equal(queueMaterialization.decision.queue_item_created,false);
+ assert.equal(queueMaterialization.decision.queue_item_enqueued,false);
+ assert.equal(queueMaterialization.decision.worker_notified,false);
+ assert.equal(queueMaterialization.decision.job_created,false);
+ assert.equal(queueMaterialization.decision.dispatch_executed,false);
+ assert.equal(queueMaterialization.decision.executed,false);
+ assert.equal(queueMaterialization.decision.production_blocked,true);
+ const queuePlacementRequest=assembleRuntimeQueuePlacementRequest({queueMaterializationRequest,queueMaterializationOutcome:queueMaterialization});
+ const queuePlacement=evaluateRuntimeQueuePlacementRequest(queuePlacementRequest,{});
+ assert.equal(queuePlacement.decision.status,'QUEUE_PLACEMENT_PACKAGE_PREPARED_SIMULATION');
+ assert.equal(queuePlacement.decision.queue_placement_applied,false);
+ assert.equal(queuePlacement.decision.queue_created,false);
+ assert.equal(queuePlacement.decision.queue_item_created,false);
+ assert.equal(queuePlacement.decision.queue_item_enqueued,false);
+ assert.equal(queuePlacement.decision.worker_notified,false);
+ assert.equal(queuePlacement.decision.job_created,false);
+ assert.equal(queuePlacement.decision.dispatch_executed,false);
+ assert.equal(queuePlacement.decision.executed,false);
+ assert.equal(queuePlacement.decision.production_blocked,true);
 });

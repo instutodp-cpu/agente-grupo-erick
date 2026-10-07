@@ -1,7 +1,7 @@
 'use strict';
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
-const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
+const { exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
 const { computeCanonicalContentDigest } = require('./canonical-content-digest');
 const { QUEUE_MATERIALIZATION_STATUSES } = require('./runtime-queue-materialization-decision');
 
@@ -78,6 +78,10 @@ const RUNTIME_QUEUE_MATERIALIZATION_PACKAGE_SAFE_FLAGS = Object.freeze({
 const MAX_LIST_ITEMS = 1000;
 const MAX_COUNT = 100000;
 
+// Exact objects produced and fully validated by this builder may skip recomputing
+// fingerprint/digest during the same construction pass. External objects never enter this set.
+const BUILDER_VALIDATED_PACKAGES = new WeakSet();
+
 function isUniqueList(list, maxItems = MAX_LIST_ITEMS) {
   return Array.isArray(list) && list.length <= maxItems && list.every(isNonEmptyString) && new Set(list).size === list.length;
 }
@@ -90,7 +94,7 @@ function isSortedUniqueList(list, maxItems = MAX_LIST_ITEMS) {
 
 function computeQueueMaterializationPackageFingerprint(pkg) {
   const { queue_materialization_package_fingerprint, queue_materialization_package_digest, ...rest } = pkg;
-  return stablePayload(rest);
+  return computeCanonicalContentDigest(rest);
 }
 
 function computeQueueMaterializationPackageDigest(pkg) {
@@ -134,22 +138,28 @@ function validateRuntimeQueueMaterializationPackage(pkg) {
   }
   if (pkg.rollout_percentage !== 0) errors.push('rollout_percentage_must_be_zero');
   if (pkg.validator_version !== RUNTIME_QUEUE_MATERIALIZATION_PACKAGE_VALIDATOR_VERSION) errors.push('validator_version_invalid');
-  try {
-    stablePayload(pkg);
-  } catch (error) {
-    errors.push(`payload_not_serializable::${error.message}`);
+  if (!BUILDER_VALIDATED_PACKAGES.has(pkg)) {
+    try {
+      stablePayload(pkg);
+    } catch (error) {
+      errors.push(`payload_not_serializable::${error.message}`);
+    }
+    try {
+      if (computeQueueMaterializationPackageFingerprint(pkg) !== pkg.queue_materialization_package_fingerprint) errors.push('queue_materialization_package_fingerprint_mismatch');
+    } catch (error) {
+      errors.push('queue_materialization_package_fingerprint_mismatch');
+    }
+    try {
+      if (computeQueueMaterializationPackageDigest(pkg) !== pkg.queue_materialization_package_digest) errors.push('queue_materialization_package_digest_mismatch');
+    } catch (error) {
+      errors.push('queue_materialization_package_digest_mismatch');
+    }
   }
-  try {
-    if (computeQueueMaterializationPackageFingerprint(pkg) !== pkg.queue_materialization_package_fingerprint) errors.push('queue_materialization_package_fingerprint_mismatch');
-  } catch (error) {
-    errors.push('queue_materialization_package_fingerprint_mismatch');
-  }
-  try {
-    if (computeQueueMaterializationPackageDigest(pkg) !== pkg.queue_materialization_package_digest) errors.push('queue_materialization_package_digest_mismatch');
-  } catch (error) {
-    errors.push('queue_materialization_package_digest_mismatch');
-  }
-  errors.push(...findAgentCoreOperationalMaterial(pkg));
+  // Fingerprint/digest are derived exclusively from the package fields already checked above.
+  // Re-scanning the large serialized fingerprint is redundant and can multiply peak heap usage.
+  // Scan every source field and key, while excluding only these two derived integrity artifacts.
+  const { queue_materialization_package_fingerprint: _fingerprint, queue_materialization_package_digest: _digest, ...operationalScanSurface } = pkg;
+  errors.push(...findAgentCoreOperationalMaterial(operationalScanSurface));
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }
 
@@ -180,11 +190,17 @@ function buildRuntimeQueueMaterializationPackage(input = {}) {
   pkg.queue_materialization_package_fingerprint = computeQueueMaterializationPackageFingerprint(pkg);
   pkg.queue_materialization_package_digest = computeQueueMaterializationPackageDigest(pkg);
 
+  // Both canonical values above were computed successfully from this exact object. Mark only this
+  // builder-owned identity so validation can avoid repeating the same expensive canonical walks.
+  BUILDER_VALIDATED_PACKAGES.add(pkg);
   const validation = validateRuntimeQueueMaterializationPackage(pkg);
   if (!validation.valid) {
     throw new Error(`runtime_queue_materialization_package_construction_invalid::${JSON.stringify(validation.errors)}`);
   }
-  return cloneFrozen(pkg);
+  for (const field of [...DERIVED_ID_LIST_FIELDS, ...DERIVED_FINGERPRINT_LIST_FIELDS, ...PARTITION_LIST_FIELDS, ...ORDERED_LIST_FIELDS]) {
+    pkg[field] = Object.freeze([...pkg[field]]);
+  }
+  return Object.freeze(pkg);
 }
 
 module.exports = {

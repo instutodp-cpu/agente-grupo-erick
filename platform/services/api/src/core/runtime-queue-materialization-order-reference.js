@@ -1,6 +1,7 @@
 'use strict';
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
+const { computeCanonicalContentDigest } = require('./canonical-content-digest');
 const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
 
 // pr109: "A ordem de materialização deve derivar exclusivamente da ordem oficial produzida pela
@@ -67,7 +68,7 @@ function isSortedUniqueList(list, maxItems = MAX_LIST_ITEMS) {
 
 function computeMaterializationOrderFingerprint(reference) {
   const { materialization_order_fingerprint, ...rest } = reference;
-  return stablePayload(rest);
+  return computeCanonicalContentDigest(rest);
 }
 
 function validateRuntimeQueueMaterializationOrderReference(reference) {

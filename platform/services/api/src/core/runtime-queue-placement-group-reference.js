@@ -1,6 +1,7 @@
 'use strict';
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
+const { computeCanonicalContentDigest } = require('./canonical-content-digest');
 const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
 
 // pr110: a purely declarative grouping of placed entries sharing the same `placement_group_key` --
@@ -36,7 +37,7 @@ const RUNTIME_QUEUE_PLACEMENT_GROUP_REFERENCE_SAFE_FLAGS = Object.freeze({
 
 function computePlacementGroupFingerprint(reference) {
   const { placement_group_fingerprint, ...rest } = reference;
-  return stablePayload(rest);
+  return computeCanonicalContentDigest(rest);
 }
 
 function validateRuntimeQueuePlacementGroupReference(reference) {
