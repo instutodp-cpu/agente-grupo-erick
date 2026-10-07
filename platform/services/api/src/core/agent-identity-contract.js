@@ -588,7 +588,11 @@ function deepFreeze(value, seen = new WeakSet()) {
 }
 
 function cloneFrozen(value) {
-  return deepFreeze(JSON.parse(JSON.stringify(stableCanonicalize(value))));
+  // stableCanonicalize already creates a detached canonical tree while enforcing the
+  // same serialization constraints (plain JSON values only, no cycles/binary/dates).
+  // Freezing that detached tree directly avoids materializing a second, potentially
+  // enormous JSON string solely to clone data that has already been cloned.
+  return deepFreeze(stableCanonicalize(value));
 }
 
 function exactFields(value, fields, prefix, errors) {

@@ -92,7 +92,7 @@ function isSortedUniqueList(list, maxItems = MAX_LIST_ITEMS) {
 
 function computeQueuePlacementPackageFingerprint(pkg) {
   const { queue_placement_package_fingerprint, queue_placement_package_digest, ...rest } = pkg;
-  return stablePayload(rest);
+  return computeCanonicalContentDigest(rest);
 }
 
 function computeQueuePlacementPackageDigest(pkg) {

@@ -1,6 +1,7 @@
 'use strict';
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
+const { computeCanonicalContentDigest } = require('./canonical-content-digest');
 const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
 const { ADMISSION_STATUSES } = require('./runtime-queue-admission-entry-reference');
 
@@ -55,7 +56,7 @@ function isSanitizedList(list, maxItems) {
 
 function computeMaterializationEntryFingerprint(reference) {
   const { materialization_entry_fingerprint, ...rest } = reference;
-  return stablePayload(rest);
+  return computeCanonicalContentDigest(rest);
 }
 
 function validateRuntimeQueueMaterializationEntryReference(reference) {

@@ -2,6 +2,7 @@
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
 const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
+const { computeCanonicalContentDigest, isCanonicalContentDigest } = require('./canonical-content-digest');
 const { validateAgentSimulationContext } = require('./agent-context-contract');
 const { validateRuntimeDispatchPolicy } = require('./runtime-dispatch-policy');
 const { validateRuntimeWorkerAssignmentRequest } = require('./runtime-worker-assignment-request');
@@ -113,6 +114,12 @@ const LIST_NESTED_REFERENCE_VALIDATORS = Object.freeze([
 
 const MAX_LIST_ITEMS = 200;
 
+// Builder-produced requests are fully validated before being deep-frozen. Remember only those
+// exact immutable objects so downstream aggregation boundaries can reuse the canonical reference
+// without re-walking the complete Planner→Dispatch lineage. Arbitrary/external objects are never
+// trusted by this cache and still receive the full fail-closed validation below.
+const VALIDATED_IMMUTABLE_RUNTIME_DISPATCH_REQUESTS = new WeakSet();
+
 // Mirrors runtime-scheduler-boundary.js's own omitReplayReference exactly, for this layer's own
 // request field: `runtime_dispatch_replay_reference`.
 function omitDispatchReplayReference(obj) {
@@ -122,6 +129,9 @@ function omitDispatchReplayReference(obj) {
 }
 
 function validateRuntimeDispatchRequest(request) {
+  if (isPlainObject(request) && Object.isFrozen(request) && VALIDATED_IMMUTABLE_RUNTIME_DISPATCH_REQUESTS.has(request)) {
+    return { valid: true, errors: [] };
+  }
   const errors = [];
   if (!isPlainObject(request)) return { valid: false, errors: ['runtime_dispatch_request_must_be_object'] };
   exactFields(request, RUNTIME_DISPATCH_REQUEST_FIELDS, 'runtime_dispatch_request', errors);
@@ -160,11 +170,8 @@ function validateRuntimeDispatchRequest(request) {
   }
 
   if (request.validator_version !== RUNTIME_DISPATCH_REQUEST_VALIDATOR_VERSION) errors.push('validator_version_invalid');
-  try {
-    stablePayload(request);
-  } catch (error) {
-    errors.push(`payload_not_serializable::${error.message}`);
-  }
+  const serializabilityDigest = computeCanonicalContentDigest(request);
+  if (!isCanonicalContentDigest(serializabilityDigest)) errors.push(`payload_not_serializable::${serializabilityDigest}`);
   errors.push(...findAgentCoreOperationalMaterial(request));
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }
@@ -215,7 +222,9 @@ function buildRuntimeDispatchRequest(input = {}) {
   if (!validation.valid) {
     throw new Error(`runtime_dispatch_request_construction_invalid::${JSON.stringify(validation.errors)}`);
   }
-  return cloneFrozen(request);
+  const immutableRequest = cloneFrozen(request);
+  VALIDATED_IMMUTABLE_RUNTIME_DISPATCH_REQUESTS.add(immutableRequest);
+  return immutableRequest;
 }
 
 module.exports = {

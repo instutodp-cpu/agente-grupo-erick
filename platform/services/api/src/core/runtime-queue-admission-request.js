@@ -1,7 +1,8 @@
 'use strict';
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
-const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
+const { exactFields, findAgentCoreOperationalMaterial } = require('./agent-identity-contract');
+const { computeCanonicalContentDigest, isCanonicalContentDigest } = require('./canonical-content-digest');
 const { validateAgentSimulationContext } = require('./agent-context-contract');
 const { validateRuntimeQueueAdmissionPolicy } = require('./runtime-queue-admission-policy');
 const { validateRuntimeDispatchRequest } = require('./runtime-dispatch-request');
@@ -162,11 +163,8 @@ function validateRuntimeQueueAdmissionRequest(request) {
   }
 
   if (request.validator_version !== RUNTIME_QUEUE_ADMISSION_REQUEST_VALIDATOR_VERSION) errors.push('validator_version_invalid');
-  try {
-    stablePayload(request);
-  } catch (error) {
-    errors.push(`payload_not_serializable::${error.message}`);
-  }
+  const serializabilityDigest = computeCanonicalContentDigest(request);
+  if (!isCanonicalContentDigest(serializabilityDigest)) errors.push(`payload_not_serializable::${serializabilityDigest}`);
   errors.push(...findAgentCoreOperationalMaterial(request));
   return { valid: errors.length === 0, errors: uniqueSorted(errors) };
 }
@@ -219,7 +217,15 @@ function buildRuntimeQueueAdmissionRequest(input = {}) {
   if (!validation.valid) {
     throw new Error(`runtime_queue_admission_request_construction_invalid::${JSON.stringify(validation.errors)}`);
   }
-  return cloneFrozen(request);
+  // Queue Admission is an aggregation boundary: its nested references are already validated,
+  // canonical immutable contracts from prior layers. Re-cloning the full lineage here duplicates
+  // the entire Planner→Dispatch graph and can exhaust the default Node heap in a genuine same-run.
+  // Copy/freeze only the list containers owned by this request, preserve the canonical references
+  // verbatim, and freeze the new top-level envelope.
+  for (const [field] of LIST_NESTED_REFERENCE_VALIDATORS) {
+    request[field] = Object.freeze([...request[field]]);
+  }
+  return Object.freeze(request);
 }
 
 module.exports = {

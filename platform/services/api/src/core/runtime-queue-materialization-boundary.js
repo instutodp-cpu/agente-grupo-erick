@@ -83,11 +83,20 @@ function evaluateRuntimeQueueMaterializationRequest(request, context = {}) {
     actorId: isPlainObject(admissionPackageRef) ? admissionPackageRef.actor_id : undefined
   };
 
-  const requestFingerprint = computeCanonicalContentDigest(requestIsObject ? request : {});
+  // Compute the canonical request fingerprint lazily. The request validator already performs
+  // the full canonical serializability traversal; eagerly traversing the inherited admission
+  // graph here duplicates peak memory before validation has had a chance to release temporaries.
+  let requestFingerprint;
+  function getRequestFingerprint() {
+    if (requestFingerprint === undefined) {
+      requestFingerprint = computeCanonicalContentDigest(requestIsObject ? request : {});
+    }
+    return requestFingerprint;
+  }
 
   function finalize(status, reasonCodes, derived = {}) {
     return buildQueueMaterializationOutcome(status, reasonCodes, {
-      request, requestFingerprint, canonical, admissionPackageRef, ...derived
+      request, requestFingerprint: getRequestFingerprint(), canonical, admissionPackageRef, ...derived
     }, validatedFlags);
   }
 

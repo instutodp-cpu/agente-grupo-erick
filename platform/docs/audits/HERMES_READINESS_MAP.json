@@ -1,0 +1,521 @@
+{
+  "schema_version": "1.0",
+  "mission": "hermes-self-audit-readiness",
+  "audited_revision": "043f2a80cf97ed1099fdf139ab0254e39fd5e13c",
+  "evidence_states": [
+    "planned",
+    "contracted",
+    "implemented",
+    "tested",
+    "proven_e2e",
+    "operational"
+  ],
+  "rules": {
+    "infer_higher_state": false,
+    "require_exact_revision_for_e2e": true,
+    "require_environment_boundary_for_operational": true,
+    "default_deny": true,
+    "merge_authority": false,
+    "human_merge_required": true
+  },
+  "autonomy_levels": {
+    "A0": [
+      "read",
+      "audit"
+    ],
+    "A1": [
+      "plan",
+      "map_evidence",
+      "simulate"
+    ],
+    "A2": [
+      "create_branch",
+      "edit",
+      "commit",
+      "test",
+      "inspect_ci",
+      "self_correct",
+      "draft_pr"
+    ],
+    "A3": [
+      "approved_scoped_external_action"
+    ],
+    "A4": [
+      "merge_main",
+      "production_publish",
+      "financial_spend",
+      "customer_message",
+      "destructive_action",
+      "secret_or_permission_change"
+    ]
+  },
+  "protected_levels": [
+    "A3",
+    "A4"
+  ],
+  "findings": [
+    {
+      "id": "F-001",
+      "severity": "high",
+      "type": "stale_registry",
+      "evidence": "platform/services/api/src/capabilities/registry.js",
+      "status": "classified",
+      "detail": "The central capability registry is the intent-router availability surface, not global readiness. Its planned state must not be interpreted as absence of internal implementation; global evidence remains in this readiness map."
+    },
+    {
+      "id": "F-002",
+      "severity": "high",
+      "type": "missing_automation",
+      "evidence": "platform/docs/GOVERNANCE_CHECK_REPORT.md",
+      "status": "resolved",
+      "detail": "A deterministic self-audit scanner now exists, has dedicated tests, and is invoked by the named Hermes self-audit readiness gate inside the required core CI workflow. This proves repository automation only; it does not prove E2E or operational runtime."
+    },
+    {
+      "id": "F-003",
+      "severity": "high",
+      "type": "split_truth_source",
+      "evidence": "marketing/registry.yaml",
+      "status": "classified",
+      "detail": "Authority separation is explicit and test-enforced: the core capability registry describes intent-router availability only; marketing/registry.yaml is the Marketing domain contract/policy surface; this readiness map records maturity; runtime evidence alone proves real execution."
+    },
+    {
+      "id": "F-004",
+      "severity": "critical",
+      "type": "operational_evidence",
+      "evidence": "maintainer canary attempt13 / PR #528",
+      "status": "proven"
+    },
+    {
+      "id": "F-005",
+      "severity": "medium",
+      "type": "historical_documentation",
+      "evidence": "platform/docs/HERMES_EXECUTION_PLAN_STAGE_MANIFEST.md",
+      "status": "classified",
+      "detail": "The execution-plan stage manifest document is explicitly marked as historical/provenance for roadmap language while its implemented technical contracts remain normative within their scope."
+    },
+    {
+      "id": "F-006",
+      "severity": "high",
+      "type": "ci_scope_gap",
+      "evidence": ".github/workflows/hermes-core-smoke.yml + .github/workflows/marketing-foundation-ci.yml",
+      "status": "resolved",
+      "detail": "The existing Hermes Core smoke workflow now contains a named Hermes self-audit readiness gate. No extra workflow was created, so required CI remains centralized and the workflow inventory stays at two."
+    },
+    {
+      "id": "F-007",
+      "severity": "medium",
+      "type": "simulation_boundary",
+      "evidence": "platform/docs/HERMES_RUNTIME_*_SIMULATION_CONTRACTS.md",
+      "status": "proven",
+      "detail": "Scheduler, worker, dispatch and queue families have substantial implementation/tests but canonical docs explicitly retain simulation boundaries; operational must not be inferred."
+    },
+    {
+      "id": "F-008",
+      "severity": "high",
+      "type": "evidence_binding_gap",
+      "evidence": "platform/services/api/scripts/hermes-self-audit.js",
+      "status": "resolved",
+      "detail": "Evidence reconciliation now separates explicit static test-to-core references from filename-prefix candidates. The scanner observed 686 direct bindings at revision 0757193ccdb4195485a9600c766b73c0bedea899; 209 prefix-only candidates remain reconciliation candidates and are explicitly not proof that an implementation is untested. No capability readiness state is promoted from this evidence alone."
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "hermes-maintainer-github-bounded",
+      "scope": "staging/scoped",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": true,
+      "operational": true,
+      "evidence_revision": "a5dcd628e0562d52f12ee811a4aeaa9205ead5da",
+      "limits": [
+        "no_merge_authority",
+        "human_merge_required"
+      ]
+    },
+    {
+      "id": "marketing-foundation",
+      "scope": "simulation-first",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "evidence_revision": "ad37a8a572903b231f6791da131167d818aba86f",
+      "limits": [
+        "external_execution_false",
+        "default_execution_deny"
+      ]
+    },
+    {
+      "id": "automated-global-self-audit",
+      "scope": "repository",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "evidence_revision": "66592988d161c7411a51ba306614f6f370c39c6a",
+      "evidence": [
+        "platform/services/api/scripts/hermes-self-audit.js",
+        "platform/services/api/test/hermes-self-audit.test.js"
+      ],
+      "limits": [
+        "not_yet_e2e_proven",
+        "not_operational"
+      ]
+    },
+    {
+      "id": "core-business-domains",
+      "scope": "compras/financeiro/treinamento",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": true,
+      "operational": false,
+      "evidence": [
+        "platform/docs/INTERNAL_BUSINESS_API_READ_ONLY.md",
+        "platform/docs/PERMISSION_MATRIX.md",
+        "platform/services/api/src/core/compras-purchase-summary.js",
+        "platform/services/api/src/core/financeiro-financial-summary.js",
+        "platform/services/api/src/core/treinamento-training-progress-summary.js",
+        "platform/services/api/src/adapters/internal-business/grupo-erick-domain-read-adapters.js",
+        "platform/services/api/test/grupo-erick-domain-read-adapters.test.js",
+        "CI #1481 at 0a0bda448ba95d2b11493fb915419a772106f4e6",
+        "platform/services/api/test/grupo-erick-business-domains-e2e-simulation.test.js",
+        "CI #1482 at b78da51165db747b1f24974fda36443064c9b019"
+      ],
+      "limits": [
+        "proven_e2e_scope_is_local_simulated_datastore_only",
+        "no_real_datastore_provider",
+        "no_operational_evidence",
+        "protected_actions_remain_human_gated"
+      ],
+      "evidence_revision": "b78da51165db747b1f24974fda36443064c9b019"
+    },
+    {
+      "id": "runtime-scheduler-worker-dispatch-queue",
+      "scope": "simulation contracts",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "limits": [
+        "simulation_boundary"
+      ]
+    },
+    {
+      "id": "runtime-queue-worker-dispatch-handoff",
+      "scope": "simulation queue admission/materialization/placement -> worker assignment -> dispatch -> public-web canary handoff",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": true,
+      "operational": false,
+      "evidence_revision": "29dfa7d066004865d721af9ba8ea4028e0225dd5",
+      "evidence": [
+        "platform/services/api/test/helpers/runtime-queue-placement-simulation-test-data.js",
+        "platform/services/api/test/helpers/public-web-canary-queued-handoff-test-helper.js",
+        "platform/services/api/test/public-web-canary-queued-simulation-boundary.test.js",
+        "CI #1484 at 29dfa7d066004865d721af9ba8ea4028e0225dd5"
+      ],
+      "limits": [
+        "simulation_only",
+        "scheduler_not_in_this_e2e_scope",
+        "no_real_queue_or_worker",
+        "no_real_provider",
+        "no_operational_evidence",
+        "protected_actions_remain_human_gated"
+      ]
+    },
+    {
+      "id": "agent-orchestration-stack",
+      "scope": "planner/decision/execution-plan",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "limits": [
+        "no_operational_evidence_in_baseline"
+      ]
+    },
+    {
+      "id": "planner-reference-bridge",
+      "scope": "real planner output -> canonical references -> same-run readiness evidence -> decision engine",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": true,
+      "operational": false,
+      "evidence": [
+        "platform/services/api/src/core/orchestrator-plan-reference.js",
+        "platform/services/api/test/orchestrator-planner-reference-bridge.test.js",
+        "platform/services/api/test/orchestrator-planner-decision-e2e-simulation.test.js",
+        "CI #1488 success at 475a7cce09b088d949e0f7e62d728012d3b6ae68"
+      ],
+      "limits": [
+        "execution_plan_and_gateway_not_in_this_e2e_scope",
+        "agent_orchestration_stack_not_promoted",
+        "simulation_only",
+        "no_execution_authority",
+        "no_operational_evidence"
+      ],
+      "evidence_revision": "475a7cce09b088d949e0f7e62d728012d3b6ae68"
+    },
+    {
+      "id": "orchestration-authorization-boundary",
+      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": true,
+      "operational": false,
+      "evidence": [
+        "platform/services/api/test/orchestrator-planner-decision-e2e-simulation.test.js",
+        "CI #1490 success at 11d820b133fe140c2030a46ec7ffb04d58856a13"
+      ],
+      "limits": [
+        "execution_plan_and_gateway_not_in_this_e2e_scope",
+        "simulation_only",
+        "execution_authorized_false",
+        "no_real_execution",
+        "no_operational_evidence",
+        "protected_actions_remain_human_gated"
+      ],
+      "evidence_revision": "11d820b133fe140c2030a46ec7ffb04d58856a13"
+    },
+    {
+      "id": "orchestration-planner-authorization-execution-plan",
+      "scope": "real planner -> same-run readiness evidence -> decision engine -> execution authorization boundary -> canonical execution plan request -> execution plan engine -> exact engine binding ledger -> execution gateway with externally verified CI evidence -> canonical gateway-to-runtime assembler -> runtime execution simulation boundary -> runtime readiness -> runtime admission -> runtime scheduler simulation boundary -> runtime worker assignment simulation boundary -> runtime dispatch simulation boundary -> runtime queue admission simulation boundary -> runtime queue materialization simulation boundary -> runtime queue placement simulation boundary",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": true,
+      "operational": false,
+      "evidence_revision": "234aa7df2558a79b011125e98493c9bb5787aa8f",
+      "evidence": [
+        "platform/services/api/src/core/execution-plan-request-assembler.js",
+        "platform/services/api/src/core/architecture-gate-ci-evidence-assembler.js",
+        "platform/services/api/src/core/execution-plan-engine.js exposes its exact validated binding ledger to downstream composition",
+        "platform/services/api/src/core/gateway-runtime-simulation-assembler.js",
+        "platform/services/api/test/gateway-runtime-simulation-assembler.test.js",
+        "platform/services/api/test/orchestrator-planner-decision-e2e-simulation.test.js",
+        "CI run 37229042342 success at 223868e8065c9443dea5a40aaa082ef88bfcb7d4 for the preceding same-run gateway proof",
+        "local focused regression 117/117 passed for gateway-to-runtime composition before readiness promotion",
+        "platform/services/api/src/core/runtime-readiness-admission-assembler.js",
+        "platform/services/api/test/runtime-readiness-admission-simulation-assembler.test.js",
+        "same-run E2E proves RUNTIME_READY_SIMULATION -> RUNTIME_ADMITTED_SIMULATION while execution remains unauthorized and production blocked",
+        "platform/services/api/src/core/runtime-scheduler-assembler.js",
+        "platform/services/api/test/runtime-scheduler-simulation-assembler.test.js",
+        "same-run E2E proves SCHEDULER_PACKAGE_PREPARED_SIMULATION while scheduler/queue/worker/dispatch/execution remain inactive and production blocked",
+        "platform/services/api/src/core/runtime-worker-assignment-assembler.js",
+        "platform/services/api/test/runtime-worker-assignment-simulation-assembler.test.js",
+        "same-run E2E proves WORKER_ASSIGNMENT_PACKAGE_PREPARED_SIMULATION while worker assignment/reservation/start, dispatch and execution remain inactive and production blocked",
+        "platform/services/api/src/core/runtime-dispatch-assembler.js",
+        "platform/services/api/test/runtime-dispatch-simulation-assembler.test.js",
+        "same-run E2E proves DISPATCH_PACKAGE_PREPARED_SIMULATION while dispatch/worker/stage/execution remain inactive and production blocked",
+        "local combined regression 169/169 passed for same-run composition through dispatch before CI delivery",
+        "platform/services/api/src/core/runtime-queue-admission-assembler.js",
+        "platform/services/api/test/runtime-queue-admission-simulation-assembler.test.js",
+        "local focused Dispatch + Queue Admission regression 228/228 passed with exit code 0",
+        "clean default-heap same-run E2E passed with exit code 0 and proves QUEUE_ADMISSION_PACKAGE_PREPARED_SIMULATION",
+        "same-run preserves canonical Registry Snapshot logical_sequence through readiness -> admission -> scheduler -> worker assignment -> dispatch -> queue admission",
+        "Queue Admission remains declarative: queue/item/worker/stage/execution operational flags false and production_blocked true",
+        "platform/services/api/src/core/runtime-queue-materialization-assembler.js",
+        "platform/services/api/src/core/runtime-queue-placement-assembler.js",
+        "platform/services/api/test/runtime-queue-materialization-placement-simulation-assemblers.test.js",
+        "local Materialization + Placement assembler regression 3/3 passed with exit code 0",
+        "local combined Admission + Materialization + Placement contract regression 283/283 passed with exit code 0 after fixed-size canonical SHA-256 fingerprint migration",
+        "clean default-heap same-run E2E passed 1/1 with exit code 0 in 1729s and proves QUEUE_MATERIALIZATION_PACKAGE_PREPARED_SIMULATION -> QUEUE_PLACEMENT_PACKAGE_PREPARED_SIMULATION without OOM",
+        "same-run preserves simulation-only fail-closed behavior through queue materialization and queue placement; operational remains false and production_blocked true",
+        "queue admission/materialization/placement fingerprints are fixed-size canonical SHA-256 digests rather than recursively embedded canonical JSON payloads"
+      ],
+      "limits": [
+        "simulation_only",
+        "architecture_ci_evidence_is_external_and_revision_bound",
+        "execution_authorized_false",
+        "execution_started_false",
+        "executed_false",
+        "production_blocked_true",
+        "no_real_execution",
+        "no_operational_evidence",
+        "protected_actions_remain_human_gated"
+      ]
+    },
+    {
+      "id": "orchestration-execution-plan-gateway",
+      "scope": "execution plan stage manifest -> execution plan engine -> execution gateway",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": true,
+      "operational": false,
+      "evidence_revision": "8d241ab597b62b0a23246995b1e81f9867332e75",
+      "evidence": [
+        "platform/services/api/test/orchestration-execution-plan-gateway-e2e-simulation.test.js",
+        "platform/services/api/test/helpers/execution-gateway-test-data.js"
+      ],
+      "limits": [
+        "simulation_only",
+        "planner_to_decision_to_execution_plan_adapter_not_proven",
+        "agent_orchestration_stack_not_promoted",
+        "no_real_execution",
+        "no_operational_evidence",
+        "protected_actions_remain_human_gated"
+      ]
+    },
+    {
+      "id": "memory-selection",
+      "scope": "core selection",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false
+    },
+    {
+      "id": "model-selection-provider-contracts",
+      "scope": "core model boundary",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false
+    },
+    {
+      "id": "tool-workflow-contracts",
+      "scope": "core contracts",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false
+    },
+    {
+      "id": "public-web-canary",
+      "scope": "non-production canary",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "limits": [
+        "readiness_only_evidence",
+        "historical_fake_dry_run_not_operational_proof",
+        "human_authorization_required"
+      ]
+    },
+    {
+      "id": "transcription-stack",
+      "scope": "provider/transport/runtime",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "limits": [
+        "synthetic_only",
+        "real_provider_disabled",
+        "external_network_disabled",
+        "production_blocked"
+      ]
+    }
+  ],
+  "inventory": {
+    "platform_docs": 138,
+    "core_source_files": 704,
+    "api_tests": 563,
+    "github_workflows": 2,
+    "marketing_files": 202,
+    "core_family_counts": {
+      "hermes_maintainer": 178,
+      "public_web": 57,
+      "runtime_queue": 36,
+      "transcription_provider": 28,
+      "runtime_execution": 26,
+      "runtime_worker": 19,
+      "runtime_dispatch": 18,
+      "execution_plan": 16,
+      "runtime_scheduler": 14,
+      "execution_authorization": 14,
+      "model_selection": 12,
+      "canonical_governance": 11,
+      "orchestrator_decision": 10,
+      "memory_selection": 10,
+      "execution_gateway": 10,
+      "context_assembly": 10
+    }
+  },
+  "autonomy": {
+    "current_max_level": "A2_proven_bounded",
+    "authorized_now": [
+      "A0",
+      "A1"
+    ],
+    "candidate": "A2",
+    "protected_level": "A4",
+    "a2_canary": {
+      "status": "proven_to_human_boundary",
+      "objective": "From one bounded repository objective, independently audit, plan, create an isolated branch, make a harmless real change, test the exact resulting revision, inspect/correct CI if needed, create a Draft PR, attach evidence, and stop before merge.",
+      "execution_path": "hermes-maintainer-github-bounded",
+      "prerequisite_capability": "hermes-maintainer-github-bounded",
+      "prerequisite_e2e_revision": "a5dcd628e0562d52f12ee811a4aeaa9205ead5da",
+      "required_controls": [
+        "bounded_objective",
+        "isolated_branch",
+        "harmless_change",
+        "exact_revision_test",
+        "draft_pr_only",
+        "merge_authority_false",
+        "human_merge_required",
+        "production_false"
+      ],
+      "pass_requires": [
+        "audit_evidence",
+        "plan_evidence",
+        "branch_receipt",
+        "edit_receipt",
+        "exact_revision_test_receipt",
+        "ci_evidence",
+        "draft_pr_receipt",
+        "final_stop_at_human_boundary"
+      ],
+      "forbidden": [
+        "merge",
+        "production_publish",
+        "financial_spend",
+        "customer_message",
+        "destructive_action",
+        "secret_or_permission_change"
+      ],
+      "evidence": {
+        "draft_pr": 530,
+        "base_revision": "a587b0d0fba603a286c673ff1f89ebc670e885a9",
+        "initial_revision": "6fb7e0a8f2867db6d4e8bd2fde103d7dae09e82f",
+        "corrected_revision": "4767ae4546b39c0c5c56bc1111519ab3103a0e16",
+        "ci_run": 37164249309,
+        "ci_conclusion": "success",
+        "self_correction": "inventory_drift platform_docs 136 -> 137",
+        "stopped_before_merge": true
+      }
+    }
+  }
+}
