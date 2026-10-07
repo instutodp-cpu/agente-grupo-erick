@@ -75,8 +75,11 @@ async function executeOperationalCanary(options = {}) {
   const killed = await runtime.killSwitchResolver('public_web_canary_real_non_production');
   if (killed !== false) return { ok: false, status: 'kill_switch_active', executed: false, real_provider_called: false };
 
-  const composition = raw.operationalComposition;
+  const prepared = raw.preparedExecution;
+  const composition = prepared && prepared.ok === true ? prepared.operationalComposition : raw.operationalComposition;
+  if (prepared && (prepared.status !== 'PUBLIC_WEB_CANARY_EMAIL_REAUTH_OPERATIONAL_PREPARED_ACTIVE_NOT_EXECUTED' || prepared.execution_authorized !== false || prepared.external_network_called !== false || prepared.production_allowed !== false || !prepared.lifecycle || !prepared.lifecycle.session || prepared.lifecycle.session.canary_state !== 'active')) return { ok:false, status:'operational_preparation_required', executed:false, real_provider_called:false };
   if (!composition || composition.ok !== true || composition.status !== 'PUBLIC_WEB_CANARY_EMAIL_REAUTH_OPERATIONAL_BRIDGE_READY_NOT_CONFIRMED' || composition.execution_authorized !== false || composition.external_network_called !== false || composition.production_allowed !== false || !composition.chain || !composition.bridgeInput || Object.prototype.hasOwnProperty.call(composition.bridgeInput, 'activation_confirmation')) return { ok:false, status:'operational_composition_required', executed:false, real_provider_called:false };
+  if (prepared && composition.bridgeInput.runner_request?.canary_session_id !== prepared.lifecycle.session.canary_session_id) return { ok:false, status:'active_session_binding_required', executed:false, real_provider_called:false };
 
   const confirmation = await confirmationReader();
   if (confirmation !== REQUIRED_CONFIRMATION) return { ok: false, status: 'exact_human_confirmation_required', executed: false, real_provider_called: false };

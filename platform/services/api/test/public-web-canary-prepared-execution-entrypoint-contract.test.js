@@ -1,0 +1,4 @@
+'use strict';const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');
+const source=fs.readFileSync(require.resolve('../scripts/public-web-canary-real-non-production'),'utf8');
+test('dedicated entrypoint requires active prepared session before human confirmation',()=>{const prepared=source.indexOf("prepared.lifecycle.session.canary_state !== 'active'");const confirmation=source.indexOf('const confirmation = await confirmationReader()');assert.ok(prepared>0);assert.ok(confirmation>prepared);assert.match(source,/active_session_binding_required/);});
+test('prepared execution cannot carry execution authority into confirmation boundary',()=>{assert.match(source,/prepared.execution_authorized !== false/);assert.match(source,/prepared.external_network_called !== false/);assert.match(source,/prepared.production_allowed !== false/);});
