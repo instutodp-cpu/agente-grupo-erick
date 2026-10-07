@@ -11,16 +11,18 @@ const {
   createPublicWebCanaryRealNonProductionExecutionBridge
 } = require('../src/pilots/public-web-canary-real-non-production-execution-bridge');
 
-const ALLOWED_FLAGS = new Set(['--bootstrap']);
+const ALLOWED_FLAGS = new Set(['--bootstrap', '--preflight']);
 const BOOTSTRAP_PATH = path.resolve(__dirname, '../config/public-web-canary-real-non-production.local.js');
 
 function parseArgs(argv) {
-  if (argv.length === 0) return { ok: true, bootstrapPath: BOOTSTRAP_PATH };
-  if (argv.length !== 2 || argv[0] !== '--bootstrap' || !argv[1] || argv[1].startsWith('--')) {
-    return { ok: false, reason: 'only_bootstrap_path_is_allowed' };
+  if (argv.length === 0) return { ok: true, bootstrapPath: BOOTSTRAP_PATH, preflight: false };
+  let bootstrapPath = BOOTSTRAP_PATH; let preflight = false;
+  for (let i=0;i<argv.length;i+=1) {
+    const flag=argv[i]; if(!ALLOWED_FLAGS.has(flag)) return {ok:false,reason:'only_bootstrap_and_preflight_are_allowed'};
+    if(flag==='--preflight'){ if(preflight)return {ok:false,reason:'duplicate_preflight'}; preflight=true; continue; }
+    const value=argv[i+1]; if(!value||value.startsWith('--'))return {ok:false,reason:'bootstrap_path_required'}; bootstrapPath=path.resolve(value); i+=1;
   }
-  if (!ALLOWED_FLAGS.has(argv[0])) return { ok: false, reason: 'unknown_argument' };
-  return { ok: true, bootstrapPath: path.resolve(argv[1]) };
+  return { ok: true, bootstrapPath, preflight };
 }
 
 function loadBootstrap(bootstrapPath) {
@@ -35,6 +37,24 @@ async function readExactConfirmation() {
   const rl = readline.createInterface({ input, output });
   try { return await rl.question('Confirmacao: '); }
   finally { rl.close(); }
+}
+
+
+async function preflightOperationalCanary(options = {}) {
+  const raw = options.bootstrap;
+  if (!raw) return { ok:false, status:'operational_bootstrap_not_configured', ready:false, network_called:false, secret_resolved:false };
+  const runtime = createPublicWebCanaryStagingBootstrap(raw.runtime || {});
+  if (!runtime.ok) return { ...runtime, status:'operational_runtime_blocked', ready:false, network_called:false, secret_resolved:false };
+  const checks = [];
+  const featureEnabled = await runtime.featureFlagResolver('public_web_canary_real_non_production');
+  checks.push({check:'feature_flag',ok:featureEnabled===true});
+  const killed = await runtime.killSwitchResolver('public_web_canary_real_non_production');
+  checks.push({check:'kill_switch',ok:killed===false});
+  checks.push({check:'durable_audit_contract',ok:runtime.requireDurableAudit===true && runtime.auditSink && runtime.auditSink.durable===true && typeof runtime.auditSink.appendDurably==='function' && typeof runtime.auditSink.ensureReady==='function'});
+  if (checks.at(-1).ok) { try { const r=await runtime.auditSink.ensureReady(); checks.push({check:'durable_audit_ready',ok:!!r&&r.ok===true}); } catch { checks.push({check:'durable_audit_ready',ok:false}); } }
+  checks.push({check:'secret_reference_only',ok:runtime.secretReferenceRegistry && runtime.secretResolver && typeof runtime.secretResolver.resolve==='function'});
+  const ready=checks.every(x=>x.ok);
+  return Object.freeze({ok:ready,status:ready?'OPERATIONAL_CANARY_PREFLIGHT_READY':'OPERATIONAL_CANARY_PREFLIGHT_BLOCKED',ready,checks:Object.freeze(checks.map(Object.freeze)),network_called:false,secret_resolved:false,execution_started:false,production_allowed:false});
 }
 
 async function executeOperationalCanary(options = {}) {
@@ -63,7 +83,7 @@ async function main() {
   if (!parsed.ok) { output.write(JSON.stringify({ ok:false, status:'cli_blocked', reason:parsed.reason })+'\n'); process.exitCode=2; return; }
   const bootstrap = loadBootstrap(parsed.bootstrapPath);
   try {
-    const result = await executeOperationalCanary({ bootstrap });
+    const result = parsed.preflight ? await preflightOperationalCanary({ bootstrap }) : await executeOperationalCanary({ bootstrap });
     output.write(JSON.stringify(result, null, 2)+'\n');
     process.exitCode = result && result.ok ? 0 : 2;
   } catch (_error) {
@@ -73,4 +93,4 @@ async function main() {
 }
 
 if (require.main === module) main();
-module.exports = { BOOTSTRAP_PATH, parseArgs, executeOperationalCanary };
+module.exports = { BOOTSTRAP_PATH, parseArgs, preflightOperationalCanary, executeOperationalCanary };
