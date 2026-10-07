@@ -21,7 +21,9 @@ const required = [
   'legal/contracts/legal-clause-playbook.schema.json',
   'legal/contracts/legal-risk.schema.json',
   'legal/contracts/legal-process.schema.json',
-  'legal/contracts/legal-process-event.schema.json'
+  'legal/contracts/legal-process-event.schema.json',
+  'legal/contracts/legal-deadline.schema.json',
+  'legal/contracts/legal-deadline-policy.schema.json'
 ];
 
 for (const file of required) {
