@@ -610,7 +610,7 @@ test('bridge never restores a consumed reservation when runner throws', async ()
   );
 });
 
-test('bridge is dormant: it is not wired into API index or the operational CLI', () => {
+test('bridge is isolated from API and legacy CLI; dedicated entrypoint owns controlled reachability', () => {
   const apiIndex = fs.readFileSync(
     path.join(__dirname, '..', 'src', 'index.js'),
     'utf8'
@@ -634,5 +634,15 @@ test('bridge is dormant: it is not wired into API index or the operational CLI',
       'public-web-canary-real-non-production-execution-bridge'
     ),
     false
+  );
+  const dedicatedEntrypoint = fs.readFileSync(
+    path.join(__dirname, '..', 'scripts', 'public-web-canary-real-non-production.js'),
+    'utf8'
+  );
+  assert.equal(
+    dedicatedEntrypoint.includes(
+      'public-web-canary-real-non-production-execution-bridge'
+    ),
+    true
   );
 });
