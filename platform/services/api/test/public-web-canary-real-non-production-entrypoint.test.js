@@ -4,6 +4,11 @@ const test = require('node:test');
 const path = require('node:path');
 const { parseArgs, preflightOperationalCanary, executeOperationalCanary } = require('../scripts/public-web-canary-real-non-production');
 
+
+function operationalComposition(){
+  return {ok:true,status:'PUBLIC_WEB_CANARY_EMAIL_REAUTH_OPERATIONAL_BRIDGE_READY_NOT_CONFIRMED',execution_authorized:false,external_network_called:false,production_allowed:false,chain:{grantResult:{}},bridgeInput:{}};
+}
+
 function blockedRuntime(overrides={}) {
   return { operationalBootstrapConfigured:true, stagingRealTransportOptIn:true, environment:'staging', production:false,
     production_allowed:false, maximum_requests:1, rollout_percentage:1,
@@ -37,8 +42,10 @@ test('kill switch blocks before human confirmation or bridge',async()=>{
   assert.equal(r.status,'kill_switch_active'); assert.equal(confirmed,false); assert.equal(r.executed,false);
 });
 
+test('missing canonical composition blocks before asking human confirmation',async()=>{ let confirmed=false; const r=await executeOperationalCanary({bootstrap:{runtime:blockedRuntime({featureFlagResolver:async()=>true})},confirmationReader:async()=>{confirmed=true;return 'EXECUTAR CANARY PUBLIC WEB';}}); assert.equal(r.status,'operational_composition_required'); assert.equal(confirmed,false); });
+
 test('wrong human phrase blocks before bridge',async()=>{
-  const r=await executeOperationalCanary({bootstrap:{runtime:blockedRuntime({featureFlagResolver:async()=>true})},confirmationReader:async()=> 'NAO'});
+  const r=await executeOperationalCanary({bootstrap:{runtime:blockedRuntime({featureFlagResolver:async()=>true}),operationalComposition:operationalComposition()},confirmationReader:async()=> 'NAO'});
   assert.equal(r.status,'exact_human_confirmation_required'); assert.equal(r.executed,false);
 });
 
@@ -61,3 +68,5 @@ test('preflight blocks when durable audit is not operationally ready',async()=>{
   assert.equal(r.ok,false); assert.equal(r.status,'OPERATIONAL_CANARY_PREFLIGHT_BLOCKED');
   assert.equal(r.checks.find(x=>x.check==='durable_audit_ready').ok,false);
 });
+
+test('bootstrap cannot preinject activation confirmation',async()=>{let confirmed=false;const c=operationalComposition();c.bridgeInput={activation_confirmation:'EXECUTAR CANARY PUBLIC WEB'};const r=await executeOperationalCanary({bootstrap:{runtime:blockedRuntime({featureFlagResolver:async()=>true}),operationalComposition:c},confirmationReader:async()=>{confirmed=true;return 'EXECUTAR CANARY PUBLIC WEB';}});assert.equal(r.status,'operational_composition_required');assert.equal(confirmed,false);});
