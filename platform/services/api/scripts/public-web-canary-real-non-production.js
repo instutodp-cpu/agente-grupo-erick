@@ -40,10 +40,15 @@ async function readExactConfirmation() {
 }
 
 
+function normalizeRuntime(raw) {
+  if (raw && raw.ok === true && raw.operationalBootstrapConfigured === true && raw.stagingRealTransportOptIn === true && raw.environment === 'staging' && raw.production === false && raw.production_allowed === false && raw.realTransport === true) return raw;
+  return createPublicWebCanaryStagingBootstrap(raw || {});
+}
+
 async function preflightOperationalCanary(options = {}) {
   const raw = options.bootstrap;
   if (!raw) return { ok:false, status:'operational_bootstrap_not_configured', ready:false, network_called:false, secret_resolved:false };
-  const runtime = createPublicWebCanaryStagingBootstrap(raw.runtime || {});
+  const runtime = normalizeRuntime(raw.runtime || {});
   if (!runtime.ok) return { ...runtime, status:'operational_runtime_blocked', ready:false, network_called:false, secret_resolved:false };
   const checks = [];
   const featureEnabled = await runtime.featureFlagResolver('public_web_canary_real_non_production');
@@ -52,7 +57,7 @@ async function preflightOperationalCanary(options = {}) {
   checks.push({check:'kill_switch',ok:killed===false});
   checks.push({check:'durable_audit_contract',ok:runtime.requireDurableAudit===true && runtime.auditSink && runtime.auditSink.durable===true && typeof runtime.auditSink.appendDurably==='function' && typeof runtime.auditSink.ensureReady==='function'});
   if (checks.at(-1).ok) { try { const r=await runtime.auditSink.ensureReady(); checks.push({check:'durable_audit_ready',ok:!!r&&r.ok===true}); } catch { checks.push({check:'durable_audit_ready',ok:false}); } }
-  checks.push({check:'secret_reference_only',ok:runtime.secretReferenceRegistry && runtime.secretResolver && typeof runtime.secretResolver.resolve==='function'});
+  checks.push({check:'secret_reference_only',ok:runtime.secretReferenceRegistry && typeof runtime.secretReferenceRegistry.getSecretReference==='function' && runtime.secretResolver && typeof runtime.secretResolver.resolveReference==='function'});
   const ready=checks.every(x=>x.ok);
   return Object.freeze({ok:ready,status:ready?'OPERATIONAL_CANARY_PREFLIGHT_READY':'OPERATIONAL_CANARY_PREFLIGHT_BLOCKED',ready,checks:Object.freeze(checks.map(Object.freeze)),network_called:false,secret_resolved:false,execution_started:false,production_allowed:false});
 }
@@ -62,7 +67,7 @@ async function executeOperationalCanary(options = {}) {
   const raw = options.bootstrap;
   if (!raw) return { ok: false, status: 'operational_bootstrap_not_configured', executed: false, real_provider_called: false };
 
-  const runtime = createPublicWebCanaryStagingBootstrap(raw.runtime || {});
+  const runtime = normalizeRuntime(raw.runtime || {});
   if (!runtime.ok) return { ...runtime, status: 'operational_runtime_blocked', executed: false, real_provider_called: false };
 
   const featureEnabled = await runtime.featureFlagResolver('public_web_canary_real_non_production');

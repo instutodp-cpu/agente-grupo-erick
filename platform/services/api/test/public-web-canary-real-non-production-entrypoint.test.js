@@ -47,7 +47,7 @@ test('preflight proves controls without confirmation, secret resolution, or netw
   let auditReady=0, resolved=0;
   const runtime=blockedRuntime({featureFlagResolver:async()=>true,killSwitchResolver:async()=>false,requireDurableAudit:true,
     auditSink:{durable:true,appendDurably:async()=>({ok:true}),ensureReady:async()=>{auditReady++;return {ok:true};}},
-    secretResolver:{resolve:async()=>{resolved++;throw new Error('must not resolve');}}});
+    secretReferenceRegistry:{getSecretReference:()=>({reference_id:'x'})},secretResolver:{resolveReference:async()=>{resolved++;throw new Error('must not resolve');}}});
   const r=await preflightOperationalCanary({bootstrap:{runtime}});
   assert.equal(r.ok,true); assert.equal(r.ready,true); assert.equal(auditReady,1); assert.equal(resolved,0);
   assert.equal(r.network_called,false); assert.equal(r.secret_resolved,false); assert.equal(r.execution_started,false);
@@ -56,7 +56,7 @@ test('preflight proves controls without confirmation, secret resolution, or netw
 test('preflight blocks when durable audit is not operationally ready',async()=>{
   const runtime=blockedRuntime({featureFlagResolver:async()=>true,requireDurableAudit:true,
     auditSink:{durable:true,appendDurably:async()=>({ok:true}),ensureReady:async()=>{throw new Error('db unavailable');}},
-    secretResolver:{resolve:async()=> 'never'} });
+    secretReferenceRegistry:{getSecretReference:()=>({reference_id:'x'})},secretResolver:{resolveReference:async()=> 'never'} });
   const r=await preflightOperationalCanary({bootstrap:{runtime}});
   assert.equal(r.ok,false); assert.equal(r.status,'OPERATIONAL_CANARY_PREFLIGHT_BLOCKED');
   assert.equal(r.checks.find(x=>x.check==='durable_audit_ready').ok,false);
