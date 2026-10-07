@@ -23,7 +23,8 @@ const required = [
   'legal/contracts/legal-process.schema.json',
   'legal/contracts/legal-process-event.schema.json',
   'legal/contracts/legal-deadline.schema.json',
-  'legal/contracts/legal-deadline-policy.schema.json'
+  'legal/contracts/legal-deadline-policy.schema.json',
+  'legal/contracts/legal-draft.schema.json'
 ];
 
 for (const file of required) {
