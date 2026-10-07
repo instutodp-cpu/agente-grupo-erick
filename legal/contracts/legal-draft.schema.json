@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalDraft",
+  "type": "object",
+  "required": [
+    "draft_id",
+    "matter_scope",
+    "draft_type",
+    "template_ref",
+    "template_version",
+    "evidence_bundle_ref",
+    "sections",
+    "status",
+    "external_execution"
+  ],
+  "properties": {
+    "draft_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "matter_scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "draft_type": {
+      "enum": [
+        "contract",
+        "notice",
+        "legal_opinion",
+        "policy",
+        "petition_draft",
+        "corporate_document",
+        "other"
+      ]
+    },
+    "template_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "template_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_bundle_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "section_id",
+          "label",
+          "content",
+          "claim_refs"
+        ],
+        "properties": {
+          "section_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "label": {
+            "enum": [
+              "FACT",
+              "INTERNAL_DOCUMENT",
+              "LEGAL_AUTHORITY",
+              "PRECEDENT",
+              "INFERENCE",
+              "RECOMMENDATION",
+              "PROCEDURAL"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "claim_refs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "blocked_evidence",
+        "ready_for_review",
+        "rejected"
+      ]
+    },
+    "external_execution": {
+      "const": false
+    },
+    "review_run_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
