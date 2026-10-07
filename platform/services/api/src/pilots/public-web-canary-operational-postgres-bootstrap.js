@@ -19,7 +19,7 @@ function createPublicWebCanaryOperationalPostgresBootstrap({environment=process.
   const persistence=createPostgresPublicWebCanaryAuditPersistence({pool});
   const auditSink=createPublicWebCanaryPersistentAuditSink({persistence});
   if(runtime.production_allowed===true||runtime.production===true) { pool.end(); return Object.freeze({version:VERSION,bootstrap:Object.freeze({ok:false,blocked_reason:'production_blocked'}),controls,credential_material_present:false,network_call_performed:false,async close(){}}); }
-  const staging=createPublicWebCanaryStagingBootstrap({...runtime,...controls,auditSink,requireDurableAudit:true});
+  const staging=createPublicWebCanaryStagingBootstrap({...runtime,...controls,featureFlagResolver:controls.canaryFeatureFlagResolver,killSwitchResolver:controls.canaryKillSwitchResolver,auditSink,requireDurableAudit:true});
   let closed=false;
   function prepareEmailReauthExecution({durableComposition,plan,requested_at}={}) {
     if(!staging.ok) return Object.freeze({ok:false,status:'PUBLIC_WEB_CANARY_EMAIL_REAUTH_OPERATIONAL_PREPARATION_BLOCKED',reason:'operational_bootstrap_not_ready',execution_authorized:false,external_network_called:false,production_allowed:false});

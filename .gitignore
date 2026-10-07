@@ -7,3 +7,6 @@ public-web-canary-trial.evidence.json
 public-web-canary-trial.approval.json
 public-web-canary-trial-bootstrap.local.js
 public-web-canary-trial-bootstrap.staging.local.js
+
+# Local operational canary bootstrap (never commit)
+platform/services/api/config/public-web-canary-real-non-production.local.js

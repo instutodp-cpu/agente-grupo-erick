@@ -1,0 +1,2 @@
+'use strict';const test=require('node:test');const assert=require('node:assert/strict');const {createPublicWebCanaryOperationalControls}=require('../src/pilots/public-web-canary-operational-controls');const {PROVIDER_ID}=require('../src/core/public-web-transport-contract');
+test('operational staging reference uses canonical public web provider id',()=>{const c=createPublicWebCanaryOperationalControls({environment:{}});assert.equal(c.secretReference.provider_id,PROVIDER_ID);assert.equal(c.production_allowed,false);assert.equal(c.credential_material_present,false);});
