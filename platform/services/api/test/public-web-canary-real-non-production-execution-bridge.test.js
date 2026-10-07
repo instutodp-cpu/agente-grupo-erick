@@ -650,7 +650,7 @@ test('bridge is isolated from API and legacy CLI; dedicated entrypoint owns cont
 test('email reauth mode reaches one synthetic runner call and remains single-use', async () => {
   const { adaptEmailReauthGrantForBridge } = require('../src/core/public-web-canary-email-reauth-bridge-grant-adapter');
   const authorization = {ok:true,status:'PUBLIC_WEB_CANARY_EMAIL_REAUTH_SINGLE_USE_GRANT_READY',approval_mode:'STRONG_HUMAN_REAUTH_EMAIL',grant_mode:'EMAIL_REAUTH_SINGLE_USE',operator_id:'human:owner',authorization_grant_id:'email-grant:test',execution_reservation_id:'email-reservation:test',replay_key:'email-replay:test',reservation_nonce:'email-nonce:test',evidence_key:'sha256:'+'e'.repeat(64),single_use:true,remaining_execution_count:1,verified_at:'2026-09-18T15:01:00.000Z'};
-  const grantResult=adaptEmailReauthGrantForBridge({authorization,tenant_id:'tenant-real-bridge-test',trial_id:'public_web_trial_real_bridge_test',plan_hash:'sha256:synthetic-real-bridge-plan',environment:'staging',production_allowed:false});
+  const grantResult=adaptEmailReauthGrantForBridge({authorization,tenant_id:'tenant-real-bridge-test',trial_id:'public_web_trial_real_bridge_test',plan_hash:'sha256:synthetic-real-bridge-plan',environment:'staging',production_allowed:false,issued_at:'2026-09-18T15:01:30.000Z'});
   assert.equal(grantResult.ok,true);
   const chain={grantResult}; const counter={calls:0};
   const ledger=createPublicWebCanaryExecutionReservationLedger({clock:()=> '2026-09-18T15:02:00.000Z'});
