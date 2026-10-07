@@ -8,7 +8,7 @@ function validateEmailReplyProof(handoff={},delivery={},reply={},profile={}){
  if(!delivery.message_id||!delivery.thread_id||delivery.delivery_reference!==handoff.delivery_reference)return blocked('delivery_binding_required');
  if(!reply.id||reply.id===delivery.message_id||reply.thread_id!==delivery.thread_id)return blocked('distinct_reply_in_same_thread_required');
  if(reply.from!==profile.email)return blocked('reply_sender_must_match_authenticated_profile');
- if(typeof reply.body!=='string'||reply.body.trim()!==EXACT_REPLY)return blocked('exact_reply_phrase_required');
+ if(typeof reply.body!=='string')return blocked('exact_reply_phrase_required'); const lines=reply.body.replace(/\r/g,'').split('\n'); const first=lines.find(line=>line.trim().length>0); if(first?.trim()!==EXACT_REPLY)return blocked('exact_reply_phrase_required'); const tail=lines.slice(lines.indexOf(first)+1).join('\n').trim(); if(tail && !/(^|\n)(On .+wrote:|Em .+escreveu:)/m.test(tail))return blocked('unexpected_reply_content');
  if(!reply.email_ts||!delivery.email_ts||Date.parse(reply.email_ts)<=Date.parse(delivery.email_ts))return blocked('reply_must_follow_delivery');
  return Object.freeze({ok:true,status:'EMAIL_REAUTH_REPLY_PROOF_VERIFIED',provider:'google',provider_authenticated:true,identity_alias:handoff.identity_alias,provider_event_id:'gmail-message:'+reply.id,delivery_reference:handoff.delivery_reference,challenge_id:handoff.challenge_id,action_digest:handoff.action_digest,verified_at:new Date(Date.parse(reply.email_ts)).toISOString(),single_use:true,execution_authorized:false,production_allowed:false});
 }
