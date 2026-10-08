@@ -5,18 +5,17 @@ const { run } = require('../scripts/public-web-canary-staging-audit-transaction-
 
 const env = Object.freeze({
   POSTGRES_PORT: '5432', POSTGRES_USER: 'probe', POSTGRES_PASSWORD: 'dummy',
-  POSTGRES_DB: 'staging_test', HERMES_ENVIRONMENT: 'staging',
+  POSTGRES_DB: 'postgres', POSTGRES_HOST: 'db.vvzvqinbzdqzcwrfoomd.supabase.co', HERMES_ENVIRONMENT: 'staging',
   HERMES_AUDIT_PROBE_CONFIRM_STAGING: 'YES'
 });
-function fakePool({ target = 'staging', rollbackFails = false } = {}) {
+function fakePool({ target = '17.6', rollbackFails = false } = {}) {
   const queries = [];
   class PoolClass {
     async connect() {
       return {
         async query(sql) {
           queries.push(sql);
-          if (sql.includes('current_database()')) return { rows: [{ audit_exists: true }] };
-          if (sql.includes("current_setting('hermes.environment'")) return { rows: [{ target_environment: target }] };
+          if (sql.includes('current_database()')) return { rows: [{ audit_exists: true, db: 'postgres', server_version: target }] };
           if (sql === 'ROLLBACK') {
             if (rollbackFails) throw Error('rollback_failed');
             return { rows: [] };
@@ -77,4 +76,20 @@ test('rejects production NODE_ENV even when staging flags are present', async ()
   const result = await run({ env: { ...env, NODE_ENV: 'production' }, PoolClass });
   assert.equal(result.ok, false);
   assert.equal(constructed, false);
+});
+
+test('rejects local postgres before connecting', async () => {
+  let constructed = false;
+  class PoolClass { constructor() { constructed = true; } }
+  const result = await run({ env: { ...env, POSTGRES_HOST: '127.0.0.1' }, PoolClass });
+  assert.equal(result.reason, 'staging_database_target_required');
+  assert.equal(constructed, false);
+});
+test('requires TLS certificate verification for official staging host', async () => {
+  let config;
+  class PoolClass { constructor(c) { config = c; } async connect() { throw Error('intentional_stop'); } async end() {} }
+  await run({ env, PoolClass });
+  assert.equal(config.host, 'db.vvzvqinbzdqzcwrfoomd.supabase.co');
+  assert.equal(config.ssl.rejectUnauthorized, true);
+  assert.equal(config.ssl.servername, config.host);
 });
