@@ -5,7 +5,7 @@ const { Pool } = require('pg');
 const { randomUUID } = require('node:crypto');
 const { readFileSync } = require('node:fs');
 const { buildDurableAuditRecord } = require('../src/core/public-web-canary-durable-audit-contract');
-const { INSERT_SQL, READINESS_SQL } = require('../src/adapters/postgres/public-web-canary-audit-persistence-postgres');
+const { INSERT_SQL, READINESS_SQL, rowValues } = require('../src/adapters/postgres/public-web-canary-audit-persistence-postgres');
 
 async function run({ env = process.env, PoolClass = Pool, readCA = readFileSync } = {}) {
   const STAGING_HOST = 'db.vvzvqinbzdqzcwrfoomd.supabase.co';
@@ -44,8 +44,7 @@ async function run({ env = process.env, PoolClass = Pool, readCA = readFileSync 
       simulated: true, executed: false, real_provider_called: false
     });
     if (!event.valid) throw new Error('audit_event_invalid');
-    const e = event.event;
-    const params = [event.event_id,event.event_digest,event.contract_version,e.canary_session_id,e.trace_id,e.request_id,e.change_id,e.tenant_id,e.workspace_type,e.user_id||null,e.operator_id,e.approved_by||null,e.event_name,e.event_sequence,e.occurred_at,event.serialized];
+    const params = rowValues(event);
     const result = await client.query(INSERT_SQL,params);
     if (result.rows.length !== 1) throw new Error('audit_insert_not_confirmed');
     await client.query('ROLLBACK');
