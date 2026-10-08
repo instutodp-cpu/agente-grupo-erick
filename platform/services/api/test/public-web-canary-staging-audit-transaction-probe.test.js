@@ -59,3 +59,22 @@ test('never reports success if rollback fails', async () => {
   assert.equal(result.ok, false);
   assert.notEqual(result.rollback_confirmed, true);
 });
+
+test('successful staging probe confirms rollback after insert without commit', async () => {
+  const fake = fakePool();
+  const result = await run({ env, PoolClass: fake.PoolClass });
+  assert.equal(result.ok, true);
+  assert.equal(result.rollback_confirmed, true);
+  assert.equal(result.external_network_called, false);
+  assert.equal(fake.queries.includes('BEGIN READ WRITE'), true);
+  assert.equal(fake.queries.includes('ROLLBACK'), true);
+  assert.equal(fake.queries.includes('COMMIT'), false);
+  assert.ok(fake.queries.indexOf('ROLLBACK') > fake.queries.indexOf('BEGIN READ WRITE'));
+});
+test('rejects production NODE_ENV even when staging flags are present', async () => {
+  let constructed = false;
+  class PoolClass { constructor() { constructed = true; } }
+  const result = await run({ env: { ...env, NODE_ENV: 'production' }, PoolClass });
+  assert.equal(result.ok, false);
+  assert.equal(constructed, false);
+});
