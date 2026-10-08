@@ -85,8 +85,11 @@ function parsePayload(value) {
 function rowToRecord(row) {
   if (!row || typeof row !== 'object') throw new PublicWebCanaryAuditPersistenceError('CORRUPT_ROW', 'audit_row_invalid');
   const event = parsePayload(row.event_payload);
+  const payloadIdentity = event.event_id;
+  if (payloadIdentity !== undefined) delete event.event_id;
   const record = buildDurableAuditRecord(event);
   if (!record.valid
+    || (payloadIdentity !== undefined && payloadIdentity !== row.event_id)
     || row.event_id !== record.event_id
     || row.event_digest !== record.event_digest
     || row.contract_version !== PERSISTENT_AUDIT_CONTRACT_VERSION
@@ -126,7 +129,7 @@ function rowValues(record) {
     event.event_name,
     event.event_sequence,
     event.occurred_at,
-    record.serialized
+    JSON.stringify({ ...event, event_id: record.event_id })
   ];
 }
 
@@ -269,5 +272,6 @@ module.exports = {
   READINESS_SQL,
   SELECT_BY_IDENTITY_SQL,
   createPostgresPublicWebCanaryAuditPersistence,
+  rowValues,
   validateTableName
 };
