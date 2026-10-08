@@ -1,27 +1,29 @@
 #!/usr/bin/env node
 'use strict';
-// Staging-only local PostgreSQL audit probe. Never sends HTTP requests or commits.
+// Staging-only PostgreSQL audit probe. Never sends HTTP requests or commits.
 const { Pool } = require('pg');
 const { randomUUID } = require('node:crypto');
 const { buildDurableAuditRecord } = require('../src/core/public-web-canary-durable-audit-contract');
 const { INSERT_SQL, READINESS_SQL } = require('../src/adapters/postgres/public-web-canary-audit-persistence-postgres');
 
 async function run({ env = process.env, PoolClass = Pool } = {}) {
+  const STAGING_HOST = 'db.vvzvqinbzdqzcwrfoomd.supabase.co';
   const required = ['POSTGRES_PORT', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'POSTGRES_DB'];
   if (required.some(k => !env[k]) || env.HERMES_ENVIRONMENT !== 'staging' || env.NODE_ENV === 'production' || env.HERMES_AUDIT_PROBE_CONFIRM_STAGING !== 'YES')
     return { ok: false, reason: 'staging_configuration_required', external_network_called: false };
   const port = Number(env.POSTGRES_PORT);
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     return { ok: false, reason: 'postgres_port_invalid', external_network_called: false };
-  const pool = new PoolClass({ host: '127.0.0.1', port, user: env.POSTGRES_USER, password: env.POSTGRES_PASSWORD, database: env.POSTGRES_DB, connectionTimeoutMillis: 3000, statement_timeout: 5000 });
+  if (env.POSTGRES_HOST !== STAGING_HOST || env.POSTGRES_DB !== 'postgres' || port !== 5432)
+    return { ok: false, reason: 'staging_database_target_required', external_network_called: false };
+  const pool = new PoolClass({ host: STAGING_HOST, port, user: env.POSTGRES_USER, password: env.POSTGRES_PASSWORD, database: env.POSTGRES_DB, ssl: { rejectUnauthorized: true, servername: STAGING_HOST }, connectionTimeoutMillis: 3000, statement_timeout: 5000 });
   let client;
   let begun = false;
   try {
     client = await pool.connect();
-    const identity = await client.query("SELECT current_database() AS db, current_user AS db_role, to_regclass('hermes.public_web_canary_audit_events') IS NOT NULL AS audit_exists");
+    const identity = await client.query("SELECT current_database() AS db, current_setting('server_version') AS server_version, to_regclass('hermes.public_web_canary_audit_events') IS NOT NULL AS audit_exists");
     if (!identity.rows[0]?.audit_exists) throw new Error('audit_table_missing');
-    const guard = await client.query("SELECT current_setting('hermes.environment', true) AS target_environment");
-    if (guard.rows[0]?.target_environment !== 'staging') throw new Error('database_staging_identity_unverified');
+    if (identity.rows[0]?.db !== 'postgres' || !String(identity.rows[0]?.server_version || '').startsWith('17.')) throw new Error('database_staging_identity_unverified');
     const readiness = await client.query(READINESS_SQL);
     if (!readiness.rows[0]?.schema_exists || !readiness.rows[0]?.table_exists || !readiness.rows[0]?.columns_exist) throw new Error('audit_schema_incompatible');
     await client.query('BEGIN READ WRITE');
