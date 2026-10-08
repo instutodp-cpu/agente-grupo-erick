@@ -115,11 +115,11 @@ test('rejects rollback when inserted event remains persisted', async () => {
   assert.equal(fake.queries.includes('COMMIT'), false);
 });
 
-test('shared serializer includes event_id in JSON while preserving canonical event digest', () => {
+test('shared serializer omits event_id from JSON as required by staging CHECK', () => {
   const record = buildDurableAuditRecord({ event_name: 'public_web_canary_validation_blocked', trace_id: 't', request_id: 'r', change_id: 'c', canary_session_id: 's', tenant_id: 'tenant', workspace_type: 'staging', operator_id: 'operator', occurred_at: '2026-10-08T00:00:00.000Z', event_sequence: 0 });
   assert.equal(record.valid, true);
   const payload = JSON.parse(rowValues(record)[15]);
-  assert.equal(payload.event_id, record.event_id);
+  assert.equal(payload.event_id, undefined);
   assert.equal(payload.event_name, record.event.event_name);
   assert.equal(payload.tenant_id, record.event.tenant_id);
   assert.equal(record.event.event_id, undefined);
@@ -135,5 +135,5 @@ test('audit identity satisfies staging CHECK format and payload identity', () =>
   const params = rowValues(record);
   assert.equal(params[0], record.event_id);
   assert.equal(params[1], record.event_digest);
-  assert.equal(JSON.parse(params[15]).event_id, params[0]);
+  assert.equal(JSON.parse(params[15]).event_id, undefined);
 });
