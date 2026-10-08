@@ -2,6 +2,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { run } = require('../scripts/public-web-canary-staging-audit-transaction-probe');
+const { buildDurableAuditRecord } = require('../src/core/public-web-canary-durable-audit-contract');
+const { rowValues } = require('../src/adapters/postgres/public-web-canary-audit-persistence-postgres');
 
 const readCA = () => '-----BEGIN CERTIFICATE-----\ntest-ca\n-----END CERTIFICATE-----';
 const env = Object.freeze({
@@ -111,4 +113,15 @@ test('rejects rollback when inserted event remains persisted', async () => {
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'audit_rollback_not_verified');
   assert.equal(fake.queries.includes('COMMIT'), false);
+});
+
+test('shared serializer includes event_id in JSON while preserving canonical event digest', () => {
+  const record = buildDurableAuditRecord({ event_name: 'public_web_canary_validation_blocked', trace_id: 't', request_id: 'r', change_id: 'c', canary_session_id: 's', tenant_id: 'tenant', workspace_type: 'staging', operator_id: 'operator', occurred_at: '2026-10-08T00:00:00.000Z', event_sequence: 0 });
+  assert.equal(record.valid, true);
+  const payload = JSON.parse(rowValues(record)[15]);
+  assert.equal(payload.event_id, record.event_id);
+  assert.equal(payload.event_name, record.event.event_name);
+  assert.equal(payload.tenant_id, record.event.tenant_id);
+  assert.equal(record.event.event_id, undefined);
+  assert.equal(JSON.parse(record.serialized).event_id, undefined);
 });
