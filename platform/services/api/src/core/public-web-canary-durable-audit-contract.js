@@ -86,11 +86,12 @@ function buildDurableAuditRecord(input = {}) {
     contract_version: PERSISTENT_AUDIT_CONTRACT_VERSION,
     event: validation.event
   };
-  const eventDigest = hashCanaryEvidence(material);
+  const eventHash = hashCanaryEvidence(material);
+  const eventDigest = `sha256:${eventHash}`;
   return {
     valid: true,
     event: validation.event,
-    event_id: `public-web-canary-audit::${eventDigest.slice('sha256:'.length)}`,
+    event_id: eventHash,
     event_digest: eventDigest,
     contract_version: PERSISTENT_AUDIT_CONTRACT_VERSION,
     serialized: validation.serialized
