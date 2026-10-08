@@ -442,7 +442,7 @@
   "inventory": {
     "platform_docs": 138,
     "core_source_files": 718,
-    "api_tests": 593,
+    "api_tests": 594,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
