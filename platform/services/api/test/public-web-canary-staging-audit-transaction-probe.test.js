@@ -125,3 +125,15 @@ test('shared serializer includes event_id in JSON while preserving canonical eve
   assert.equal(record.event.event_id, undefined);
   assert.equal(JSON.parse(record.serialized).event_id, undefined);
 });
+
+test('audit identity satisfies staging CHECK format and payload identity', () => {
+  const record = buildDurableAuditRecord({ event_name: 'public_web_canary_validation_blocked', trace_id: 't', request_id: 'r', change_id: 'c', canary_session_id: 's', tenant_id: 'tenant', workspace_type: 'staging', operator_id: 'operator', occurred_at: '2026-10-08T00:00:00.000Z', event_sequence: 0 });
+  assert.equal(record.valid, true);
+  assert.match(record.event_id, /^[0-9a-f]{64}$/);
+  assert.match(record.event_digest, /^sha256:[0-9a-f]{64}$/);
+  assert.equal(record.event_digest, `sha256:${record.event_id}`);
+  const params = rowValues(record);
+  assert.equal(params[0], record.event_id);
+  assert.equal(params[1], record.event_digest);
+  assert.equal(JSON.parse(params[15]).event_id, params[0]);
+});
