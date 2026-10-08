@@ -9,13 +9,14 @@ const env = Object.freeze({
   POSTGRES_DB: 'postgres', POSTGRES_HOST: 'db.vvzvqinbzdqzcwrfoomd.supabase.co', HERMES_ENVIRONMENT: 'staging',
   HERMES_AUDIT_PROBE_CONFIRM_STAGING: 'YES', HERMES_STAGING_CA_FILE: '/home/hermesadmin/supabase-staging-root-ca.pem'
 });
-function fakePool({ target = '17.6', rollbackFails = false } = {}) {
+function fakePool({ target = '17.6', rollbackFails = false, persistedAfterRollback = false } = {}) {
   const queries = [];
   class PoolClass {
     async connect() {
       return {
         async query(sql) {
           queries.push(sql);
+          if (sql.includes('SELECT count(*)::int AS persisted_count')) return { rows: [{ persisted_count: persistedAfterRollback ? 1 : 0 }] };
           if (sql.includes('current_database()')) return { rows: [{ audit_exists: true, db: 'postgres', server_version: target }] };
           if (sql === 'ROLLBACK') {
             if (rollbackFails) throw Error('rollback_failed');
@@ -102,4 +103,12 @@ test('fails closed before connection when CA file is not approved', async () => 
   const result = await run({ env: { ...env, HERMES_STAGING_CA_FILE: '/tmp/other.pem' }, PoolClass, readCA });
   assert.equal(result.reason, 'staging_ca_unavailable');
   assert.equal(constructed, false);
+});
+
+test('rejects rollback when inserted event remains persisted', async () => {
+  const fake = fakePool({ persistedAfterRollback: true });
+  const result = await run({ env, PoolClass: fake.PoolClass, readCA });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'audit_rollback_not_verified');
+  assert.equal(fake.queries.includes('COMMIT'), false);
 });
