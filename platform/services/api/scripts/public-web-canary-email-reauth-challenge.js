@@ -5,9 +5,12 @@ const {prepareStrongHumanReauthEmail}=require('../src/core/strong-human-reauth-e
 const {createStrongHumanReauthEmailPostgres}=require('../src/adapters/postgres/strong-human-reauth-email-postgres');
 const {prepareEmailProviderHandoff}=require('../src/core/strong-human-reauth-email-provider-handoff');
 const {computeCanonicalContentDigest}=require('../src/core/canonical-content-digest');
+const {validateOrigin,normalizeCanaryTargetPath}=require('../src/core/public-web-canary-target-allowlist');
 async function createChallenge({PoolClass=Pool,env=process.env,clock}={}){
  const required=['POSTGRES_PORT','POSTGRES_USER','POSTGRES_PASSWORD','POSTGRES_DB'];for(const k of required)if(!env[k])throw new Error('postgres_configuration_missing');
- const digest=computeCanonicalContentDigest({environment:'staging',target_origin:'https://example.com',target_path:'/',method:'GET',port:443,maximum_requests:1,redirects_allowed:false,production_allowed:false});
+ const origin=validateOrigin(env.HERMES_REAUTH_TARGET_ORIGIN);const path=normalizeCanaryTargetPath(env.HERMES_REAUTH_TARGET_PATH);
+ if(!origin.valid||!path.valid||origin.origin==='https://example.com')throw new Error('explicit_valid_non_placeholder_canary_target_required');
+ const digest=computeCanonicalContentDigest({environment:'staging',target_origin:origin.origin,target_path:path.path,method:'GET',port:443,maximum_requests:1,redirects_allowed:false,production_allowed:false});
  if(!/^sha256:[0-9a-f]{64}$/.test(digest))throw new Error('canonical_digest_invalid');
  const challenge=prepareStrongHumanReauthEmail({subject_id:'human:owner',action_digest:digest,email_identity_reference:'owner-primary-email',ttl_seconds:600,production_allowed:false},{clock});
  if(!challenge.ok)throw new Error(challenge.reason||challenge.status);
