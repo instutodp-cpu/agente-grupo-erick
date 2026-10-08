@@ -3,10 +3,11 @@
 // Staging-only PostgreSQL audit probe. Never sends HTTP requests or commits.
 const { Pool } = require('pg');
 const { randomUUID } = require('node:crypto');
+const { readFileSync } = require('node:fs');
 const { buildDurableAuditRecord } = require('../src/core/public-web-canary-durable-audit-contract');
 const { INSERT_SQL, READINESS_SQL } = require('../src/adapters/postgres/public-web-canary-audit-persistence-postgres');
 
-async function run({ env = process.env, PoolClass = Pool } = {}) {
+async function run({ env = process.env, PoolClass = Pool, readCA = readFileSync } = {}) {
   const STAGING_HOST = 'db.vvzvqinbzdqzcwrfoomd.supabase.co';
   const required = ['POSTGRES_PORT', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'POSTGRES_DB'];
   if (required.some(k => !env[k]) || env.HERMES_ENVIRONMENT !== 'staging' || env.NODE_ENV === 'production' || env.HERMES_AUDIT_PROBE_CONFIRM_STAGING !== 'YES')
@@ -16,7 +17,13 @@ async function run({ env = process.env, PoolClass = Pool } = {}) {
     return { ok: false, reason: 'postgres_port_invalid', external_network_called: false };
   if (env.POSTGRES_HOST !== STAGING_HOST || env.POSTGRES_DB !== 'postgres' || port !== 5432)
     return { ok: false, reason: 'staging_database_target_required', external_network_called: false };
-  const pool = new PoolClass({ host: STAGING_HOST, port, user: env.POSTGRES_USER, password: env.POSTGRES_PASSWORD, database: env.POSTGRES_DB, ssl: { rejectUnauthorized: true, servername: STAGING_HOST }, connectionTimeoutMillis: 3000, statement_timeout: 5000 });
+  let ca;
+  try {
+    if (env.HERMES_STAGING_CA_FILE !== '/home/hermesadmin/supabase-staging-root-ca.pem') throw new Error('staging_ca_required');
+    ca = readCA(env.HERMES_STAGING_CA_FILE, 'utf8');
+    if (!ca.includes('-----BEGIN CERTIFICATE-----')) throw new Error('staging_ca_invalid');
+  } catch { return { ok: false, reason: 'staging_ca_unavailable', external_network_called: false }; }
+  const pool = new PoolClass({ host: STAGING_HOST, port, user: env.POSTGRES_USER, password: env.POSTGRES_PASSWORD, database: env.POSTGRES_DB, ssl: { ca, rejectUnauthorized: true, servername: STAGING_HOST }, connectionTimeoutMillis: 3000, statement_timeout: 5000 });
   let client;
   let begun = false;
   try {
