@@ -129,7 +129,7 @@ function rowValues(record) {
     event.event_name,
     event.event_sequence,
     event.occurred_at,
-    JSON.stringify({ ...event, event_id: record.event_id })
+    record.serialized
   ];
 }
 
