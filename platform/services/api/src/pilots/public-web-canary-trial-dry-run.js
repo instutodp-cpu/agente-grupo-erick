@@ -306,7 +306,7 @@ function buildCanaryRequestFromPlan(plan, context, ids = {}) {
     maximum_requests: plan.maximum_requests,
     lifecycle_version: preflightSnapshot.lifecycle_version || plan.lifecycle_version || lifecycle && lifecycle.lifecycle_version,
     configuration_version: preflightSnapshot.configuration_version || plan.configuration_version || configuration && configuration.configuration_version,
-    readiness_evidence_id: context.readiness_evidence_id || preflightSnapshot.readiness_evidence_id || plan.readiness_evidence_id,
+    readiness_evidence_id: context.readiness_evidence_id || (context.readinessResult && hashCanaryEvidence(context.readinessResult)) || preflightSnapshot.readiness_evidence_id || plan.readiness_evidence_id,
     secret_reference_id: preflightSnapshot.secret_reference_id || plan.secret_reference_id || (
       configuration &&
       Array.isArray(configuration.secret_reference_descriptors) &&
