@@ -11,6 +11,7 @@ const {
   createPublicWebCanaryRealNonProductionExecutionBridge
 } = require('../src/pilots/public-web-canary-real-non-production-execution-bridge');
 
+const { FLAG, KILL } = require('../src/pilots/public-web-canary-operational-controls');
 const ALLOWED_FLAGS = new Set(['--bootstrap', '--preflight']);
 const BOOTSTRAP_PATH = path.resolve(__dirname, '../config/public-web-canary-real-non-production.local.js');
 
@@ -51,9 +52,9 @@ async function preflightOperationalCanary(options = {}) {
   const runtime = normalizeRuntime(raw.runtime || {});
   if (!runtime.ok) return { ...runtime, status:'operational_runtime_blocked', ready:false, network_called:false, secret_resolved:false };
   const checks = [];
-  const featureEnabled = await runtime.featureFlagResolver('public_web_canary_real_non_production');
+  const featureEnabled = await runtime.featureFlagResolver(FLAG);
   checks.push({check:'feature_flag',ok:featureEnabled===true});
-  const killed = await runtime.killSwitchResolver('public_web_canary_real_non_production');
+  const killed = await runtime.killSwitchResolver(KILL);
   checks.push({check:'kill_switch',ok:killed===false});
   checks.push({check:'durable_audit_contract',ok:runtime.requireDurableAudit===true && runtime.auditSink && runtime.auditSink.durable===true && typeof runtime.auditSink.appendDurably==='function' && typeof runtime.auditSink.ensureReady==='function'});
   if (checks.at(-1).ok) { try { const r=await runtime.auditSink.ensureReady(); checks.push({check:'durable_audit_ready',ok:!!r&&r.ok===true}); } catch { checks.push({check:'durable_audit_ready',ok:false}); } }
@@ -70,9 +71,9 @@ async function executeOperationalCanary(options = {}) {
   const runtime = normalizeRuntime(raw.runtime || {});
   if (!runtime.ok) return { ...runtime, status: 'operational_runtime_blocked', executed: false, real_provider_called: false };
 
-  const featureEnabled = await runtime.featureFlagResolver('public_web_canary_real_non_production');
+  const featureEnabled = await runtime.featureFlagResolver(FLAG);
   if (featureEnabled !== true) return { ok: false, status: 'feature_flag_disabled', executed: false, real_provider_called: false };
-  const killed = await runtime.killSwitchResolver('public_web_canary_real_non_production');
+  const killed = await runtime.killSwitchResolver(KILL);
   if (killed !== false) return { ok: false, status: 'kill_switch_active', executed: false, real_provider_called: false };
 
   const prepared = raw.preparedExecution;
