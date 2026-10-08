@@ -50,9 +50,11 @@ async function run({ env = process.env, PoolClass = Pool, readCA = readFileSync 
     if (result.rows.length !== 1) throw new Error('audit_insert_not_confirmed');
     await client.query('ROLLBACK');
     begun = false;
+    const afterRollback = await client.query('SELECT count(*)::int AS persisted_count FROM hermes.public_web_canary_audit_events WHERE event_id = $1', [event.event_id]);
+    if (afterRollback.rows.length !== 1 || Number(afterRollback.rows[0].persisted_count) !== 0) throw new Error('audit_rollback_not_verified');
     return { ok: true, status: 'STAGING_AUDIT_TRANSACTION_PROBE_PASSED', rollback_confirmed: true, external_network_called: false, production_effect: 'ZERO', connection_role: '<redacted>', database: '<redacted>' };
   } catch (error) {
-    return { ok: false, status: 'STAGING_AUDIT_TRANSACTION_PROBE_BLOCKED', reason: ['audit_table_missing','database_staging_identity_unverified','audit_schema_incompatible','audit_event_invalid','audit_insert_not_confirmed'].includes(error.message) ? error.message : 'connection_or_persistence_failed', code: error.code || null, external_network_called: false };
+    return { ok: false, status: 'STAGING_AUDIT_TRANSACTION_PROBE_BLOCKED', reason: ['audit_table_missing','database_staging_identity_unverified','audit_schema_incompatible','audit_event_invalid','audit_insert_not_confirmed','audit_rollback_not_verified'].includes(error.message) ? error.message : 'connection_or_persistence_failed', code: error.code || null, external_network_called: false };
   } finally {
     if (client) { if (begun) { try { await client.query('ROLLBACK'); } catch {} } client.release(); }
     await pool.end();
