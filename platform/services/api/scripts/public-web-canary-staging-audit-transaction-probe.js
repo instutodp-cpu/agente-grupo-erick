@@ -8,7 +8,7 @@ const { INSERT_SQL, READINESS_SQL } = require('../src/adapters/postgres/public-w
 
 async function run({ env = process.env, PoolClass = Pool } = {}) {
   const required = ['POSTGRES_PORT', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'POSTGRES_DB'];
-  if (required.some(k => !env[k]) || env.HERMES_ENVIRONMENT === 'production' || env.NODE_ENV === 'production')
+  if (required.some(k => !env[k]) || env.HERMES_ENVIRONMENT !== 'staging' || env.NODE_ENV === 'production' || env.HERMES_AUDIT_PROBE_CONFIRM_STAGING !== 'YES')
     return { ok: false, reason: 'staging_configuration_required', external_network_called: false };
   const port = Number(env.POSTGRES_PORT);
   if (!Number.isInteger(port) || port < 1 || port > 65535)
@@ -20,6 +20,8 @@ async function run({ env = process.env, PoolClass = Pool } = {}) {
     client = await pool.connect();
     const identity = await client.query("SELECT current_database() AS db, current_user AS db_role, to_regclass('hermes.public_web_canary_audit_events') IS NOT NULL AS audit_exists");
     if (!identity.rows[0]?.audit_exists) throw new Error('audit_table_missing');
+    const guard = await client.query("SELECT current_setting('hermes.environment', true) AS target_environment");
+    if (guard.rows[0]?.target_environment !== 'staging') throw new Error('database_staging_identity_unverified');
     const readiness = await client.query(READINESS_SQL);
     if (!readiness.rows[0]?.schema_exists || !readiness.rows[0]?.table_exists || !readiness.rows[0]?.columns_exist) throw new Error('audit_schema_incompatible');
     await client.query('BEGIN READ WRITE');
@@ -39,7 +41,7 @@ async function run({ env = process.env, PoolClass = Pool } = {}) {
     if (result.rows.length !== 1) throw new Error('audit_insert_not_confirmed');
     return { ok: true, status: 'STAGING_AUDIT_TRANSACTION_PROBE_PASSED', rollback_required: true, external_network_called: false, production_effect: 'ZERO', connection_role: '<redacted>', database: '<redacted>' };
   } catch (error) {
-    return { ok: false, status: 'STAGING_AUDIT_TRANSACTION_PROBE_BLOCKED', reason: ['audit_table_missing','audit_schema_incompatible','audit_event_invalid','audit_insert_not_confirmed'].includes(error.message) ? error.message : 'connection_or_persistence_failed', code: error.code || null, external_network_called: false };
+    return { ok: false, status: 'STAGING_AUDIT_TRANSACTION_PROBE_BLOCKED', reason: ['audit_table_missing','database_staging_identity_unverified','audit_schema_incompatible','audit_event_invalid','audit_insert_not_confirmed'].includes(error.message) ? error.message : 'connection_or_persistence_failed', code: error.code || null, external_network_called: false };
   } finally {
     if (client) { if (begun) { try { await client.query('ROLLBACK'); } catch {} } client.release(); }
     await pool.end();
