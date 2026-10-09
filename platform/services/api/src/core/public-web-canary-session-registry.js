@@ -403,6 +403,30 @@ function createPublicWebCanarySessionRegistry(options = {}) {
     });
   }
 
+
+  function approveCanaryWithEmailReauth(approval, deps = {}) {
+    const session = requireSession(approval);
+    if (!session) return response(null, approval, { error_code: 'CANARY_SESSION_NOT_FOUND', blocked_reason: 'canary_session_not_found' });
+    const id = consumeId(approval);
+    if (!id.ok) return response(session, approval, { error_code: id.code, blocked_reason: id.reason });
+    const conflict = checkVersion(session, approval);
+    if (conflict) return conflict;
+    if (session.canary_state !== 'approved_pending') return response(session, approval, { error_code: 'CANARY_STATE_TRANSITION_INVALID', blocked_reason: 'canary_state_transition_invalid' });
+    const grant = approval.grantResult || {};
+    if (grant.ok !== true || grant.status !== 'PUBLIC_WEB_CANARY_EMAIL_REAUTH_BRIDGE_GRANT_READY_NOT_EXECUTED' || grant.authorization_grant?.grant_mode !== 'EMAIL_REAUTH_SINGLE_USE' || grant.authorization_grant?.authorization_scope !== 'PUBLIC_WEB_CANARY_SINGLE_EXECUTION_NON_PRODUCTION' || grant.authorization_grant?.single_use !== true || grant.authorization_grant?.remaining_execution_count !== 1 || grant.execution_authorized !== false || grant.production_effect !== 'ZERO') return response(session, approval, { error_code:'CANARY_APPROVAL_REQUIRED', blocked_reason:'email_reauth_single_use_grant_required' });
+    const reservation = grant.execution_reservation || {};
+    if (reservation.tenant_id !== session.tenant_id || reservation.single_use !== true || reservation.remaining_execution_count !== 1 || reservation.reservation_consumed !== false || reservation.replay_key_reserved !== true || reservation.replay_key_consumed !== false) return response(session, approval, { error_code:'CANARY_APPROVAL_REQUIRED', blocked_reason:'email_reauth_reservation_binding_invalid' });
+    const now = Date.parse(typeof deps.clock === 'function' ? deps.clock() : '');
+    const issued = Date.parse(grant.authorization_grant.issued_at || ''), expires = Date.parse(grant.authorization_grant.expires_at || '');
+    if (!Number.isFinite(now) || !Number.isFinite(issued) || !Number.isFinite(expires) || now < issued || now > expires || expires - issued !== 120000) return response(session, approval, { error_code:'CANARY_APPROVAL_REQUIRED', blocked_reason:'email_reauth_grant_expired' });
+    if (session.environment !== 'staging' || session.maximum_requests !== 1 || session.target_origin !== 'https://example.com' || session.target_path !== '/' || session.operation !== 'fetch_public_page_summary') return response(session, approval, { error_code:'CANARY_APPROVAL_REQUIRED', blocked_reason:'email_reauth_canary_scope_mismatch' });
+    if (!deps.operatorPolicy || typeof deps.operatorPolicy.consumeStrongReauthApproval !== 'function') return response(session, approval, { error_code:'CANARY_APPROVAL_REQUIRED', blocked_reason:'strong_reauth_operator_policy_required' });
+    const approvedAt = new Date(now).toISOString();
+    const consumed = deps.operatorPolicy.consumeStrongReauthApproval({ approval_id: grant.authorization_grant_id, approved_by: grant.authorization_grant.operator_id, approver_role:'integration_operator', approved_at: approvedAt, expires_at: grant.authorization_grant.expires_at, mode:'STRONG_HUMAN_REAUTH_EMAIL' }, session);
+    if (!consumed.consumed) return response(session, approval, { error_code:'CANARY_APPROVAL_REQUIRED', blocked_reason:consumed.reason || 'strong_reauth_approval_not_consumed' });
+    return storeTransition(session, approval, 'approved', 'public_web_canary_email_reauth_approved', { approval_id: grant.authorization_grant_id, approved_by: grant.authorization_grant.operator_id, approved_at: approvedAt });
+  }
+
   function activateCanary(request, deps = {}) {
     const id = consumeId(request);
     const session = requireSession(request);
@@ -518,6 +542,7 @@ function createPublicWebCanarySessionRegistry(options = {}) {
     requestCanary,
     validateCanary,
     approveCanary,
+    approveCanaryWithEmailReauth,
     activateCanary,
     beginCanaryExecution,
     abortCanaryExecution,

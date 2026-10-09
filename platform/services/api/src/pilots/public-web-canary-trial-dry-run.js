@@ -238,6 +238,38 @@ function createSyntheticCanaryContext(plan, overrides = {}) {
   return context;
 }
 
+function createOperationalCanaryContext(plan, bindings = {}) {
+  const required = ['adapterRegistry','lifecycleRegistry','configurationRegistry','secretReferenceRegistry','secretResolver','readinessResult','featureFlagResolver','killSwitchResolver','auditSink'];
+  const missing = required.filter((name) => !bindings[name]);
+  if (!plan || plan.environment !== 'staging' || bindings.production === true || bindings.production_allowed === true) return Object.freeze({ ok:false, status:'PUBLIC_WEB_CANARY_OPERATIONAL_CONTEXT_BLOCKED', blocked_reason:'staging_zero_production_required', production_allowed:false, external_network_called:false });
+  if (missing.length) return Object.freeze({ ok:false, status:'PUBLIC_WEB_CANARY_OPERATIONAL_CONTEXT_BLOCKED', blocked_reason:'operational_binding_missing', missing_dependencies:Object.freeze(missing), production_allowed:false, external_network_called:false });
+  const context = {
+    canarySessionRegistry: bindings.canarySessionRegistry || createPublicWebCanarySessionRegistry({ clock: bindings.clock }),
+    targetAllowlist: bindings.targetAllowlist || createPublicWebCanaryTargetAllowlist({ clock: bindings.clock || (() => nowIso(bindings)) }),
+    adapterRegistry: bindings.adapterRegistry,
+    lifecycleRegistry: bindings.lifecycleRegistry,
+    configurationRegistry: bindings.configurationRegistry,
+    secretReferenceRegistry: bindings.secretReferenceRegistry,
+    secretResolver: bindings.secretResolver,
+    readinessResult: bindings.readinessResult,
+    rateLimitBudget: bindings.rateLimitBudget || createPublicWebPilotBudget({ clock: bindings.clock }),
+    costBudget: bindings.costBudget || createPublicWebPilotBudget({ clock: bindings.clock }),
+    featureFlagResolver: bindings.featureFlagResolver,
+    killSwitchResolver: bindings.killSwitchResolver,
+    tenantAllowlist: bindings.tenantAllowlist || [plan.tenant_id],
+    workspaceAllowlist: bindings.workspaceAllowlist || [plan.workspace_type],
+    userAllowlist: bindings.userAllowlist || [plan.user_id],
+    operatorPolicy: bindings.operatorPolicy || createPublicWebCanaryOperatorPolicy(),
+    auditSink: bindings.auditSink,
+    requireDurableAudit: true,
+    clock: bindings.clock,
+    production_allowed: false,
+    external_network_called: false
+  };
+  context.readiness_evidence_id = hashCanaryEvidence(context.readinessResult);
+  return Object.freeze({ ok:true, status:'PUBLIC_WEB_CANARY_OPERATIONAL_CONTEXT_READY_NOT_EXECUTED', context:Object.freeze(context), production_allowed:false, execution_authorized:false, external_network_called:false });
+}
+
 function buildCanaryRequestFromPlan(plan, context, ids = {}) {
   const preflightSnapshot = context.preflight && context.preflight.binding_snapshot || {};
   const lifecycle = context.lifecycleRegistry && typeof context.lifecycleRegistry.getConnector === 'function'
@@ -274,7 +306,7 @@ function buildCanaryRequestFromPlan(plan, context, ids = {}) {
     maximum_requests: plan.maximum_requests,
     lifecycle_version: preflightSnapshot.lifecycle_version || plan.lifecycle_version || lifecycle && lifecycle.lifecycle_version,
     configuration_version: preflightSnapshot.configuration_version || plan.configuration_version || configuration && configuration.configuration_version,
-    readiness_evidence_id: context.readiness_evidence_id || preflightSnapshot.readiness_evidence_id || plan.readiness_evidence_id,
+    readiness_evidence_id: context.readiness_evidence_id || (context.readinessResult && hashCanaryEvidence(context.readinessResult)) || preflightSnapshot.readiness_evidence_id || plan.readiness_evidence_id,
     secret_reference_id: preflightSnapshot.secret_reference_id || plan.secret_reference_id || (
       configuration &&
       Array.isArray(configuration.secret_reference_descriptors) &&
@@ -365,6 +397,24 @@ function prepareOperationalCanarySession(plan, context = {}, ids = {}) {
   });
 }
 
+function prepareEmailReauthOperationalCanarySession(plan, context = {}, operationalComposition = {}, ids = {}) {
+  const grant = operationalComposition && operationalComposition.chain && operationalComposition.chain.grantResult;
+  if (!grant || grant.ok !== true || grant.status !== 'PUBLIC_WEB_CANARY_EMAIL_REAUTH_BRIDGE_GRANT_READY_NOT_EXECUTED') return { ok:false, stage:'email_grant', blocked_reason:'email_reauth_grant_required' };
+  if (!operationalComposition.bridgeInput || operationalComposition.bridgeInput.tenant_id !== plan.tenant_id || operationalComposition.bridgeInput.runner_request?.canary_session_id !== plan.canary_session_id) return { ok:false, stage:'composition_binding', blocked_reason:'operational_composition_binding_invalid' };
+  const targetPolicy = ensureTargetPolicy(plan, context, ids.suffix || 'email_reauth');
+  if (!targetPolicy.ok) return { ok:false, stage:'target_policy', result:targetPolicy };
+  const request = buildCanaryRequestFromPlan(plan, context, ids);
+  const created = context.canarySessionRegistry.requestCanary(request);
+  if (!created.ok) return { ok:false, stage:'request', result:created };
+  const validated = context.canarySessionRegistry.validateCanary({canary_session_id:request.canary_session_id,change_id:request.change_id+':validate',request_id:request.request_id+':validate',expected_version:created.session.version},context);
+  if (!validated.ok || validated.session?.canary_state !== 'approved_pending') return { ok:false, stage:'validate', result:validated };
+  const approved = context.canarySessionRegistry.approveCanaryWithEmailReauth({canary_session_id:request.canary_session_id,change_id:request.change_id+':approve-email',request_id:request.request_id+':approve-email',expected_version:validated.session.version,grantResult:grant},context);
+  if (!approved.ok) return { ok:false, stage:'approve-email', result:approved };
+  const active = context.canarySessionRegistry.activateCanary({canary_session_id:request.canary_session_id,change_id:request.change_id+':activate',request_id:request.request_id+':activate',expected_version:approved.session.version},context);
+  if (!active.ok) return { ok:false, stage:'activate', result:active };
+  return Object.freeze({ok:true,status:'PUBLIC_WEB_CANARY_EMAIL_REAUTH_SESSION_ACTIVE_NOT_EXECUTED',session:active.session,target_policy:targetPolicy.target_policy,execution_authorized:false,external_network_called:false,production_allowed:false});
+}
+
 function buildRunnerRequest(plan, session, ids = {}) {
   return sanitizeTrialData({
     trace_id: ids.trace_id || `${plan.trial_id}_execution_trace`,
@@ -442,7 +492,9 @@ module.exports = {
   buildRunnerRequest,
   createPublicWebCanaryTrialDryRun,
   createSyntheticCanaryContext,
+  createOperationalCanaryContext,
   fakeNodeHttpsClient,
   prepareOperationalCanarySession,
+  prepareEmailReauthOperationalCanarySession,
   runTrialDryRun
 };

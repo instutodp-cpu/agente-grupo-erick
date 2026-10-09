@@ -1,0 +1,114 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('node:fs');
+const path = require('node:path');
+const readline = require('node:readline/promises');
+const { stdin: input, stdout: output } = require('node:process');
+const { createPublicWebCanaryStagingBootstrap } = require('../src/pilots/public-web-canary-staging-bootstrap');
+const {
+  REQUIRED_CONFIRMATION,
+  createPublicWebCanaryRealNonProductionExecutionBridge
+} = require('../src/pilots/public-web-canary-real-non-production-execution-bridge');
+
+const { FLAG, KILL } = require('../src/pilots/public-web-canary-operational-controls');
+const ALLOWED_FLAGS = new Set(['--bootstrap', '--preflight']);
+const BOOTSTRAP_PATH = path.resolve(__dirname, '../config/public-web-canary-real-non-production.local.js');
+
+function parseArgs(argv) {
+  if (argv.length === 0) return { ok: true, bootstrapPath: BOOTSTRAP_PATH, preflight: false };
+  let bootstrapPath = BOOTSTRAP_PATH; let preflight = false;
+  for (let i=0;i<argv.length;i+=1) {
+    const flag=argv[i]; if(!ALLOWED_FLAGS.has(flag)) return {ok:false,reason:'only_bootstrap_and_preflight_are_allowed'};
+    if(flag==='--preflight'){ if(preflight)return {ok:false,reason:'duplicate_preflight'}; preflight=true; continue; }
+    const value=argv[i+1]; if(!value||value.startsWith('--'))return {ok:false,reason:'bootstrap_path_required'}; bootstrapPath=path.resolve(value); i+=1;
+  }
+  return { ok: true, bootstrapPath, preflight };
+}
+
+function loadBootstrap(bootstrapPath) {
+  if (!fs.existsSync(bootstrapPath)) return null;
+  const loaded = require(bootstrapPath);
+  return loaded && typeof loaded === 'object' ? loaded : null;
+}
+
+async function readExactConfirmation() {
+  if (!input.isTTY || !output.isTTY) return '';
+  output.write(`Digite exatamente: ${REQUIRED_CONFIRMATION}\n`);
+  const rl = readline.createInterface({ input, output });
+  try { return await rl.question('Confirmacao: '); }
+  finally { rl.close(); }
+}
+
+
+function normalizeRuntime(raw) {
+  if (raw && raw.ok === true && raw.operationalBootstrapConfigured === true && raw.stagingRealTransportOptIn === true && raw.environment === 'staging' && raw.production === false && raw.production_allowed === false && raw.realTransport === true) return raw;
+  return createPublicWebCanaryStagingBootstrap(raw || {});
+}
+
+async function preflightOperationalCanary(options = {}) {
+  const raw = options.bootstrap;
+  if (!raw) return { ok:false, status:'operational_bootstrap_not_configured', ready:false, network_called:false, secret_resolved:false };
+  const runtime = normalizeRuntime(raw.runtime || {});
+  if (!runtime.ok) return { ...runtime, status:'operational_runtime_blocked', ready:false, network_called:false, secret_resolved:false };
+  const checks = [];
+  const featureEnabled = await runtime.featureFlagResolver(FLAG);
+  checks.push({check:'feature_flag',ok:featureEnabled===true});
+  const killed = await runtime.killSwitchResolver(KILL);
+  checks.push({check:'kill_switch',ok:killed===false});
+  checks.push({check:'durable_audit_contract',ok:runtime.requireDurableAudit===true && runtime.auditSink && runtime.auditSink.durable===true && typeof runtime.auditSink.appendDurably==='function' && typeof runtime.auditSink.ensureReady==='function'});
+  if (checks.at(-1).ok) { try { const r=await runtime.auditSink.ensureReady(); checks.push({check:'durable_audit_ready',ok:!!r&&r.ok===true}); } catch { checks.push({check:'durable_audit_ready',ok:false}); } }
+  checks.push({check:'secret_reference_only',ok:runtime.secretReferenceRegistry && typeof runtime.secretReferenceRegistry.getSecretReference==='function' && runtime.secretResolver && typeof runtime.secretResolver.resolveReference==='function'});
+  const ready=checks.every(x=>x.ok);
+  return Object.freeze({ok:ready,status:ready?'OPERATIONAL_CANARY_PREFLIGHT_READY':'OPERATIONAL_CANARY_PREFLIGHT_BLOCKED',ready,checks:Object.freeze(checks.map(Object.freeze)),network_called:false,secret_resolved:false,execution_started:false,production_allowed:false});
+}
+
+async function executeOperationalCanary(options = {}) {
+  const confirmationReader = options.confirmationReader || readExactConfirmation;
+  const raw = options.bootstrap;
+  if (!raw) return { ok: false, status: 'operational_bootstrap_not_configured', executed: false, real_provider_called: false };
+
+  const runtime = normalizeRuntime(raw.runtime || {});
+  if (!runtime.ok) return { ...runtime, status: 'operational_runtime_blocked', executed: false, real_provider_called: false };
+
+  const featureEnabled = await runtime.featureFlagResolver(FLAG);
+  if (featureEnabled !== true) return { ok: false, status: 'feature_flag_disabled', executed: false, real_provider_called: false };
+  const killed = await runtime.killSwitchResolver(KILL);
+  if (killed !== false) return { ok: false, status: 'kill_switch_active', executed: false, real_provider_called: false };
+
+  const prepared = raw.preparedExecution;
+  const composition = prepared && prepared.ok === true ? prepared.operationalComposition : raw.operationalComposition;
+  if (prepared && (prepared.status !== 'PUBLIC_WEB_CANARY_EMAIL_REAUTH_OPERATIONAL_PREPARED_ACTIVE_NOT_EXECUTED' || prepared.execution_authorized !== false || prepared.external_network_called !== false || prepared.production_allowed !== false || !prepared.lifecycle || !prepared.lifecycle.session || prepared.lifecycle.session.canary_state !== 'active')) return { ok:false, status:'operational_preparation_required', executed:false, real_provider_called:false };
+  if (!composition || composition.ok !== true || composition.status !== 'PUBLIC_WEB_CANARY_EMAIL_REAUTH_OPERATIONAL_BRIDGE_READY_NOT_CONFIRMED' || composition.execution_authorized !== false || composition.external_network_called !== false || composition.production_allowed !== false || !composition.chain || !composition.bridgeInput || Object.prototype.hasOwnProperty.call(composition.bridgeInput, 'activation_confirmation')) return { ok:false, status:'operational_composition_required', executed:false, real_provider_called:false };
+  if (prepared && composition.bridgeInput.runner_request?.canary_session_id !== prepared.lifecycle.session.canary_session_id) return { ok:false, status:'active_session_binding_required', executed:false, real_provider_called:false };
+
+  const confirmation = await confirmationReader();
+  if (confirmation !== REQUIRED_CONFIRMATION) return { ok: false, status: 'exact_human_confirmation_required', executed: false, real_provider_called: false };
+
+  const bridgeInput = Object.freeze({ ...composition.bridgeInput, activation_confirmation: confirmation });
+  const bridge = createPublicWebCanaryRealNonProductionExecutionBridge({ clock: runtime.clock });
+  return bridge.execute({ chain: composition.chain, bridgeInput, runtime });
+}
+
+async function main() {
+  const parsed = parseArgs(process.argv.slice(2));
+  if (!parsed.ok) { output.write(JSON.stringify({ ok:false, status:'cli_blocked', reason:parsed.reason })+'\n'); process.exitCode=2; return; }
+  const bootstrap = loadBootstrap(parsed.bootstrapPath);
+  try {
+    const result = parsed.preflight ? await preflightOperationalCanary({ bootstrap }) : await executeOperationalCanary({ bootstrap });
+    output.write(JSON.stringify(result, null, 2)+'\n');
+    process.exitCode = result && result.ok ? 0 : 2;
+  } catch (_error) {
+    output.write(JSON.stringify({ ok:false, status:'operational_canary_failed_safe', executed:false, real_provider_called:false })+'\n');
+    process.exitCode=3;
+  } finally {
+    // Release staging PostgreSQL connections even when preflight blocks.
+    if (bootstrap && typeof bootstrap.close === 'function') {
+      try { await bootstrap.close(); }
+      catch { process.exitCode = 3; }
+    }
+  }
+}
+
+if (require.main === module) main();
+module.exports = { BOOTSTRAP_PATH, parseArgs, preflightOperationalCanary, executeOperationalCanary };

@@ -610,7 +610,7 @@ test('bridge never restores a consumed reservation when runner throws', async ()
   );
 });
 
-test('bridge is dormant: it is not wired into API index or the operational CLI', () => {
+test('bridge is isolated from API and legacy CLI; dedicated entrypoint owns controlled reachability', () => {
   const apiIndex = fs.readFileSync(
     path.join(__dirname, '..', 'src', 'index.js'),
     'utf8'
@@ -635,4 +635,29 @@ test('bridge is dormant: it is not wired into API index or the operational CLI',
     ),
     false
   );
+  const dedicatedEntrypoint = fs.readFileSync(
+    path.join(__dirname, '..', 'scripts', 'public-web-canary-real-non-production.js'),
+    'utf8'
+  );
+  assert.equal(
+    dedicatedEntrypoint.includes(
+      'public-web-canary-real-non-production-execution-bridge'
+    ),
+    true
+  );
+});
+
+test('email reauth mode reaches one synthetic runner call and remains single-use', async () => {
+  const { adaptEmailReauthGrantForBridge } = require('../src/core/public-web-canary-email-reauth-bridge-grant-adapter');
+  const authorization = {ok:true,status:'PUBLIC_WEB_CANARY_EMAIL_REAUTH_SINGLE_USE_GRANT_READY',approval_mode:'STRONG_HUMAN_REAUTH_EMAIL',grant_mode:'EMAIL_REAUTH_SINGLE_USE',operator_id:'human:owner',authorization_grant_id:'email-grant:test',execution_reservation_id:'email-reservation:test',replay_key:'email-replay:test',reservation_nonce:'email-nonce:test',evidence_key:'sha256:'+'e'.repeat(64),single_use:true,remaining_execution_count:1,verified_at:'2026-09-18T15:01:00.000Z'};
+  const {buildEmailReauthRuntimeBinding}=require('../src/core/public-web-canary-email-reauth-runtime-binding');
+  const runtimeBinding=buildEmailReauthRuntimeBinding({tenant_id:'tenant-real-bridge-test',action_digest:require('../src/core/canonical-content-digest').computeCanonicalContentDigest({environment:'staging',target_origin:'https://staging.example.org',target_path:'/health',method:'GET',port:443,maximum_requests:1,redirects_allowed:false,production_allowed:false}),environment:'staging',target_origin:'https://staging.example.org',target_path:'/health',method:'GET',port:443,maximum_requests:1,redirects_allowed:false,production_allowed:false});
+  const grantResult=adaptEmailReauthGrantForBridge({authorization,runtimeBinding,environment:'staging',production_allowed:false,issued_at:'2026-09-18T15:01:30.000Z'});
+  assert.equal(grantResult.ok,true);
+  const chain={grantResult}; const counter={calls:0};
+  const ledger=createPublicWebCanaryExecutionReservationLedger({clock:()=> '2026-09-18T15:02:00.000Z'});
+  const bridge=createPublicWebCanaryRealNonProductionExecutionBridge({reservationLedger:ledger,canaryRunner:successfulFakeRunner(counter)});
+  const input={chain,bridgeInput:{...bridgeInput({grantResult}),tenant_id:runtimeBinding.tenant_id,trial_id:runtimeBinding.trial_id,plan_hash:runtimeBinding.plan_hash,authorization_grant_id:grantResult.authorization_grant_id,execution_reservation_id:grantResult.execution_reservation_id,grant_reservation_fingerprint:grantResult.grant_reservation_fingerprint,replay_key:grantResult.execution_reservation.replay_key,reservation_nonce:grantResult.execution_reservation.reservation_nonce},runtime:runtime()};
+  const first=await bridge.execute(input);assert.equal(first.ok,true);assert.equal(counter.calls,1);assert.equal(first.production_effect,'ZERO');
+  const replay=await bridge.execute(input);assert.equal(replay.ok,false);assert.equal(counter.calls,1);
 });

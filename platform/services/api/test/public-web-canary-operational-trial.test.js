@@ -278,6 +278,14 @@ test('synthetic canary runtime defaults satisfy the pilot gate before one fake p
   assert.equal(context.nodeHttpsClient.calls(), 1);
 });
 
+test('preparation derives readiness hash when context lacks evidence id', () => {
+  const context = validPreflightContext();
+  assert.equal(context.readiness_evidence_id, undefined);
+  const prepared = prepareOperationalCanarySession(validPlan(), context, { suffix: 'readiness_hash_regression' });
+  assert.equal(prepared.ok, true, prepared.result?.session?.terminal_reason);
+  assert.equal(prepared.session.canary_state, 'active');
+});
+
 test('synthetic dry-run ignores operational transport, provider, secret, database and audit capabilities', async () => {
   const context = validPreflightContext();
   const plan = validPlan();

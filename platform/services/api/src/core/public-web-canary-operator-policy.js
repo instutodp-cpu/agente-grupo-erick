@@ -90,6 +90,16 @@ function createPublicWebCanaryOperatorPolicy(options = {}) {
     return { allowed: true, consumed: true, valid: true };
   }
 
+  function consumeStrongReauthApproval(approval, session) {
+    if (!approval || !session || approval.mode !== 'STRONG_HUMAN_REAUTH_EMAIL') return { allowed: false, consumed: false, valid: false, reason: 'strong_reauth_mode_required' };
+    if (approval.approved_by !== session.operator_id || approval.approver_role !== 'integration_operator') return { allowed: false, consumed: false, valid: false, reason: 'strong_reauth_subject_mismatch' };
+    if (approvals.has(approval.approval_id) || revokedApprovals.has(approval.approval_id)) return { allowed: false, consumed: false, valid: false, reason: 'approval_replay_detected' };
+    const approvedAt = parseCanaryTimestamp(approval.approved_at), expiresAt = parseCanaryTimestamp(approval.expires_at), sessionExpiresAt = parseCanaryTimestamp(session.expires_at);
+    if (!approvedAt || !expiresAt || !sessionExpiresAt || !(expiresAt.getTime() > approvedAt.getTime() && expiresAt.getTime() - approvedAt.getTime() <= 120000) || expiresAt.getTime() > sessionExpiresAt.getTime()) return { allowed: false, consumed: false, valid: false, reason: 'strong_reauth_freshness_invalid' };
+    approvals.set(approval.approval_id, Object.freeze({ approval_id: approval.approval_id, session_id: session.canary_session_id, approved_by: approval.approved_by, approver_role: approval.approver_role, approved_at: approval.approved_at, expires_at: approval.expires_at, scope_hash: hashCanaryEvidence({ mode: approval.mode, session_id: session.canary_session_id, tenant_id: session.tenant_id, target_origin: session.target_origin, operation: session.operation }), revoked: false }));
+    return { allowed: true, consumed: true, valid: true };
+  }
+
   function getApproval(approvalId) {
     return approvals.get(approvalId) || null;
   }
@@ -132,6 +142,7 @@ function createPublicWebCanaryOperatorPolicy(options = {}) {
     canApprove,
     validateApproval,
     consumeApproval,
+    consumeStrongReauthApproval,
     getApproval(approvalId) { return clone(getApproval(approvalId)); },
     isApprovalActive,
     isApprovalRevoked,

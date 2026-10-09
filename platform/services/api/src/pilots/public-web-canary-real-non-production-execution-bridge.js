@@ -9,8 +9,8 @@ const {
 } = require('../core/read-only-adapter-contract');
 const {
   PUBLIC_WEB_CANARY_EXECUTION_AUTHORIZATION_GRANT_RESERVATION_VALIDATOR_VERSION,
-  validatePublicWebCanaryExecutionAuthorizationGrantReservationBoundaryResult
 } = require('../core/public-web-canary-execution-authorization-grant-reservation-boundary');
+const { validatePublicWebCanaryGrantByMode } = require('../core/public-web-canary-grant-mode-validator');
 const {
   createPublicWebCanaryExecutionReservationLedger
 } = require('../core/public-web-canary-execution-reservation-ledger');
@@ -68,7 +68,8 @@ function validateGrantChain(chain) {
   const failures = [];
   if (!isPlainObject(chain)) return ['grant_chain_missing'];
 
-  const required = [
+  const emailMode = chain.grantResult?.authorization_grant?.grant_mode === 'EMAIL_REAUTH_SINGLE_USE';
+  const required = emailMode ? ['grantResult'] : [
     'grantResult',
     'intentResult',
     'reviewResult',
@@ -86,7 +87,7 @@ function validateGrantChain(chain) {
   if (failures.length > 0) return uniqueSorted(failures);
 
   const validation =
-    validatePublicWebCanaryExecutionAuthorizationGrantReservationBoundaryResult(
+    validatePublicWebCanaryGrantByMode(
       chain.grantResult,
       chain.intentResult,
       chain.reviewResult,
@@ -107,22 +108,22 @@ function validateGrantChain(chain) {
 
   const grant = chain.grantResult;
   if (grant.ok !== true) failures.push('grant_result_not_ok');
-  if (
+  if (!emailMode && (
     grant.status !==
     'PUBLIC_WEB_CANARY_EXECUTION_AUTHORIZATION_GRANTED_RESERVED'
-  ) {
+  )) {
     failures.push('grant_status_not_granted_reserved');
   }
-  if (
+  if (!emailMode && (
     grant.next_state !==
     'WAITING_PUBLIC_WEB_CANARY_REAL_NON_PRODUCTION_EXECUTION_BRIDGE'
-  ) {
+  )) {
     failures.push('grant_next_state_mismatch');
   }
-  if (
+  if (!emailMode && (
     grant.validator_version !==
     PUBLIC_WEB_CANARY_EXECUTION_AUTHORIZATION_GRANT_RESERVATION_VALIDATOR_VERSION
-  ) {
+  )) {
     failures.push('grant_validator_version_mismatch');
   }
 

@@ -1,0 +1,10 @@
+'use strict';
+const test=require('node:test');const assert=require('node:assert/strict');
+const {composeProviderEvidence}=require('../src/core/public-web-canary-email-reauth-provider-evidence-composer');
+const d='sha256:'+ 'a'.repeat(64),a='sha256:'+ 'b'.repeat(64);
+const handoff={ok:true,status:'EMAIL_REAUTH_PROVIDER_HANDOFF_READY',identity_alias:'owner-primary-email',delivery_reference:'delivery:1',challenge_id:d,action_digest:a};
+const delivery={message_id:'m1',thread_id:'t1',delivery_reference:'delivery:1',email_ts:'2026-10-07T17:25:05.000Z'};
+const reply={id:'m2',thread_id:'t1',from:'owner@example.test',body:'APROVAR REAUTENTICACAO HERMES',email_ts:'2026-10-07T17:25:29.000Z'};
+const profile={authenticated:true,identity_alias:'owner-primary-email',email:'owner@example.test'};
+test('composes authenticated reply into opaque non-authorizing evidence',()=>{const r=composeProviderEvidence({handoff,delivery,reply,profile});assert.equal(r.ok,true);assert.equal(r.execution_authorized,false);assert.equal(r.envelope.contains_provider_identifier,false);assert.equal(JSON.stringify(r.envelope).includes('m2'),false);});
+test('fails closed on wrong thread or phrase',()=>{assert.equal(composeProviderEvidence({handoff,delivery,reply:{...reply,thread_id:'x'},profile}).ok,false);assert.equal(composeProviderEvidence({handoff,delivery,reply:{...reply,body:'sim'},profile}).ok,false);});
