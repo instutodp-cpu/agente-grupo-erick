@@ -15,6 +15,15 @@ const { buildEmailReauthRuntimeBinding } = require('../core/public-web-canary-em
 
 const VERSION = 'public_web_canary_operational_postgres_bootstrap_v1';
 function required(env,key){ const v=env?.[key]; if(typeof v!=='string'||v.trim()==='') throw new TypeError('postgres_environment_invalid'); return v; }
+function optionalFileSecret(env,key,fileKey,fs,path){
+  const direct=env?.[key];
+  if(typeof direct==='string'&&direct.trim()!=='') return direct;
+  const filePath=env?.[fileKey];
+  if(typeof filePath!=='string'||filePath.trim()===''||!path.isAbsolute(filePath)) throw new TypeError('postgres_environment_invalid');
+  const value=fs.readFileSync(filePath,'utf8').trim();
+  if(value==='') throw new TypeError('postgres_environment_invalid');
+  return value;
+}
 
 function createPublicWebCanaryOperationalPostgresBootstrap({environment=process.env,PoolClass, runtime={}}={}) {
   const singleUseIdFactory=typeof runtime.singleUseIdFactory==='function'?runtime.singleUseIdFactory:randomUUID;
@@ -28,7 +37,8 @@ function createPublicWebCanaryOperationalPostgresBootstrap({environment=process.
   if (host !== 'db.vvzvqinbzdqzcwrfoomd.supabase.co' || port !== 5432 || !path.isAbsolute(caPath)) throw new TypeError('staging_postgres_identity_invalid');
   const ca=fs.readFileSync(caPath,'utf8');
   if (!ca.includes('BEGIN CERTIFICATE')) throw new TypeError('staging_postgres_ca_invalid');
-  const pool=new PoolClass({host,port,user:required(environment,'POSTGRES_USER'),password:required(environment,'POSTGRES_PASSWORD'),database:required(environment,'POSTGRES_DB'),ssl:{ca,rejectUnauthorized:true}});
+  const password=optionalFileSecret(environment,'POSTGRES_PASSWORD','POSTGRES_PASSWORD_FILE',fs,path);
+  const pool=new PoolClass({host,port,user:required(environment,'POSTGRES_USER'),password,database:required(environment,'POSTGRES_DB'),ssl:{ca,rejectUnauthorized:true}});
   const controls=createPublicWebCanaryOperationalControls({environment});
   const clock=typeof runtime.clock==='function'?runtime.clock:()=>new Date().toISOString();
   const bindings=createPublicWebCanaryOperationalBindings({controls,clock});
