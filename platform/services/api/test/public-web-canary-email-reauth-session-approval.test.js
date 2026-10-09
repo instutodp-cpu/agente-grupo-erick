@@ -8,7 +8,8 @@ test('registry exposes isolated email reauth approval without weakening legacy a
  assert.match(src,/grant_mode !== 'EMAIL_REAUTH_SINGLE_USE'/);
  assert.match(src,/authorization_scope !== 'PUBLIC_WEB_CANARY_SINGLE_EXECUTION_NON_PRODUCTION'/);
  assert.match(src,/expires - issued !== 120000/);
- assert.match(src,/session\.target_origin !== 'https:\/\/example\.com'/);
+ assert.match(src,/EMAIL_REAUTH_STAGING_TARGET_ORIGIN/);
+ assert.match(src,/EMAIL_REAUTH_STAGING_TARGET_PATH/);
  const legacy=src.slice(src.indexOf('function approveCanary('),src.indexOf('function approveCanaryWithEmailReauth'));
  assert.match(legacy,/dualApproval: true/);
  assert.match(legacy,/operatorPolicy\.validateApproval/);
@@ -18,7 +19,7 @@ test('registry exposes isolated email reauth approval without weakening legacy a
 test('operator policy records bounded strong reauth approval as active without dual-control impersonation',()=>{
  const {createPublicWebCanaryOperatorPolicy}=require('../src/core/public-web-canary-operator-policy');
  const policy=createPublicWebCanaryOperatorPolicy();
- const session={canary_session_id:'email_session',operator_id:'operator_public_web',tenant_id:'grupo_erick',target_origin:'https://example.com',operation:'fetch_public_page_summary',expires_at:'2026-10-07T12:05:00.000Z'};
+ const session={canary_session_id:'email_session',operator_id:'operator_public_web',tenant_id:'grupo_erick',target_origin:'https://hermes-staging.grupoerick.tech',operation:'fetch_public_page_summary',expires_at:'2026-10-07T12:05:00.000Z'};
  const approval={approval_id:'email_grant',approved_by:'operator_public_web',approver_role:'integration_operator',approved_at:'2026-10-07T12:00:00.000Z',expires_at:'2026-10-07T12:02:00.000Z',mode:'STRONG_HUMAN_REAUTH_EMAIL'};
  const consumed=policy.consumeStrongReauthApproval(approval,session);
  assert.equal(consumed.consumed,true);
