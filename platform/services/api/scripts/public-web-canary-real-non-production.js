@@ -101,6 +101,12 @@ async function main() {
   } catch (_error) {
     output.write(JSON.stringify({ ok:false, status:'operational_canary_failed_safe', executed:false, real_provider_called:false })+'\n');
     process.exitCode=3;
+  } finally {
+    // Release staging PostgreSQL connections even when preflight blocks.
+    if (bootstrap && typeof bootstrap.close === 'function') {
+      try { await bootstrap.close(); }
+      catch { process.exitCode = 3; }
+    }
   }
 }
 
