@@ -216,7 +216,8 @@ function buildPublicWebRequest(input, session, targetUrl, limits) {
   };
 }
 
-function buildSecretAccessContext(input, session) {
+function buildSecretAccessContext(input, session, secretReference) {
+  const stagingReference = session.environment === 'staging' && secretReference?.environment === 'staging';
   return {
     trace_id: input.trace_id,
     request_id: input.request_id,
@@ -226,8 +227,8 @@ function buildSecretAccessContext(input, session) {
     adapter_id: session.adapter_id,
     workspace_type: session.workspace_type,
     tenant_id: session.tenant_id,
-    environment: session.environment === 'staging' ? 'staging' : 'local_test',
-    purpose: session.environment === 'staging' ? 'public_web_canary_execution' : 'local_test_readiness_validation',
+    environment: stagingReference ? 'staging' : 'local_test',
+    purpose: stagingReference ? 'public_web_canary_execution' : 'local_test_readiness_validation',
     requested_by: session.operator_id,
     simulated: true,
     executed: false,
@@ -406,7 +407,7 @@ function createPublicWebCanaryRunner(deps = {}) {
         allowed_workspaces: Array.isArray(deps.workspaceAllowlist) ? deps.workspaceAllowlist : undefined,
         allowed_users: Array.isArray(deps.userAllowlist) ? deps.userAllowlist : undefined,
         secretReference: binding.secret_reference,
-        secretAccessContext: buildSecretAccessContext(input, session),
+        secretAccessContext: buildSecretAccessContext(input, session, binding.secret_reference),
         clock: deps.clock
       });
       let normalized = normalizeNetworkResult(result, input, session, networkStarted, deps, {
