@@ -226,8 +226,8 @@ function buildSecretAccessContext(input, session) {
     adapter_id: session.adapter_id,
     workspace_type: session.workspace_type,
     tenant_id: session.tenant_id,
-    environment: 'local_test',
-    purpose: 'local_test_readiness_validation',
+    environment: session.environment === 'staging' ? 'staging' : 'local_test',
+    purpose: session.environment === 'staging' ? 'public_web_canary_execution' : 'local_test_readiness_validation',
     requested_by: session.operator_id,
     simulated: true,
     executed: false,
@@ -517,6 +517,7 @@ function createPublicWebCanaryRunner(deps = {}) {
 }
 
 module.exports = {
+  buildSecretAccessContext,
   buildBlockedBeforeNetworkResult,
   buildFailedAfterNetworkResult,
   createPublicWebCanaryRunner
