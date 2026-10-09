@@ -5,7 +5,7 @@ const test = require('node:test');
 
 const { createPublicWebNodeHttpsClient } = require('../src/adapters/public-web/public-web-node-https-client');
 const { normalizeCanaryTelemetry, validateCanaryTelemetry } = require('../src/core/public-web-canary-telemetry');
-const { createPublicWebCanaryRunner } = require('../src/pilots/public-web-canary-runner');
+const { createPublicWebCanaryRunner, buildSecretAccessContext } = require('../src/pilots/public-web-canary-runner');
 const { createPublicWebCanaryStagingBootstrap } = require('../src/pilots/public-web-canary-staging-bootstrap');
 const {
   validCanaryContext,
@@ -173,4 +173,17 @@ test('telemetry separates provider invocation, transport invocation, and network
   });
   assert.equal(validateCanaryTelemetry({ provider_invoked: true, transport_invoked: false }).valid, true);
   assert.equal(validateCanaryTelemetry({ provider_invoked: false, transport_invoked: true }).valid, false);
+});
+
+
+test('secret access context selects staging purpose without leaking into local tests', () => {
+  const input = { trace_id: 'trace', request_id: 'request' };
+  const session = { environment: 'staging', configuration_id: 'config', connector_id: 'connector', provider_id: 'provider', adapter_id: 'adapter', workspace_type: 'corporate', tenant_id: 'grupo_erick', operator_id: 'operator' };
+  const staging = buildSecretAccessContext(input, session);
+  assert.equal(staging.environment, 'staging');
+  assert.equal(staging.purpose, 'public_web_canary_execution');
+  const local = buildSecretAccessContext(input, { ...session, environment: 'local_test' });
+  assert.equal(local.environment, 'local_test');
+  assert.equal(local.purpose, 'local_test_readiness_validation');
+  assert.notEqual(staging.environment, 'production');
 });
