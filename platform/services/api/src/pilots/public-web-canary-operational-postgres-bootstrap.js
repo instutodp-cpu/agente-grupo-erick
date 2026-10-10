@@ -34,11 +34,13 @@ function createPublicWebCanaryOperationalPostgresBootstrap({environment=process.
   const caPath=required(environment,'HERMES_STAGING_CA_FILE');
   const fs=require('node:fs');
   const path=require('node:path');
-  if (host !== 'db.vvzvqinbzdqzcwrfoomd.supabase.co' || port !== 5432 || !path.isAbsolute(caPath)) throw new TypeError('staging_postgres_identity_invalid');
+  const direct=host==='db.vvzvqinbzdqzcwrfoomd.supabase.co' && port===5432 && environment.POSTGRES_USER==='postgres';
+  const pooler=host==='aws-0-sa-east-1.pooler.supabase.com' && port===5432 && environment.POSTGRES_USER==='postgres.vvzvqinbzdqzcwrfoomd';
+  if ((!direct&&!pooler) || environment.POSTGRES_DB!=='postgres' || !path.isAbsolute(caPath)) throw new TypeError('staging_postgres_identity_invalid');
   const ca=fs.readFileSync(caPath,'utf8');
   if (!ca.includes('BEGIN CERTIFICATE')) throw new TypeError('staging_postgres_ca_invalid');
   const password=optionalFileSecret(environment,'POSTGRES_PASSWORD','POSTGRES_PASSWORD_FILE',fs,path);
-  const pool=new PoolClass({host,port,user:required(environment,'POSTGRES_USER'),password,database:required(environment,'POSTGRES_DB'),ssl:{ca,rejectUnauthorized:true}});
+  const pool=new PoolClass({host,port,user:required(environment,'POSTGRES_USER'),password,database:required(environment,'POSTGRES_DB'),ssl:{ca,rejectUnauthorized:true,servername:host}});
   const controls=createPublicWebCanaryOperationalControls({environment});
   const clock=typeof runtime.clock==='function'?runtime.clock:()=>new Date().toISOString();
   const bindings=createPublicWebCanaryOperationalBindings({controls,clock});
