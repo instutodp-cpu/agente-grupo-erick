@@ -346,15 +346,14 @@ function createPublicWebCanaryRunner(deps = {}) {
     let providerInvoked = false;
     let transportInvoked = false;
     let externalNetworkCalled = false;
+    const policyDnsResolver = () => dns.approved_ips.slice();
     const transport = createPublicWebRealTransportCandidate({
       enabled: true,
       environment: session.environment,
       production: false,
       featureFlagResolver: deps.featureFlagResolver,
       killSwitchResolver: deps.killSwitchResolver,
-      dnsResolver: typeof deps.dnsResolver.resolveSyncForPolicy === 'function'
-        ? deps.dnsResolver.resolveSyncForPolicy
-        : () => dns.approved_ips,
+      dnsResolver: policyDnsResolver,
       httpClient: async (transportRequest) => {
         networkStarted = true;
         transportInvoked = true;
@@ -391,7 +390,7 @@ function createPublicWebCanaryRunner(deps = {}) {
         secretReferenceRegistry: deps.secretReferenceRegistry,
         secretResolver: deps.secretResolver,
         readinessResult: deps.readinessResult,
-        dnsResolver: typeof deps.dnsResolver.resolveSyncForPolicy === 'function' ? deps.dnsResolver.resolveSyncForPolicy : () => dns.approved_ips,
+        dnsResolver: policyDnsResolver,
         rateLimitBudget: deps.rateLimitBudget,
         costBudget: deps.costBudget,
         audit_available: deps.requireDurableAudit === true
