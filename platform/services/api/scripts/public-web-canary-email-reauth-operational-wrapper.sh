@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-ENV_FILE="${HERMES_REAUTH_POSTGRES_ENV_FILE:-/home/hermesadmin/.hermes-write-postgres.env}"
+ENV_FILE="${HERMES_REAUTH_POSTGRES_ENV_FILE:-/home/hermesadmin/.hermes-public-web-canary-staging-postgres.env}"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 if [ "$#" -ne 0 ]; then
   printf '%s\n' '{"ok":false,"status":"EMAIL_REAUTH_OPERATIONAL_WRAPPER_BLOCKED","reason":"arguments_not_allowed","execution_authorized":false,"external_network_called":false,"production_allowed":false}' >&2
