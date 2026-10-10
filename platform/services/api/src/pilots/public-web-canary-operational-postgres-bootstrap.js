@@ -3,6 +3,7 @@
 const { randomUUID } = require('node:crypto');
 
 const { createPostgresPublicWebCanaryAuditPersistence } = require('../adapters/postgres/public-web-canary-audit-persistence-postgres');
+const { createPublicWebCanaryStagingPostgresPool } = require('../adapters/postgres/public-web-canary-staging-postgres-pool');
 const { createPublicWebCanaryPersistentAuditSink } = require('../core/public-web-canary-persistent-audit-sink');
 const { createPublicWebCanaryStagingBootstrap } = require('./public-web-canary-staging-bootstrap');
 const { createPublicWebCanaryOperationalControls } = require('./public-web-canary-operational-controls');
@@ -14,33 +15,9 @@ const { authorizePublicWebCanaryWithEmailReauth } = require('../core/public-web-
 const { buildEmailReauthRuntimeBinding } = require('../core/public-web-canary-email-reauth-runtime-binding');
 
 const VERSION = 'public_web_canary_operational_postgres_bootstrap_v1';
-function required(env,key){ const v=env?.[key]; if(typeof v!=='string'||v.trim()==='') throw new TypeError('postgres_environment_invalid'); return v; }
-function optionalFileSecret(env,key,fileKey,fs,path){
-  const direct=env?.[key];
-  if(typeof direct==='string'&&direct.trim()!=='') return direct;
-  const filePath=env?.[fileKey];
-  if(typeof filePath!=='string'||filePath.trim()===''||!path.isAbsolute(filePath)) throw new TypeError('postgres_environment_invalid');
-  const value=fs.readFileSync(filePath,'utf8').trim();
-  if(value==='') throw new TypeError('postgres_environment_invalid');
-  return value;
-}
-
 function createPublicWebCanaryOperationalPostgresBootstrap({environment=process.env,PoolClass, runtime={}}={}) {
   const singleUseIdFactory=typeof runtime.singleUseIdFactory==='function'?runtime.singleUseIdFactory:randomUUID;
-  if(typeof PoolClass!=='function') throw new TypeError('postgres_pool_class_required');
-  const port=Number(required(environment,'POSTGRES_PORT'));
-  if(!Number.isInteger(port)||port<1||port>65535) throw new TypeError('postgres_environment_invalid');
-  const host=required(environment,'POSTGRES_HOST');
-  const caPath=required(environment,'HERMES_STAGING_CA_FILE');
-  const fs=require('node:fs');
-  const path=require('node:path');
-  const direct=host==='db.vvzvqinbzdqzcwrfoomd.supabase.co' && port===5432 && environment.POSTGRES_USER==='postgres';
-  const pooler=host==='aws-0-sa-east-1.pooler.supabase.com' && port===5432 && environment.POSTGRES_USER==='postgres.vvzvqinbzdqzcwrfoomd';
-  if ((!direct&&!pooler) || environment.POSTGRES_DB!=='postgres' || !path.isAbsolute(caPath)) throw new TypeError('staging_postgres_identity_invalid');
-  const ca=fs.readFileSync(caPath,'utf8');
-  if (!ca.includes('BEGIN CERTIFICATE')) throw new TypeError('staging_postgres_ca_invalid');
-  const password=optionalFileSecret(environment,'POSTGRES_PASSWORD','POSTGRES_PASSWORD_FILE',fs,path);
-  const pool=new PoolClass({host,port,user:required(environment,'POSTGRES_USER'),password,database:required(environment,'POSTGRES_DB'),ssl:{ca,rejectUnauthorized:true,servername:host}});
+  const pool=createPublicWebCanaryStagingPostgresPool({environment,PoolClass});
   const controls=createPublicWebCanaryOperationalControls({environment});
   const clock=typeof runtime.clock==='function'?runtime.clock:()=>new Date().toISOString();
   const bindings=createPublicWebCanaryOperationalBindings({controls,clock});
