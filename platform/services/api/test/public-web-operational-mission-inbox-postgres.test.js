@@ -36,3 +36,36 @@ test('postgres inbox fails closed when durable schema is not ready',async()=>{
   const pool={async query(){return {rows:[{table_exists:false}]};},async connect(){throw new Error('must not connect');}}; const inbox=createPublicWebOperationalMissionInboxPostgres({pool}); const result=await inbox.admit(record());
   assert.equal(result.ok,false); assert.equal(result.status,'NOT_READY');
 });
+
+test('postgres inbox reads by run and applies compare-and-set lifecycle transition',async()=>{
+  let current=rowFrom(record()); const calls=[];
+  const pool={
+    async query(sql,params){
+      calls.push({sql,params});
+      if(sql.includes('to_regclass')) return {rows:[{table_exists:true}]};
+      if(sql.startsWith('SELECT *')) return {rows:current?[current]:[]};
+      if(sql.startsWith('UPDATE')) {
+        if(current && current.mission_run_id===params[0] && current.status===params[1]) {
+          current={...current,status:params[2],updated_at:'2026-10-14T21:01:00.000Z'};
+          return {rows:[current]};
+        }
+        return {rows:[]};
+      }
+      throw new Error('unexpected query');
+    },
+    async connect(){throw new Error('not used');}
+  };
+  const inbox=createPublicWebOperationalMissionInboxPostgres({pool});
+  const found=await inbox.getByRun('run-1'); assert.equal(found.ok,true); assert.equal(found.record.status,'accepted');
+  const moved=await inbox.transition({mission_run_id:'run-1',expected_status:'accepted',next_status:'preparing'});
+  assert.equal(moved.ok,true); assert.equal(moved.record.status,'preparing');
+  const stale=await inbox.transition({mission_run_id:'run-1',expected_status:'accepted',next_status:'preparing'});
+  assert.equal(stale.ok,false); assert.equal(stale.status,'CONFLICT'); assert.equal(stale.current_status,'preparing');
+});
+
+test('postgres inbox lifecycle patches are whitelisted before SQL construction',async()=>{
+  const pool={async query(sql){if(sql.includes('to_regclass')) return {rows:[{table_exists:true}]}; throw new Error('must not mutate');},async connect(){throw new Error('not used');}};
+  const inbox=createPublicWebOperationalMissionInboxPostgres({pool});
+  const result=await inbox.transition({mission_run_id:'run-1',expected_status:'accepted',next_status:'preparing',patch:{tenant_id:'other'}});
+  assert.equal(result.ok,false); assert.equal(result.status,'INVALID'); assert.match(result.reason,/patch_field_forbidden/);
+});
