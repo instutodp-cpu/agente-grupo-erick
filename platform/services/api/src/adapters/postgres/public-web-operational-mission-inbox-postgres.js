@@ -3,7 +3,7 @@
 const TABLE = 'hermes.public_web_operational_mission_inbox';
 const PATCH_COLUMNS = Object.freeze(new Set([
   'reauth_challenge_id', 'reauth_action_digest', 'evidence_key',
-  'execution_id', 'request_id', 'result_digest', 'result_summary', 'error_code',
+  'execution_id', 'request_id', 'result_digest', 'result_summary', 'error_code', 'cost_units',
   'callback_state', 'callback_attempts', 'callback_last_error',
   'completed_at', 'acknowledged_at'
 ]));

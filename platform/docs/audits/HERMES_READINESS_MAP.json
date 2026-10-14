@@ -457,13 +457,13 @@
   ],
   "inventory": {
     "platform_docs": 139,
-    "core_source_files": 724,
-    "api_tests": 608,
+    "core_source_files": 726,
+    "api_tests": 611,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
       "hermes_maintainer": 178,
-      "public_web": 57,
+      "public_web": 59,
       "runtime_queue": 36,
       "transcription_provider": 28,
       "runtime_execution": 26,
