@@ -409,17 +409,33 @@
     },
     {
       "id": "public-web-canary",
-      "scope": "non-production canary",
+      "scope": "staging real-network read-only canary",
       "planned": true,
       "contracted": true,
       "implemented": true,
       "tested": true,
-      "proven_e2e": false,
-      "operational": false,
+      "proven_e2e": true,
+      "operational": true,
       "limits": [
-        "readiness_only_evidence",
-        "historical_fake_dry_run_not_operational_proof",
-        "human_authorization_required"
+        "staging_only",
+        "production_blocked",
+        "read_only_public_web_only",
+        "human_email_reauth_required",
+        "single_use_authorization_required",
+        "exact_human_tty_confirmation_required",
+        "maximum_requests_1_per_authorized_session",
+        "redirects_disabled",
+        "generic_runtime_remains_simulation_only"
+      ],
+      "evidence_revision": "7318ee2a3d3d82c889b99fb77a6bec03118ed58e",
+      "evidence": [
+        "PR #538 merged as 7318ee2a3d3d82c889b99fb77a6bec03118ed58e",
+        "PUBLIC_WEB_CANARY_REAL_NON_PRODUCTION_EXECUTION_COMPLETED",
+        "exactly one request_id in the single-use grant window",
+        "HTTP 2xx from https://hermes-staging.grupoerick.tech/health",
+        "redirects_followed=0 and production_effect=ZERO",
+        "durable PostgreSQL audit: public_web_canary_request_started -> public_web_canary_request_succeeded",
+        "platform/docs/PUBLIC_WEB_FIRST_OPERATIONAL_MISSION.md"
       ]
     },
     {
@@ -440,9 +456,9 @@
     }
   ],
   "inventory": {
-    "platform_docs": 138,
-    "core_source_files": 721,
-    "api_tests": 602,
+    "platform_docs": 139,
+    "core_source_files": 724,
+    "api_tests": 608,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {

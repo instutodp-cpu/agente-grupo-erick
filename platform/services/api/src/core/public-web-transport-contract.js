@@ -331,6 +331,14 @@ function uniqueSorted(values) {
   return [...new Set((values || []).filter(isNonEmptyString))].sort();
 }
 
+function isRealExecutionEvidence(value = {}) {
+  return value.executed === true
+    && value.real_provider_called === true
+    && value.provider_invoked === true
+    && value.transport_invoked === true
+    && value.external_network_called === true;
+}
+
 function deepClone(value) {
   if (value === undefined) return undefined;
   return JSON.parse(JSON.stringify(value));
@@ -669,7 +677,9 @@ function validatePublicWebTransportResponse(response) {
   if (!PUBLIC_WEB_STATUSES.includes(response.status)) errors.push('status_not_allowed');
   if (!ALLOWED_CONTENT_TYPES.includes(normalizeContentType(response.content_type))) errors.push('content_type_not_allowed');
   if (!Array.isArray(response.structured_results)) errors.push('structured_results_must_be_array');
-  if (response.simulated !== true) errors.push('simulated_must_be_true');
+  if (typeof response.simulated !== 'boolean') errors.push('simulated_must_be_boolean');
+  if (response.simulated === false && !isRealExecutionEvidence(response)) errors.push('real_execution_evidence_required_when_not_simulated');
+  if (response.simulated === true && isRealExecutionEvidence(response)) errors.push('real_execution_must_not_be_simulated');
   if (typeof response.real_provider_called !== 'boolean') errors.push('real_provider_called_must_be_boolean');
   if (response.can_trigger_real_execution !== false) errors.push('can_trigger_real_execution_must_be_false');
   errors.push(...findForbiddenFields(response));
@@ -686,6 +696,7 @@ function buildSafeTransportError(code, message, context = {}) {
 }
 
 function buildPublicWebAuditEvent(context = {}) {
+  const simulated = !isRealExecutionEvidence(context);
   return {
     event_name: 'public_web_read_only_adapter_pilot_evaluated',
     trace_id: context.trace_id || 'trace_not_available',
@@ -712,7 +723,7 @@ function buildPublicWebAuditEvent(context = {}) {
     configuration_state: context.configuration_state || 'unknown',
     canary_state: context.canary_state || 'blocked',
     rollout_percentage: Number.isFinite(context.rollout_percentage) ? context.rollout_percentage : 0,
-    simulated: true,
+    simulated,
     executed: context.executed === true,
     real_provider_called: context.real_provider_called === true,
     provider_invoked: context.provider_invoked === true,
@@ -761,7 +772,7 @@ function buildTransportEnvelope(request, fields = {}) {
     redirects_followed: Number.isInteger(fields.redirects_followed) ? fields.redirects_followed : 0,
     rate_limit_metadata: sanitizeObject(fields.rate_limit_metadata || { policy: 'synthetic', retry_performed: false }),
     cost_metadata: sanitizeObject(fields.cost_metadata || { cost_units: 0, budget_source: 'synthetic' }),
-    simulated: true,
+    simulated: !isRealExecutionEvidence(fields),
     executed: fields.executed === true,
     real_provider_called: fields.real_provider_called === true,
     provider_invoked: fields.provider_invoked === true,
@@ -945,6 +956,7 @@ module.exports = {
   isPlainObject,
   isNonEmptyString,
   uniqueSorted,
+  isRealExecutionEvidence,
   deepClone,
   hashValue,
   findForbiddenFields,

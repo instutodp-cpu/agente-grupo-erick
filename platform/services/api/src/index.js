@@ -28,6 +28,8 @@ const {
   attachRequestIdentity
 } = require('./core/request-identity');
 const { beginCallerObservation, confirmationMetadata } = require('./core/caller-observability');
+const { resolveMachineIdentity } = require('./core/machine-identity-resolver');
+const { createPublicWebOperationalMissionIngressBootstrap } = require('./pilots/public-web-operational-mission-ingress-bootstrap');
 
 const SERVICE = 'hermes-api';
 const VERSION = process.env.HERMES_VERSION || '2.0.0-scaffold';
@@ -124,6 +126,7 @@ function readJsonBody(req) {
 
 function createServer({
   machineIdentityRegistry = null,
+  missionIngress = null,
   requestIdentityMode = REQUEST_IDENTITY_MODES.PUBLIC
 } = {}) {
   return http.createServer((req, res) => {
@@ -147,6 +150,55 @@ function createServer({
     // Readiness reporta a presença das dependências configuradas (não conecta).
     if (method === 'GET' && url === '/ready') {
       return sendJson(res, 200, { status: 'ready', service: SERVICE, config: configPresence() });
+    }
+
+    if (method === 'POST' && url === '/internal/mission-dispatch') {
+      if (!machineIdentityRegistry || !missionIngress || typeof missionIngress.admit !== 'function') {
+        return sendJson(res, 503, {
+          error: 'mission_ingress_not_configured',
+          execution_authorized: false,
+          external_network_called: false,
+          production_allowed: false
+        });
+      }
+
+      let identity;
+      try {
+        identity = resolveMachineIdentity({ authorization: req.headers && req.headers.authorization }, machineIdentityRegistry);
+      } catch (_error) {
+        return sendJson(res, 401, {
+          error: 'unauthorized',
+          execution_authorized: false,
+          external_network_called: false,
+          production_allowed: false
+        });
+      }
+
+      return readJsonBody(req)
+        .then((body) => missionIngress.admit({ envelope: body, identity }))
+        .then((result) => {
+          const statusCode = result.ok === true
+            ? (result.idempotent === true ? 200 : 202)
+            : (Number.isInteger(result.http_status) ? result.http_status : 503);
+          console.log(JSON.stringify({
+            level: result.ok === true ? 'info' : 'warn',
+            event: result.ok === true ? 'operational_mission_ingress_admitted' : 'operational_mission_ingress_blocked',
+            status: result.status,
+            mission_run_id: result.mission_run_id || null,
+            contract_hash: result.contract_hash || null,
+            idempotent: result.idempotent === true,
+            execution_authorized: false,
+            external_network_called: false,
+            production_allowed: false
+          }));
+          return sendJson(res, statusCode, result);
+        })
+        .catch(() => sendJson(res, 400, {
+          error: 'invalid_request',
+          execution_authorized: false,
+          external_network_called: false,
+          production_allowed: false
+        }));
     }
 
     // Recebe uma mensagem e classifica domínio + intenção. Sem acoplamento a
@@ -428,7 +480,11 @@ function createServer({
 // Só sobe o listener quando executado diretamente (`node src/index.js`), não
 // quando `createServer` é importado por testes.
 if (require.main === module) {
-  const server = createServer();
+  const missionIngressComposition = createPublicWebOperationalMissionIngressBootstrap();
+  const server = createServer({
+    machineIdentityRegistry: missionIngressComposition.machineIdentityRegistry,
+    missionIngress: missionIngressComposition.missionIngress
+  });
 
   server.listen(PORT, () => {
     // Log estruturado simples (JSON) para facilitar observabilidade futura.
@@ -439,7 +495,10 @@ if (require.main === module) {
   for (const signal of ['SIGTERM', 'SIGINT']) {
     process.on(signal, () => {
       console.log(JSON.stringify({ level: 'info', event: 'api_shutdown', signal }));
-      server.close(() => process.exit(0));
+      server.close(async () => {
+        try { await missionIngressComposition.close(); }
+        finally { process.exit(0); }
+      });
     });
   }
 }

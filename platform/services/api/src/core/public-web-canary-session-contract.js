@@ -10,6 +10,7 @@ const {
   READINESS_CANDIDATE_ID,
   hashValue,
   isBlockedOperation,
+  isRealExecutionEvidence,
   uniqueSorted
 } = require('./public-web-transport-contract');
 
@@ -451,7 +452,7 @@ function buildCanaryAuditEventCandidate(context = {}) {
     event_sequence: Number.isSafeInteger(context.event_sequence) && context.event_sequence >= 0
       ? context.event_sequence
       : 0,
-    simulated: true,
+    simulated: !isRealExecutionEvidence(context),
     executed: context.executed === true,
     real_provider_called: context.real_provider_called === true,
     provider_invoked: context.provider_invoked === true,
