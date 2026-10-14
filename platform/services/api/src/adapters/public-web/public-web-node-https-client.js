@@ -40,8 +40,13 @@ function createPublicWebNodeHttpsClient(options = {}) {
         port: 443,
         method,
         path: `${url.pathname || '/'}${url.search || ''}`,
-        lookup(hostname, _options, callback) {
-          callback(null, input.approved_ip, input.approved_ip.includes(':') ? 6 : 4);
+        lookup(hostname, lookupOptions, callback) {
+          const family = input.approved_ip.includes(':') ? 6 : 4;
+          if (lookupOptions && lookupOptions.all === true) {
+            callback(null, [{ address: input.approved_ip, family }]);
+            return;
+          }
+          callback(null, input.approved_ip, family);
         },
         headers: {
           Host: input.host_header || input.hostname,
