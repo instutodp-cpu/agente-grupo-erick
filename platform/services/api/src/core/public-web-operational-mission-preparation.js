@@ -102,4 +102,49 @@ async function prepareOperationalMissionReauth({ inbox, mission_run_id, challeng
   });
 }
 
-module.exports = { VERSION, prepareOperationalMissionReauth };
+async function bindOperationalMissionEvidence({ inbox, evidenceStore, mission_run_id, evidence_key } = {}) {
+  if (!inbox || typeof inbox.getByRun !== 'function' || typeof inbox.transition !== 'function') return blocked('durable_inbox_required');
+  if (!evidenceStore || typeof evidenceStore.readVerified !== 'function') return blocked('durable_evidence_store_required');
+  if (!nonEmpty(mission_run_id)) return blocked('mission_run_id_required');
+  if (!/^sha256:[0-9a-f]{64}$/.test(String(evidence_key || ''))) return blocked('evidence_key_invalid');
+
+  const found = await inbox.getByRun(mission_run_id);
+  if (!found?.ok || !found.record) return blocked(found?.reason || 'mission_not_found');
+  const record = found.record;
+  if (record.status !== 'awaiting_human_reauth') return blocked('mission_must_be_awaiting_human_reauth', { current_status:record.status });
+  if (!nonEmpty(record.reauth_challenge_id) || !nonEmpty(record.reauth_action_digest)) return blocked('mission_reauth_binding_missing');
+
+  let evidence;
+  try { evidence = await evidenceStore.readVerified(evidence_key); }
+  catch (_error) { return blocked('verified_durable_evidence_required'); }
+  if (!evidence || evidence.ok !== true || evidence.durable !== true || evidence.single_use !== true
+    || evidence.challenge_id !== record.reauth_challenge_id || evidence.action_digest !== record.reauth_action_digest
+    || evidence.subject_id !== 'human:owner') {
+    return blocked('mission_reauth_evidence_binding_mismatch');
+  }
+
+  const ready = await inbox.transition({
+    mission_run_id,
+    expected_status:'awaiting_human_reauth',
+    next_status:'ready_for_tty',
+    patch:{ evidence_key, error_code:null }
+  });
+  if (!ready?.ok) return blocked(ready?.reason || 'mission_evidence_state_persistence_failed', { current_status:ready?.current_status || null });
+
+  return Object.freeze({
+    ok:true,
+    status:'PUBLIC_WEB_OPERATIONAL_MISSION_READY_FOR_TTY',
+    version:VERSION,
+    mission_id:record.mission_id,
+    mission_run_id,
+    contract_hash:record.contract_hash,
+    evidence_key,
+    verified_at:evidence.verified_at || null,
+    execution_authorized:false,
+    execution_started:false,
+    external_network_called:false,
+    production_allowed:false
+  });
+}
+
+module.exports = { VERSION, prepareOperationalMissionReauth, bindOperationalMissionEvidence };
