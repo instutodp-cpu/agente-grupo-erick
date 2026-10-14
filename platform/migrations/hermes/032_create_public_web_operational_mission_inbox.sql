@@ -1,5 +1,5 @@
 -- Durable staging-only inbox for bounded Maestro -> Hermes public-web missions.
--- Admission only: this table does not authorize execution or call any provider.
+-- Admission/state only: this table never authorizes a provider call by itself.
 BEGIN;
 
 CREATE SCHEMA IF NOT EXISTS hermes;
@@ -22,7 +22,20 @@ CREATE TABLE IF NOT EXISTS hermes.public_web_operational_mission_inbox (
   mission_payload JSONB NOT NULL,
   trial_config JSONB NOT NULL,
   status TEXT NOT NULL DEFAULT 'accepted',
+  reauth_challenge_id TEXT,
+  reauth_action_digest TEXT,
+  evidence_key TEXT,
+  execution_id TEXT,
+  request_id TEXT,
+  result_digest TEXT,
+  result_summary TEXT,
+  error_code TEXT,
+  callback_state TEXT NOT NULL DEFAULT 'not_ready',
+  callback_attempts INTEGER NOT NULL DEFAULT 0,
+  callback_last_error TEXT,
   received_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ,
+  acknowledged_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
   CONSTRAINT public_web_operational_mission_inbox_identity_check CHECK (
@@ -44,6 +57,22 @@ CREATE TABLE IF NOT EXISTS hermes.public_web_operational_mission_inbox (
   CONSTRAINT public_web_operational_mission_inbox_status_check CHECK (
     status IN ('accepted','preparing','awaiting_human_reauth','ready_for_tty','executing','succeeded','failed_safe','acknowledged')
   ),
+  CONSTRAINT public_web_operational_mission_inbox_callback_state_check CHECK (
+    callback_state IN ('not_ready','pending','sending','acknowledged','retry','dead_letter')
+    AND callback_attempts >= 0
+    AND callback_attempts <= 10
+  ),
+  CONSTRAINT public_web_operational_mission_inbox_optional_digest_check CHECK (
+    (reauth_challenge_id IS NULL OR reauth_challenge_id ~ '^sha256:[0-9a-f]{64}$')
+    AND (reauth_action_digest IS NULL OR reauth_action_digest ~ '^sha256:[0-9a-f]{64}$')
+    AND (evidence_key IS NULL OR evidence_key ~ '^sha256:[0-9a-f]{64}$')
+    AND (result_digest IS NULL OR result_digest ~ '^sha256:[0-9a-f]{64}$')
+  ),
+  CONSTRAINT public_web_operational_mission_inbox_result_check CHECK (
+    (result_summary IS NULL OR octet_length(result_summary) <= 8192)
+    AND (error_code IS NULL OR octet_length(error_code) <= 256)
+    AND (callback_last_error IS NULL OR octet_length(callback_last_error) <= 512)
+  ),
   CONSTRAINT public_web_operational_mission_inbox_payload_check CHECK (
     jsonb_typeof(mission_payload) = 'object'
     AND mission_payload->>'dispatch_token' IS NULL
@@ -63,6 +92,9 @@ CREATE TABLE IF NOT EXISTS hermes.public_web_operational_mission_inbox (
 
 CREATE INDEX IF NOT EXISTS public_web_operational_mission_inbox_tenant_status_idx
   ON hermes.public_web_operational_mission_inbox (tenant_id, workspace_id, status, received_at);
+CREATE INDEX IF NOT EXISTS public_web_operational_mission_inbox_callback_idx
+  ON hermes.public_web_operational_mission_inbox (callback_state, updated_at)
+  WHERE callback_state IN ('pending','retry');
 
 ALTER TABLE hermes.public_web_operational_mission_inbox ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE hermes.public_web_operational_mission_inbox FROM PUBLIC, anon, authenticated;
