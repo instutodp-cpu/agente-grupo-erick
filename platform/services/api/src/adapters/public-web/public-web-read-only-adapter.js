@@ -167,7 +167,7 @@ function sanitizeResponse(response, request = {}, context = {}) {
     redirects_followed: response.redirects_followed,
     rate_limit_metadata: sanitizeObject(response.rate_limit_metadata),
     cost_metadata: sanitizeObject(response.cost_metadata),
-    simulated: true,
+    simulated: response.simulated,
     executed: response.executed === true,
     real_provider_called: response.real_provider_called === true,
     can_trigger_real_execution: false,
