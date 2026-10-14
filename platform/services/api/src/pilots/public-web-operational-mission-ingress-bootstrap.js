@@ -2,7 +2,6 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { Pool } = require('pg');
 const { createMachineIdentityRegistry } = require('../core/machine-identity-registry');
 const { createOperationalMissionIngress } = require('../core/public-web-operational-mission-ingress');
 const { createPublicWebCanaryStagingPostgresPool } = require('../adapters/postgres/public-web-canary-staging-postgres-pool');
@@ -26,13 +25,14 @@ function disabled() {
   return Object.freeze({ version:VERSION, enabled:false, machineIdentityRegistry:null, missionIngress:null, async close(){} });
 }
 
-function createPublicWebOperationalMissionIngressBootstrap({ environment=process.env, PoolClass=Pool, clock } = {}) {
+function createPublicWebOperationalMissionIngressBootstrap({ environment=process.env, PoolClass=null, clock } = {}) {
   if (environment.HERMES_MISSION_INGRESS_ENABLED !== 'true') return disabled();
+  const ResolvedPoolClass = PoolClass || require('pg').Pool;
   const identity = readProtectedJson(environment, IDENTITY_ENV);
   const policy = readProtectedJson(environment, POLICY_ENV);
   const machineIdentityRegistry = createMachineIdentityRegistry(identity);
   if (machineIdentityRegistry.size < 1) throw new TypeError('mission_ingress_identity_registry_empty');
-  const pool = createPublicWebCanaryStagingPostgresPool({ environment, PoolClass });
+  const pool = createPublicWebCanaryStagingPostgresPool({ environment, PoolClass: ResolvedPoolClass });
   const inbox = createPublicWebOperationalMissionInboxPostgres({ pool });
   const missionIngress = createOperationalMissionIngress({ inbox, policy, clock });
   let closed=false;
