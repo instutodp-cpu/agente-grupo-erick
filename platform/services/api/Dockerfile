@@ -1,10 +1,12 @@
-# Hermes Core — API (scaffold). Sem dependências npm ainda: imagem enxuta.
+# Hermes Core — API (scaffold).
 FROM node:20-alpine
 
 WORKDIR /app
 
-# Copia manifesto primeiro (cache de camada). Sem deps → sem npm install.
-COPY package.json ./
+# Copy manifests first to keep dependency installation cacheable and deterministic.
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+
 COPY src ./src
 COPY scripts/hermes-maintainer-staging-readiness-probe.js ./scripts/hermes-maintainer-staging-readiness-probe.js
 
