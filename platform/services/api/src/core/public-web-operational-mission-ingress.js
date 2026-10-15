@@ -16,6 +16,7 @@ function normalizePolicy(policy = {}) {
   const required = ['principal_id','tenant_id','workspace_type','user_id','operator_id','approver_id'];
   for (const field of required) if (!nonEmpty(policy[field])) throw new TypeError(`mission_ingress_policy_${field}_required`);
   if (!Array.isArray(policy.workspace_ids) || policy.workspace_ids.length < 1 || policy.workspace_ids.some((v)=>!nonEmpty(v))) throw new TypeError('mission_ingress_policy_workspace_ids_required');
+  if (policy.workspace_type !== 'corporate') throw new TypeError('mission_ingress_policy_workspace_type_unsupported');
   if (policy.environment !== 'staging' || policy.production_allowed !== false) throw new TypeError('mission_ingress_policy_staging_only');
   return Object.freeze({
     principal_id: policy.principal_id,
