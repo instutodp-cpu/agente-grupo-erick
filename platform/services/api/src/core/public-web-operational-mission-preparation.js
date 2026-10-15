@@ -27,7 +27,8 @@ async function prepareOperationalMissionReauth({ inbox, mission_run_id, challeng
   const found = await inbox.getByRun(mission_run_id);
   if (!found?.ok || !found.record) return blocked(found?.reason || 'mission_not_found');
   if (found.record.status !== 'accepted') return blocked('mission_must_be_accepted', { current_status:found.record.status });
-  if (found.record.trial_config?.environment !== 'staging' || found.record.trial_config?.maximum_requests !== 1) {
+  if (found.record.trial_config?.environment !== 'staging' || found.record.trial_config?.maximum_requests !== 1
+    || !nonEmpty(found.record.trial_config?.operator_id)) {
     return blocked('stored_trial_config_invalid');
   }
 
@@ -41,7 +42,8 @@ async function prepareOperationalMissionReauth({ inbox, mission_run_id, challeng
       target_path: found.record.target_path,
       mission_id: found.record.mission_id,
       mission_run_id,
-      contract_hash: found.record.contract_hash
+      contract_hash: found.record.contract_hash,
+      subject_id: found.record.trial_config.operator_id
     });
   } catch (_error) {
     const completedAt = String(clock());
@@ -119,7 +121,7 @@ async function bindOperationalMissionEvidence({ inbox, evidenceStore, mission_ru
   catch (_error) { return blocked('verified_durable_evidence_required'); }
   if (!evidence || evidence.ok !== true || evidence.durable !== true || evidence.single_use !== true
     || evidence.challenge_id !== record.reauth_challenge_id || evidence.action_digest !== record.reauth_action_digest
-    || evidence.subject_id !== 'human:owner') {
+    || !nonEmpty(record.trial_config?.operator_id) || evidence.subject_id !== record.trial_config.operator_id) {
     return blocked('mission_reauth_evidence_binding_mismatch');
   }
 

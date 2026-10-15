@@ -17,8 +17,9 @@ async function main({ environment=process.env, PoolClass=Pool } = {}) {
     return await prepareOperationalMissionReauth({
       inbox,
       mission_run_id:missionRunId,
-      challengeFactory:({target_origin,target_path})=>createChallenge({
+      challengeFactory:({target_origin,target_path,subject_id})=>createChallenge({
         PoolClass,
+        subject_id,
         env:{
           ...environment,
           HERMES_REAUTH_TARGET_ORIGIN:target_origin,
