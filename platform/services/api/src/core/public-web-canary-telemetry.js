@@ -7,14 +7,10 @@ const TELEMETRY_FIELDS = Object.freeze([
 ]);
 
 function normalizeCanaryTelemetry(input = {}) {
-  const providerInvoked = input.provider_invoked === true;
-  const transportInvoked = input.transport_invoked === true;
-  const externalNetworkCalled = input.external_network_called === true;
   return {
-    provider_invoked: providerInvoked,
-    transport_invoked: transportInvoked,
-    external_network_called: externalNetworkCalled,
-    simulated: !(providerInvoked && transportInvoked && externalNetworkCalled)
+    provider_invoked: input.provider_invoked === true,
+    transport_invoked: input.transport_invoked === true,
+    external_network_called: input.external_network_called === true
   };
 }
 

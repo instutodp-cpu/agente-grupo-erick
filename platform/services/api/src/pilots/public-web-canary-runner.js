@@ -12,7 +12,8 @@ const {
   validateCanaryExecutionBindings
 } = require('../core/public-web-canary-session-registry');
 const {
-  REQUEST_LIMITS
+  REQUEST_LIMITS,
+  isRealExecutionEvidence
 } = require('../core/public-web-transport-contract');
 const { normalizeCanaryTelemetry } = require('../core/public-web-canary-telemetry');
 
@@ -238,11 +239,18 @@ function buildSecretAccessContext(input, session, secretReference) {
 
 function normalizeNetworkResult(result, input, session, networkStarted, deps, telemetry = {}) {
   const flags = normalizeCanaryTelemetry(telemetry);
-  const normalized = {
-    ...result,
+  const evidence = {
     executed: networkStarted ? true : result.executed === true,
     real_provider_called: networkStarted,
-    ...flags,
+    provider_invoked: flags.provider_invoked === true,
+    transport_invoked: flags.transport_invoked === true,
+    external_network_called: flags.external_network_called === true
+  };
+  const simulated = !isRealExecutionEvidence(evidence);
+  const normalized = {
+    ...result,
+    ...evidence,
+    simulated,
     can_trigger_real_execution: false
   };
   normalized.audit_event_candidate = {
@@ -250,10 +258,17 @@ function normalizeNetworkResult(result, input, session, networkStarted, deps, te
     event_name: result.status === 'public_web_candidate_success' ? 'public_web_canary_request_succeeded' : 'public_web_canary_request_failed_safe',
     trace_id: input.trace_id,
     request_id: input.request_id,
+    change_id: input.change_id,
     canary_session_id: session.canary_session_id,
-    executed: networkStarted ? true : result.executed === true,
-    real_provider_called: networkStarted,
-    ...flags,
+    tenant_id: session.tenant_id,
+    workspace_type: session.workspace_type,
+    user_id: session.user_id,
+    operator_id: session.operator_id,
+    operation: session.operation,
+    source_type: session.source_type,
+    target_origin: session.target_origin,
+    ...evidence,
+    simulated,
     can_trigger_real_execution: false,
     occurred_at: nowIso(deps)
   };

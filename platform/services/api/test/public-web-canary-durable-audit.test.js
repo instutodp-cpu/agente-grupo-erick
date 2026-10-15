@@ -83,6 +83,9 @@ class ScriptedPool {
     if (sql === SELECT_BY_IDENTITY_SQL) {
       return { rows: this.rows.filter((row) => row.event_id === params[0] || row.event_digest === params[1]) };
     }
+    if (sql.includes('WHERE request_id = $1 AND tenant_id = $2')) {
+      return { rows: this.rows.filter((row) => row.request_id === params[0] && row.tenant_id === params[1]) };
+    }
     if (sql === 'BEGIN' || sql === 'COMMIT' || sql === 'ROLLBACK') return { rows: [] };
     throw new Error(`unexpected_sql:${sql}`);
   }
@@ -145,6 +148,17 @@ test('duplicate canonical event is accepted as replay without a second row', asy
   assert.equal(replay.status, 'REPLAY_ACCEPTED');
   assert.deepEqual(replay.receipt.event_digest, first.receipt.event_digest);
   assert.equal(pool.rows.length, 1);
+});
+
+test('PostgreSQL audit adapter reads only the exact request and tenant for reconciliation', async () => {
+  const { adapter } = adapterWithPool();
+  await adapter.append(auditEvent({ request_id:'request-target', tenant_id:'tenant-target', event_sequence:1 }));
+  await adapter.append(auditEvent({ request_id:'request-other', tenant_id:'tenant-target', event_sequence:2 }));
+  await adapter.append(auditEvent({ request_id:'request-target', tenant_id:'tenant-other', event_sequence:3 }));
+  const rows = await adapter.listByRequest({ request_id:'request-target', tenant_id:'tenant-target' });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].event.request_id, 'request-target');
+  assert.equal(rows[0].event.tenant_id, 'tenant-target');
 });
 
 test('persistent sink keeps memory behavior for local inspection but requires durable append explicitly', async () => {

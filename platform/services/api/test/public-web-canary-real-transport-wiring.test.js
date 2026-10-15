@@ -163,8 +163,13 @@ test('telemetry separates provider invocation, transport invocation, and network
   const evidencedContext = validCanaryContext({ nodeHttpsClient: fakeNodeHttpsClient({ external_network_called: true }) });
   const evidencedSession = createApprovedActiveSession(evidencedContext);
   const evidenced = await createPublicWebCanaryRunner(evidencedContext).runCanaryRequest(runnerInput(evidencedSession, 'transport_evidence'));
+  assert.equal(evidenced.provider_invoked, true);
   assert.equal(evidenced.transport_invoked, true);
   assert.equal(evidenced.external_network_called, true);
+  assert.equal(evidenced.executed, true);
+  assert.equal(evidenced.real_provider_called, true);
+  assert.equal(evidenced.simulated, false);
+  assert.equal(evidenced.audit_event_candidate.simulated, false);
 
   assert.deepEqual(normalizeCanaryTelemetry({ provider_invoked: true }), {
     provider_invoked: true,
