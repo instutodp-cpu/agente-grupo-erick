@@ -24,4 +24,6 @@ test('enabled bootstrap requires protected identity/policy files and composes st
 
 test('enabled bootstrap rejects permissive configuration file modes',t=>{const f=files(t); fs.chmodSync(f.policy,0o644); assert.throws(()=>createPublicWebOperationalMissionIngressBootstrap({environment:env(f),PoolClass:FakePool}),/permissions_invalid/);});
 
+test('enabled bootstrap rejects workspace types unsupported by the operational canary',t=>{const f=files(t); const policy=JSON.parse(fs.readFileSync(f.policy,'utf8')); policy.workspace_type='profissional'; fs.writeFileSync(f.policy,JSON.stringify(policy),{mode:0o600}); assert.throws(()=>createPublicWebOperationalMissionIngressBootstrap({environment:env(f),PoolClass:FakePool}),/workspace_type_unsupported/);});
+
 test('enabled bootstrap remains pinned to staging postgres identity',t=>{const f=files(t); const e=env(f); e.POSTGRES_HOST='prod.example.com'; assert.throws(()=>createPublicWebOperationalMissionIngressBootstrap({environment:e,PoolClass:FakePool}),/staging_postgres_identity_invalid/);});
