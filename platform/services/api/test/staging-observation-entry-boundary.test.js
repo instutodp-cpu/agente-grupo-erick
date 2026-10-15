@@ -7,11 +7,13 @@ const test = require('node:test');
 
 const PLATFORM_ROOT = path.join(__dirname, '../../../');
 const CADDYFILE_PATH = path.join(PLATFORM_ROOT, 'infra/staging-observation/Caddyfile');
+const OPERATIONAL_CADDYFILE_PATH = path.join(PLATFORM_ROOT, 'infra/staging-observation/Caddyfile.operational-mission');
 const DOC_PATH = path.join(PLATFORM_ROOT, 'docs/HERMES_STAGING_OBSERVATION_ENTRY_BOUNDARY.md');
 
 function readBoundaryFiles() {
   return {
     caddy: fs.readFileSync(CADDYFILE_PATH, 'utf8'),
+    operationalCaddy: fs.readFileSync(OPERATIONAL_CADDYFILE_PATH, 'utf8'),
     docs: fs.readFileSync(DOC_PATH, 'utf8')
   };
 }
@@ -54,6 +56,19 @@ test('boundary forwards only safe observation hints and redacts access logs', ()
   for (const redactedField of ['Authorization', 'bearer tokens', 'cookies', 'raw headers', 'bodies']) {
     assert.match(docs, new RegExp(redactedField, 'i'));
   }
+});
+
+test('operational mission ingress preserves bearer only on the exact dispatch route', () => {
+  const { caddy, operationalCaddy } = readBoundaryFiles();
+
+  assert.match(operationalCaddy, /@mission_dispatch\s*\{[\s\S]*method POST[\s\S]*path \/internal\/mission-dispatch[\s\S]*\}/);
+  assert.match(operationalCaddy, /handle @mission_dispatch \{\s*import hermes_machine_ingress_upstream\s*\}/);
+  assert.match(operationalCaddy, /\(hermes_machine_ingress_upstream\)[\s\S]*header_up Authorization \{http\.request\.header\.Authorization\}/);
+  assert.match(operationalCaddy, /\(hermes_observation_upstream\)[\s\S]*header_up -Authorization/);
+  assert.equal((operationalCaddy.match(/reverse_proxy 127\.0\.0\.1:8080/g) || []).length, 2);
+  assert.doesNotMatch(caddy, /mission-dispatch|hermes_machine_ingress_upstream/);
+  assert.match(operationalCaddy, /format filter[\s\S]*request>headers delete/);
+  assert.match(operationalCaddy, /handle \{\s*respond "not found" 404\s*\}/);
 });
 
 test('boundary removes the complete query with supported Caddy syntax', () => {
