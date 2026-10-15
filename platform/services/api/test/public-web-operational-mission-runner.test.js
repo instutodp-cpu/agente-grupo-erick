@@ -4,6 +4,50 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { runReadyOperationalMission, retryOperationalMissionCallback, reconcileOperationalMissionRealSuccess } = require('../src/core/public-web-operational-mission-runner');
 const { hashValue } = require('../src/core/public-web-transport-contract');
+const { createPublicWebCanaryRunner } = require('../src/pilots/public-web-canary-runner');
+const {
+  validCanaryRequest,
+  validApproval,
+  validCanaryContext,
+  fakeNodeHttpsClient
+} = require('./helpers/public-web-canary-test-data');
+
+function createApprovedActiveCanary(context) {
+  const request=validCanaryRequest();
+  const created=context.canarySessionRegistry.requestCanary(request);
+  const validated=context.canarySessionRegistry.validateCanary({
+    canary_session_id:request.canary_session_id,change_id:'change_validate_reconcile_regression',request_id:'request_validate_reconcile_regression',expected_version:created.session.version
+  },context);
+  const approved=context.canarySessionRegistry.approveCanary(validApproval(validated.session),context);
+  const active=context.canarySessionRegistry.activateCanary({
+    canary_session_id:request.canary_session_id,change_id:'change_activate_reconcile_regression',request_id:'request_activate_reconcile_regression',expected_version:approved.session.version
+  },context);
+  return active.session;
+}
+
+test('real canary network evidence recomputes simulated false before mission classification', async () => {
+  const context=validCanaryContext({nodeHttpsClient:fakeNodeHttpsClient({external_network_called:true})});
+  const session=createApprovedActiveCanary(context);
+  const result=await createPublicWebCanaryRunner(context).runCanaryRequest({
+    trace_id:'trace_reconcile_regression',request_id:'request_reconcile_regression',change_id:'change_reconcile_regression',
+    canary_execution_id:'execution_reconcile_regression',canary_session_id:session.canary_session_id,
+    operator_id:session.operator_id,operator_role:session.operator_role,environment:session.environment,
+    target_origin:session.target_origin,target_path:session.target_path,source_type:session.source_type,operation:session.operation,
+    reason:'prove real evidence normalization',requested_at:'2026-10-15T19:30:00.000Z',expected_version:session.version,
+    simulated:true,executed:false,real_provider_called:false
+  });
+  assert.equal(result.status,'public_web_candidate_success');
+  assert.equal(result.executed,true);
+  assert.equal(result.real_provider_called,true);
+  assert.equal(result.provider_invoked,true);
+  assert.equal(result.transport_invoked,true);
+  assert.equal(result.external_network_called,true);
+  assert.equal(result.simulated,false);
+  assert.equal(result.audit_event_candidate.simulated,false);
+  assert.equal(result.audit_event_candidate.operator_id,session.operator_id);
+  assert.equal(result.audit_event_candidate.change_id,'change_reconcile_regression');
+  assert.equal(context.nodeHttpsClient.calls(),1);
+});
 
 function baseRecord() {
   return {
