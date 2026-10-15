@@ -10,5 +10,5 @@ test('operational bindings remain contractual and non-executing while staging re
  const lifecycle=b.lifecycleRegistry.getConnector(CONNECTOR_ID); const config=b.configurationRegistry.getConfiguration(CONFIGURATION_ID); const ref=b.secretReferenceRegistry.getSecretReference(config.secret_reference_descriptors[0].reference_id);
  assert.equal(lifecycle.runtime_enabled,false); assert.equal(lifecycle.real_provider_enabled,false); assert.equal(lifecycle.execution_mode,'contract_only');
  assert.equal(b.readinessResult.simulated,true); assert.equal(b.readinessResult.executed,false); assert.equal(b.readinessResult.real_provider_called,false); assert.equal(b.readinessResult.can_trigger_real_execution,false);
- assert.equal(config.environment,'staging'); assert.equal(config.feature_flag_default,false); assert.equal(validatePublicWebStagingSecretReference(ref).valid,true); assert.equal(b.secretResolver.canResolve(ref),true);
+ assert.equal(config.environment,'staging'); assert.equal(config.feature_flag_default,false); assert.deepEqual(lifecycle.operations,['fetch_public_page_summary','fetch_public_metadata']); assert.deepEqual(config.allowed_operations,['fetch_public_page_summary','fetch_public_metadata']); assert.equal(validatePublicWebStagingSecretReference(ref).valid,true); assert.equal(b.secretResolver.canResolve(ref),true);
 });
