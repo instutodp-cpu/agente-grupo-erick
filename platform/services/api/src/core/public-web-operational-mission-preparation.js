@@ -119,7 +119,7 @@ async function bindOperationalMissionEvidence({ inbox, evidenceStore, mission_ru
   catch (_error) { return blocked('verified_durable_evidence_required'); }
   if (!evidence || evidence.ok !== true || evidence.durable !== true || evidence.single_use !== true
     || evidence.challenge_id !== record.reauth_challenge_id || evidence.action_digest !== record.reauth_action_digest
-    || evidence.subject_id !== 'human:owner') {
+    || evidence.subject_id !== 'human:owner' || evidence.subject_id !== record.trial_config?.operator_id) {
     return blocked('mission_reauth_evidence_binding_mismatch');
   }
 
