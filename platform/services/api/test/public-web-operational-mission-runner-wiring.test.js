@@ -30,3 +30,21 @@ test('result cost migration is additive and durable callback reconstruction allo
   assert.match(migration,/CHECK \(cost_units >= 0 AND cost_units <= 1\)/);
   assert.match(adapter,/'cost_units'/);
 });
+
+test('operational reauth uses the stored mission operator instead of a hardcoded human subject',()=>{
+  const challenge=text('scripts/public-web-canary-email-reauth-challenge.js');
+  const prepare=text('scripts/public-web-operational-mission-prepare.js');
+  const core=text('src/core/public-web-operational-mission-preparation.js');
+  assert.match(challenge,/HERMES_REAUTH_SUBJECT_ID/);
+  assert.doesNotMatch(challenge,/subject_id:'human:owner'/);
+  assert.match(prepare,/HERMES_REAUTH_SUBJECT_ID:subject_id/);
+  assert.match(core,/evidence\.subject_id !== operatorId/);
+  assert.doesNotMatch(core,/evidence\.subject_id !== 'human:owner'/);
+});
+
+test('reauth recovery path cannot execute public web and is separate from normal preparation',()=>{
+  const source=text('scripts/public-web-operational-mission-reissue-reauth.js');
+  assert.match(source,/reissueOperationalMissionReauth/);
+  assert.match(source,/HERMES_REAUTH_SUBJECT_ID:subject_id/);
+  assert.doesNotMatch(source,/executeOperationalCanary|runReadyOperationalMission|https\.request|https\.get|fetch\s*\(/);
+});
