@@ -26,6 +26,11 @@ const ELIGIBLE_LIFECYCLE_STATES = Object.freeze([
   'runtime_disabled'
 ]);
 
+const EMAIL_REAUTH_SINGLE_GET_OPERATIONS = new Set([
+  'fetch_public_page_summary',
+  'fetch_public_metadata'
+]);
+
 function safeError(code, reason) {
   return buildSafeCanaryError(code, reason || code, { blocked_reason: reason || code });
 }
@@ -418,7 +423,7 @@ function createPublicWebCanarySessionRegistry(options = {}) {
     const now = Date.parse(typeof deps.clock === 'function' ? deps.clock() : '');
     const issued = Date.parse(grant.authorization_grant.issued_at || ''), expires = Date.parse(grant.authorization_grant.expires_at || '');
     if (!Number.isFinite(now) || !Number.isFinite(issued) || !Number.isFinite(expires) || now < issued || now > expires || expires - issued !== 120000) return response(session, approval, { error_code:'CANARY_APPROVAL_REQUIRED', blocked_reason:'email_reauth_grant_expired' });
-    if (session.environment !== 'staging' || session.maximum_requests !== 1 || typeof reservation.target_origin !== 'string' || typeof reservation.target_path !== 'string' || session.target_origin !== reservation.target_origin || session.target_path !== reservation.target_path || session.operation !== 'fetch_public_page_summary') return response(session, approval, { error_code:'CANARY_APPROVAL_REQUIRED', blocked_reason:'email_reauth_canary_scope_mismatch' });
+    if (session.environment !== 'staging' || session.maximum_requests !== 1 || typeof reservation.target_origin !== 'string' || typeof reservation.target_path !== 'string' || session.target_origin !== reservation.target_origin || session.target_path !== reservation.target_path || !EMAIL_REAUTH_SINGLE_GET_OPERATIONS.has(session.operation)) return response(session, approval, { error_code:'CANARY_APPROVAL_REQUIRED', blocked_reason:'email_reauth_canary_scope_mismatch' });
     if (!deps.operatorPolicy || typeof deps.operatorPolicy.consumeStrongReauthApproval !== 'function') return response(session, approval, { error_code:'CANARY_APPROVAL_REQUIRED', blocked_reason:'strong_reauth_operator_policy_required' });
     const approvedAt = new Date(now).toISOString();
     const consumed = deps.operatorPolicy.consumeStrongReauthApproval({ approval_id: grant.authorization_grant_id, approved_by: grant.authorization_grant.operator_id, approver_role:'integration_operator', approved_at: approvedAt, expires_at: grant.authorization_grant.expires_at, mode:'STRONG_HUMAN_REAUTH_EMAIL' }, session);
