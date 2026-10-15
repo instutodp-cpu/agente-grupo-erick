@@ -8,8 +8,10 @@ test('registry exposes isolated email reauth approval without weakening legacy a
  assert.match(src,/grant_mode !== 'EMAIL_REAUTH_SINGLE_USE'/);
  assert.match(src,/authorization_scope !== 'PUBLIC_WEB_CANARY_SINGLE_EXECUTION_NON_PRODUCTION'/);
  assert.match(src,/expires - issued !== 120000/);
- assert.match(src,/EMAIL_REAUTH_STAGING_TARGET_ORIGIN/);
- assert.match(src,/EMAIL_REAUTH_STAGING_TARGET_PATH/);
+ assert.doesNotMatch(src,/EMAIL_REAUTH_STAGING_TARGET_ORIGIN/);
+ assert.doesNotMatch(src,/EMAIL_REAUTH_STAGING_TARGET_PATH/);
+ assert.match(src,/session\.target_origin !== reservation\.target_origin/);
+ assert.match(src,/session\.target_path !== reservation\.target_path/);
  const legacy=src.slice(src.indexOf('function approveCanary('),src.indexOf('function approveCanaryWithEmailReauth'));
  assert.match(legacy,/dualApproval: true/);
  assert.match(legacy,/operatorPolicy\.validateApproval/);
