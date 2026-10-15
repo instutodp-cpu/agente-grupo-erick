@@ -5,7 +5,7 @@ const assert=require('node:assert/strict');
 const { prepareOperationalMissionReauth, bindOperationalMissionEvidence }=require('../src/core/public-web-operational-mission-preparation');
 
 function inbox(initial='accepted') {
-  let record={mission_id:'mission-1',mission_run_id:'run-1',contract_hash:`sha256:${'a'.repeat(64)}`,target_origin:'https://example.com',target_path:'/docs',trial_config:{environment:'staging',maximum_requests:1},status:initial};
+  let record={mission_id:'mission-1',mission_run_id:'run-1',contract_hash:`sha256:${'a'.repeat(64)}`,target_origin:'https://example.com',target_path:'/docs',trial_config:{environment:'staging',maximum_requests:1,operator_id:'human:owner'},status:initial};
   const transitions=[];
   return {transitions,get record(){return record;},async getByRun(id){return id==='run-1'?{ok:true,status:'FOUND',record}:{ok:false,status:'NOT_FOUND',reason:'mission_not_found'};},async transition(input){transitions.push(input);if(record.status!==input.expected_status)return {ok:false,status:'CONFLICT',reason:'mission_status_changed',current_status:record.status};record={...record,status:input.next_status,...input.patch};return {ok:true,status:'TRANSITIONED',record};}};
 }
@@ -48,6 +48,12 @@ test('fresh durable evidence bound to the same challenge moves mission to ready_
 test('evidence from another challenge cannot be rebound to a mission',async()=>{
   const store=inbox('awaiting_human_reauth');store.record.reauth_challenge_id=challenge().challenge_id;store.record.reauth_action_digest=challenge().action_digest;
   const result=await bindOperationalMissionEvidence({inbox:store,evidenceStore:evidenceStore({challenge_id:`sha256:${'e'.repeat(64)}`}),mission_run_id:'run-1',evidence_key:`sha256:${'d'.repeat(64)}`});
+  assert.equal(result.ok,false);assert.equal(result.reason,'mission_reauth_evidence_binding_mismatch');assert.equal(store.record.status,'awaiting_human_reauth');
+});
+
+test('evidence subject must match the mission operator before ready_for_tty',async()=>{
+  const store=inbox('awaiting_human_reauth');store.record.reauth_challenge_id=challenge().challenge_id;store.record.reauth_action_digest=challenge().action_digest;store.record.trial_config.operator_id='external-user-id';
+  const result=await bindOperationalMissionEvidence({inbox:store,evidenceStore:evidenceStore(),mission_run_id:'run-1',evidence_key:`sha256:${'d'.repeat(64)}`});
   assert.equal(result.ok,false);assert.equal(result.reason,'mission_reauth_evidence_binding_mismatch');assert.equal(store.record.status,'awaiting_human_reauth');
 });
 
