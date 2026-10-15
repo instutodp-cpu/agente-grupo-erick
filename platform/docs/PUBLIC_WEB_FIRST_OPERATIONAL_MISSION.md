@@ -123,3 +123,11 @@ This removes the ambiguity observed in the first successful real canary without 
 - no merge authority for Hermes
 - no callback accepted without authenticated origin
 - no global target allowlist widening
+
+## Operational edge ingress
+
+The staging edge uses a separate `Caddyfile.operational-mission` artifact for the first operational mission. The historical observation-only Caddyfile remains unchanged and continues to strip `Authorization` from observation routes.
+
+The operational artifact adds exactly one authenticated edge route: `POST /internal/mission-dispatch`. Only that route forwards the caller's `Authorization` header to the loopback Hermes API so the machine bearer can be resolved by the ingress identity registry. `Proxy-Authorization`, cookies, caller-supplied forwarding headers, query strings, raw request headers in access logs, and sensitive response headers remain blocked or redacted. All unsupported paths and methods remain a terminal proxy `404`.
+
+Enabling this edge route does not authorize public-web execution. Mission admission remains durable and non-executing; fresh email reauthentication, single-use authorization, and exact real-TTY confirmation remain mandatory before the one-request public-web runner can start.

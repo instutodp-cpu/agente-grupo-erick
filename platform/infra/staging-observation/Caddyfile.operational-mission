@@ -1,0 +1,118 @@
+# Hermes operational mission edge boundary.
+# STAGING-ONLY / PRODUCTION-BLOCKED.
+# Derived from the historical observation-only Caddyfile.
+
+(hermes_observation_upstream) {
+	reverse_proxy 127.0.0.1:8080 {
+		header_up -Authorization
+		header_up -Proxy-Authorization
+		header_up -Cookie
+		header_up -Forwarded
+		header_up -X-Forwarded-For
+		header_up -X-Forwarded-Host
+		header_up -X-Forwarded-Proto
+		header_up Host {http.request.host}
+		header_up X-Forwarded-For {http.request.remote.host}
+		header_up X-Forwarded-Proto https
+		header_up User-Agent {http.request.header.User-Agent}
+		header_up Content-Type {http.request.header.Content-Type}
+		header_up Accept {http.request.header.Accept}
+		header_up X-Hermes-Observation-Ingress "caddy-public-v1"
+
+		transport http {
+			dial_timeout 5s
+			response_header_timeout 30s
+			max_conns_per_host 32
+		}
+
+		header_down -Set-Cookie
+		header_down -Authorization
+	}
+}
+
+# Machine-authenticated mission admission gets a dedicated upstream contract.
+# Authorization is preserved only for the exact /internal/mission-dispatch route.
+(hermes_machine_ingress_upstream) {
+	reverse_proxy 127.0.0.1:8080 {
+		header_up Authorization {http.request.header.Authorization}
+		header_up -Proxy-Authorization
+		header_up -Cookie
+		header_up -Forwarded
+		header_up -X-Forwarded-For
+		header_up -X-Forwarded-Host
+		header_up -X-Forwarded-Proto
+		header_up Host {http.request.host}
+		header_up X-Forwarded-For {http.request.remote.host}
+		header_up X-Forwarded-Proto https
+		header_up User-Agent {http.request.header.User-Agent}
+		header_up Content-Type {http.request.header.Content-Type}
+		header_up Accept {http.request.header.Accept}
+		header_up X-Hermes-Observation-Ingress "caddy-public-v1"
+
+		transport http {
+			dial_timeout 5s
+			response_header_timeout 30s
+			max_conns_per_host 32
+		}
+
+		header_down -Set-Cookie
+		header_down -Authorization
+	}
+}
+
+staging-observation.example.invalid {
+	tls {
+		protocols tls1.2 tls1.3
+	}
+
+	request_body {
+		max_size 1MB
+	}
+
+	@mission_dispatch {
+		method POST
+		path /internal/mission-dispatch
+	}
+	@write_routes {
+		method POST
+		path /message /confirm
+	}
+	@confirmation_status {
+		method GET
+		path_regexp confirmation_id ^/confirm/[^/]+$
+	}
+	@health_routes {
+		method GET
+		path /health /ready
+	}
+
+	route {
+		rewrite * {path}
+		handle @mission_dispatch {
+			import hermes_machine_ingress_upstream
+		}
+		handle @write_routes {
+			import hermes_observation_upstream
+		}
+		handle @confirmation_status {
+			import hermes_observation_upstream
+		}
+		handle @health_routes {
+			import hermes_observation_upstream
+		}
+		handle {
+			respond "not found" 404
+		}
+	}
+
+	log {
+		output stdout
+		format filter {
+			wrap json
+			request>uri delete
+			request>headers delete
+			request>body delete
+			response>headers delete
+		}
+	}
+}
