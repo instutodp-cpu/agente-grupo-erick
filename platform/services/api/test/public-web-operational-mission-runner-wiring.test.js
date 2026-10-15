@@ -23,6 +23,13 @@ test('callback retry path cannot invoke or import public-web execution',()=>{
   assert.doesNotMatch(source,/executeOperationalCanary|public-web-canary-real-non-production|https\.request|https\.get/);
 });
 
+test('real-success reconciliation CLI cannot import or invoke public-web execution',()=>{
+  const source=text('scripts/public-web-operational-mission-reconcile-real-success.js');
+  assert.match(source,/reconcileOperationalMissionRealSuccess/);
+  assert.match(source,/createPostgresPublicWebCanaryAuditPersistence/);
+  assert.doesNotMatch(source,/executeOperationalCanary|public-web-canary-real-non-production|https\.request|https\.get|fetch\s*\(/);
+});
+
 test('result cost migration is additive and durable callback reconstruction allows cost patch only',()=>{
   const migration=text('../../migrations/hermes/033_add_public_web_operational_mission_result_cost.sql');
   const adapter=text('src/adapters/postgres/public-web-operational-mission-inbox-postgres.js');

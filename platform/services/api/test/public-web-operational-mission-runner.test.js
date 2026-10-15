@@ -2,7 +2,52 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { runReadyOperationalMission, retryOperationalMissionCallback } = require('../src/core/public-web-operational-mission-runner');
+const { runReadyOperationalMission, retryOperationalMissionCallback, reconcileOperationalMissionRealSuccess } = require('../src/core/public-web-operational-mission-runner');
+const { hashValue } = require('../src/core/public-web-transport-contract');
+const { createPublicWebCanaryRunner } = require('../src/pilots/public-web-canary-runner');
+const {
+  validCanaryRequest,
+  validApproval,
+  validCanaryContext,
+  fakeNodeHttpsClient
+} = require('./helpers/public-web-canary-test-data');
+
+function createApprovedActiveCanary(context) {
+  const request=validCanaryRequest();
+  const created=context.canarySessionRegistry.requestCanary(request);
+  const validated=context.canarySessionRegistry.validateCanary({
+    canary_session_id:request.canary_session_id,change_id:'change_validate_reconcile_regression',request_id:'request_validate_reconcile_regression',expected_version:created.session.version
+  },context);
+  const approved=context.canarySessionRegistry.approveCanary(validApproval(validated.session),context);
+  const active=context.canarySessionRegistry.activateCanary({
+    canary_session_id:request.canary_session_id,change_id:'change_activate_reconcile_regression',request_id:'request_activate_reconcile_regression',expected_version:approved.session.version
+  },context);
+  return active.session;
+}
+
+test('real canary network evidence recomputes simulated false before mission classification', async () => {
+  const context=validCanaryContext({nodeHttpsClient:fakeNodeHttpsClient({external_network_called:true})});
+  const session=createApprovedActiveCanary(context);
+  const result=await createPublicWebCanaryRunner(context).runCanaryRequest({
+    trace_id:'trace_reconcile_regression',request_id:'request_reconcile_regression',change_id:'change_reconcile_regression',
+    canary_execution_id:'execution_reconcile_regression',canary_session_id:session.canary_session_id,
+    operator_id:session.operator_id,operator_role:session.operator_role,environment:session.environment,
+    target_origin:session.target_origin,target_path:session.target_path,source_type:session.source_type,operation:session.operation,
+    reason:'prove real evidence normalization',requested_at:'2026-10-15T19:30:00.000Z',expected_version:session.version,
+    simulated:true,executed:false,real_provider_called:false
+  });
+  assert.equal(result.status,'public_web_candidate_success');
+  assert.equal(result.executed,true);
+  assert.equal(result.real_provider_called,true);
+  assert.equal(result.provider_invoked,true);
+  assert.equal(result.transport_invoked,true);
+  assert.equal(result.external_network_called,true);
+  assert.equal(result.simulated,false);
+  assert.equal(result.audit_event_candidate.simulated,false);
+  assert.equal(result.audit_event_candidate.operator_id,session.operator_id);
+  assert.equal(result.audit_event_candidate.change_id,'change_reconcile_regression');
+  assert.equal(context.nodeHttpsClient.calls(),1);
+});
 
 function baseRecord() {
   return {
@@ -101,4 +146,89 @@ test('real network failure can callback as falhou without retrying the public re
   assert.equal(result.ok,false); assert.equal(seen.status,'falhou'); assert.equal(seen.error_code,'provider_failed');
   assert.equal(result.external_network_called,true); assert.equal(result.public_web_execution_repeated,false);
   assert.equal(inbox.state.record.status,'acknowledged');
+});
+
+
+function reconciliationRecord() {
+  return {
+    inbox_id:'inbox-real', mission_id:'mission-real', mission_run_id:'run-real', contract_hash:`sha256:${'d'.repeat(64)}`,
+    tenant_id:'grupo_erick', workspace_type:'corporate', target_origin:'https://api.github.com', target_path:'/',
+    status:'failed_safe', evidence_key:`sha256:${'e'.repeat(64)}`, callback_state:'not_ready', callback_attempts:0,
+    callback_last_error:null, error_code:'PUBLIC_WEB_CANARY_REAL_NON_PRODUCTION_EXECUTION_COMPLETED', cost_units:0,
+    execution_id:'exec-real', request_id:'request-real', result_digest:`sha256:${'f'.repeat(64)}`, result_summary:'',
+    completed_at:'2026-10-15T19:32:43.234Z', acknowledged_at:null,
+    trial_config:{
+      environment:'staging', maximum_requests:1, operation:'fetch_public_metadata', source_type:'public_documentation_page',
+      operator_id:'human:owner', user_id:'user-real', tenant_id:'grupo_erick', workspace_type:'corporate',
+      target_origin:'https://api.github.com', target_path:'/'
+    }
+  };
+}
+
+function durableRealSuccessEvents(overrides = {}) {
+  const common = {
+    canary_session_id:'session-real', trace_id:'trace-real', request_id:'request-real', tenant_id:'grupo_erick',
+    workspace_type:'corporate', user_id:'user-real', operation:'fetch_public_metadata',
+    target_origin_hash:hashValue('https://api.github.com'), error_code:null, blocked_reason:null
+  };
+  const started = {
+    ...common, event_name:'public_web_canary_request_started', status:'public_web_canary_request_started', operator_id:'human:owner',
+    simulated:true, executed:false, real_provider_called:false, provider_invoked:false, transport_invoked:false,
+    external_network_called:false, occurred_at:'2026-10-15T19:32:42.854Z'
+  };
+  const succeeded = {
+    ...common, event_name:'public_web_canary_request_succeeded', status:'public_web_candidate_success', operator_id:'operator_not_available',
+    simulated:false, executed:true, real_provider_called:true, provider_invoked:true, transport_invoked:true,
+    external_network_called:true, occurred_at:'2026-10-15T19:32:43.212Z'
+  };
+  if (overrides.started) Object.assign(started, overrides.started);
+  if (overrides.succeeded) Object.assign(succeeded, overrides.succeeded);
+  return [
+    { event_digest:`sha256:${'1'.repeat(64)}`, event:started },
+    { event_digest:`sha256:${'2'.repeat(64)}`, event:succeeded }
+  ];
+}
+
+test('durable real-success reconciliation corrects false failed_safe and acknowledges callback without replaying public web', async () => {
+  const inbox=fakeInbox(reconciliationRecord()); let callbacks=0; let reads=0;
+  const result=await reconcileOperationalMissionRealSuccess({
+    inbox,mission_run_id:'run-real',clock:()=> '2026-10-15T19:40:00.000Z',
+    auditPersistence:{listByRequest:async input=>{reads+=1;assert.deepEqual(input,{request_id:'request-real',tenant_id:'grupo_erick'});return durableRealSuccessEvents();}},
+    callbackSender:{send:async envelope=>{callbacks+=1;assert.equal(envelope.status,'concluida');assert.equal(envelope.execution_id,'exec-real');assert.equal(envelope.request_id,'request-real');return {ok:true,acknowledged:true};}}
+  });
+  assert.equal(result.ok,true); assert.equal(reads,1); assert.equal(callbacks,1);
+  assert.equal(result.reconciled_from_durable_audit,true); assert.equal(result.public_web_execution_repeated,false); assert.equal(result.external_public_web_called,false);
+  assert.equal(inbox.state.record.status,'acknowledged'); assert.equal(inbox.state.record.callback_state,'acknowledged');
+  assert.equal(inbox.state.record.error_code,null); assert.match(inbox.state.record.result_digest,/^sha256:[0-9a-f]{64}$/);
+});
+
+test('durable real-success reconciliation fails closed on mismatched target proof without callback or state mutation', async () => {
+  const inbox=fakeInbox(reconciliationRecord()); let callbacks=0;
+  const result=await reconcileOperationalMissionRealSuccess({
+    inbox,mission_run_id:'run-real',
+    auditPersistence:{listByRequest:async()=>durableRealSuccessEvents({succeeded:{target_origin_hash:hashValue('https://example.com')}})},
+    callbackSender:{send:async()=>{callbacks+=1;return {ok:true,acknowledged:true};}}
+  });
+  assert.equal(result.ok,false); assert.equal(result.reason,'durable_audit_mission_binding_mismatch'); assert.equal(callbacks,0);
+  assert.equal(inbox.state.transitions.length,0); assert.equal(inbox.state.record.status,'failed_safe');
+});
+
+test('durable real-success reconciliation requires exactly one started and one succeeded event', async () => {
+  const inbox=fakeInbox(reconciliationRecord());
+  const duplicate=durableRealSuccessEvents(); duplicate.push({...duplicate[1],event_digest:`sha256:${'3'.repeat(64)}`});
+  const result=await reconcileOperationalMissionRealSuccess({
+    inbox,mission_run_id:'run-real',auditPersistence:{listByRequest:async()=>duplicate}
+  });
+  assert.equal(result.ok,false); assert.equal(result.reason,'durable_audit_exact_request_pair_required');
+  assert.equal(inbox.state.transitions.length,0);
+});
+
+test('reconciled success with callback failure becomes callback retry and never replays public web', async () => {
+  const inbox=fakeInbox(reconciliationRecord()); let callbacks=0;
+  const result=await reconcileOperationalMissionRealSuccess({
+    inbox,mission_run_id:'run-real',clock:()=> '2026-10-15T19:40:00.000Z',auditPersistence:{listByRequest:async()=>durableRealSuccessEvents()},
+    callbackSender:{send:async()=>{callbacks+=1;return {ok:false,reason:'temporary_callback_failure'};}}
+  });
+  assert.equal(result.ok,true); assert.equal(callbacks,1); assert.equal(result.public_web_execution_repeated,false); assert.equal(result.external_public_web_called,false);
+  assert.equal(inbox.state.record.status,'succeeded'); assert.equal(inbox.state.record.callback_state,'retry');
 });

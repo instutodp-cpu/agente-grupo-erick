@@ -250,6 +250,18 @@ function createPostgresPublicWebCanaryAuditPersistence({ pool, tableName = PERSI
     return response.rows.map(rowToRecord);
   }
 
+  async function listByRequest({ request_id, tenant_id } = {}) {
+    if (typeof request_id !== 'string' || !request_id.trim()) throw new TypeError('public_web_canary_audit_request_id_required');
+    if (typeof tenant_id !== 'string' || !tenant_id.trim()) throw new TypeError('public_web_canary_audit_tenant_id_required');
+    await ensureReady();
+    const response = await pool.query(
+      `SELECT ${AUDIT_COLUMNS.join(', ')} FROM ${tableName} WHERE request_id = $1 AND tenant_id = $2 ORDER BY occurred_at, event_sequence, event_id`,
+      [request_id.trim(), tenant_id.trim()]
+    );
+    if (!response || !Array.isArray(response.rows)) throw new PublicWebCanaryAuditPersistenceError('READ_FAILED', 'public_web_canary_audit_request_read_failed');
+    return response.rows.map(rowToRecord);
+  }
+
   return Object.freeze({
     adapter_name: 'public_web_canary_audit_persistence_postgres',
     contract_version: PERSISTENT_AUDIT_CONTRACT_VERSION,
@@ -258,7 +270,8 @@ function createPostgresPublicWebCanaryAuditPersistence({ pool, tableName = PERSI
     max_event_bytes: MAX_PERSISTED_EVENT_BYTES,
     ensureReady,
     append,
-    list
+    list,
+    listByRequest
   });
 }
 
