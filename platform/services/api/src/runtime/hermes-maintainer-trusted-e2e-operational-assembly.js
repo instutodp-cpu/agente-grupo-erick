@@ -3,13 +3,13 @@ const {prepareHermesMaintainerTrustedE2eControlledExecutions}=require('./hermes-
 const {prepareHermesMaintainerTrustedE2eOperationalEvidence}=require('./hermes-maintainer-trusted-e2e-operational-evidence-preparation');
 const {prepareHermesMaintainerTrustedE2eAuthorizedOperational}=require('./hermes-maintainer-trusted-e2e-authorized-operational-composition');
 const {adaptHermesMaintainerTrustedE2eExternalDecisions}=require('./hermes-maintainer-trusted-e2e-external-decision-adapter');
-const CONTRACT_VERSION='hermes_maintainer_trusted_e2e_operational_assembly_v1';
+const CONTRACT_VERSION='hermes_maintainer_trusted_e2e_operational_assembly_v2';
 function blocked(stage,value){return Object.freeze({contract_version:CONTRACT_VERSION,status:'TRUSTED_E2E_OPERATIONAL_ASSEMBLY_BLOCKED',prepared:false,stage,value:value||null,operational:null,authorization_consumed:false,production_used:false,merge_authority:false,human_merge_required:true});}
 function prepareHermesMaintainerTrustedE2eOperationalAssembly(input={}){
  const executions=prepareHermesMaintainerTrustedE2eControlledExecutions({mission_id:input.mission_id,branch_name:input.branch_name});
  if(executions.prepared!==true)return blocked('controlled_executions',executions);
  const evidence=prepareHermesMaintainerTrustedE2eOperationalEvidence({
-  branch_name:input.branch_name,base_sha:input.base_sha,execution_reference:input.execution_reference,
+  branch_name:input.branch_name,base_sha:input.base_sha,execution_reference:input.execution_reference,a3_eligibility_input:input.a3_eligibility_input,
   repository_read:input.repository_read,
   branch:{controlled_execution:executions.controlled_executions.branch},
   edit:{controlled_execution:executions.controlled_executions.edit,path:input.edit?.path,current_blob_sha:input.edit?.current_blob_sha,content:input.edit?.content,message:input.edit?.message},
