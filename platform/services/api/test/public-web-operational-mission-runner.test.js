@@ -124,6 +124,26 @@ test('pre-network block fails safe and never emits a fake real callback', async 
   assert.equal(inbox.state.record.error_code,'exact_human_confirmation_required');
 });
 
+test('callback retry accepts PostgreSQL Date completed_at without replaying public web', async () => {
+  const record=baseRecord();
+  record.status='succeeded'; record.callback_state='pending'; record.callback_attempts=0;
+  record.execution_id='exec-date'; record.request_id='request-date'; record.result_digest=`sha256:${'d'.repeat(64)}`;
+  record.completed_at=new Date('2026-10-15T19:32:43.234Z');
+  const inbox=fakeInbox(record); let callbacks=0;
+  const result=await retryOperationalMissionCallback({
+    inbox,mission_run_id:'run-1',clock:()=> '2026-10-15T19:40:00.000Z',
+    callbackSender:{send:async envelope=>{
+      callbacks+=1;
+      assert.equal(envelope.occurred_at,'2026-10-15T19:32:43.234Z');
+      assert.equal(envelope.status,'concluida');
+      return {ok:true,acknowledged:true};
+    }}
+  });
+  assert.equal(result.ok,true); assert.equal(callbacks,1);
+  assert.equal(result.public_web_execution_repeated,false); assert.equal(result.external_public_web_called,false);
+  assert.equal(inbox.state.record.status,'acknowledged'); assert.equal(inbox.state.record.callback_state,'acknowledged');
+});
+
 test('callback retry at durable maximum goes dead-letter without exceeding database bound or invoking public web', async () => {
   const record=baseRecord(); record.status='succeeded'; record.callback_state='retry'; record.callback_attempts=10;
   record.execution_id='exec-1'; record.request_id='request-1'; record.result_digest=`sha256:${'c'.repeat(64)}`; record.completed_at='2026-10-14T22:40:00.000Z';
