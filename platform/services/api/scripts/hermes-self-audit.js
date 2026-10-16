@@ -144,14 +144,25 @@ function audit() {
   if (map.rules?.merge_authority !== false) errors.push({type:'unsafe_rule', rule:'merge_authority'});
   if (map.rules?.human_merge_required !== true) errors.push({type:'unsafe_rule', rule:'human_merge_required'});
   const canary = map.autonomy?.a2_canary;
-  if (map.autonomy?.candidate === 'A2') {
-    if (!['ready_for_execution','proven_to_human_boundary'].includes(canary?.status)) errors.push({type:'a2_canary_not_ready'});
+  const a2Authorized = map.autonomy?.authorized_now?.includes('A2') === true;
+  const a2Candidate = map.autonomy?.candidate === 'A2';
+  if (a2Authorized || a2Candidate) {
+    const allowedStatuses = a2Authorized
+      ? ['authorized_bounded']
+      : ['ready_for_execution','proven_to_human_boundary'];
+    if (!allowedStatuses.includes(canary?.status)) errors.push({type:'a2_canary_not_ready'});
     for (const control of ['isolated_branch','exact_revision_test','draft_pr_only','merge_authority_false','human_merge_required','production_false']) {
       if (!canary?.required_controls?.includes(control)) errors.push({type:'missing_a2_control', control});
     }
     for (const forbidden of ['merge','production_publish','financial_spend','customer_message','destructive_action','secret_or_permission_change']) {
       if (!canary?.forbidden?.includes(forbidden)) errors.push({type:'missing_a2_forbidden_boundary', boundary:forbidden});
     }
+  }
+  if (a2Authorized && map.autonomy?.current_max_level !== 'A2_authorized_bounded') {
+    errors.push({type:'a2_authority_state_mismatch'});
+  }
+  if (a2Authorized && map.autonomy?.candidate != null) {
+    errors.push({type:'a2_authorized_with_pending_candidate'});
   }
   errors.push(...validateEvidence(map));
   errors.push(...validateAuthoritySeparation());

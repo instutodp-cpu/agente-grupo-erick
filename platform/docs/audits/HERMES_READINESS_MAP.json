@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "mission": "hermes-self-audit-readiness",
-  "audited_revision": "043f2a80cf97ed1099fdf139ab0254e39fd5e13c",
+  "audited_revision": "a6a6df358418d07d68117b69ec4870e1d29a2581",
   "evidence_states": [
     "planned",
     "contracted",
@@ -427,7 +427,7 @@
         "redirects_disabled",
         "generic_runtime_remains_simulation_only"
       ],
-      "evidence_revision": "7318ee2a3d3d82c889b99fb77a6bec03118ed58e",
+      "evidence_revision": "a6a6df358418d07d68117b69ec4870e1d29a2581",
       "evidence": [
         "PR #538 merged as 7318ee2a3d3d82c889b99fb77a6bec03118ed58e",
         "PUBLIC_WEB_CANARY_REAL_NON_PRODUCTION_EXECUTION_COMPLETED",
@@ -435,7 +435,11 @@
         "HTTP 2xx from https://hermes-staging.grupoerick.tech/health",
         "redirects_followed=0 and production_effect=ZERO",
         "durable PostgreSQL audit: public_web_canary_request_started -> public_web_canary_request_succeeded",
-        "platform/docs/PUBLIC_WEB_FIRST_OPERATIONAL_MISSION.md"
+        "platform/docs/PUBLIC_WEB_FIRST_OPERATIONAL_MISSION.md",
+        "PR #548 merged as a6a6df358418d07d68117b69ec4870e1d29a2581",
+        "Maestro Mission 6ad02b16cdd1db9ef55927ca / MissionRun 6ad02b2e45e512d3aeb9199a completed through Hermes in staging",
+        "fetch_public_metadata to https://api.github.com/ completed with exactly one durable request_started -> request_succeeded pair and one distinct request_id",
+        "official callback retry acknowledged exactly once with callback_attempts=1 and no public-web replay; production effect ZERO"
       ]
     },
     {
@@ -481,15 +485,16 @@
     }
   },
   "autonomy": {
-    "current_max_level": "A2_proven_bounded",
+    "current_max_level": "A2_authorized_bounded",
     "authorized_now": [
       "A0",
-      "A1"
+      "A1",
+      "A2"
     ],
-    "candidate": "A2",
+    "candidate": null,
     "protected_level": "A4",
     "a2_canary": {
-      "status": "proven_to_human_boundary",
+      "status": "authorized_bounded",
       "objective": "From one bounded repository objective, independently audit, plan, create an isolated branch, make a harmless real change, test the exact resulting revision, inspect/correct CI if needed, create a Draft PR, attach evidence, and stop before merge.",
       "execution_path": "hermes-maintainer-github-bounded",
       "prerequisite_capability": "hermes-maintainer-github-bounded",
@@ -531,7 +536,14 @@
         "ci_conclusion": "success",
         "self_correction": "inventory_drift platform_docs 136 -> 137",
         "stopped_before_merge": true
-      }
+      },
+      "authorization_scope": [
+        "bounded_repository_objective",
+        "isolated_branch",
+        "edit_commit_test",
+        "inspect_and_self_correct_ci",
+        "draft_pr_only"
+      ]
     }
   }
 }
