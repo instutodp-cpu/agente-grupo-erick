@@ -166,6 +166,37 @@
       ]
     },
     {
+      "id": "a3-scoped-external-action-pre-execution-admission",
+      "scope": "staging maintainer SCM pre-execution admission for exact bounded GitHub create_branch canary",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "evidence": [
+        "platform/docs/HERMES_A3_SCOPED_EXTERNAL_ACTION_PRE_EXECUTION_ADMISSION.md",
+        "platform/services/api/src/core/a3-scoped-external-action-pre-execution-admission.js",
+        "platform/services/api/test/a3-scoped-external-action-pre-execution-admission.test.js"
+      ],
+      "limits": [
+        "pre_execution_only",
+        "execution_authorized_false",
+        "execution_started_false",
+        "executed_false",
+        "no_network_or_provider_call",
+        "no_write_performed",
+        "staging_only",
+        "maintainer_scm_write_only",
+        "create_branch_canary_only",
+        "exact_target_binding_required",
+        "single_use_unconsumed_unrevoked_required",
+        "a3_not_promoted",
+        "a4_protected",
+        "no_operational_evidence"
+      ]
+    },
+    {
       "id": "marketing-foundation",
       "scope": "simulation-first",
       "planned": true,
@@ -491,9 +522,9 @@
     }
   ],
   "inventory": {
-    "platform_docs": 140,
-    "core_source_files": 727,
-    "api_tests": 613,
+    "platform_docs": 141,
+    "core_source_files": 728,
+    "api_tests": 614,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
