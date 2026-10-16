@@ -1,10 +1,25 @@
 'use strict';
 
+const {
+ CONTRACT_VERSION:A3_CONTRACT_VERSION,
+ ELIGIBLE:A3_ELIGIBLE,
+ evaluateA3ScopedExternalActionEligibility
+}=require('./a3-scoped-external-action-eligibility');
+
 const GUARD_VERSION='hermes_maintainer_github_write_canary_execution_guard_v1';
 const CANARY_VERSION='hermes_maintainer_github_write_canary_contract_v1';
 const ADMISSION_VERSION='hermes_maintainer_github_durable_write_admission_v1';
 const REPOSITORY='instutodp-cpu/agente-grupo-erick';
 const URL='https://api.github.com/repos/instutodp-cpu/agente-grupo-erick/git/refs';
+
+function evaluateHermesMaintainerA3PreexecutionEligibility(input){
+ if(!input||typeof input!=='object'||Array.isArray(input))return null;
+ try{return evaluateA3ScopedExternalActionEligibility(input);}
+ catch(error){
+  if(error instanceof TypeError)return null;
+  throw error;
+ }
+}
 
 function createHermesMaintainerGithubWriteCanaryExecutionGuard({execute}={}){
  if(typeof execute!=='function')throw new TypeError('execute_required');
@@ -33,4 +48,10 @@ function blocked(blockers){
  });
 }
 
-module.exports={GUARD_VERSION,createHermesMaintainerGithubWriteCanaryExecutionGuard};
+module.exports={
+ A3_CONTRACT_VERSION,
+ A3_ELIGIBLE,
+ GUARD_VERSION,
+ createHermesMaintainerGithubWriteCanaryExecutionGuard,
+ evaluateHermesMaintainerA3PreexecutionEligibility
+};

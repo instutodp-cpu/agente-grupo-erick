@@ -3,7 +3,9 @@
 const {createHermesMaintainerGithubWriteOperationalAdmissionComposition}=require('./hermes-maintainer-github-write-operational-admission-composition');
 const {createHermesMaintainerGithubWriteCanaryRuntimeRunner}=require('./hermes-maintainer-github-write-canary-runtime-runner');
 
-const COMPOSITION_VERSION='hermes_maintainer_github_write_operational_canary_composition_v1';
+const COMPOSITION_VERSION='hermes_maintainer_github_write_operational_canary_composition_v2';
+
+function blocked(reason){return Object.freeze({composition_version:COMPOSITION_VERSION,status:'OPERATIONAL_CANARY_EXECUTION_BLOCKED',execution_performed:false,network_call_performed:false,write_performed:false,production_used:false,blockers:Object.freeze([reason])});}
 
 function createHermesMaintainerGithubWriteOperationalCanaryComposition({pool,environment,fetchImpl,createTimeoutSignal}={}){
  const admission=createHermesMaintainerGithubWriteOperationalAdmissionComposition({pool});
@@ -16,12 +18,12 @@ function createHermesMaintainerGithubWriteOperationalCanaryComposition({pool,env
   network_call_performed:false,
   write_performed:false,
   production_used:false,
-  async execute(grant,canary,input){
-   const durableAdmission=await admission.prepare(grant,canary,input);
+  async execute(eligibilityInput,grant,canary,input){
+   const durableAdmission=await admission.prepare(eligibilityInput,grant,canary,input);
    if(durableAdmission?.contract_version!=='hermes_maintainer_github_durable_write_admission_v1'||durableAdmission?.status!=='GITHUB_DURABLE_WRITE_REQUEST_ADMITTED'||durableAdmission?.admission_valid!==true||durableAdmission?.execution_authorized!==true){
-    return Object.freeze({composition_version:COMPOSITION_VERSION,status:'OPERATIONAL_CANARY_EXECUTION_BLOCKED',execution_performed:false,network_call_performed:false,write_performed:false,production_used:false,blockers:Object.freeze(['DURABLE_ADMISSION_NOT_CONFIRMED'])});
+    return blocked('DURABLE_ADMISSION_NOT_CONFIRMED');
    }
-   return runner.execute(canary,durableAdmission);
+   return runner.execute(eligibilityInput,canary,durableAdmission);
   }
  });
 }

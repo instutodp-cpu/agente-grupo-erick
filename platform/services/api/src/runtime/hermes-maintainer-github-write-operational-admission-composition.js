@@ -12,8 +12,13 @@ const {prepareHermesMaintainerGithubDurableCreateBranchRequest}=require('../core
 const {admitHermesMaintainerGithubDurableWriteRequest}=require('../core/hermes-maintainer-github-durable-write-admission');
 const {createHermesMaintainerScmWritePostgresPersistenceComposition}=require('../core/hermes-maintainer-scm-write-postgres-persistence-composition');
 const {createHermesMaintainerScmWritePostgresAttemptOwnershipComposition}=require('../core/hermes-maintainer-scm-write-postgres-attempt-ownership-composition');
+const {
+ A3_CONTRACT_VERSION,
+ A3_ELIGIBLE,
+ evaluateHermesMaintainerA3PreexecutionEligibility
+}=require('../core/hermes-maintainer-github-write-canary-execution-guard');
 
-const COMPOSITION_VERSION='hermes_maintainer_github_write_operational_admission_composition_v1';
+const COMPOSITION_VERSION='hermes_maintainer_github_write_operational_admission_composition_v2';
 const REPOSITORY='instutodp-cpu/agente-grupo-erick';
 const INPUT_FIELDS=Object.freeze(['admission_reference','attempt_reference','capability_reference','consumption_reference']);
 
@@ -30,11 +35,22 @@ function validCanary(canary){
  return canary?.contract_version==='hermes_maintainer_github_write_canary_contract_v1'&&canary?.status==='CANARY_PREPARED'&&canary?.canary_valid===true&&canary?.repository===REPOSITORY&&canary?.operation==='create_branch'&&canary?.execution_authorized===false&&canary?.network_call_performed===false&&canary?.write_performed===false&&canary?.production_used===false;
 }
 function blocked(reason){return Object.freeze({composition_version:COMPOSITION_VERSION,status:'OPERATIONAL_ADMISSION_BLOCKED',admission_valid:false,execution_authorized:false,network_call_performed:false,write_performed:false,production_used:false,blockers:Object.freeze([reason])});}
+function validA3Eligibility(eligibilityInput,grant,canary){
+ const eligibility=evaluateHermesMaintainerA3PreexecutionEligibility(eligibilityInput);
+ if(!eligibility)return {valid:false,eligibility:null};
+ const branch=typeof canary?.ref==='string'?canary.ref.replace(/^refs\/heads\//,''):null;
+ const target=eligibilityInput?.target_reference;
+ const sourceGrant=eligibilityInput?.source_evidence?.authorization_grant;
+ const valid=eligibility.contract_version===A3_CONTRACT_VERSION&&eligibility.status===A3_ELIGIBLE&&eligibility.a3_eligible===true&&eligibility.environment==='staging'&&eligibility.operation==='create_branch'&&eligibility.execution_authorized===false&&eligibility.executed===false&&eligibility.provider_invoked===false&&eligibility.external_network_called===false&&eligibility.production_allowed===false&&eligibility.a4_authority_granted===false&&Array.isArray(eligibility.blockers)&&eligibility.blockers.length===0&&target?.repository===REPOSITORY&&target?.base_ref==='main'&&target?.base_sha===canary?.sha&&target?.branch_name===branch&&eligibility.base_sha===canary?.sha&&eligibility.action_intent_digest===grant?.intent_digest&&eligibility.authorization_reference===grant?.authorization_reference&&sourceGrant?.authorization_reference===grant?.authorization_reference&&sourceGrant?.intent_digest===grant?.intent_digest;
+ return {valid,eligibility};
+}
 
 function createHermesMaintainerGithubWriteOperationalAdmissionComposition({pool}={}){
  const consumption=createHermesMaintainerScmWritePostgresPersistenceComposition({pool});
  const ownership=createHermesMaintainerScmWritePostgresAttemptOwnershipComposition({pool});
- return Object.freeze({composition_version:COMPOSITION_VERSION,async prepare(grant,canary,input){
+ return Object.freeze({composition_version:COMPOSITION_VERSION,async prepare(eligibilityInput,grant,canary,input){
+  const a3=validA3Eligibility(eligibilityInput,grant,canary);
+  if(!a3.valid)return blocked('A3_ELIGIBILITY_REQUIRED');
   if(!validCanary(canary))return blocked('CANARY_INVALID');
   if(!validGrant(grant,canary))return blocked('AUTHORIZATION_GRANT_SCOPE_INVALID');
   if(!exactInput(input))return blocked('OPERATIONAL_INPUT_INVALID');
@@ -57,5 +73,5 @@ function createHermesMaintainerGithubWriteOperationalAdmissionComposition({pool}
   return admitHermesMaintainerGithubDurableWriteRequest(request,{decision:'ADMITTED',intent_digest:request.intent_digest,attempt_reference:request.attempt_reference,capability_reference:request.capability_reference,ownership_key:request.ownership_key,admission_reference:input.admission_reference});
  }});
 }
-function preflightHermesMaintainerGithubWriteOperationalAdmission(grant,canary,input){if(!validCanary(canary))return blocked('CANARY_INVALID');if(!validGrant(grant,canary))return blocked('AUTHORIZATION_GRANT_SCOPE_INVALID');if(!exactInput(input))return blocked('OPERATIONAL_INPUT_INVALID');return Object.freeze({admission_preflight_valid:true});}
+function preflightHermesMaintainerGithubWriteOperationalAdmission(eligibilityInput,grant,canary,input){const a3=validA3Eligibility(eligibilityInput,grant,canary);if(!a3.valid)return blocked('A3_ELIGIBILITY_REQUIRED');if(!validCanary(canary))return blocked('CANARY_INVALID');if(!validGrant(grant,canary))return blocked('AUTHORIZATION_GRANT_SCOPE_INVALID');if(!exactInput(input))return blocked('OPERATIONAL_INPUT_INVALID');return Object.freeze({admission_preflight_valid:true,a3_eligibility_fingerprint:a3.eligibility.eligibility_fingerprint});}
 module.exports={COMPOSITION_VERSION,preflightHermesMaintainerGithubWriteOperationalAdmission,createHermesMaintainerGithubWriteOperationalAdmissionComposition};
