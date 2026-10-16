@@ -12,7 +12,11 @@ const {prepareHermesMaintainerGithubDurableCreateBranchRequest}=require('../core
 const {admitHermesMaintainerGithubDurableWriteRequest}=require('../core/hermes-maintainer-github-durable-write-admission');
 const {createHermesMaintainerScmWritePostgresPersistenceComposition}=require('../core/hermes-maintainer-scm-write-postgres-persistence-composition');
 const {createHermesMaintainerScmWritePostgresAttemptOwnershipComposition}=require('../core/hermes-maintainer-scm-write-postgres-attempt-ownership-composition');
-const {evaluateA3ScopedExternalActionEligibility,CONTRACT_VERSION:A3_CONTRACT_VERSION,ELIGIBLE:A3_ELIGIBLE}=require('../core/a3-scoped-external-action-eligibility');
+const {
+ A3_CONTRACT_VERSION,
+ A3_ELIGIBLE,
+ evaluateHermesMaintainerA3PreexecutionEligibility
+}=require('../core/hermes-maintainer-github-write-canary-execution-guard');
 
 const COMPOSITION_VERSION='hermes_maintainer_github_write_operational_admission_composition_v2';
 const REPOSITORY='instutodp-cpu/agente-grupo-erick';
@@ -32,7 +36,8 @@ function validCanary(canary){
 }
 function blocked(reason){return Object.freeze({composition_version:COMPOSITION_VERSION,status:'OPERATIONAL_ADMISSION_BLOCKED',admission_valid:false,execution_authorized:false,network_call_performed:false,write_performed:false,production_used:false,blockers:Object.freeze([reason])});}
 function validA3Eligibility(eligibilityInput,grant,canary){
- const eligibility=evaluateA3ScopedExternalActionEligibility(eligibilityInput);
+ const eligibility=evaluateHermesMaintainerA3PreexecutionEligibility(eligibilityInput);
+ if(!eligibility)return {valid:false,eligibility:null};
  const branch=typeof canary?.ref==='string'?canary.ref.replace(/^refs\/heads\//,''):null;
  const target=eligibilityInput?.target_reference;
  const sourceGrant=eligibilityInput?.source_evidence?.authorization_grant;
