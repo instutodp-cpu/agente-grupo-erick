@@ -4,6 +4,10 @@ const { cloneFrozen, exactFields, stablePayload } = require('./agent-identity-co
 const { computeCanonicalContentDigest, isCanonicalContentDigest } = require('./canonical-content-digest');
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
 const {
+  READY: DURABLE_TARGET_READY,
+  validateHermesMaintainerSafeWorkflowDurableTarget
+} = require('./hermes-maintainer-safe-workflow-durable-target');
+const {
   AUTHORIZED: MAINTAINER_AUTHORIZED,
   validateHermesMaintainerSingleUseAuthorization
 } = require('./hermes-maintainer-single-use-execution-authorization');
@@ -12,7 +16,7 @@ const {
 // intentionally narrow: it consumes the existing maintainer SCM approval + authorization +
 // single-use authorization artifacts directly. New capability families require explicit code
 // and tests; caller-supplied generic authority booleans are not accepted.
-const CONTRACT_VERSION = 'hermes_a3_scoped_external_action_eligibility_v1';
+const CONTRACT_VERSION = 'hermes_a3_scoped_external_action_eligibility_v2';
 const ELIGIBLE = 'A3_SCOPED_EXTERNAL_ACTION_ELIGIBLE';
 const BLOCKED = 'A3_SCOPED_EXTERNAL_ACTION_BLOCKED';
 const SOURCE_FAMILY = 'MAINTAINER_SCM_WRITE_SINGLE_USE_V1';
@@ -25,13 +29,13 @@ const INPUT_FIELDS = Object.freeze([
   'protected_actions', 'evaluation_time'
 ]);
 const TARGET_FIELDS = Object.freeze([
-  'target_type', 'repository', 'base_ref', 'branch_name', 'target_digest'
+  'target_type', 'repository', 'base_ref', 'base_sha', 'branch_name', 'target_digest'
 ]);
 const OPERATOR_FIELDS = Object.freeze([
   'operator_id', 'source_reference', 'identity_verified', 'scope_verified', 'operator_binding_digest'
 ]);
 const SOURCE_EVIDENCE_FIELDS = Object.freeze([
-  'family', 'approval_binding', 'authorization_grant', 'single_use_authorization'
+  'family', 'approval_binding', 'authorization_grant', 'single_use_authorization', 'durable_target'
 ]);
 const COST_FIELDS = Object.freeze(['requested_units', 'maximum_units']);
 const PROTECTED_ACTION_FIELDS = Object.freeze([
@@ -56,10 +60,21 @@ const SINGLE_USE_AUTHORIZATION_FIELDS = Object.freeze([
   'issued_at', 'expires_at', 'environment', 'single_use', 'status', 'execution_authorized',
   'consumed', 'revoked', 'authorization_fingerprint', 'production_allowed', 'executed', 'blockers'
 ]);
+const DURABLE_TARGET_FIELDS = Object.freeze([
+  'contract_version', 'mission_id', 'workflow_digest', 'intent_digest', 'authorization_binding_digest',
+  'durable_operation', 'target_handoff_contract', 'ownership_key', 'attempt_reference', 'status',
+  'target_prepared', 'target', 'execution_eligible', 'execution_authorized', 'network_authorized',
+  'credentials_authorized', 'write_authorized', 'merge_authority', 'human_merge_required', 'simulation',
+  'production_allowed', 'provider_called', 'secret_accessed', 'operational_authority_consumed', 'blockers'
+]);
+const DURABLE_TARGET_VALUE_FIELDS = Object.freeze([
+  'operation', 'repository', 'base_ref', 'base_sha', 'branch_name'
+]);
 
 const IDENTIFIER_PATTERN = /^[^\u0000-\u001f\u007f\s]{1,255}$/u;
 const TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const UNSAFE_TARGET_TOKEN_PATTERN = /[*?\[\]{}]/;
+const SHA_PATTERN = /^[a-f0-9]{40}$/;
 
 function isIdentifier(value) {
   return typeof value === 'string' && IDENTIFIER_PATTERN.test(value);
@@ -80,6 +95,7 @@ function computeA3TargetDigest(target) {
     target_type: target.target_type,
     repository: target.repository,
     base_ref: target.base_ref,
+    base_sha: target.base_sha,
     branch_name: target.branch_name
   });
 }
@@ -146,6 +162,31 @@ function validateSingleUseAuthorization(authorization, grant, evaluationTime, er
     && Date.parse(authorization.expires_at) <= Date.parse(evaluationTime)) errors.push('single_use_authorization_expired');
 }
 
+
+function validateDurableTarget(durableTarget, approval, grant, targetReference, errors) {
+  if (!isPlainObject(durableTarget)) {
+    errors.push('durable_target_must_be_object');
+    return;
+  }
+  exactSourceFields(durableTarget, DURABLE_TARGET_FIELDS, 'durable_target', errors);
+  if (!isPlainObject(durableTarget.target)) errors.push('durable_target_value_must_be_object');
+  else exactFields(durableTarget.target, DURABLE_TARGET_VALUE_FIELDS, 'durable_target_value', errors);
+  const validation = validateHermesMaintainerSafeWorkflowDurableTarget(durableTarget);
+  if (!validation.valid) errors.push(...validation.errors.map(error => `durable_target_invalid::${error}`));
+  if (durableTarget?.status !== DURABLE_TARGET_READY || durableTarget?.target_prepared !== true) errors.push('durable_target_not_prepared');
+  if (!isCanonicalContentDigest(durableTarget?.workflow_digest)) errors.push('durable_target_workflow_digest_invalid');
+  if (!isCanonicalContentDigest(durableTarget?.authorization_binding_digest)) errors.push('durable_target_authorization_binding_digest_invalid');
+  if (durableTarget?.intent_digest !== approval?.intent_digest || durableTarget?.intent_digest !== grant?.intent_digest) errors.push('durable_target_intent_mismatch');
+  if (durableTarget?.durable_operation !== 'create_branch') errors.push('durable_target_operation_invalid');
+  if (durableTarget?.target_handoff_contract !== 'hermes_maintainer_scm_write_durable_admission_handoff_v1') errors.push('durable_target_handoff_contract_invalid');
+  const target = durableTarget?.target;
+  if (target?.operation !== 'create_branch') errors.push('durable_target_value_operation_invalid');
+  for (const field of ['repository', 'base_ref', 'base_sha', 'branch_name']) {
+    if (target?.[field] !== targetReference?.[field]) errors.push(`durable_target_${field}_mismatch`);
+  }
+  if (Array.isArray(durableTarget?.blockers) && durableTarget.blockers.length !== 0) errors.push('durable_target_has_blockers');
+}
+
 function validateA3ScopedExternalActionEligibilityInput(input) {
   const errors = [];
   if (!isPlainObject(input)) return { valid: false, errors: ['eligibility_input_must_be_object'] };
@@ -163,6 +204,7 @@ function validateA3ScopedExternalActionEligibilityInput(input) {
   for (const field of ['repository', 'base_ref', 'branch_name']) {
     if (!isNonEmptyString(input.target_reference?.[field]) || UNSAFE_TARGET_TOKEN_PATTERN.test(input.target_reference?.[field] || '')) errors.push(`target_${field}_invalid`);
   }
+  if (!SHA_PATTERN.test(input.target_reference?.base_sha || '')) errors.push('target_base_sha_invalid');
   if (!isCanonicalContentDigest(input.target_reference?.target_digest)) errors.push('target_digest_invalid');
   else if (input.target_reference.target_digest !== computeA3TargetDigest(input.target_reference)) errors.push('target_digest_mismatch');
 
@@ -179,9 +221,11 @@ function validateA3ScopedExternalActionEligibilityInput(input) {
   const approval = input.source_evidence?.approval_binding;
   const grant = input.source_evidence?.authorization_grant;
   const singleUse = input.source_evidence?.single_use_authorization;
+  const durableTarget = input.source_evidence?.durable_target;
   validateApprovalBinding(approval, errors);
   validateAuthorizationGrant(grant, approval, errors);
   validateSingleUseAuthorization(singleUse, grant, input.evaluation_time, errors);
+  validateDurableTarget(durableTarget, approval, grant, input.target_reference, errors);
 
   if (isCanonicalContentDigest(input.action_intent_digest) && input.action_intent_digest !== approval?.intent_digest) errors.push('action_intent_not_bound_to_official_approval');
   if (input.operation !== approval?.operation || input.operation !== grant?.operation || input.operation !== singleUse?.operation) errors.push('operation_not_bound_to_authorization_chain');
@@ -218,6 +262,8 @@ function evaluateA3ScopedExternalActionEligibility(input = {}) {
     approval_reference: isNonEmptyString(input.source_evidence?.approval_binding?.approval_reference) ? input.source_evidence.approval_binding.approval_reference : null,
     authorization_reference: isNonEmptyString(input.source_evidence?.authorization_grant?.authorization_reference) ? input.source_evidence.authorization_grant.authorization_reference : null,
     single_use_authorization_id: isNonEmptyString(input.source_evidence?.single_use_authorization?.authorization_id) ? input.source_evidence.single_use_authorization.authorization_id : null,
+    durable_target_contract: input.source_evidence?.durable_target?.contract_version === 'hermes_maintainer_safe_workflow_durable_target_v1' ? input.source_evidence.durable_target.contract_version : null,
+    base_sha: SHA_PATTERN.test(input.target_reference?.base_sha || '') ? input.target_reference.base_sha : null,
     single_use_required: true,
     authorization_consumed: input.source_evidence?.single_use_authorization?.consumed === true,
     authorization_revoked: input.source_evidence?.single_use_authorization?.revoked === true,

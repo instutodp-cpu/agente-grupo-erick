@@ -136,7 +136,7 @@
     },
     {
       "id": "a3-scoped-external-action-eligibility",
-      "scope": "staging maintainer SCM declarative eligibility only",
+      "scope": "staging maintainer SCM declarative eligibility with exact source revision; E2E simulation candidate",
       "planned": true,
       "contracted": true,
       "implemented": true,
@@ -146,7 +146,8 @@
       "evidence": [
         "platform/docs/HERMES_A3_SCOPED_EXTERNAL_ACTION_ELIGIBILITY.md",
         "platform/services/api/src/core/a3-scoped-external-action-eligibility.js",
-        "platform/services/api/test/a3-scoped-external-action-eligibility.test.js"
+        "platform/services/api/test/a3-scoped-external-action-eligibility.test.js",
+        "platform/services/api/test/a3-scoped-external-action-e2e-simulation.test.js"
       ],
       "limits": [
         "eligibility_only",
@@ -158,7 +159,10 @@
         "official_approval_authorization_single_use_chain_required",
         "single_use_unconsumed_unrevoked_required",
         "no_network_or_provider_call",
-        "no_operational_evidence"
+        "no_operational_evidence",
+        "official_durable_target_required",
+        "exact_base_sha_bound",
+        "e2e_simulation_candidate_not_ci_proven"
       ]
     },
     {
@@ -489,7 +493,7 @@
   "inventory": {
     "platform_docs": 140,
     "core_source_files": 727,
-    "api_tests": 612,
+    "api_tests": 613,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
