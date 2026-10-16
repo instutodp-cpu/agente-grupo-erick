@@ -6,7 +6,7 @@ const { createHermesMaintainerSafeWorkflowMutationOrchestration } = require('../
 const { createHermesMaintainerSafeWorkflowAuthorizedMutationEntry } = require('../core/hermes-maintainer-safe-workflow-authorized-mutation-entry');
 const { createHermesMaintainerSafeWorkflowAuthorizedMutationFlow } = require('../core/hermes-maintainer-safe-workflow-authorized-mutation-flow');
 const { createHermesMaintainerRevisionBoundE2eOrchestrator } = require('../core/hermes-maintainer-revision-bound-e2e-orchestrator');
-const { createHermesMaintainerGithubDurableWriteRuntimeComposition } = require('./hermes-maintainer-github-durable-write-runtime-composition');
+const { createHermesMaintainerGithubWriteCanaryRuntimeRunner } = require('./hermes-maintainer-github-write-canary-runtime-runner');
 const { createHermesMaintainerGithubUpdateFileRuntimeComposition } = require('./hermes-maintainer-github-update-file-runtime-composition');
 const { createHermesMaintainerGithubCreatePullRequestRuntimeComposition } = require('./hermes-maintainer-github-create-pull-request-runtime-composition');
 const { createHermesMaintainerGithubWriteOperationalFinalizationComposition } = require('./hermes-maintainer-github-write-operational-finalization-composition');
@@ -15,7 +15,7 @@ const { createHermesMaintainerGithubCreatePullRequestOperationalFinalizationComp
 const { runHermesMaintainerGithubE2eRead } = require('./hermes-maintainer-github-e2e-read-composition');
 const { createHermesMaintainerRevisionBoundTestRuntimeComposition } = require('./hermes-maintainer-revision-bound-test-runtime-composition');
 
-const COMPOSITION_VERSION = 'hermes_maintainer_trusted_e2e_runtime_composition_v1';
+const COMPOSITION_VERSION = 'hermes_maintainer_trusted_e2e_runtime_composition_v2';
 
 function createHermesMaintainerTrustedE2eRuntimeComposition({
   environment, fetchImpl, createTimeoutSignal, timeoutMs, pool, resolveReadAuthorization,
@@ -28,7 +28,7 @@ function createHermesMaintainerTrustedE2eRuntimeComposition({
   if (typeof resolveReadAuthorization !== 'function') throw new TypeError('resolveReadAuthorization_required');
 
   const runtimes = Object.freeze({
-    create_branch: createHermesMaintainerGithubDurableWriteRuntimeComposition({ environment, fetchImpl, createTimeoutSignal, timeoutMs }),
+    create_branch: createHermesMaintainerGithubWriteCanaryRuntimeRunner({ environment, fetchImpl, createTimeoutSignal, timeoutMs }),
     update_file: createHermesMaintainerGithubUpdateFileRuntimeComposition({ environment, fetchImpl, createTimeoutSignal, timeoutMs }),
     create_pull_request: createHermesMaintainerGithubCreatePullRequestRuntimeComposition({ environment, fetchImpl, createTimeoutSignal, timeoutMs })
   });
