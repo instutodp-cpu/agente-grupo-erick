@@ -1,9 +1,9 @@
 # Hermes A3 Scoped External Action Eligibility
 
-Status: implemented and tested eligibility contract v2 with exact source revision binding; A3 remains unauthorized
-Mode: evidence-first, fail-closed, staging-only
-Execution authority: none
-Merge authority: human only
+Status: A3 authorized_scoped for the proven staging maintainer SCM create_branch capability after exact-revision real canary and explicit human promotion authorization
+Mode: evidence-first, fail-closed, staging-only, exact-target, single-use
+Execution authority: scoped only through the official approval + authorization + single-use + durable A3 chain; no generic or wildcard authority
+Merge authority: human only; A4 remains protected
 
 ## Objective
 
@@ -106,11 +106,25 @@ Update-file and Draft PR execution remain on their existing official bounded run
 
 This binding still does **not** promote A3, execute a real canary, grant production authority, or grant merge authority.
 
-## Promotion rule
+## Promotion result
 
-This implementation does not change the autonomy state. `A0`, `A1`, and bounded `A2` remain the only authorized levels. A3 remains protected.
+A3 is now authorized only for the capability and boundary that were actually proven: staging maintainer SCM `create_branch` through `MAINTAINER_SCM_WRITE_SINGLE_USE_V1`. This is not blanket external-action authority and does not authorize another provider, operation, environment or target family.
 
-A future A3 promotion requires, at minimum, capability-specific end-to-end proof on an exact revision, a bounded operational environment, durable single-use/replay evidence where applicable, and an explicit human authorization decision. Unit tests, simulation evidence and preexecution readiness alone cannot promote A3.
+Promotion evidence:
+
+- exact proven revision: `cb8580f1a0d07487410e5a5c2f27d172746b94ee`;
+- real branch mutation: `refs/heads/hermes/canary/a3-create-branch-20261016-175647` created at that exact SHA;
+- provider result: HTTP `201`, `GITHUB_DURABLE_WRITE_EXECUTION_SUCCEEDED`;
+- durable receipt: `GITHUB_WRITE_DURABLE_FINALIZATION_CONFIRMED`, `receipt_valid=true`;
+- E2E closure: `E2E_DURABLE_WRITE_CLOSURE_CONFIRMED`, `production_used=false`;
+- exact action intent: `sha256:ccad4c4a2d54a557707d71c5caf774ffd73f5432d32f2cb1f525738c10fcc8e1`;
+- human approval reference: `human-a3-canary-20261016-1845`;
+- human authorization reference: `control-a3-canary-20261016-1845`;
+- explicit promotion evidence digest: `sha256:b57ce125c09b9b63457f0cdab93f02c1a4ddf79f98e22295a998b711e7cb46cf`.
+
+The promotion preserves the same per-action controls: explicit human approval and authorization, exact repository/operation/branch/base-SHA binding, staging only, expiring single-use authority, durable replay protection, and fail-closed execution. A4 remains protected: no merge authority, no production publication, no financial spend, no customer messaging, no destructive action, and no secret/permission change.
+
+Any expansion beyond this proven A3 scope requires its own capability-specific evidence and explicit authorization; it cannot inherit authority from this promotion.
 
 ## Implementation evidence
 

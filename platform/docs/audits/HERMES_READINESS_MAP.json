@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
   "mission": "hermes-self-audit-readiness",
-  "audited_revision": "a6a6df358418d07d68117b69ec4870e1d29a2581",
+  "audited_revision": "cb8580f1a0d07487410e5a5c2f27d172746b94ee",
   "evidence_states": [
     "planned",
     "contracted",
@@ -50,7 +50,6 @@
     ]
   },
   "protected_levels": [
-    "A3",
     "A4"
   ],
   "findings": [
@@ -136,34 +135,41 @@
     },
     {
       "id": "a3-scoped-external-action-eligibility",
-      "scope": "staging maintainer SCM declarative eligibility with exact source revision; E2E simulation candidate",
+      "scope": "staging maintainer SCM create_branch via exact A3 eligibility + explicit human approval/authorization + durable single-use/replay protection",
       "planned": true,
       "contracted": true,
       "implemented": true,
       "tested": true,
-      "proven_e2e": false,
-      "operational": false,
+      "proven_e2e": true,
+      "operational": true,
       "evidence": [
         "platform/docs/HERMES_A3_SCOPED_EXTERNAL_ACTION_ELIGIBILITY.md",
         "platform/services/api/src/core/a3-scoped-external-action-eligibility.js",
-        "platform/services/api/test/a3-scoped-external-action-eligibility.test.js",
-        "platform/services/api/test/a3-scoped-external-action-e2e-simulation.test.js"
+        "platform/services/api/src/runtime/hermes-maintainer-github-write-canary-runtime-runner.js",
+        "platform/services/api/src/runtime/hermes-maintainer-github-write-e2e-durable-closure.js",
+        "real A3 create_branch canary at exact revision cb8580f1a0d07487410e5a5c2f27d172746b94ee",
+        "created refs/heads/hermes/canary/a3-create-branch-20261016-175647 -> cb8580f1a0d07487410e5a5c2f27d172746b94ee",
+        "GITHUB_DURABLE_WRITE_EXECUTION_SUCCEEDED with provider_status=201 and exactly one provider call",
+        "GITHUB_WRITE_DURABLE_FINALIZATION_CONFIRMED with receipt_valid=true",
+        "E2E_DURABLE_WRITE_CLOSURE_CONFIRMED with production_used=false",
+        "explicit human promotion authorization evidence sha256:b57ce125c09b9b63457f0cdab93f02c1a4ddf79f98e22295a998b711e7cb46cf"
       ],
       "limits": [
-        "eligibility_only",
-        "execution_authorized_false",
-        "a3_not_promoted",
-        "a4_protected",
+        "a3_authorized_scoped",
         "staging_only",
         "maintainer_scm_write_only",
+        "create_branch_only_for_promoted_scope",
+        "explicit_human_approval_per_action_required",
+        "explicit_human_authorization_per_action_required",
         "official_approval_authorization_single_use_chain_required",
-        "single_use_unconsumed_unrevoked_required",
-        "no_network_or_provider_call",
-        "no_operational_evidence",
-        "official_durable_target_required",
         "exact_base_sha_bound",
-        "e2e_simulation_candidate_not_ci_proven"
-      ]
+        "durable_single_use_and_replay_protection_required",
+        "a4_protected",
+        "merge_authority_false",
+        "human_merge_required",
+        "production_blocked"
+      ],
+      "evidence_revision": "cb8580f1a0d07487410e5a5c2f27d172746b94ee"
     },
     {
       "id": "marketing-foundation",
@@ -516,11 +522,12 @@
     }
   },
   "autonomy": {
-    "current_max_level": "A2_authorized_bounded",
+    "current_max_level": "A3_authorized_scoped",
     "authorized_now": [
       "A0",
       "A1",
-      "A2"
+      "A2",
+      "A3"
     ],
     "candidate": null,
     "protected_level": "A4",
@@ -574,6 +581,46 @@
         "edit_commit_test",
         "inspect_and_self_correct_ci",
         "draft_pr_only"
+      ]
+    },
+    "a3_canary": {
+      "status": "authorized_scoped",
+      "objective": "Allow only explicitly approved, capability-scoped A3 external actions through the proven staging maintainer SCM create_branch chain; every action remains exact-target, single-use and human-authorized.",
+      "capability_id": "hermes-maintainer-scm-write",
+      "source_family": "MAINTAINER_SCM_WRITE_SINGLE_USE_V1",
+      "environment": "staging",
+      "operation": "create_branch",
+      "repository": "instutodp-cpu/agente-grupo-erick",
+      "evidence_revision": "cb8580f1a0d07487410e5a5c2f27d172746b94ee",
+      "canary_branch": "hermes/canary/a3-create-branch-20261016-175647",
+      "intent_digest": "sha256:ccad4c4a2d54a557707d71c5caf774ffd73f5432d32f2cb1f525738c10fcc8e1",
+      "approval_reference": "human-a3-canary-20261016-1845",
+      "authorization_reference": "control-a3-canary-20261016-1845",
+      "promotion_evidence_digest": "sha256:b57ce125c09b9b63457f0cdab93f02c1a4ddf79f98e22295a998b711e7cb46cf",
+      "provider_status": 201,
+      "execution_status": "GITHUB_DURABLE_WRITE_EXECUTION_SUCCEEDED",
+      "receipt_status": "GITHUB_WRITE_DURABLE_FINALIZATION_CONFIRMED",
+      "closure_status": "E2E_DURABLE_WRITE_CLOSURE_CONFIRMED",
+      "human_promotion_authorized": true,
+      "required_controls": [
+        "explicit_human_approval_per_action",
+        "explicit_human_authorization_per_action",
+        "staging_only",
+        "exact_repository_operation_branch_base_sha_binding",
+        "single_use_authorization",
+        "durable_replay_protection",
+        "one_bounded_provider_write",
+        "production_false",
+        "merge_authority_false",
+        "human_merge_required"
+      ],
+      "forbidden": [
+        "merge",
+        "production_publish",
+        "financial_spend",
+        "customer_message",
+        "destructive_action",
+        "secret_or_permission_change"
       ]
     }
   }
