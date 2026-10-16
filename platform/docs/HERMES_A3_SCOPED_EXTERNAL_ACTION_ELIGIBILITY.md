@@ -76,15 +76,27 @@ Even on success, the gate always preserves:
 
 Eligibility is evidence for a later promotion/canary decision, not permission to execute.
 
+## Preexecution binding
+
+The staging GitHub write canary runner v2 re-evaluates the complete A3 eligibility input before the existing execution guard. It binds repository, base reference, branch, exact base SHA and action intent to the same canary and durable admission. A caller-supplied eligibility summary is never trusted as authority.
+
+The runner exposes an inert `preflight` path. Preflight does not resolve credentials, call the network, write to GitHub, persist operational state, consume an authorization, or authorize execution. A successful preflight reports `A3_PREEXECUTION_READY` while preserving `execution_authorized=false`, `execution_started=false`, `execution_performed=false`, `network_call_performed=false` and `write_performed=false`.
+
+Actual runner execution is now fail-closed unless that preflight succeeds and the existing official canary/admission execution guard also accepts the same canary and admission. This closes the legacy runner path in which a syntactically valid canary plus durable admission could reach the runtime without first passing the new A3 eligibility boundary.
+
+This binding still does **not** promote A3, execute a real canary, grant production authority, or grant merge authority.
+
 ## Promotion rule
 
 This implementation does not change the autonomy state. `A0`, `A1`, and bounded `A2` remain the only authorized levels. A3 remains protected.
 
-A future A3 promotion requires, at minimum, capability-specific end-to-end proof on an exact revision, a bounded operational environment, durable single-use/replay evidence where applicable, and an explicit human authorization decision. Unit tests and this eligibility gate alone cannot promote A3.
+A future A3 promotion requires, at minimum, capability-specific end-to-end proof on an exact revision, a bounded operational environment, durable single-use/replay evidence where applicable, and an explicit human authorization decision. Unit tests, simulation evidence and preexecution readiness alone cannot promote A3.
 
 ## Implementation evidence
 
 - `platform/services/api/src/core/a3-scoped-external-action-eligibility.js`
 - `platform/services/api/test/a3-scoped-external-action-eligibility.test.js`
 - `platform/services/api/test/a3-scoped-external-action-e2e-simulation.test.js`
+- `platform/services/api/src/runtime/hermes-maintainer-github-write-canary-runtime-runner.js`
+- `platform/services/api/test/hermes-maintainer-github-write-canary-runtime-runner.test.js`
 - `platform/docs/audits/HERMES_READINESS_MAP.json`
