@@ -84,6 +84,10 @@ The runner exposes an inert `preflight` path. Preflight does not resolve credent
 
 Actual runner execution is now fail-closed unless that preflight succeeds and the existing official canary/admission execution guard also accepts the same canary and admission. This closes the legacy runner path in which a syntactically valid canary plus durable admission could reach the runtime without first passing the new A3 eligibility boundary.
 
+The existing operational admission composition is also upgraded to v2 and re-evaluates the complete A3 eligibility input **before** durable authorization-consumption or attempt-ownership persistence. The legacy three-argument admission path therefore blocks before Postgres is touched. Eligible target SHA, branch, repository, base reference, intent digest and authorization reference must match the same official grant/canary chain.
+
+Together, the admission v2 and runner v2 close both preexecution bypasses without creating a parallel authorization stack. A successful admission may prepare the already-existing durable request, but does not itself call GitHub; actual provider/network/write remain behind the execution guard and explicit A3 human boundary.
+
 This binding still does **not** promote A3, execute a real canary, grant production authority, or grant merge authority.
 
 ## Promotion rule
@@ -99,4 +103,6 @@ A future A3 promotion requires, at minimum, capability-specific end-to-end proof
 - `platform/services/api/test/a3-scoped-external-action-e2e-simulation.test.js`
 - `platform/services/api/src/runtime/hermes-maintainer-github-write-canary-runtime-runner.js`
 - `platform/services/api/test/hermes-maintainer-github-write-canary-runtime-runner.test.js`
+- `platform/services/api/src/runtime/hermes-maintainer-github-write-operational-admission-composition.js`
+- `platform/services/api/test/hermes-maintainer-github-write-operational-admission-composition.test.js`
 - `platform/docs/audits/HERMES_READINESS_MAP.json`
