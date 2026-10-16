@@ -135,6 +135,33 @@
       ]
     },
     {
+      "id": "a3-scoped-external-action-eligibility",
+      "scope": "staging maintainer SCM declarative eligibility only",
+      "planned": true,
+      "contracted": true,
+      "implemented": true,
+      "tested": true,
+      "proven_e2e": false,
+      "operational": false,
+      "evidence": [
+        "platform/docs/HERMES_A3_SCOPED_EXTERNAL_ACTION_ELIGIBILITY.md",
+        "platform/services/api/src/core/a3-scoped-external-action-eligibility.js",
+        "platform/services/api/test/a3-scoped-external-action-eligibility.test.js"
+      ],
+      "limits": [
+        "eligibility_only",
+        "execution_authorized_false",
+        "a3_not_promoted",
+        "a4_protected",
+        "staging_only",
+        "maintainer_scm_write_only",
+        "official_approval_authorization_single_use_chain_required",
+        "single_use_unconsumed_unrevoked_required",
+        "no_network_or_provider_call",
+        "no_operational_evidence"
+      ]
+    },
+    {
       "id": "marketing-foundation",
       "scope": "simulation-first",
       "planned": true,
@@ -460,9 +487,9 @@
     }
   ],
   "inventory": {
-    "platform_docs": 139,
-    "core_source_files": 726,
-    "api_tests": 611,
+    "platform_docs": 140,
+    "core_source_files": 727,
+    "api_tests": 612,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
