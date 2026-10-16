@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { deriveHermesMaintainerFinalE2eReadiness } = require('../src/core/hermes-maintainer-final-e2e-readiness');
 
 const trusted = overrides => ({
-  composition_version: 'hermes_maintainer_trusted_e2e_runtime_composition_v1',
+  composition_version: 'hermes_maintainer_trusted_e2e_runtime_composition_v2',
   environment: 'staging',
   production_allowed: false,
   merge_authority: false,
@@ -13,7 +13,7 @@ const trusted = overrides => ({
   ...overrides
 });
 
-test('declares the trusted staging E2E runtime executable while still requiring a real canary', () => {
+test('declares only the A3-bound trusted staging E2E runtime ready while still requiring a real canary', () => {
   const result = deriveHermesMaintainerFinalE2eReadiness(trusted());
   assert.equal(result.status, 'MAINTAINER_FINAL_E2E_RUNTIME_READY');
   assert.equal(result.execution_ready, true);
@@ -24,6 +24,13 @@ test('declares the trusted staging E2E runtime executable while still requiring 
   assert.equal(result.merge_authority, false);
   assert.equal(result.human_merge_required, true);
   assert.deepEqual(result.blockers, []);
+});
+
+test('rejects legacy trusted runtime v1 so create_branch cannot bypass A3', () => {
+  const result = deriveHermesMaintainerFinalE2eReadiness(trusted({composition_version:'hermes_maintainer_trusted_e2e_runtime_composition_v1'}));
+  assert.equal(result.execution_ready, false);
+  assert.equal(result.trusted_runtime_ready, false);
+  assert.deepEqual(result.blockers, ['TRUSTED_E2E_RUNTIME_COMPOSITION_INVALID']);
 });
 
 for (const [name, override] of [

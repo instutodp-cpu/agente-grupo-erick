@@ -3,7 +3,7 @@
 const { buildHermesMaintainerE2eWorkflowContract, validateHermesMaintainerE2eWorkflowContract } = require('./hermes-maintainer-e2e-workflow-contract');
 
 const READINESS_VERSION = 'hermes_maintainer_final_e2e_readiness_v1';
-const TRUSTED_COMPOSITION_VERSION = 'hermes_maintainer_trusted_e2e_runtime_composition_v1';
+const TRUSTED_COMPOSITION_VERSION = 'hermes_maintainer_trusted_e2e_runtime_composition_v2';
 
 function blocked(reason) {
   return Object.freeze({

@@ -82,11 +82,27 @@ The staging GitHub write canary runner v2 re-evaluates the complete A3 eligibili
 
 The runner exposes an inert `preflight` path. Preflight does not resolve credentials, call the network, write to GitHub, persist operational state, consume an authorization, or authorize execution. A successful preflight reports `A3_PREEXECUTION_READY` while preserving `execution_authorized=false`, `execution_started=false`, `execution_performed=false`, `network_call_performed=false` and `write_performed=false`.
 
-Actual runner execution is now fail-closed unless that preflight succeeds and the existing official canary/admission execution guard also accepts the same canary and admission. This closes the legacy runner path in which a syntactically valid canary plus durable admission could reach the runtime without first passing the new A3 eligibility boundary.
+Actual runner execution is fail-closed unless that preflight succeeds and the existing official canary/admission execution guard also accepts the same canary and admission. This closes the direct legacy runner path in which a syntactically valid canary plus durable admission could reach the runtime without first passing the A3 eligibility boundary.
 
 The existing operational admission composition is also upgraded to v2 and re-evaluates the complete A3 eligibility input **before** durable authorization-consumption or attempt-ownership persistence. The legacy three-argument admission path therefore blocks before Postgres is touched. Eligible target SHA, branch, repository, base reference, intent digest and authorization reference must match the same official grant/canary chain.
 
-Together, the admission v2 and runner v2 close both preexecution bypasses without creating a parallel authorization stack. A successful admission may prepare the already-existing durable request, but does not itself call GitHub; actual provider/network/write remain behind the execution guard and explicit A3 human boundary.
+These two bindings close the direct admission and canary-runner bypasses without creating a parallel authorization stack. A successful admission may prepare the already-existing durable request, but does not itself call GitHub; actual provider/network/write remain behind the execution guard and explicit A3 human boundary.
+
+## Trusted E2E binding
+
+A later audit found one additional legacy route: the trusted E2E safe-workflow composition still wired `create_branch` directly to `hermes_maintainer_github_durable_write_runtime_composition_v1`. That runtime accepted a valid durable admission but did not know about the A3 eligibility contract.
+
+The trusted E2E path is therefore hardened as follows:
+
+- `hermes_maintainer_trusted_e2e_operational_input_builder_v2` requires the complete branch A3 eligibility input and runs the official admission-v2 preflight with it;
+- `hermes_maintainer_trusted_e2e_operational_preparation_v2` passes that same A3 input into the official durable admission v2 before workflow preparation;
+- `hermes_maintainer_trusted_e2e_canary_workflow_preparation_v2` preserves the exact A3 eligibility input and canary in the branch mutation context;
+- the safe-workflow execution-boundary handoff now identifies `hermes_maintainer_github_write_canary_runtime_runner_v2` as the only official `create_branch` runtime for this path;
+- the execution invocation fails closed with `A3_EXECUTION_CONTEXT_REQUIRED` before runtime invocation if the A3 input or canary is absent;
+- `hermes_maintainer_trusted_e2e_runtime_composition_v2` uses the official A3 canary runner rather than the legacy direct durable-write runtime;
+- final E2E readiness trusts only trusted-runtime composition v2, so the legacy v1 composition cannot regain readiness by compatibility fallback.
+
+Update-file and Draft PR execution remain on their existing official bounded runtimes. This change does not run the trusted E2E canary, does not resolve a provider credential, does not call GitHub through the runtime, does not consume real single-use authority, and does not promote A3.
 
 This binding still does **not** promote A3, execute a real canary, grant production authority, or grant merge authority.
 
@@ -105,4 +121,15 @@ A future A3 promotion requires, at minimum, capability-specific end-to-end proof
 - `platform/services/api/test/hermes-maintainer-github-write-canary-runtime-runner.test.js`
 - `platform/services/api/src/runtime/hermes-maintainer-github-write-operational-admission-composition.js`
 - `platform/services/api/test/hermes-maintainer-github-write-operational-admission-composition.test.js`
+- `platform/services/api/src/runtime/hermes-maintainer-trusted-e2e-operational-input-builder.js`
+- `platform/services/api/src/runtime/hermes-maintainer-trusted-e2e-operational-preparation.js`
+- `platform/services/api/src/runtime/hermes-maintainer-trusted-e2e-canary-workflow-preparation.js`
+- `platform/services/api/src/runtime/hermes-maintainer-trusted-e2e-runtime-composition.js`
+- `platform/services/api/src/core/hermes-maintainer-safe-workflow-execution-boundary-handoff.js`
+- `platform/services/api/src/core/hermes-maintainer-safe-workflow-execution-invocation.js`
+- `platform/services/api/test/hermes-maintainer-trusted-e2e-operational-input-builder.test.js`
+- `platform/services/api/test/hermes-maintainer-trusted-e2e-operational-preparation.test.js`
+- `platform/services/api/test/hermes-maintainer-trusted-e2e-canary-workflow-preparation.test.js`
+- `platform/services/api/test/hermes-maintainer-trusted-e2e-runtime-composition.test.js`
+- `platform/services/api/test/hermes-maintainer-safe-workflow-execution-invocation.test.js`
 - `platform/docs/audits/HERMES_READINESS_MAP.json`

@@ -3,18 +3,19 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const Module = require('node:module');
 
-test('trusted E2E composition wires only official runtime/finalizer chain and preserves human-only merge', () => {
+test('trusted E2E composition wires create_branch through the official A3 runner and preserves human-only merge', () => {
   const original = Module._load;
   const calls = [];
   const stub = (name, value) => ({ [name]: value });
   Module._load = function(request, parent, isMain) {
-    if (request.endsWith('hermes-maintainer-github-durable-write-runtime-composition')) return stub('createHermesMaintainerGithubDurableWriteRuntimeComposition', () => ({ composition_version:'hermes_maintainer_github_durable_write_runtime_composition_v1', execute(){} }));
+    if (request.endsWith('hermes-maintainer-github-durable-write-runtime-composition')) throw new Error('legacy_create_branch_runtime_must_not_be_imported');
+    if (request.endsWith('hermes-maintainer-github-write-canary-runtime-runner')) return stub('createHermesMaintainerGithubWriteCanaryRuntimeRunner', () => ({ runner_version:'hermes_maintainer_github_write_canary_runtime_runner_v2', execute(){} }));
     if (request.endsWith('hermes-maintainer-github-update-file-runtime-composition')) return stub('createHermesMaintainerGithubUpdateFileRuntimeComposition', () => ({ composition_version:'hermes_maintainer_github_update_file_runtime_composition_v1', execute(){} }));
     if (request.endsWith('hermes-maintainer-github-create-pull-request-runtime-composition')) return stub('createHermesMaintainerGithubCreatePullRequestRuntimeComposition', () => ({ composition_version:'hermes_maintainer_github_create_pull_request_runtime_composition_v1', execute(){} }));
     if (request.endsWith('hermes-maintainer-github-write-operational-finalization-composition')) return stub('createHermesMaintainerGithubWriteOperationalFinalizationComposition', () => ({ composition_version:'hermes_maintainer_github_write_operational_finalization_composition_v1', finalize(){} }));
     if (request.endsWith('hermes-maintainer-github-update-file-operational-finalization-composition')) return stub('createHermesMaintainerGithubUpdateFileOperationalFinalizationComposition', () => ({ composition_version:'hermes_maintainer_github_update_file_operational_finalization_composition_v1', finalize(){} }));
     if (request.endsWith('hermes-maintainer-github-create-pull-request-operational-finalization-composition')) return stub('createHermesMaintainerGithubCreatePullRequestOperationalFinalizationComposition', () => ({ composition_version:'hermes_maintainer_github_create_pull_request_operational_finalization_composition_v1', finalize(){} }));
-    if (request.endsWith('hermes-maintainer-safe-workflow-execution-invocation')) return stub('createHermesMaintainerSafeWorkflowExecutionInvocation', ({runtimes}) => { calls.push(['runtimes',Object.keys(runtimes)]); return {execute(){}}; });
+    if (request.endsWith('hermes-maintainer-safe-workflow-execution-invocation')) return stub('createHermesMaintainerSafeWorkflowExecutionInvocation', ({runtimes}) => { calls.push(['runtimes',Object.keys(runtimes),runtimes.create_branch.runner_version]); return {execute(){}}; });
     if (request.endsWith('hermes-maintainer-safe-workflow-finalization-invocation')) return stub('createHermesMaintainerSafeWorkflowFinalizationInvocation', ({finalizers}) => { calls.push(['finalizers',Object.keys(finalizers)]); return {finalize(){}}; });
     if (request.endsWith('hermes-maintainer-safe-workflow-mutation-orchestration')) return stub('createHermesMaintainerSafeWorkflowMutationOrchestration', () => ({execute(){}}));
     if (request.endsWith('hermes-maintainer-safe-workflow-authorized-mutation-entry')) return stub('createHermesMaintainerSafeWorkflowAuthorizedMutationEntry', () => ({execute(){}}));
@@ -31,18 +32,18 @@ test('trusted E2E composition wires only official runtime/finalizer chain and pr
     const composition = createHermesMaintainerTrustedE2eRuntimeComposition({
       environment: {NODE_ENV:'staging'}, fetchImpl: async()=>{}, createTimeoutSignal:()=>{}, pool:{}, resolveReadAuthorization:async()=>{}
     });
-    assert.equal(composition.composition_version,'hermes_maintainer_trusted_e2e_runtime_composition_v1');
+    assert.equal(composition.composition_version,'hermes_maintainer_trusted_e2e_runtime_composition_v2');
     assert.equal(composition.environment,'staging');
     assert.equal(composition.production_allowed,false);
     assert.equal(composition.merge_authority,false);
     assert.equal(composition.human_merge_required,true);
-    assert.deepEqual(calls[0],['runtimes',['create_branch','update_file','create_pull_request']]);
+    assert.deepEqual(calls[0],['runtimes',['create_branch','update_file','create_pull_request'],'hermes_maintainer_github_write_canary_runtime_runner_v2']);
     assert.deepEqual(calls[1],['finalizers',['create_branch','update_file','create_pull_request']]);
     assert.equal(calls[2][1].branchMutation,calls[2][1].editMutation);
     assert.equal(calls[2][1].editMutation,calls[2][1].pullRequestMutation);
-    calls[2][1].branchMutation.execute({controlled_execution:{id:'controlled'},ownership:{id:'owner'},target:{id:'target'},authority_evidence:{id:'evidence'},mutation_input:{id:'mutation'}});
+    calls[2][1].branchMutation.execute({controlled_execution:{id:'controlled'},ownership:{id:'owner'},target:{id:'target'},authority_evidence:{id:'evidence'},mutation_input:{a3_eligibility_input:{id:'a3'},canary:{id:'canary'}}});
     const invocation=calls.find(x=>x[0]==='mutationFlowExecute');
-    assert.deepEqual(invocation[1],[{id:'controlled'},{ownership:{id:'owner'},target:{id:'target'},authority_evidence:{id:'evidence'},mutation_input:{id:'mutation'}}]);
+    assert.deepEqual(invocation[1],[{id:'controlled'},{ownership:{id:'owner'},target:{id:'target'},authority_evidence:{id:'evidence'},mutation_input:{a3_eligibility_input:{id:'a3'},canary:{id:'canary'}}}]);
   } finally {
     Module._load = original;
   }
