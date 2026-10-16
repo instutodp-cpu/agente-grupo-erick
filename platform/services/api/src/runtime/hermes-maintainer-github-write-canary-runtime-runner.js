@@ -1,11 +1,11 @@
 'use strict';
 
 const {createHermesMaintainerGithubWriteProcessRuntimeBinding}=require('./hermes-maintainer-github-write-process-runtime-binding');
-const {createHermesMaintainerGithubWriteCanaryExecutionGuard}=require('../core/hermes-maintainer-github-write-canary-execution-guard');
 const {
- ELIGIBLE:A3_ELIGIBLE,
- evaluateA3ScopedExternalActionEligibility
-}=require('../core/a3-scoped-external-action-eligibility');
+ A3_ELIGIBLE,
+ createHermesMaintainerGithubWriteCanaryExecutionGuard,
+ evaluateHermesMaintainerA3PreexecutionEligibility
+}=require('../core/hermes-maintainer-github-write-canary-execution-guard');
 
 const RUNNER_VERSION='hermes_maintainer_github_write_canary_runtime_runner_v2';
 const PREEXECUTION_GATE_VERSION='hermes_a3_maintainer_github_write_preexecution_gate_v1';
@@ -74,7 +74,7 @@ function createHermesMaintainerGithubWriteCanaryRuntimeRunner({environment,fetch
  const validationGuard=createHermesMaintainerGithubWriteCanaryExecutionGuard({execute:async()=>Object.freeze({status:'CANARY_EXECUTION_ADMISSIBLE'})});
 
  async function preflight(eligibilityInput,canary,admission){
-  const eligibility=evaluateA3ScopedExternalActionEligibility(eligibilityInput);
+  const eligibility=evaluateHermesMaintainerA3PreexecutionEligibility(eligibilityInput);
   const blockers=a3BindingBlockers(eligibilityInput,eligibility,canary,admission);
   if(blockers.length)return blockedPreflight(eligibility,blockers);
   const guardValidation=await validationGuard.execute(canary,admission);
