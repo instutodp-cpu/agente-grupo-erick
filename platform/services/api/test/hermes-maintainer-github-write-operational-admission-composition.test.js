@@ -120,12 +120,12 @@ test('durable consumption makes replay fail closed after valid A3 admission',asy
  assert.equal(replay.write_performed,false);
 });
 
-test('rejects grant/canary scope mismatch before durable persistence',async()=>{
+test('rejects grant/canary scope mismatch after valid A3 gate',async()=>{
  const f=fixture();
  const bad={...f.grant,branch_name:'hermes/canary/other'};
  const out=await createHermesMaintainerGithubWriteOperationalAdmissionComposition({pool:pool()}).prepare(f.eligibility,bad,f.canary,input());
  assert.equal(out.status,'OPERATIONAL_ADMISSION_BLOCKED');
- assert.deepEqual(out.blockers,['A3_ELIGIBILITY_REQUIRED']);
+ assert.deepEqual(out.blockers,['AUTHORIZATION_GRANT_SCOPE_INVALID']);
 });
 
 test('requires exact operational reference fields after valid A3 gate',async()=>{
