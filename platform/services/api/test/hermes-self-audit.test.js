@@ -1,6 +1,8 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { audit, validateEvidence, collectEvidenceInventory, collectDirectTestBindings, validateAuthoritySeparation } = require('../scripts/hermes-self-audit');
 
 test('self-audit readiness evidence is internally safe and anchored', () => {
@@ -31,11 +33,22 @@ test('evidence ladder fails closed on impossible promotions', () => {
 });
 
 
-test('A2 autonomy canary remains bounded below protected authority', () => {
+test('A2 bounded autonomy is authorized while protected authority remains excluded', () => {
   const result = audit();
   assert.equal(result.status, 'pass');
   assert.equal(result.errors.some(error => String(error.type).startsWith('missing_a2_')), false);
   assert.equal(result.errors.some(error => error.type === 'a2_canary_not_ready'), false);
+  assert.equal(result.errors.some(error => error.type === 'a2_authority_state_mismatch'), false);
+  assert.equal(result.errors.some(error => error.type === 'a2_authorized_with_pending_candidate'), false);
+
+  const map = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../docs/audits/HERMES_READINESS_MAP.json'), 'utf8'));
+  assert.deepEqual(map.autonomy.authorized_now, ['A0', 'A1', 'A2']);
+  assert.equal(map.autonomy.current_max_level, 'A2_authorized_bounded');
+  assert.equal(map.autonomy.candidate, null);
+  assert.equal(map.autonomy.a2_canary.status, 'authorized_bounded');
+  for (const forbidden of ['merge','production_publish','financial_spend','customer_message','destructive_action','secret_or_permission_change']) {
+    assert.ok(map.autonomy.a2_canary.forbidden.includes(forbidden));
+  }
 });
 
 
