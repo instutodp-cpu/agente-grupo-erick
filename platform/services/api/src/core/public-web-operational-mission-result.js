@@ -7,6 +7,10 @@ const CALLBACK_VERSION = 'hermes_operational_mission_callback_v1';
 const CALLBACK_PROVIDER = 'hermes_public_web_staging';
 
 function nonEmpty(value) { return typeof value === 'string' && value.trim() !== ''; }
+function timestampIso(value) {
+  const milliseconds = value instanceof Date ? value.getTime() : Date.parse(String(value));
+  return Number.isFinite(milliseconds) ? new Date(milliseconds).toISOString() : null;
+}
 function boundedText(value, max) {
   const text = typeof value === 'string' ? value : '';
   return Buffer.byteLength(text, 'utf8') <= max ? text : text.slice(0, max);
@@ -87,7 +91,8 @@ function classifyOperationalMissionExecution({ result, record, execution_id, req
 
 function buildOperationalMissionCallbackEnvelope(record = {}) {
   if (!record || !['succeeded','failed_safe','acknowledged'].includes(record.status)) throw new TypeError('terminal_mission_record_required');
-  if (!nonEmpty(record.execution_id) || !nonEmpty(record.request_id) || !nonEmpty(record.completed_at)) throw new TypeError('terminal_execution_identity_required');
+  const completedAt = timestampIso(record.completed_at);
+  if (!nonEmpty(record.execution_id) || !nonEmpty(record.request_id) || !completedAt) throw new TypeError('terminal_execution_identity_required');
   if (!/^sha256:[0-9a-f]{64}$/.test(String(record.contract_hash || ''))) throw new TypeError('contract_hash_invalid');
   if (!/^sha256:[0-9a-f]{64}$/.test(String(record.result_digest || ''))) throw new TypeError('result_digest_invalid');
   if (!['pending','sending','retry','acknowledged'].includes(record.callback_state)) throw new TypeError('callback_not_ready');
@@ -110,7 +115,7 @@ function buildOperationalMissionCallbackEnvelope(record = {}) {
     result_summary: typeof record.result_summary === 'string' ? record.result_summary : '',
     error_code: failed ? record.error_code : null,
     cost_units: costUnits,
-    occurred_at: new Date(Date.parse(record.completed_at)).toISOString()
+    occurred_at: completedAt
   });
 }
 
