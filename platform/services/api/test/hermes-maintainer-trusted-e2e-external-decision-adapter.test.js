@@ -1,8 +1,29 @@
 'use strict';
 const test=require('node:test');const assert=require('node:assert/strict');
 const {adaptHermesMaintainerTrustedE2eExternalDecisions}=require('../src/runtime/hermes-maintainer-trusted-e2e-external-decision-adapter');
+const {prepareHermesMaintainerTrustedE2eApprovalRequests}=require('../src/runtime/hermes-maintainer-trusted-e2e-approval-request-preparation');
+const {bindHermesMaintainerTrustedE2eHumanApprovals}=require('../src/runtime/hermes-maintainer-trusted-e2e-human-approval-binding');
+const {prepareHermesMaintainerTrustedE2eAuthorizationRequests}=require('../src/runtime/hermes-maintainer-trusted-e2e-authorization-request-preparation');
 const branch='hermes/canary/e2e';
+const keys=['branch','edit','pull_request'];
 const refs=()=>({branch:{approval_reference:'human:branch:1',authorization_reference:'control:branch:1'},edit:{approval_reference:'human:edit:1',authorization_reference:'control:edit:1'},pull_request:{approval_reference:'human:pr:1',authorization_reference:'control:pr:1'}});
-test('derives official request digests and adapts explicit external references without creating authority',()=>{const x=adaptHermesMaintainerTrustedE2eExternalDecisions({branch_name:branch,references:refs()});assert.equal(x.adapted,true);assert.equal(x.execution_authorized,false);assert.equal(x.authorization_consumed,false);assert.equal(x.merge_authority,false);assert.equal(x.human_merge_required,true);for(const k of ['branch','edit','pull_request']){assert.equal(x.human_decisions[k].decision,'APPROVED');assert.match(x.human_decisions[k].intent_digest,/^sha256:[a-f0-9]{64}$/);assert.equal(x.authorization_decisions[k].decision,'AUTHORIZED');assert.equal(x.authorization_decisions[k].intent_digest,x.human_decisions[k].intent_digest)}});
-test('fails closed when an external authorization reference is missing',()=>{const r=refs();delete r.edit.authorization_reference;const x=adaptHermesMaintainerTrustedE2eExternalDecisions({branch_name:branch,references:r});assert.equal(x.adapted,false);assert.equal(x.stage,'authorization_references');assert.equal(x.execution_authorized,false)});
-test('fails closed before decisions for invalid branch scope',()=>{const x=adaptHermesMaintainerTrustedE2eExternalDecisions({branch_name:'main',references:refs()});assert.equal(x.adapted,false);assert.equal(x.stage,'approval_requests');assert.equal(x.merge_authority,false)});
+function explicitDecisions(){
+ const references=refs();
+ const approvals=prepareHermesMaintainerTrustedE2eApprovalRequests({branch_name:branch});
+ assert.equal(approvals.prepared,true);
+ const human={};
+ for(const k of keys)human[k]={decision:'APPROVED',intent_digest:approvals.approval_requests[k].intent_digest,approval_reference:references[k].approval_reference};
+ const bindings=bindHermesMaintainerTrustedE2eHumanApprovals({approval_requests:approvals.approval_requests,decisions:human});
+ assert.equal(bindings.bound,true);
+ const requests=prepareHermesMaintainerTrustedE2eAuthorizationRequests({approval_bindings:bindings.approval_bindings});
+ assert.equal(requests.prepared,true);
+ const authorization={};
+ for(const k of keys)authorization[k]={decision:'AUTHORIZED',intent_digest:requests.authorization_requests[k].intent_digest,authorization_reference:references[k].authorization_reference};
+ return {references,human,authorization};
+}
+test('fails closed when opaque external references are supplied without explicit decisions',()=>{const x=adaptHermesMaintainerTrustedE2eExternalDecisions({branch_name:branch,references:refs()});assert.equal(x.contract_version,'hermes_maintainer_trusted_e2e_external_decision_adapter_v2');assert.equal(x.adapted,false);assert.equal(x.stage,'human_decisions');assert.equal(x.execution_authorized,false);assert.equal(x.authorization_consumed,false)});
+test('adapts only exact explicit external decisions and never creates authority',()=>{const d=explicitDecisions();const x=adaptHermesMaintainerTrustedE2eExternalDecisions({branch_name:branch,references:d.references,human_decisions:d.human,authorization_decisions:d.authorization});assert.equal(x.adapted,true);assert.equal(x.execution_authorized,false);assert.equal(x.authorization_consumed,false);assert.equal(x.merge_authority,false);assert.equal(x.human_merge_required,true);for(const k of keys){assert.equal(x.human_decisions[k].decision,'APPROVED');assert.equal(x.human_decisions[k].approval_reference,d.references[k].approval_reference);assert.equal(x.authorization_decisions[k].decision,'AUTHORIZED');assert.equal(x.authorization_decisions[k].authorization_reference,d.references[k].authorization_reference);assert.equal(x.authorization_decisions[k].intent_digest,x.human_decisions[k].intent_digest)}});
+test('fails closed when an opaque reference does not match the explicit human decision',()=>{const d=explicitDecisions();d.references.edit.approval_reference='human:edit:other';const x=adaptHermesMaintainerTrustedE2eExternalDecisions({branch_name:branch,references:d.references,human_decisions:d.human,authorization_decisions:d.authorization});assert.equal(x.adapted,false);assert.equal(x.stage,'human_decisions');assert.equal(x.execution_authorized,false)});
+test('fails closed when an opaque reference does not match the explicit authorization decision',()=>{const d=explicitDecisions();d.references.edit.authorization_reference='control:edit:other';const x=adaptHermesMaintainerTrustedE2eExternalDecisions({branch_name:branch,references:d.references,human_decisions:d.human,authorization_decisions:d.authorization});assert.equal(x.adapted,false);assert.equal(x.stage,'authorization_decisions');assert.equal(x.execution_authorized,false)});
+test('fails closed when an external authorization reference is missing',()=>{const d=explicitDecisions();delete d.references.edit.authorization_reference;const x=adaptHermesMaintainerTrustedE2eExternalDecisions({branch_name:branch,references:d.references,human_decisions:d.human,authorization_decisions:d.authorization});assert.equal(x.adapted,false);assert.equal(x.stage,'authorization_references');assert.equal(x.execution_authorized,false)});
+test('fails closed before decisions for invalid branch scope',()=>{const d=explicitDecisions();const x=adaptHermesMaintainerTrustedE2eExternalDecisions({branch_name:'main',references:d.references,human_decisions:d.human,authorization_decisions:d.authorization});assert.equal(x.adapted,false);assert.equal(x.stage,'approval_requests');assert.equal(x.merge_authority,false)});

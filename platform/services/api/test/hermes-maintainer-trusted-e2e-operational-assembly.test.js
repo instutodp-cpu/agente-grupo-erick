@@ -29,7 +29,7 @@ test('assembles through official compositions and preserves exact A3 evidence wi
   'hermes-maintainer-trusted-e2e-authorized-operational-composition':{prepareHermesMaintainerTrustedE2eAuthorizedOperational:(input)=>{authorizedInput=input;return {prepared:true,operational};}}
  });
  const x=module.prepareHermesMaintainerTrustedE2eOperationalAssembly({mission_id:'m',branch_name:'hermes/canary/e2e',a3_eligibility_input:a3});
- assert.equal(module.CONTRACT_VERSION,'hermes_maintainer_trusted_e2e_operational_assembly_v2');
+ assert.equal(module.CONTRACT_VERSION,'hermes_maintainer_trusted_e2e_operational_assembly_v3');
  assert.equal(evidenceInput.a3_eligibility_input,a3);
  assert.equal(authorizedInput.operational_evidence.branch.a3_eligibility_input,a3);
  assert.equal(x.prepared,true);
@@ -38,6 +38,43 @@ test('assembles through official compositions and preserves exact A3 evidence wi
  assert.equal(x.production_used,false);
  assert.equal(x.merge_authority,false);
  assert.equal(x.human_merge_required,true);
+});
+
+test('passes explicit decisions with external references instead of synthesizing authority',()=>{
+ const human={branch:{decision:'APPROVED'},edit:{decision:'APPROVED'},pull_request:{decision:'APPROVED'}};
+ const authorization={branch:{decision:'AUTHORIZED'},edit:{decision:'AUTHORIZED'},pull_request:{decision:'AUTHORIZED'}};
+ const references={branch:{approval_reference:'h:b',authorization_reference:'a:b'},edit:{approval_reference:'h:e',authorization_reference:'a:e'},pull_request:{approval_reference:'h:p',authorization_reference:'a:p'}};
+ let adapterInput=null;
+ let authorizedInput=null;
+ const module=load({
+  'hermes-maintainer-trusted-e2e-controlled-execution-composition':{prepareHermesMaintainerTrustedE2eControlledExecutions:()=>({prepared:true,controlled_executions:{branch:{},edit:{},pull_request:{}}})},
+  'hermes-maintainer-trusted-e2e-operational-evidence-preparation':{prepareHermesMaintainerTrustedE2eOperationalEvidence:()=>({prepared:true,operational_evidence:{}})},
+  'hermes-maintainer-trusted-e2e-external-decision-adapter':{adaptHermesMaintainerTrustedE2eExternalDecisions:(input)=>{adapterInput=input;return {adapted:true,human_decisions:human,authorization_decisions:authorization};}},
+  'hermes-maintainer-trusted-e2e-authorized-operational-composition':{prepareHermesMaintainerTrustedE2eAuthorizedOperational:(input)=>{authorizedInput=input;return {prepared:true,operational:{ok:true}};}}
+ });
+ const x=module.prepareHermesMaintainerTrustedE2eOperationalAssembly({mission_id:'m',branch_name:'hermes/canary/e2e',external_decision_references:references,human_decisions:human,authorization_decisions:authorization});
+ assert.equal(x.prepared,true);
+ assert.equal(adapterInput.references,references);
+ assert.equal(adapterInput.human_decisions,human);
+ assert.equal(adapterInput.authorization_decisions,authorization);
+ assert.equal(authorizedInput.human_decisions,human);
+ assert.equal(authorizedInput.authorization_decisions,authorization);
+});
+
+test('fails closed when opaque external references are not accompanied by explicit decisions',()=>{
+ let authorizedCalled=false;
+ const module=load({
+  'hermes-maintainer-trusted-e2e-controlled-execution-composition':{prepareHermesMaintainerTrustedE2eControlledExecutions:()=>({prepared:true,controlled_executions:{branch:{},edit:{},pull_request:{}}})},
+  'hermes-maintainer-trusted-e2e-operational-evidence-preparation':{prepareHermesMaintainerTrustedE2eOperationalEvidence:()=>({prepared:true,operational_evidence:{}})},
+  'hermes-maintainer-trusted-e2e-external-decision-adapter':{adaptHermesMaintainerTrustedE2eExternalDecisions:()=>({adapted:false,stage:'human_decisions',execution_authorized:false})},
+  'hermes-maintainer-trusted-e2e-authorized-operational-composition':{prepareHermesMaintainerTrustedE2eAuthorizedOperational:()=>{authorizedCalled=true;return {prepared:true};}}
+ });
+ const references={branch:{approval_reference:'h:b'},edit:{approval_reference:'h:e'},pull_request:{approval_reference:'h:p'}};
+ const x=module.prepareHermesMaintainerTrustedE2eOperationalAssembly({mission_id:'m',branch_name:'hermes/canary/e2e',external_decision_references:references});
+ assert.equal(x.prepared,false);
+ assert.equal(x.stage,'external_decisions');
+ assert.equal(authorizedCalled,false);
+ assert.equal(x.authorization_consumed,false);
 });
 
 test('fails closed when A3 operational evidence preparation blocks',()=>{
