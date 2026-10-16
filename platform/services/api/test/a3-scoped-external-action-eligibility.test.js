@@ -11,6 +11,7 @@ const { bindHermesMaintainerScmWriteApproval } = require('../src/core/hermes-mai
 const { buildHermesMaintainerScmWriteAuthorizationRequest } = require('../src/core/hermes-maintainer-scm-write-authorization-request');
 const { grantHermesMaintainerScmWriteAuthorization } = require('../src/core/hermes-maintainer-scm-write-authorization-grant');
 const { buildHermesMaintainerSingleUseAuthorization } = require('../src/core/hermes-maintainer-single-use-execution-authorization');
+const { prepareHermesMaintainerSafeWorkflowDurableTarget } = require('../src/core/hermes-maintainer-safe-workflow-durable-target');
 const {
   BLOCKED,
   CAPABILITY_ID,
@@ -28,6 +29,7 @@ const {
 const REPOSITORY = 'instutodp-cpu/agente-grupo-erick';
 const BASE_REF = 'main';
 const BRANCH = 'hermes/a3-test-branch';
+const BASE_SHA = 'd'.repeat(40);
 
 function sourceChain() {
   const intent = buildHermesMaintainerScmWriteIntent({
@@ -61,12 +63,38 @@ function sourceChain() {
   return { approvalBinding, authorizationGrant, singleUseAuthorization };
 }
 
+function durableTarget(intentDigest) {
+  const binding = {
+    contract_version: 'hermes_maintainer_safe_workflow_durable_ownership_binding_v1',
+    mission_id: 'mission-a3-1', workflow_digest: `sha256:${'e'.repeat(64)}`,
+    intent_digest: intentDigest, intent_count: 1,
+    authorization_binding_digest: `sha256:${'f'.repeat(64)}`,
+    workflow_operation: 'branch_prepare', durable_operation: 'create_branch',
+    target_handoff_contract: 'hermes_maintainer_scm_write_durable_admission_handoff_v1',
+    repository: REPOSITORY, base_ref: BASE_REF,
+    ownership_source: 'DURABLE_PERSISTENCE_RECEIPT', ownership_key: 'a3-proof::attempt-ownership',
+    persistence_key: 'a3-proof', attempt_reference: 'attempt-a3-1',
+    status: 'MAINTAINER_SAFE_WORKFLOW_DURABLE_OWNERSHIP_BOUND_SIMULATION',
+    ownership_bound: true, ownership_exclusive: true, durable_replay_protection: true,
+    execution_eligible: false, execution_authorized: false, network_authorized: false,
+    credentials_authorized: false, write_authorized: false, merge_authority: false,
+    human_merge_required: true, simulation: true, production_allowed: false,
+    executed: false, runtime_mutated: false, network_used: false, provider_called: false,
+    secret_accessed: false, operational_authority_consumed: false, blockers: []
+  };
+  return prepareHermesMaintainerSafeWorkflowDurableTarget(binding, {
+    operation: 'create_branch', repository: REPOSITORY, base_ref: BASE_REF,
+    base_sha: BASE_SHA, branch_name: BRANCH
+  });
+}
+
 function validInput() {
   const chain = sourceChain();
   const targetReference = {
     target_type: TARGET_TYPE,
     repository: REPOSITORY,
     base_ref: BASE_REF,
+    base_sha: BASE_SHA,
     branch_name: BRANCH,
     target_digest: null
   };
@@ -91,7 +119,8 @@ function validInput() {
       family: SOURCE_FAMILY,
       approval_binding: chain.approvalBinding,
       authorization_grant: chain.authorizationGrant,
-      single_use_authorization: chain.singleUseAuthorization
+      single_use_authorization: chain.singleUseAuthorization,
+      durable_target: durableTarget(chain.approvalBinding.intent_digest)
     },
     cost_control: { requested_units: 0, maximum_units: 0 },
     protected_actions: Object.fromEntries(PROTECTED_ACTION_FIELDS.map(field => [field, false])),
@@ -118,6 +147,8 @@ test('official approved + authorized + single-use maintainer chain is A3-eligibl
   assert.equal(result.production_allowed, false);
   assert.equal(result.a4_authority_granted, false);
   assert.equal(result.single_use_required, true);
+  assert.equal(result.base_sha, BASE_SHA);
+  assert.equal(result.durable_target_contract, 'hermes_maintainer_safe_workflow_durable_target_v1');
   assert.deepEqual(result.blockers, []);
   assert.match(result.eligibility_fingerprint, /^sha256:[0-9a-f]{64}$/);
   assert.equal(Object.isFrozen(result), true);
@@ -212,6 +243,21 @@ test('target and operation must match the official authorization chain exactly',
   const operation = validInput();
   operation.operation = 'update_file';
   assert.ok(evaluateA3ScopedExternalActionEligibility(operation).blockers.includes('operation_not_bound_to_authorization_chain'));
+});
+
+test('base SHA must be exact and bound to the official durable target', () => {
+  const input = validInput();
+  input.target_reference.base_sha = 'c'.repeat(40);
+  input.target_reference.target_digest = computeA3TargetDigest(input.target_reference);
+  const blockers = evaluateA3ScopedExternalActionEligibility(input).blockers;
+  assert.ok(blockers.includes('durable_target_base_sha_mismatch'));
+
+  const targetDrift = validInput();
+  targetDrift.source_evidence.durable_target = {
+    ...targetDrift.source_evidence.durable_target,
+    intent_digest: `sha256:${'0'.repeat(64)}`
+  };
+  assert.ok(evaluateA3ScopedExternalActionEligibility(targetDrift).blockers.includes('durable_target_intent_mismatch'));
 });
 
 test('operator binding is explicit, digest-bound and cannot be replaced by a boolean', () => {
