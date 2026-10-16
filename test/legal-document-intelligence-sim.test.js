@@ -1,0 +1,12 @@
+const test=require('node:test');const assert=require('node:assert/strict');
+const {createFragment,classifyExtraction,compareVersions,assertMatterIsolation}=require('../src/hermes/legal/document-intelligence');
+const mk=(text='A',value='1',method='native_text',confidence=1)=>createFragment({documentId:'d1',versionId:'v1',text,locator:{kind:'page',value},extractionMethod:method,confidence,sourceSnapshotRef:'s1'});
+test('fragment preserves locator, extraction method and hash',()=>{const f=mk();assert.equal(f.locator.value,'1');assert.equal(f.extraction_method,'native_text');assert.ok(f.content_hash.length>=16);});
+test('same fragment content hashes deterministically',()=>assert.equal(mk('same').content_hash,mk('same').content_hash));
+test('low-confidence OCR fails closed',()=>assert.equal(classifyExtraction(mk('x','1','ocr',.72)).reason,'low_confidence_ocr'));
+test('unknown extraction method cannot silently become evidence',()=>assert.equal(classifyExtraction(mk('x','1','unknown',1)).usable,false));
+test('traceable native extraction is usable',()=>assert.equal(classifyExtraction(mk()).usable,true));
+test('version comparison detects modified fragment',()=>{const a=mk('old'),b=mk('new');assert.equal(compareVersions([a],[b])[0].change,'modified');});
+test('version comparison detects added and removed fragments',()=>{const r=compareVersions([mk('old','1')],[mk('new','2')]);assert.deepEqual(r.map(x=>x.change).sort(),['added','removed']);});
+test('matter isolation rejects cross-matter document access',()=>assert.equal(assertMatterIsolation({matter_scope:'m1'},'m2').allowed,false));
+test('matter isolation permits matching matter scope',()=>assert.equal(assertMatterIsolation({matter_scope:'m1'},'m1').allowed,true));

@@ -1,0 +1,14 @@
+const test=require('node:test');const assert=require('node:assert/strict');
+const {calculateDeadline,validateDeadline,confirmDeadline,assessObligationForMonitoring}=require('../src/hermes/legal/deadline-engine');
+const calendar={calendar_id:'br-pe-2026-v1',holidays:['2026-10-12']};
+const policy={policy_id:'p1',version:'1',count_mode:'business_days',days:3,start_rule:'next_day',authority_refs:['a1'],calendar_required:true,deadline_type:'procedural'};
+test('deadline without versioned calendar remains detected',()=>assert.equal(calculateDeadline({triggerDate:'2026-10-09',policy}).status,'detected'));
+test('procedural deadline without authority basis fails closed',()=>assert.equal(calculateDeadline({triggerDate:'2026-10-09',policy:{...policy,authority_refs:[]},calendar}).reason,'missing_authority_basis'));
+test('business-day calculation skips weekend and declared holiday',()=>assert.equal(calculateDeadline({triggerDate:'2026-10-09',policy,calendar}).due_date,'2026-10-15'));
+test('calculated deadline is not confirmed automatically',()=>{const d=calculateDeadline({triggerDate:'2026-10-09',policy,calendar});assert.equal(d.status,'calculated');});
+test('unverified policy prevents deadline validation',()=>assert.equal(validateDeadline({due_date:'2026-10-15'},{calendarVerified:true,basisVerified:true}).confirmable,false));
+test('verified inputs produce validated but not yet confirmed deadline',()=>assert.equal(validateDeadline({due_date:'2026-10-15'},{policyVerified:true,calendarVerified:true,basisVerified:true}).status,'validated'));
+test('human review is mandatory for confirmation',()=>{const v={status:'validated',confirmable:true};assert.equal(confirmDeadline({},v,{approved:false}).confirmed,false);});
+test('reviewed validated deadline can become confirmed',()=>{const v={status:'validated',confirmable:true};assert.equal(confirmDeadline({},v,{approved:true}).status,'confirmed');});
+test('unverified obligation cannot enter monitoring',()=>assert.equal(assessObligationForMonitoring({review_status:'candidate',fragment_refs:['f1']}).monitorable,false));
+test('verified traceable obligation can enter monitoring',()=>assert.equal(assessObligationForMonitoring({review_status:'verified',fragment_refs:['f1']}).monitorable,true));

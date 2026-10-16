@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalProcessEvent",
+  "type": "object",
+  "required": [
+    "event_id",
+    "process_id",
+    "event_type",
+    "occurred_at",
+    "source_id",
+    "source_snapshot_ref",
+    "content_scope",
+    "verification_status"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "process_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_snapshot_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content_scope": {
+      "enum": [
+        "metadata_only",
+        "document_content",
+        "verified_decision"
+      ]
+    },
+    "verification_status": {
+      "enum": [
+        "observed",
+        "verified",
+        "rejected"
+      ]
+    },
+    "external_event_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

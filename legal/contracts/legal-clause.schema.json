@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalClause",
+  "type": "object",
+  "required": [
+    "clause_id",
+    "contract_id",
+    "contract_version_id",
+    "clause_type",
+    "fragment_refs",
+    "extraction_status"
+  ],
+  "properties": {
+    "clause_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "contract_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "contract_version_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "clause_type": {
+      "enum": [
+        "payment",
+        "term",
+        "renewal",
+        "termination",
+        "penalty",
+        "confidentiality",
+        "privacy",
+        "liability",
+        "indemnity",
+        "jurisdiction",
+        "obligation",
+        "right",
+        "other"
+      ]
+    },
+    "fragment_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "extraction_status": {
+      "enum": [
+        "extracted",
+        "partial",
+        "needs_review"
+      ]
+    },
+    "summary": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

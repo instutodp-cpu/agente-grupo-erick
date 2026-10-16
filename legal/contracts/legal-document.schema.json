@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalDocument",
+  "type": "object",
+  "required": [
+    "document_id",
+    "matter_scope",
+    "document_type",
+    "confidentiality",
+    "current_version_id"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "matter_scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "document_type": {
+      "enum": [
+        "contract",
+        "notice",
+        "petition",
+        "decision",
+        "policy",
+        "corporate_act",
+        "power_of_attorney",
+        "evidence",
+        "correspondence",
+        "other"
+      ]
+    },
+    "confidentiality": {
+      "enum": [
+        "public",
+        "internal",
+        "confidential",
+        "restricted"
+      ]
+    },
+    "current_version_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "party_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "retention_policy_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

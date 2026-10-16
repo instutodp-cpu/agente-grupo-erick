@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalEvidence",
+  "type": "object",
+  "required": [
+    "evidence_id",
+    "evidence_type",
+    "source_snapshot_ref",
+    "supports",
+    "integrity_status"
+  ],
+  "properties": {
+    "evidence_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence_type": {
+      "enum": [
+        "fact",
+        "internal_document",
+        "legal_authority",
+        "precedent",
+        "process_metadata",
+        "other"
+      ]
+    },
+    "source_snapshot_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authority_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "supports": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "contradicts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "integrity_status": {
+      "enum": [
+        "verified",
+        "unverified",
+        "invalid"
+      ]
+    },
+    "excerpt_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
