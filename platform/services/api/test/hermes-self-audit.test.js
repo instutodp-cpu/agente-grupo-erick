@@ -33,26 +33,24 @@ test('evidence ladder fails closed on impossible promotions', () => {
 });
 
 
-test('A2 bounded autonomy is authorized while protected authority remains excluded', () => {
+test('A2 bounded autonomy remains authorized beneath scoped A3 while A4 stays excluded', () => {
   const result = audit();
   assert.equal(result.status, 'pass');
   assert.equal(result.errors.some(error => String(error.type).startsWith('missing_a2_')), false);
-  assert.equal(result.errors.some(error => error.type === 'a2_canary_not_ready'), false);
-  assert.equal(result.errors.some(error => error.type === 'a2_authority_state_mismatch'), false);
-  assert.equal(result.errors.some(error => error.type === 'a2_authorized_with_pending_candidate'), false);
 
   const map = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../docs/audits/HERMES_READINESS_MAP.json'), 'utf8'));
-  assert.deepEqual(map.autonomy.authorized_now, ['A0', 'A1', 'A2']);
-  assert.equal(map.autonomy.current_max_level, 'A2_authorized_bounded');
+  assert.deepEqual(map.autonomy.authorized_now, ['A0', 'A1', 'A2', 'A3']);
+  assert.equal(map.autonomy.current_max_level, 'A3_authorized_scoped');
   assert.equal(map.autonomy.candidate, null);
   assert.equal(map.autonomy.a2_canary.status, 'authorized_bounded');
+  assert.equal(map.autonomy.authorized_now.includes('A4'), false);
   for (const forbidden of ['merge','production_publish','financial_spend','customer_message','destructive_action','secret_or_permission_change']) {
     assert.ok(map.autonomy.a2_canary.forbidden.includes(forbidden));
   }
 });
 
 
-test('A3 eligibility gate is recorded as tested evidence without promoting A3 authority', () => {
+test('A3 scoped autonomy is promoted only with real exact-revision canary and explicit human authorization evidence', () => {
   const map = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../docs/audits/HERMES_READINESS_MAP.json'), 'utf8'));
   const capability = map.capabilities.find(item => item.id === 'a3-scoped-external-action-eligibility');
   assert.ok(capability);
@@ -60,13 +58,20 @@ test('A3 eligibility gate is recorded as tested evidence without promoting A3 au
   assert.equal(capability.contracted, true);
   assert.equal(capability.implemented, true);
   assert.equal(capability.tested, true);
-  assert.equal(capability.proven_e2e, false);
-  assert.equal(capability.operational, false);
-  assert.deepEqual(map.autonomy.authorized_now, ['A0', 'A1', 'A2']);
-  assert.equal(map.autonomy.current_max_level, 'A2_authorized_bounded');
+  assert.equal(capability.proven_e2e, true);
+  assert.equal(capability.operational, true);
+  assert.equal(capability.evidence_revision, 'cb8580f1a0d07487410e5a5c2f27d172746b94ee');
+  assert.deepEqual(map.autonomy.authorized_now, ['A0', 'A1', 'A2', 'A3']);
+  assert.equal(map.autonomy.current_max_level, 'A3_authorized_scoped');
   assert.equal(map.autonomy.candidate, null);
-  assert.ok(map.protected_levels.includes('A3'));
+  assert.equal(map.autonomy.a3_canary.status, 'authorized_scoped');
+  assert.equal(map.autonomy.a3_canary.provider_status, 201);
+  assert.equal(map.autonomy.a3_canary.human_promotion_authorized, true);
+  assert.equal(map.protected_levels.includes('A3'), false);
   assert.ok(map.protected_levels.includes('A4'));
+  for (const forbidden of ['merge','production_publish','financial_spend','customer_message','destructive_action','secret_or_permission_change']) {
+    assert.ok(map.autonomy.a3_canary.forbidden.includes(forbidden));
+  }
 });
 
 
