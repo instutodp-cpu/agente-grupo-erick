@@ -52,6 +52,24 @@ test('A2 bounded autonomy is authorized while protected authority remains exclud
 });
 
 
+test('A3 eligibility gate is recorded as tested evidence without promoting A3 authority', () => {
+  const map = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../docs/audits/HERMES_READINESS_MAP.json'), 'utf8'));
+  const capability = map.capabilities.find(item => item.id === 'a3-scoped-external-action-eligibility');
+  assert.ok(capability);
+  assert.equal(capability.planned, true);
+  assert.equal(capability.contracted, true);
+  assert.equal(capability.implemented, true);
+  assert.equal(capability.tested, true);
+  assert.equal(capability.proven_e2e, false);
+  assert.equal(capability.operational, false);
+  assert.deepEqual(map.autonomy.authorized_now, ['A0', 'A1', 'A2']);
+  assert.equal(map.autonomy.current_max_level, 'A2_authorized_bounded');
+  assert.equal(map.autonomy.candidate, null);
+  assert.ok(map.protected_levels.includes('A3'));
+  assert.ok(map.protected_levels.includes('A4'));
+});
+
+
 test('self-audit produces repository evidence inventory instead of relying only on the manual map', () => {
   const inventory = collectEvidenceInventory();
   assert.ok(inventory.contract_docs > 0);
