@@ -8,7 +8,7 @@ function valid(){
   branch_name:'hermes/canary/e2e',
   base_sha:'a'.repeat(40),
   execution_reference:'canary:e2e:001',
-  a3_eligibility_input:{contract_version:'hermes_a3_scoped_external_action_eligibility_v2',marker:'same-a3-input'},
+  a3_eligibility_inputs:{branch:{contract_version:'hermes_a3_scoped_external_action_eligibility_v3',marker:'branch-a3'},edit:{contract_version:'hermes_a3_scoped_external_action_eligibility_v3',marker:'edit-a3'},pull_request:{contract_version:'hermes_a3_scoped_external_action_eligibility_v3',marker:'pull-a3'}},
   repository_read:{r:1},
   branch:{controlled_execution:{c:1}},
   edit:{controlled_execution:{c:2},path:'docs/hermes-canary.md',current_blob_sha:'b'.repeat(40),content:'canary\n',message:'test(hermes): trusted e2e canary'},
@@ -19,11 +19,11 @@ function valid(){
 test('prepares coherent unique operational evidence and preserves exact A3 input without consuming authority',()=>{
  const input=valid();
  const x=prepareHermesMaintainerTrustedE2eOperationalEvidence(input);
- assert.equal(CONTRACT_VERSION,'hermes_maintainer_trusted_e2e_operational_evidence_preparation_v2');
+ assert.equal(CONTRACT_VERSION,'hermes_maintainer_trusted_e2e_operational_evidence_preparation_v3');
  assert.equal(x.prepared,true);
  assert.equal(x.operational_evidence.branch.canary.canary_valid,true);
  assert.equal(x.operational_evidence.branch.canary.execution_authorized,false);
- assert.equal(x.operational_evidence.branch.a3_eligibility_input,input.a3_eligibility_input);
+ assert.equal(x.operational_evidence.branch.a3_eligibility_input,input.a3_eligibility_inputs.branch);assert.equal(x.operational_evidence.edit.a3_eligibility_input,input.a3_eligibility_inputs.edit);assert.equal(x.operational_evidence.pull_request.a3_eligibility_input,input.a3_eligibility_inputs.pull_request);
  const refs=[x.operational_evidence.branch.operational_input.consumption_reference,x.operational_evidence.edit.operational_input.consumption_reference,x.operational_evidence.pull_request.operational_input.consumption_reference];
  assert.equal(new Set(refs).size,3);
  assert.equal(x.production_used,false);
@@ -33,10 +33,10 @@ test('prepares coherent unique operational evidence and preserves exact A3 input
 
 test('rejects missing A3 eligibility input before operational evidence can be prepared',()=>{
  const input=valid();
- delete input.a3_eligibility_input;
+ delete input.a3_eligibility_inputs;
  const x=prepareHermesMaintainerTrustedE2eOperationalEvidence(input);
  assert.equal(x.prepared,false);
- assert.equal(x.blockers[0],'A3_ELIGIBILITY_INPUT_MISSING');
+ assert.equal(x.blockers[0],'A3_ELIGIBILITY_INPUTS_MISSING');
  assert.equal(x.operational_evidence,null);
 });
 

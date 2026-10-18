@@ -9,14 +9,14 @@ function prepareHermesMaintainerTrustedE2eOperationalAssembly(input={}){
  const executions=prepareHermesMaintainerTrustedE2eControlledExecutions({mission_id:input.mission_id,branch_name:input.branch_name});
  if(executions.prepared!==true)return blocked('controlled_executions',executions);
  const evidence=prepareHermesMaintainerTrustedE2eOperationalEvidence({
-  branch_name:input.branch_name,base_sha:input.base_sha,execution_reference:input.execution_reference,a3_eligibility_input:input.a3_eligibility_input,
+  branch_name:input.branch_name,base_sha:input.base_sha,execution_reference:input.execution_reference,a3_eligibility_inputs:input.a3_eligibility_inputs,
   repository_read:input.repository_read,
   branch:{controlled_execution:executions.controlled_executions.branch},
   edit:{controlled_execution:executions.controlled_executions.edit,path:input.edit?.path,current_blob_sha:input.edit?.current_blob_sha,content:input.edit?.content,message:input.edit?.message},
   pull_request:{controlled_execution:executions.controlled_executions.pull_request,title:input.pull_request?.title,body:input.pull_request?.body}
  });
  if(evidence.prepared!==true)return blocked('operational_evidence',evidence);
- const decisions=input.external_decision_references?adaptHermesMaintainerTrustedE2eExternalDecisions({branch_name:input.branch_name,references:input.external_decision_references,human_decisions:input.human_decisions,authorization_decisions:input.authorization_decisions}):{adapted:true,human_decisions:input.human_decisions,authorization_decisions:input.authorization_decisions};
+ const decisions=input.external_decision_references?adaptHermesMaintainerTrustedE2eExternalDecisions({branch_name:input.branch_name,edit:{branch:input.branch_name,...input.edit},pull_request:{base:'main',head:input.branch_name,draft:true,...input.pull_request},references:input.external_decision_references,human_decisions:input.human_decisions,authorization_decisions:input.authorization_decisions}):{adapted:true,human_decisions:input.human_decisions,authorization_decisions:input.authorization_decisions};
  if(decisions.adapted!==true)return blocked('external_decisions',decisions);
  const authorized=prepareHermesMaintainerTrustedE2eAuthorizedOperational({branch_name:input.branch_name,human_decisions:decisions.human_decisions,authorization_decisions:decisions.authorization_decisions,operational_evidence:evidence.operational_evidence});
  if(authorized.prepared!==true)return blocked('authorized_operational',authorized);

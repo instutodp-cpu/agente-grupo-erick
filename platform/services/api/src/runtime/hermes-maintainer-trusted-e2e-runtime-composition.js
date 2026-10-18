@@ -15,7 +15,7 @@ const { createHermesMaintainerGithubCreatePullRequestOperationalFinalizationComp
 const { runHermesMaintainerGithubE2eRead } = require('./hermes-maintainer-github-e2e-read-composition');
 const { createHermesMaintainerRevisionBoundTestRuntimeComposition } = require('./hermes-maintainer-revision-bound-test-runtime-composition');
 
-const COMPOSITION_VERSION = 'hermes_maintainer_trusted_e2e_runtime_composition_v2';
+const COMPOSITION_VERSION = 'hermes_maintainer_trusted_e2e_runtime_composition_v3';
 
 function createHermesMaintainerTrustedE2eRuntimeComposition({
   environment, fetchImpl, createTimeoutSignal, timeoutMs, pool, resolveReadAuthorization,

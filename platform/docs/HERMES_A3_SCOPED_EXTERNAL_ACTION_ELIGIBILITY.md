@@ -106,6 +106,20 @@ Update-file and Draft PR execution remain on their existing official bounded run
 
 This binding still does **not** promote A3, execute a real canary, grant production authority, or grant merge authority.
 
+## Maintenance extension: A3 v3 candidate (not promoted)
+
+The historical trusted E2E v2 notes above document the previously promoted `create_branch`-only boundary. The new **A3 v3** extension is implemented and testable but grants **no additional operational authority**.
+
+- `update_file` and `create_pull_request` (Draft only) retain their official human approval/authorization chains, evolved to v2 with exact payload digests. The edit approval covers branch, path, prior blob SHA, content digest and commit-message digest; Draft PR approval covers base, head, draft, title and body digests. A changed byte requires new human approval.
+- `hermes_a3_scoped_external_action_eligibility_v3` validates distinct official approval binding, authorization grant, staging single-use authorization, durable target and operator evidence per operation. Caller-supplied booleans and legacy artifacts cannot substitute.
+- Operational admission compositions v2 re-evaluate A3 **before durable authorization consumption / PostgreSQL persistence**; runtime compositions v2 re-evaluate the same evidence and exact payload **before credential resolution or provider network**.
+- Trusted E2E v3 carries three distinct A3 eligibility inputs through evidence preparation, operational preflight, admission, safe-workflow execution invocation and the final readiness gate. Missing evidence at *any* mutation fails closed.
+- Update-file and Draft PR staging entries require explicit `APPROVED` and `AUTHORIZED` decisions bound to the same intent digest. Opaque references alone cannot synthesize either decision.
+- `create_branch` retains its proven A3 scoped authority. The **new two operations are not E2E-proven, not operationally authorized, and not promoted** pending bounded real staging canaries and separate explicit human promotion approval.
+- `autonomy.current_max_level=A3_authorized_scoped`, `autonomy.candidate=null`, and the protected A4 boundary remain unchanged. No merge authority, no production publish, and no automatic A3 extension are granted by these changes.
+
+Evidence: `platform/services/api/test/a3-scoped-external-action-multiop.test.js`, the updated human-authorization tests, runtime tests, trusted E2E tests and `platform/docs/audits/HERMES_READINESS_MAP.json`. This PR does not perform an external write or consume live authorization.
+
 ## Promotion result
 
 A3 is now authorized only for the capability and boundary that were actually proven: staging maintainer SCM `create_branch` through `MAINTAINER_SCM_WRITE_SINGLE_USE_V1`. This is not blanket external-action authority and does not authorize another provider, operation, environment or target family.
