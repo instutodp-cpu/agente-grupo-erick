@@ -106,6 +106,20 @@ Update-file and Draft PR execution remain on their existing official bounded run
 
 This binding still does **not** promote A3, execute a real canary, grant production authority, or grant merge authority.
 
+## Two-phase durable ownership admission fix (not operational promotion)
+
+The existing standalone `update_file` and Draft PR admissions require A3 eligibility before they persist SCM consumption and exclusive ownership. A3's original `durable_target` expected an already-proven safe-workflow ownership binding, which was unavailable to the standalone acceptance entry. Using an in-memory test fixture as if it were that persisted proof is forbidden.
+
+This increment preserves the official human approval/grant contracts and defines a *strict pending-ownership* phase for the two candidate operations only:
+
+1. Before any PostgreSQL consumption, validate **all existing A3 input fields except the not-yet-created durable proof**, demanding `source_evidence.durable_target=null`, a valid expiring staging single-use record, verified operator binding, exact payload digest, same real human approval/grant, bounded cost and every A4 exclusion. The admission separately binds the pending scope and payload to the exact grant and operational request. A caller-supplied ownership object is not acceptable here.
+2. Consume SCM grant and create exclusive attempt ownership using the **existing durable Postgres create-if-absent adapters and official receipt/binding factories**. Reject absent, failed, ambiguous or replayed receipts.
+3. Hydrate the full A3 evidence **only from that verified SCM ownership receipt**. Re-evaluate the complete A3 gate; require ownership key, attempt, consumption, authorized intent and grant reference to match. If this check fails, execution stops even if consumption has already been persisted; never roll back or reuse the one-shot authorization.
+4. The official runtime v2 independently compares the returned full evidence to the original pending envelope and the actual durable admission before credential resolution/network. Missing, drifted or forged proof fails closed.
+5. Legacy complete safe-workflow durable-target evidence remains compatible. This fix neither grants A3 execution to new operations nor promotes them: `update_file` and Draft PR stay `implemented_tested_unpromoted` until separately authorized real staging canaries and human promotion decisions.
+
+Verification: `a3-durable-preownership.test.js`, `a3-durable-preownership-operational.test.js`, existing update-file/PR runners and trusted E2E tests. These tests use mocked persistence/provider dependencies and do not consume any live authorization, mutate the repository or execute the approved canary.
+
 ## Maintenance extension: A3 v3 candidate (not promoted)
 
 The historical trusted E2E v2 notes above document the previously promoted `create_branch`-only boundary. The new **A3 v3** extension is implemented and testable but grants **no additional operational authority**.

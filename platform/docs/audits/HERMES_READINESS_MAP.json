@@ -498,8 +498,8 @@
   ],
   "inventory": {
     "platform_docs": 140,
-    "core_source_files": 727,
-    "api_tests": 616,
+    "core_source_files": 728,
+    "api_tests": 618,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
@@ -648,7 +648,16 @@
       "real_canary_required": true,
       "human_promotion_authorized": false,
       "merge_authority": false,
-      "production_allowed": false
+      "production_allowed": false,
+      "durable_ownership_ordering_fix": {
+        "status": "implemented_tested_not_executed",
+        "goal": "pre-ownership A3 scope and payload validation before persistence; bind actual durable SCM ownership receipt after create-if-absent, then revalidate full A3 at the runner before credential/network",
+        "source": "official_maintainer_scm_write_durable_ownership_binding_v1_from_durable_persistence",
+        "simulation_evidence_only": true,
+        "real_provider_write_performed": false,
+        "actual_canary_pending": true,
+        "promotion_authorized": false
+      }
     }
   }
 }

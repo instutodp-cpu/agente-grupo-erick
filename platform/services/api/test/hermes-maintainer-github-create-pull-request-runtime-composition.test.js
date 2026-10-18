@@ -7,3 +7,20 @@ test('A3-qualified runtime composes isolated credential, transport and durable D
 test('missing A3 blocks before credential resolution and network',async()=>{const data=buildPullA3();let reads=0,calls=0;const environment={};Object.defineProperty(environment,'HERMES_GITHUB_CREATE_PULL_REQUEST_STAGING_TOKEN',{get(){reads++;return'opaque';}});const c=createHermesMaintainerGithubCreatePullRequestRuntimeComposition({environment,createTimeoutSignal:()=>({aborted:false}),fetchImpl:async()=>{calls++;}});const out=await c.execute(null,admission(data));assert.equal(out.status,'GITHUB_CREATE_PULL_REQUEST_A3_EXECUTION_BLOCKED');assert.equal(reads,0);assert.equal(calls,0);});
 test('title/body drift blocks before provider',async()=>{const data=buildPullA3();let calls=0;const c=createHermesMaintainerGithubCreatePullRequestRuntimeComposition({environment:{HERMES_GITHUB_CREATE_PULL_REQUEST_STAGING_TOKEN:'opaque'},createTimeoutSignal:()=>({aborted:false}),fetchImpl:async()=>{calls++;}});const a=admission(data);a.request={...a.request,body:{...a.request.body,title:'drift'}};const out=await c.execute(data.eligibilityInput,a);assert.equal(out.status,'GITHUB_CREATE_PULL_REQUEST_A3_EXECUTION_BLOCKED');assert.equal(calls,0);});
 test('construction is inert',()=>{let reads=0;const environment={};Object.defineProperty(environment,'HERMES_GITHUB_CREATE_PULL_REQUEST_STAGING_TOKEN',{get(){reads++;return'opaque';}});const c=createHermesMaintainerGithubCreatePullRequestRuntimeComposition({environment,fetchImpl:async()=>{},createTimeoutSignal:()=>({aborted:false})});assert.equal(reads,0);assert.equal(c.network_call_performed,false);assert.equal(c.write_performed,false);});
+
+
+test('pending A3 only executes after DB-bound ownership, blocks missing or drifted receipts before credentials',async()=>{
+ const d=buildPullA3();
+ const partial={...d.eligibilityInput,source_evidence:{...d.eligibilityInput.source_evidence,durable_target:null}};
+ const o={contract_version:'hermes_maintainer_scm_write_durable_ownership_binding_v1',status:'SCM_WRITE_DURABLE_OWNERSHIP_BOUND',binding_valid:true,ownership_source:'DURABLE_PERSISTENCE_RECEIPT',ownership_key:'persist-1::attempt-ownership',persistence_key:'persist-1',intent_digest:d.grant.intent_digest,authorization_reference:d.grant.authorization_reference,consumption_reference:'consume-1',attempt_reference:'attempt-1',durable_replay_protection:true,ownership_exclusive:true,execution_authorized:false,credential_material_present:false,network_call_performed:false,write_performed:false,production_used:false,blockers:[]};
+ const full={...partial,source_evidence:{...partial.source_evidence,durable_target:o}};
+ let reads=0,calls=0;
+ const environment={};Object.defineProperty(environment,'HERMES_GITHUB_CREATE_PULL_REQUEST_STAGING_TOKEN',{get(){reads++;return'opaque-token';}});
+ const runtime=createHermesMaintainerGithubCreatePullRequestRuntimeComposition({environment,createTimeoutSignal:()=>new AbortController().signal,fetchImpl:async()=>{calls++;return{status:201,json:async()=>({number:437,html_url:'https://github.com/instutodp-cpu/agente-grupo-erick/pull/437',draft:true})};}});
+ const missing=await runtime.execute(partial,admission(d));
+ assert.equal(missing.execution_performed,false);assert.equal(reads,0);assert.equal(calls,0);
+ const bad=await runtime.execute(partial,admission(d,{a3_verified_evidence:{...full,source_evidence:{...full.source_evidence,durable_target:{...o,ownership_key:'forged'}}}}));
+ assert.equal(bad.execution_performed,false);assert.equal(reads,0);assert.equal(calls,0);
+ const good=await runtime.execute(partial,admission(d,{a3_verified_evidence:full}));
+ assert.equal(good.write_performed,true);assert.equal(reads,1);assert.equal(calls,1);
+});
