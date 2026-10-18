@@ -5,8 +5,8 @@ const CONTRACT_VERSION='hermes_maintainer_safe_workflow_execution_boundary_hando
 const READY='MAINTAINER_SAFE_WORKFLOW_EXECUTION_BOUNDARY_HANDOFF_READY_SIMULATION',BLOCKED='MAINTAINER_SAFE_WORKFLOW_EXECUTION_BOUNDARY_HANDOFF_BLOCKED';
 const BOUNDARIES=Object.freeze({
  create_branch:'hermes_maintainer_github_write_canary_runtime_runner_v2',
- update_file:'hermes_maintainer_github_update_file_runtime_composition_v1',
- create_pull_request:'hermes_maintainer_github_create_pull_request_runtime_composition_v1'
+ update_file:'hermes_maintainer_github_update_file_runtime_composition_v2',
+ create_pull_request:'hermes_maintainer_github_create_pull_request_runtime_composition_v2'
 });
 function prepareHermesMaintainerSafeWorkflowExecutionBoundaryHandoff(scopeComposition){
  const blockers=[],sv=validateHermesMaintainerSafeWorkflowCredentialScopeComposition(scopeComposition);

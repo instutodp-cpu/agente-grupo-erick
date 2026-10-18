@@ -499,7 +499,7 @@
   "inventory": {
     "platform_docs": 140,
     "core_source_files": 727,
-    "api_tests": 613,
+    "api_tests": 616,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
@@ -622,6 +622,33 @@
         "destructive_action",
         "secret_or_permission_change"
       ]
+    },
+    "a3_maintenance_expansion": {
+      "status": "implemented_tested_unpromoted",
+      "capability_id": "hermes-maintainer-scm-write",
+      "environment": "staging",
+      "operations": [
+        "update_file",
+        "create_pull_request"
+      ],
+      "repository": "instutodp-cpu/agente-grupo-erick",
+      "approval_binding": "explicit human decisions with exact payload digests",
+      "preexecution_contract": "hermes_a3_scoped_external_action_eligibility_v3",
+      "required_controls": [
+        "separate_a3_evidence_per_operation",
+        "payload_bound_human_approval_and_authorization",
+        "durable_single_use_replay_protection",
+        "A3_gate_before_postgres_and_credentials",
+        "draft_only",
+        "human_merge_required",
+        "production_false"
+      ],
+      "proven_e2e": false,
+      "operational": false,
+      "real_canary_required": true,
+      "human_promotion_authorized": false,
+      "merge_authority": false,
+      "production_allowed": false
     }
   }
 }

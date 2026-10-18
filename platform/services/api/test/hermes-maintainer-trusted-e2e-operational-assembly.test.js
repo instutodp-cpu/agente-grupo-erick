@@ -19,19 +19,19 @@ function load(stubs){
 }
 
 test('assembles through official compositions and preserves exact A3 evidence without consuming authority',()=>{
- const a3={contract_version:'hermes_a3_scoped_external_action_eligibility_v2',marker:'exact-input'};
+ const a3={branch:{marker:'branch'},edit:{marker:'edit'},pull_request:{marker:'pull'}};
  const operational={branch:{ok:true}};
  let evidenceInput=null;
  let authorizedInput=null;
  const module=load({
   'hermes-maintainer-trusted-e2e-controlled-execution-composition':{prepareHermesMaintainerTrustedE2eControlledExecutions:()=>({prepared:true,controlled_executions:{branch:{b:1},edit:{e:1},pull_request:{p:1}}})},
-  'hermes-maintainer-trusted-e2e-operational-evidence-preparation':{prepareHermesMaintainerTrustedE2eOperationalEvidence:(input)=>{evidenceInput=input;return {prepared:true,operational_evidence:{branch:{a3_eligibility_input:input.a3_eligibility_input}}};}},
+  'hermes-maintainer-trusted-e2e-operational-evidence-preparation':{prepareHermesMaintainerTrustedE2eOperationalEvidence:(input)=>{evidenceInput=input;return {prepared:true,operational_evidence:{branch:{a3_eligibility_input:input.a3_eligibility_inputs.branch},edit:{a3_eligibility_input:input.a3_eligibility_inputs.edit},pull_request:{a3_eligibility_input:input.a3_eligibility_inputs.pull_request}}};}},
   'hermes-maintainer-trusted-e2e-authorized-operational-composition':{prepareHermesMaintainerTrustedE2eAuthorizedOperational:(input)=>{authorizedInput=input;return {prepared:true,operational};}}
  });
- const x=module.prepareHermesMaintainerTrustedE2eOperationalAssembly({mission_id:'m',branch_name:'hermes/canary/e2e',a3_eligibility_input:a3});
+ const x=module.prepareHermesMaintainerTrustedE2eOperationalAssembly({mission_id:'m',branch_name:'hermes/canary/e2e',a3_eligibility_inputs:a3});
  assert.equal(module.CONTRACT_VERSION,'hermes_maintainer_trusted_e2e_operational_assembly_v3');
- assert.equal(evidenceInput.a3_eligibility_input,a3);
- assert.equal(authorizedInput.operational_evidence.branch.a3_eligibility_input,a3);
+ assert.equal(evidenceInput.a3_eligibility_inputs,a3);
+ assert.equal(authorizedInput.operational_evidence.branch.a3_eligibility_input,a3.branch);
  assert.equal(x.prepared,true);
  assert.equal(x.operational,operational);
  assert.equal(x.authorization_consumed,false);

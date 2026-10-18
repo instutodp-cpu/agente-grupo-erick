@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { deriveHermesMaintainerFinalE2eReadiness } = require('../src/core/hermes-maintainer-final-e2e-readiness');
 
 const trusted = overrides => ({
-  composition_version: 'hermes_maintainer_trusted_e2e_runtime_composition_v2',
+  composition_version: 'hermes_maintainer_trusted_e2e_runtime_composition_v3',
   environment: 'staging',
   production_allowed: false,
   merge_authority: false,

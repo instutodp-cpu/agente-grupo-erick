@@ -5,7 +5,7 @@ const { prepareHermesMaintainerScmWriteDurableAdmissionHandoff } = require('../c
 const { prepareHermesMaintainerGithubUpdateFileDurableAdmissionHandoff } = require('../core/hermes-maintainer-github-update-file-durable-admission-handoff');
 const { prepareHermesMaintainerGithubCreatePullRequestDurableAdmissionHandoff } = require('../core/hermes-maintainer-github-create-pull-request-durable-admission-handoff');
 
-const CONTRACT_VERSION='hermes_maintainer_trusted_e2e_canary_workflow_preparation_v2';
+const CONTRACT_VERSION='hermes_maintainer_trusted_e2e_canary_workflow_preparation_v3';
 const REPOSITORY='instutodp-cpu/agente-grupo-erick';
 
 function blocked(stage,value){return Object.freeze({contract_version:CONTRACT_VERSION,status:'MAINTAINER_TRUSTED_E2E_CANARY_WORKFLOW_PREPARATION_BLOCKED',prepared:false,stage,value:value||null,workflow:null,production_used:false,merge_authority:false,human_merge_required:true});}
@@ -18,12 +18,13 @@ function prepareMutation(controlledExecution,target,admission,grant,requestInput
  else if(admission.operation==='update_file')durableHandoff=prepareHermesMaintainerGithubUpdateFileDurableAdmissionHandoff(bridge.ownership,target);
  else if(admission.operation==='create_pull_request')durableHandoff=prepareHermesMaintainerGithubCreatePullRequestDurableAdmissionHandoff(bridge.ownership,target);
  if(durableHandoff?.handoff_valid!==true)return {ok:false,value:durableHandoff};
- if(admission.operation==='create_branch'&&(!executionContext?.a3_eligibility_input||!executionContext?.canary))return {ok:false,value:{status:'A3_EXECUTION_CONTEXT_REQUIRED'}};
+ if(!executionContext?.a3_eligibility_input)return {ok:false,value:{status:'A3_EXECUTION_CONTEXT_REQUIRED'}};
+ if(admission.operation==='create_branch'&&!executionContext?.canary)return {ok:false,value:{status:'A3_EXECUTION_CONTEXT_REQUIRED'}};
  const capabilityGrant=Object.freeze({decision:'GRANTED',capability:bridge.authority_evidence.capability,intent_digest:bridge.authority_evidence.intent_digest,attempt_reference:bridge.authority_evidence.attempt_reference,capability_reference:bridge.authority_evidence.capability_reference});
  const mutationInputBase={durable_handoff:durableHandoff,grant:capabilityGrant,target,request_input:requestInput||null,admission_reference:admission.admission_reference,ownership:bridge.ownership};
  const mutationInput=admission.operation==='create_branch'
   ?Object.freeze({...mutationInputBase,a3_eligibility_input:executionContext.a3_eligibility_input,canary:executionContext.canary})
-  :Object.freeze(mutationInputBase);
+  :Object.freeze({...mutationInputBase,a3_eligibility_input:executionContext.a3_eligibility_input});
  return {ok:true,value:Object.freeze({controlled_execution:controlledExecution,ownership:bridge.ownership,target,authority_evidence:bridge.authority_evidence,mutation_input:mutationInput})};
 }
 
@@ -31,9 +32,9 @@ function prepareHermesMaintainerTrustedE2eCanaryWorkflow(input={}){
  if(!input.repository_read)return blocked('repository_read_missing');
  const branch=prepareMutation(input.branch?.controlled_execution,input.branch?.target,input.branch?.admission,input.branch?.grant,input.branch?.mutation_input,{a3_eligibility_input:input.branch?.a3_eligibility_input,canary:input.branch?.canary});
  if(!branch.ok)return blocked('branch_authority_bridge',branch.value);
- const edit=prepareMutation(input.edit?.controlled_execution,input.edit?.target,input.edit?.admission,input.edit?.grant,input.edit?.mutation_input);
+ const edit=prepareMutation(input.edit?.controlled_execution,input.edit?.target,input.edit?.admission,input.edit?.grant,input.edit?.mutation_input,{a3_eligibility_input:input.edit?.a3_eligibility_input});
  if(!edit.ok)return blocked('edit_authority_bridge',edit.value);
- const pull=prepareMutation(input.pull_request?.controlled_execution,input.pull_request?.target,input.pull_request?.admission,input.pull_request?.grant,input.pull_request?.mutation_input);
+ const pull=prepareMutation(input.pull_request?.controlled_execution,input.pull_request?.target,input.pull_request?.admission,input.pull_request?.grant,input.pull_request?.mutation_input,{a3_eligibility_input:input.pull_request?.a3_eligibility_input});
  if(!pull.ok)return blocked('pull_request_authority_bridge',pull.value);
 
  for(const [name,item,operation] of [['branch',branch.value,'create_branch'],['edit',edit.value,'update_file'],['pull_request',pull.value,'create_pull_request']]){

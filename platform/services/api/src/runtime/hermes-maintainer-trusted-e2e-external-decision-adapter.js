@@ -10,7 +10,7 @@ function exactDecision(value,decision,intentDigest,referenceKey,externalReferenc
 function adaptHermesMaintainerTrustedE2eExternalDecisions(input={}){
  const refs=input.references;
  if(!refs)return blocked('external_references',null);
- const approvals=prepareHermesMaintainerTrustedE2eApprovalRequests({branch_name:input.branch_name});
+ const approvals=prepareHermesMaintainerTrustedE2eApprovalRequests({branch_name:input.branch_name,edit:input.edit,pull_request:input.pull_request});
  if(approvals.prepared!==true)return blocked('approval_requests',approvals);
  const human={};
  for(const k of KEYS){

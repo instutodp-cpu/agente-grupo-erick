@@ -48,15 +48,15 @@ const valid=()=>({
   controlled_execution:{id:'branch-control'},
   mutation_input:{id:'branch-mutation'}
  },
- edit:{grant:{id:'edit-grant'},target:{operation:'update_file',branch:'hermes/canary/e2e'},operational_input:{id:'edit-operational'}},
- pull_request:{grant:{id:'pull-grant'},target:{operation:'create_pull_request',head:'hermes/canary/e2e',base:'main',draft:true},operational_input:{id:'pull-operational'}}
+ edit:{a3_eligibility_input:{eligibility_id:'a3-edit'},grant:{id:'edit-grant'},target:{operation:'update_file',branch:'hermes/canary/e2e'},operational_input:{id:'edit-operational'}},
+ pull_request:{a3_eligibility_input:{eligibility_id:'a3-pull'},grant:{id:'pull-grant'},target:{operation:'create_pull_request',head:'hermes/canary/e2e',base:'main',draft:true},operational_input:{id:'pull-operational'}}
 });
 
 test('prepares admissions in mutation order and binds exact A3 evidence into the branch workflow',async()=>{
  const {m,calls}=load();
  const c=m.createHermesMaintainerTrustedE2eOperationalPreparation({pool:{}});
  const x=await c.prepare(valid());
- assert.equal(c.composition_version,'hermes_maintainer_trusted_e2e_operational_preparation_v2');
+ assert.equal(c.composition_version,'hermes_maintainer_trusted_e2e_operational_preparation_v3');
  assert.equal(x.prepared,true);
  assert.equal(x.production_used,false);
  assert.equal(x.merge_authority,false);
@@ -94,6 +94,7 @@ test('missing A3 eligibility fails closed during preflight before any durable ad
  assert.equal(calls.some(entry=>entry[0]==='workflow'),false);
 });
 
+for(const stage of ['edit','pull_request'])test('missing '+stage+' A3 stops all durable admissions',async()=>{const i=valid();delete i[stage].a3_eligibility_input;const {m,calls}=load();const out=await m.createHermesMaintainerTrustedE2eOperationalPreparation({pool:{}}).prepare(i);assert.equal(out.prepared,false);assert.equal(out.stage,'operational_admission_preflight');assert.equal(calls.some(entry=>['branch','edit','pull','workflow'].includes(entry[0])),false);});
 test('rejects inconsistent target chain before consuming any durable authorization',async()=>{
  const {m,calls}=load();
  const i=valid();
