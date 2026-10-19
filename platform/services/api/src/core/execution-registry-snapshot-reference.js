@@ -1,5 +1,8 @@
 'use strict';
+const { matchesCanonicalFingerprint } = require('./canonical-content-digest');
+const { computeBoundedCanonicalFingerprint } = require('./canonical-content-digest');
 
+const { assertCanonicalContentSerializable } = require('./canonical-content-digest');
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
 const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
 
@@ -43,7 +46,7 @@ function isEntityFingerprintsObject(value) {
 
 function computeSnapshotFingerprint(reference) {
   const { snapshot_fingerprint, ...rest } = reference;
-  return stablePayload(rest);
+  return computeBoundedCanonicalFingerprint(rest);
 }
 
 function validateExecutionRegistrySnapshotReference(reference) {
@@ -78,12 +81,13 @@ function validateExecutionRegistrySnapshotReference(reference) {
   }
   if (reference.validator_version !== REGISTRY_SNAPSHOT_REFERENCE_VALIDATOR_VERSION) errors.push('validator_version_invalid');
   try {
-    stablePayload(reference);
+    assertCanonicalContentSerializable(reference);
   } catch (error) {
     errors.push(`payload_not_serializable::${error.message}`);
   }
   try {
-    if (computeSnapshotFingerprint(reference) !== reference.snapshot_fingerprint) {
+    const { snapshot_fingerprint: _omitted_fp, ...fingerprintMaterial } = reference;
+    if (!matchesCanonicalFingerprint(fingerprintMaterial, reference.snapshot_fingerprint)) {
       errors.push('snapshot_fingerprint_mismatch');
     }
   } catch (error) {

@@ -1,4 +1,5 @@
 'use strict';
+const { assertCanonicalContentSerializable } = require('./canonical-content-digest');
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
 const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
@@ -95,7 +96,7 @@ function validateBindingRecord(record) {
   }
   if (record.validator_version !== BINDING_RECORD_VALIDATOR_VERSION) errors.push('validator_version_invalid');
   try {
-    stablePayload(record);
+    assertCanonicalContentSerializable(record);
   } catch (error) {
     errors.push(`payload_not_serializable::${error.message}`);
   }

@@ -45,7 +45,8 @@ const {
   resolveStopConditionBindingOutcome, validateScopeCrossChecks
 } = require('../src/core/execution-reference-binding-validator');
 const {
-  DIGEST_PREFIX, computeCanonicalContentDigest, isCanonicalContentDigest
+  DIGEST_PREFIX, computeCanonicalContentDigest, isCanonicalContentDigest,
+  computeBoundedCanonicalFingerprint, assertCanonicalContentSerializable
 } = require('../src/core/canonical-content-digest');
 const { buildExecutionPlanIdempotency, computeIdempotencyFingerprint } = require('../src/core/execution-plan-idempotency');
 const { buildExecutionPlanStopCondition, computeStopConditionFingerprint } = require('../src/core/execution-plan-stop-condition');
@@ -754,4 +755,30 @@ test('regression: replay via the registry still works after FIX 1-3, and the ful
   const outcome = evaluateExecutionPlanRequest(scenario.request, {});
   assert.equal(registry.registerExecutionPlan(outcome.plan, { expected_version: 0 }).status, 'REGISTERED_SIMULATION');
   assert.equal(registry.registerExecutionPlan(outcome.plan).status, 'REPLAY_ACCEPTED');
+});
+
+
+test('bounded fingerprints retain legacy canonical form for small records and SHA-256 full-content integrity for large records', () => {
+  const tiny={operation:'read',nested:{a:1,b:true}};
+  assert.equal(computeBoundedCanonicalFingerprint(tiny),stablePayload(tiny));
+  const big={mission_run_id:'run-unit',evidence:'e'.repeat(180000),scope:{tenant:'tenant-a',operation:'simulation'}};
+  const fingerprint=computeBoundedCanonicalFingerprint(big);
+  assert.equal(fingerprint,computeCanonicalContentDigest(big));
+  assert.match(fingerprint,/^sha256:[a-f0-9]{64}$/);
+  assert.equal(fingerprint.length,71);
+  assert.equal(computeBoundedCanonicalFingerprint({scope:{operation:'simulation',tenant:'tenant-a'},evidence:big.evidence,mission_run_id:'run-unit'}),fingerprint,'property order is nonsemantic');
+  assert.notEqual(computeBoundedCanonicalFingerprint({...big,evidence:'f'+big.evidence.slice(1)}),fingerprint,'single byte mutation must alter fingerprint');
+  assert.throws(()=>computeBoundedCanonicalFingerprint({values:[NaN]}),/non_finite_number/);
+  assert.throws(()=>computeBoundedCanonicalFingerprint({cycle:big,fn:()=>true}),/function_not_serializable/);
+});
+test('streamed canonical serializability rejects noncanonical values without weakening legacy binding results', () => {
+  const original=scenarioFixture('valid-reference-binding-no-llm').bindingResult;
+  assertValid('legacy binding result',validateExecutionReferenceBindingResult(original));
+  const changed={...original,binding_ledger_fingerprint:original.binding_ledger_fingerprint+'-tampered'};
+  assert.equal(validateExecutionReferenceBindingResult(changed).errors.includes('result_fingerprint_mismatch'),true);
+  assert.doesNotThrow(()=>assertCanonicalContentSerializable({large:'x'.repeat(800000)}));
+  const cyclic={};cyclic.self=cyclic;
+  assert.throws(()=>assertCanonicalContentSerializable(cyclic),/cyclic_reference/);
+  assert.throws(()=>assertCanonicalContentSerializable({bad:new Date()}),/date_not_serializable/);
+  assert.throws(()=>assertCanonicalContentSerializable({bad:Buffer.from('x')}),/binary_not_serializable/);
 });

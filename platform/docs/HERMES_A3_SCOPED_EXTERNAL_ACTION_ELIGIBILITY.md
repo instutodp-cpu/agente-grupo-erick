@@ -186,3 +186,124 @@ The user explicitly authorized one exact staging `update_file` intent (`sha256:5
 Consequently the evidence is `real_write_and_durable_closure_confirmed_provenance_pending`, **not** automatic A3 operational promotion. Keep `proven_e2e=false`, `operational=false`, `human_promotion_authorized=false`, `candidate=null` and A4/production/merge protected. Do **not** replay the consumed authorization, reissue evidence for that historical write, or repeat the write to disguise missing provenance. Before a new qualifying canary or promotion request, require independently verifiable official staging-gate source and mission-linked single-use provenance, while retaining the existing exact scoped human authorization path.
 
 Evidence: `platform/docs/audits/HERMES_A3_UPDATE_FILE_CANARY_20261019.json`. No new external execution or operational promotion was performed by this readiness-audit increment.
+
+
+## A3 MissionRun-origin gate (fail-closed; source not connected)
+
+The 2026-10-19 real `update_file` canary was confirmed at GitHub and in durable
+PostgreSQL receipts. However, the staging-gate simulation in that one-shot
+runner was assembled locally; it did **not** provide independently verifiable
+MissionRun provenance. Those historical facts remain unchanged; no receipt
+can be minted retroactively for that write.
+
+This increment adds `hermes_maintainer_a3_mission_source_verification_v1` as
+a hard check for **both** `update_file` and Draft `create_pull_request`
+operational admission, immediately **before** consuming the authorization
+or acquiring Postgres ownership. The verifier requires a read through a
+server-owned `readMissionRun` dependency. It does not accept a caller's
+`source_evidence` as proof and has **no default reader** or local-fixture
+fallback. If the reader is missing, inaccessible, returns a different
+mission/operation/branch/target, lacks the exact human grant or single-use
+fingerprint, or reports a nonzero simulation effect, admission fails closed
+without consuming authorization or fetching write credentials.
+
+The returned MissionRun record must carry the exact durable status
+`STAGING_SIMULATION_RECONCILED`, source `MISSION_GATEWAY_DURABLE`, matching
+`mission_run_id` and `mission_id`, valid workflow operation, original
+target/intent digests, approval/authorization references, single-use ID
+and fingerprint, simulation receipt/workflow/authorization/gate fingerprints,
+zero-effect flags, and a canonical record digest.
+
+**Critical trust boundary:** a canonical digest verifies internal consistency,
+**not** issuer authenticity. An implementation may wire `readMissionRun`
+**only** to the separately authenticated authoritative Mission Gateway
+record store, using server-managed credentials and a read-only interface.
+No such source adapter is connected in this PR. Do not expose dependency
+injection to untrusted request parameters or accept evidence manufactured
+from the runner's `controlled_execution` object. This guard is deliberately
+blocking in staging until that independent backing source exists; test
+helpers mock it only for isolated validation and regression tests.
+
+The existing official approval/grant, A3 v3 scoped eligibility, PostgreSQL
+`CREATE_IF_ABSENT`, and update-file / Draft PR transport contracts remain
+intact. `create_branch` promotion and authority are not expanded. The
+readiness state stays `implemented_tested_unpromoted`, and
+`proven_e2e`, `operational`, `human_promotion_authorized`, A4 and production
+remain false. No new MissionRun, dispatch, provider write or merge is part
+of this fix.
+
+
+### Located source: Maestro Pessoal / missionGateway (2026-10-19)
+
+The authoritative **control-plane application** is Maestro Pessoal
+(Base44 app `69f62cbb266971d4deeb4938`), not Hermes Insight Hub.
+Its `MissionRun` entity stores `mission_id`, `idempotency_key`,
+`contrato_json`, `contract_hash`, `dispatch_protocol_version`,
+`emitted_by`, `issued_at`, `hermes_run_id` and `dispatch_simulado`.
+The current official `base44/functions/missionGateway/router.ts` exposes
+`list_runs` and `verify_integrity`; the handlers in
+`run/runService.ts` call `loadMissionAndValidate` /
+`loadRunAndValidate` and check `MembroEspaco` membership, while repositories
+read via service role. `verify_integrity` checks the immutable Mission Contract
+hash and **does not** attest A3 staging-gate execution or single-use issuance.
+
+The currently observed MissionRun
+`6ad02b2e45e512d3aeb9199a` belongs to mission
+`6ad02b16cdd1db9ef55927ca`, the prior **public-web read**
+(`public_web_email_canary_execution`, 2026-10-15). It must never be
+reinterpreted as proof of an `update_file` or Draft PR canary.
+
+**Integration dependency, not yet implemented:** extend the *existing*
+missionGateway's authorized, server-side read surface to return independently
+persisted A3 staging-gate and single-use provenance **bound to the exact
+MissionRun/operation/target/approval**. Authenticated Hermes server wiring must
+verify the issuer and source; a canonical SHA alone cannot prove authenticity.
+Do not use Base44 entity direct reads as a runtime authority shortcut, inject
+the existing public-web run into the A3 contract, or fabricate a new MissionRun.
+Until the gateway exposes such evidence, `readMissionRun` remains unconfigured
+and A3 `update_file` / Draft PR fail closed before consumption.
+
+## Existing Mission Gateway read bridge (2026-10-19)
+
+The staging Hermes A3 code now has a **read-only**, server-injected bridge
+(`hermes_maintainer_maestro_missionrun_reader_v1`) for the identified
+Maestro Pessoal `missionGateway`. This is an integration boundary, **not**
+the missing operational proof. Given a trusted, independently authenticated
+server-side `invokeMissionGateway`, it first requests the existing
+`list_runs` operation, resolves one MissionRun for the requested mission,
+and requires the existing `verify_integrity` contract-hash check to pass.
+
+**Important: `verify_integrity` proves only the Mission Contract hash.**
+It is not permission to write, nor does it prove a simulated staging gate
+or single-use issuance. The bridge therefore requires a *separate* gateway
+verification operation, `verify_a3_provenance`, bound to exactly:
+`run_id`, `mission_id`, `a3_operation`, `repository`,
+`environment=staging`, `target_digest`, `intent_digest`,
+`approval_reference`, `authorization_reference`, and
+`single_use_authorization_id`. Only an issuer-verified authoritative
+record proceeds to the existing strict A3 validator.
+
+**Not yet available:** the observed Maestro `router.ts` does **not**
+implement `verify_a3_provenance`; its MissionRun schema does not carry
+the requisite separately attestable A3 proof. No deployed authenticated
+Hermes→Maestro invocation channel has been verified/configured. With no
+server-supplied `invokeMissionGateway`, or a gateway returning unknown
+operation/404/invalid proof, the reader returns no source proof. Both A3
+mutation admissions continue to block **before** authorization consumption
+and any SCM network call. Tests mock the future gateway response *only in
+test code*, including negative tests proving a legacy public-web run with a
+valid contract hash still cannot become A3 authority.
+
+To complete this bridge later, evolve the **existing** missionGateway
+under its current workspace membership and service-role contracts to
+issue/verify a protected, immutable A3 source attestation from a genuinely
+authorized MissionRun and simulation gate. Then connect a server-owned
+authenticated invoker; never pass a client-controlled invoker, plain
+MissionRun field, or bearer token through user input. Source authenticity
+must be enforced by the gateway's privileged issuer (canonical digests
+alone establish integrity, not authenticity). Do not retrofit that proof
+onto the historical one-shot `update_file` canary. Until a separate
+successful staging E2E and explicit human promotion, keep
+`source_reader_connected=false`, `proven_e2e=false`,
+`operational=false`, `human_promotion_authorized=false`,
+`candidate=null`; A4, production and merge authority remain forbidden.

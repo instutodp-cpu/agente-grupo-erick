@@ -2,13 +2,15 @@
 const {createHermesMaintainerGithubWriteOperationalAdmissionComposition,preflightHermesMaintainerGithubWriteOperationalAdmission}=require('./hermes-maintainer-github-write-operational-admission-composition');
 const {createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition,preflightHermesMaintainerGithubUpdateFileOperationalAdmission}=require('./hermes-maintainer-github-update-file-operational-admission-composition');
 const {createHermesMaintainerGithubCreatePullRequestOperationalAdmissionComposition,preflightHermesMaintainerGithubCreatePullRequestOperationalAdmission}=require('./hermes-maintainer-github-create-pull-request-operational-admission-composition');
+const {createHermesMaintainerMaestroMissionRunReader}=require('./hermes-maintainer-maestro-missionrun-reader');
 const {prepareHermesMaintainerTrustedE2eCanaryWorkflow}=require('./hermes-maintainer-trusted-e2e-canary-workflow-preparation');
 const COMPOSITION_VERSION='hermes_maintainer_trusted_e2e_operational_preparation_v3';
 function blocked(stage,value){return Object.freeze({composition_version:COMPOSITION_VERSION,status:'MAINTAINER_TRUSTED_E2E_OPERATIONAL_PREPARATION_BLOCKED',prepared:false,stage,value:value||null,workflow:null,production_used:false,merge_authority:false,human_merge_required:true});}
-function createHermesMaintainerTrustedE2eOperationalPreparation({pool}={}){
+function createHermesMaintainerTrustedE2eOperationalPreparation({pool,readMissionRun,invokeMissionGateway}={}){
+ const trustedReader=typeof invokeMissionGateway==='function'?createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}).readMissionRun:readMissionRun;
  const branchAdmission=createHermesMaintainerGithubWriteOperationalAdmissionComposition({pool});
- const editAdmission=createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({pool});
- const pullAdmission=createHermesMaintainerGithubCreatePullRequestOperationalAdmissionComposition({pool});
+ const editAdmission=createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({pool,readMissionRun:trustedReader});
+ const pullAdmission=createHermesMaintainerGithubCreatePullRequestOperationalAdmissionComposition({pool,readMissionRun:trustedReader});
  return Object.freeze({composition_version:COMPOSITION_VERSION,async prepare(input={}){
   const branchName=input.branch?.target?.branch_name;
   const canaryBranch=typeof input.branch?.canary?.ref==='string'?input.branch.canary.ref.replace(/^refs\/heads\//,''):null;

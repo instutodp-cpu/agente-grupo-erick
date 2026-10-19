@@ -1,5 +1,8 @@
 'use strict';
+const { matchesCanonicalFingerprint } = require('./canonical-content-digest');
+const { computeBoundedCanonicalFingerprint } = require('./canonical-content-digest');
 
+const { assertCanonicalContentSerializable } = require('./canonical-content-digest');
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
 const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
 const { validateBindingRecord } = require('./execution-reference-binding-record');
@@ -35,7 +38,7 @@ const MAX_BINDING_RECORDS = 200;
 
 function computeLedgerFingerprint(ledger) {
   const { ledger_fingerprint, ...rest } = ledger;
-  return stablePayload(rest);
+  return computeBoundedCanonicalFingerprint(rest);
 }
 
 // all_required_bindings_present cannot be derived from binding_records alone: it depends on
@@ -108,12 +111,13 @@ function validateExecutionReferenceBindingLedger(ledger) {
   }
   if (ledger.validator_version !== BINDING_LEDGER_VALIDATOR_VERSION) errors.push('validator_version_invalid');
   try {
-    stablePayload(ledger);
+    assertCanonicalContentSerializable(ledger);
   } catch (error) {
     errors.push(`payload_not_serializable::${error.message}`);
   }
   try {
-    if (computeLedgerFingerprint(ledger) !== ledger.ledger_fingerprint) errors.push('ledger_fingerprint_mismatch');
+    const { ledger_fingerprint: _omitted_fp, ...fingerprintMaterial } = ledger;
+    if (!matchesCanonicalFingerprint(fingerprintMaterial, ledger.ledger_fingerprint)) errors.push('ledger_fingerprint_mismatch');
   } catch (error) {
     errors.push('ledger_fingerprint_mismatch');
   }

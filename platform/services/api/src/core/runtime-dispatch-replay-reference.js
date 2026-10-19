@@ -1,4 +1,7 @@
 'use strict';
+const { matchesCanonicalFingerprint } = require('./canonical-content-digest');
+const { assertCanonicalContentSerializable } = require('./canonical-content-digest');
+const { computeBoundedCanonicalFingerprint } = require('./canonical-content-digest');
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
 const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
@@ -53,7 +56,7 @@ function isUniqueStringList(list, maxItems = MAX_LIST_ITEMS) {
 
 function computeDispatchReplayFingerprint(reference) {
   const { replay_fingerprint, ...rest } = reference;
-  return stablePayload(rest);
+  return computeBoundedCanonicalFingerprint(rest);
 }
 
 function validateRuntimeDispatchReplayReference(reference) {
@@ -97,12 +100,13 @@ function validateRuntimeDispatchReplayReference(reference) {
   }
   if (reference.validator_version !== RUNTIME_DISPATCH_REPLAY_REFERENCE_VALIDATOR_VERSION) errors.push('validator_version_invalid');
   try {
-    stablePayload(reference);
+    assertCanonicalContentSerializable(reference);
   } catch (error) {
     errors.push(`payload_not_serializable::${error.message}`);
   }
   try {
-    if (computeDispatchReplayFingerprint(reference) !== reference.replay_fingerprint) errors.push('replay_fingerprint_mismatch');
+    const { replay_fingerprint: _omitted_fp, ...fingerprintMaterial } = reference;
+    if (!matchesCanonicalFingerprint(fingerprintMaterial, reference.replay_fingerprint)) errors.push('replay_fingerprint_mismatch');
   } catch (error) {
     errors.push('replay_fingerprint_mismatch');
   }

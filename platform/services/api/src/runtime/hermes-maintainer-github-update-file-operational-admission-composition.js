@@ -15,6 +15,8 @@ const {createHermesMaintainerScmWritePostgresAttemptOwnershipComposition}=requir
 const {computeHermesMaintainerGithubUpdateFileContentDigest:contentDigest,computeHermesMaintainerGithubUpdateFileMessageDigest:messageDigest}=require('../core/hermes-maintainer-github-update-file-human-authorization');
 const {A3_CONTRACT_VERSION,A3_ELIGIBLE,evaluateHermesMaintainerA3PreexecutionEligibility}=require('../core/hermes-maintainer-github-write-canary-execution-guard');
 const a3Ownership=require('../core/hermes-maintainer-a3-durable-ownership-admission');
+const {createHermesMaintainerA3MissionSourceVerifier}=require('../core/hermes-maintainer-a3-mission-source-verification');
+const {stablePayload}=require('../core/agent-identity-contract');
 const COMPOSITION_VERSION='hermes_maintainer_github_update_file_operational_admission_composition_v2';
 const REPOSITORY='instutodp-cpu/agente-grupo-erick';
 const INPUT_FIELDS=Object.freeze(['admission_reference','attempt_reference','capability_reference','consumption_reference','path','current_blob_sha','content','message']);
@@ -27,12 +29,17 @@ function validA3Eligibility(eligibilityInput,grant,target,input){
  return{valid,eligibility};
 }
 function validPendingA3(e,g,t,i){const r=e?.target_reference,sg=e?.source_evidence?.authorization_grant;return a3Ownership.pending(e)&&e.operation==='update_file'&&r?.repository===REPOSITORY&&r?.base_ref==='main'&&r?.branch_name===t?.branch&&r?.path===i?.path&&r?.current_blob_sha===i?.current_blob_sha&&r?.content_digest===contentDigest(i?.content)&&r?.message_digest===messageDigest(i?.message)&&e.action_intent_digest===g?.intent_digest&&sg?.intent_digest===g?.intent_digest&&sg?.authorization_reference===g?.authorization_reference&&sg?.content_digest===g?.content_digest&&sg?.message_digest===g?.message_digest;}
-function createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({pool}={}){
+function createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({pool,readMissionRun}={}){
  const consumption=createHermesMaintainerScmWritePostgresPersistenceComposition({pool}),ownership=createHermesMaintainerScmWritePostgresAttemptOwnershipComposition({pool});
+ const missionSource=createHermesMaintainerA3MissionSourceVerifier({readMissionRun});
  return Object.freeze({composition_version:COMPOSITION_VERSION,async prepare(eligibilityInput,grant,target,input){
   const a3=validA3Eligibility(eligibilityInput,grant,target,input);if(!a3.valid&&!validPendingA3(eligibilityInput,grant,target,input))return blocked('A3_ELIGIBILITY_REQUIRED');
   if(!target||target.repository!==REPOSITORY||target.operation!=='update_file'||typeof target.branch!=='string')return blocked('TARGET_INVALID');
   if(!validInput(input))return blocked('OPERATIONAL_INPUT_INVALID');if(!validGrant(grant,target,input))return blocked('AUTHORIZATION_GRANT_SCOPE_INVALID');
+  const snapshot=stablePayload({eligibilityInput,grant,target,input});
+  const provenance=await missionSource.verify(eligibilityInput);
+  if(stablePayload({eligibilityInput,grant,target,input})!==snapshot)return blocked('A3_MISSION_SOURCE_READ_SCOPE_DRIFT');
+  if(!provenance.verified)return blocked('A3_MISSION_SOURCE_UNVERIFIED');
   const consumed=consumeHermesMaintainerScmWriteAuthorization(grant,{intent_digest:grant.intent_digest,authorization_reference:grant.authorization_reference,consumption_reference:input.consumption_reference,already_consumed:false});
   const persistenceRequest=buildHermesMaintainerScmWritePersistenceRequest(consumed),persistenceResult=await consumption.adapter.persist(persistenceRequest),durableReceipt=createHermesMaintainerScmWriteDurableReceipt(persistenceRequest,persistenceResult);
   if(durableReceipt.receipt_valid!==true){const backendBlocker=persistenceResult?.blockers?.[0];const reason=persistenceResult?.status==='SCM_WRITE_PERSISTENCE_EXISTS'?'DURABLE_CONSUMPTION_EXISTS':persistenceResult?.status==='SCM_WRITE_PERSISTENCE_CREATED'?'DURABLE_CONSUMPTION_RECEIPT_INVALID':backendBlocker==='PERSISTENCE_BACKEND_UNCONFIRMED'?'DURABLE_CONSUMPTION_UNCONFIRMED':backendBlocker==='PERSISTENCE_BACKEND_INVALID'?'DURABLE_CONSUMPTION_INVALID':'DURABLE_CONSUMPTION_PERSISTENCE_FAILED';return blocked(reason);}

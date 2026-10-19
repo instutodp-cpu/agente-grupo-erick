@@ -1,4 +1,5 @@
 'use strict';
+const { computeBoundedCanonicalFingerprint } = require('./canonical-content-digest');
 
 const { isPlainObject } = require('./read-only-adapter-contract');
 const { stablePayload } = require('./agent-identity-contract');
@@ -32,7 +33,7 @@ const {
 
 function safeFingerprint(value) {
   try {
-    return stablePayload(value === undefined || value === null ? null : value);
+    return computeBoundedCanonicalFingerprint(value === undefined || value === null ? null : value);
   } catch (error) {
     return `fingerprint_invalid::${error.message}`;
   }
