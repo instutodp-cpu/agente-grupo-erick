@@ -175,3 +175,14 @@ Any expansion beyond this proven A3 scope requires its own capability-specific e
 - `platform/services/api/test/hermes-maintainer-trusted-e2e-runtime-composition.test.js`
 - `platform/services/api/test/hermes-maintainer-safe-workflow-execution-invocation.test.js`
 - `platform/docs/audits/HERMES_READINESS_MAP.json`
+
+
+## Real staging `update_file` observation vs. promotion gate (2026-10-19)
+
+The user explicitly authorized one exact staging `update_file` intent (`sha256:55bffd2fcced4099e9f08a3cf7a1a753ca50fb89a77bd7ff618fea7ce30b7a33`), and the official update-file runtime recorded HTTP 200, an expected GitHub blob and commit, one durable SCM consumption and ownership, and one matching execution outcome and finalization. The readback confirmed the branch update and unchanged `main`.
+
+**Provenance limitation:** the one-shot VPS execution runner assembled a `hermes_maintainer_controlled_executor_v1` simulation object directly before `evaluateHermesMaintainerStagingGate`. Although the structural validator and zero-effect reconciliation passed, this is **not** independent proof that the simulation gate originated from a verified official mission run. The recorded runtime output also did not retain a mission-linked single-use authorization ID. The successful provider write and durable completion cannot retroactively create those missing source attestations.
+
+Consequently the evidence is `real_write_and_durable_closure_confirmed_provenance_pending`, **not** automatic A3 operational promotion. Keep `proven_e2e=false`, `operational=false`, `human_promotion_authorized=false`, `candidate=null` and A4/production/merge protected. Do **not** replay the consumed authorization, reissue evidence for that historical write, or repeat the write to disguise missing provenance. Before a new qualifying canary or promotion request, require independently verifiable official staging-gate source and mission-linked single-use provenance, while retaining the existing exact scoped human authorization path.
+
+Evidence: `platform/docs/audits/HERMES_A3_UPDATE_FILE_CANARY_20261019.json`. No new external execution or operational promotion was performed by this readiness-audit increment.

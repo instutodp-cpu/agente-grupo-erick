@@ -39,3 +39,35 @@ for(const [make,filename,createName] of [
   });
  });
 }
+
+test('2026-10-19 observed update_file canary cannot silently promote without source provenance',()=>{
+ const fs=require('node:fs'),path=require('node:path');
+ const root=path.resolve(__dirname,'../../..');
+ const evidence=JSON.parse(fs.readFileSync(path.join(root,'docs/audits/HERMES_A3_UPDATE_FILE_CANARY_20261019.json'),'utf8'));
+ const map=JSON.parse(fs.readFileSync(path.join(root,'docs/audits/HERMES_READINESS_MAP.json'),'utf8'));
+ const autonomy=map.autonomy,extension=autonomy.a3_maintenance_expansion,review=extension.update_file_canary_review;
+ assert.equal(evidence.scope.operation,'update_file');
+ assert.equal(evidence.scope.environment,'staging');
+ assert.equal(evidence.human_authorized_intent_digest,'sha256:55bffd2fcced4099e9f08a3cf7a1a753ca50fb89a77bd7ff618fea7ce30b7a33');
+ assert.equal(evidence.observed_execution.provider_status,200);
+ assert.equal(evidence.observed_execution.new_blob_sha,'6145a08810c51a85b906dd96b8cbe0b9218ed6c7');
+ assert.equal(evidence.observed_execution.branch_commit_sha,'27023bb6d239077a6efd1874289cf3e7372abbf0');
+ for(const field of ['maintainer_scm_write_consumption_records','maintainer_scm_write_attempt_ownership_records','maintainer_github_update_file_execution_outcome_matching_records','maintainer_github_update_file_finalization_matching_records'])assert.equal(evidence.durable_evidence[field],1);
+ assert.equal(evidence.provenance_review.independent_staging_gate_source_attestation_present,false);
+ assert.equal(evidence.provenance_review.single_use_artifact_linked_to_durable_mission_run_receipt,false);
+ assert.ok(evidence.provenance_review.promotion_blockers.length>0);
+ assert.equal(evidence.decision.canary_real_write_confirmed,true);
+ for(const name of ['trusted_e2e_promotion_evidence_complete','promotion_eligible','human_promotion_authorized','operational','production_allowed','a4_authorized','merge_authority'])assert.equal(evidence.decision[name],false,name);
+ assert.equal(extension.status,'implemented_tested_unpromoted');
+ assert.equal(extension.proven_e2e,false);
+ assert.equal(extension.operational,false);
+ assert.equal(extension.human_promotion_authorized,false);
+ assert.equal(extension.production_allowed,false);
+ assert.equal(review.real_provider_write_confirmed,true);
+ assert.equal(review.staging_gate_source_verified,false);
+ assert.equal(review.single_use_mission_source_verified,false);
+ assert.equal(review.promotion_eligible,false);
+ assert.equal(autonomy.current_max_level,'A3_authorized_scoped');
+ assert.equal(autonomy.candidate,null);
+ assert.equal(autonomy.a3_canary.operation,'create_branch');
+});
