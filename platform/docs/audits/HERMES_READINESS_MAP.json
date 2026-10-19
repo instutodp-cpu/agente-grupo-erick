@@ -687,7 +687,16 @@
         "legacy_create_branch_authority_changed": false,
         "proven_e2e": false,
         "operational": false,
-        "human_promotion_authorized": false
+        "human_promotion_authorized": false,
+        "source_system": "Maestro Pessoal / Base44 missionGateway",
+        "source_app_id": "69f62cbb266971d4deeb4938",
+        "official_operations_observed": [
+          "list_runs",
+          "verify_integrity"
+        ],
+        "existing_record_only_public_web": true,
+        "source_a3_attestation_fields_available": false,
+        "next_dependency": "Extend authenticated missionGateway read-only A3 provenance to attest the exact MissionRun, simulation-gate receipt and single-use issuance. Do not change current autonomy or replay the used canary."
       }
     }
   }

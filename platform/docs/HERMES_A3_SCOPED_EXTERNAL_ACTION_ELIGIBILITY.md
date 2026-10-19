@@ -231,3 +231,34 @@ readiness state stays `implemented_tested_unpromoted`, and
 `proven_e2e`, `operational`, `human_promotion_authorized`, A4 and production
 remain false. No new MissionRun, dispatch, provider write or merge is part
 of this fix.
+
+
+### Located source: Maestro Pessoal / missionGateway (2026-10-19)
+
+The authoritative **control-plane application** is Maestro Pessoal
+(Base44 app `69f62cbb266971d4deeb4938`), not Hermes Insight Hub.
+Its `MissionRun` entity stores `mission_id`, `idempotency_key`,
+`contrato_json`, `contract_hash`, `dispatch_protocol_version`,
+`emitted_by`, `issued_at`, `hermes_run_id` and `dispatch_simulado`.
+The current official `base44/functions/missionGateway/router.ts` exposes
+`list_runs` and `verify_integrity`; the handlers in
+`run/runService.ts` call `loadMissionAndValidate` /
+`loadRunAndValidate` and check `MembroEspaco` membership, while repositories
+read via service role. `verify_integrity` checks the immutable Mission Contract
+hash and **does not** attest A3 staging-gate execution or single-use issuance.
+
+The currently observed MissionRun
+`6ad02b2e45e512d3aeb9199a` belongs to mission
+`6ad02b16cdd1db9ef55927ca`, the prior **public-web read**
+(`public_web_email_canary_execution`, 2026-10-15). It must never be
+reinterpreted as proof of an `update_file` or Draft PR canary.
+
+**Integration dependency, not yet implemented:** extend the *existing*
+missionGateway's authorized, server-side read surface to return independently
+persisted A3 staging-gate and single-use provenance **bound to the exact
+MissionRun/operation/target/approval**. Authenticated Hermes server wiring must
+verify the issuer and source; a canonical SHA alone cannot prove authenticity.
+Do not use Base44 entity direct reads as a runtime authority shortcut, inject
+the existing public-web run into the A3 contract, or fabricate a new MissionRun.
+Until the gateway exposes such evidence, `readMissionRun` remains unconfigured
+and A3 `update_file` / Draft PR fail closed before consumption.
