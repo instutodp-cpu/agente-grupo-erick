@@ -14,3 +14,28 @@ test('closes draft PR durable chain and preserves provider identity',async()=>{l
 test('replay fails closed before a second provider write',async()=>{let calls=0;const c=createHermesMaintainerGithubCreatePullRequestE2eDurableClosure({pool:pool(),readMissionRun:readFor(eligibility()),environment:{HERMES_GITHUB_CREATE_PULL_REQUEST_STAGING_TOKEN:'synthetic-token'},fetchImpl:async()=>{calls++;return {status:201,json:async()=>({number:438,html_url:'https://github.com/instutodp-cpu/agente-grupo-erick/pull/438',draft:true})};},createTimeoutSignal:()=>new AbortController().signal});const first=await c.execute(eligibility(),grant(),target,input()),replay=await c.execute(eligibility(),grant(),target,input());assert.equal(first.closure_valid,true);assert.equal(replay.status,'CREATE_PULL_REQUEST_E2E_DURABLE_CLOSURE_BLOCKED');assert.equal(calls,1);});
 test('invalid target fails closed before provider',async()=>{let calls=0;const out=await createHermesMaintainerGithubCreatePullRequestE2eDurableClosure({pool:pool(),readMissionRun:readFor(eligibility()),environment:{HERMES_GITHUB_CREATE_PULL_REQUEST_STAGING_TOKEN:'synthetic-token'},fetchImpl:async()=>{calls++;},createTimeoutSignal:()=>new AbortController().signal}).execute(eligibility(),grant(),{...target,draft:false},input());assert.equal(out.closure_valid,false);assert.equal(calls,0);});
 test('construction is inert and credential remains isolated',()=>{let calls=0;const c=createHermesMaintainerGithubCreatePullRequestE2eDurableClosure({pool:pool(),readMissionRun:readFor(eligibility()),environment:{HERMES_GITHUB_CREATE_PULL_REQUEST_STAGING_TOKEN:'synthetic-token'},fetchImpl:async()=>{calls++;},createTimeoutSignal:()=>new AbortController().signal});assert.equal(c.composition_version,'hermes_maintainer_github_create_pull_request_e2e_durable_closure_v2');assert.equal(c.credential_reference,'github_create_pull_request_hermes_branch_staging');assert.equal(calls,0);assert.equal(c.production_used,false);assert.throws(()=>createHermesMaintainerGithubCreatePullRequestE2eDurableClosure(),/postgres_pool_required/);});
+
+test('official Maestro legacy list_runs and verify_integrity cannot supply A3 authority without separate attestation',async()=>{
+ const e=eligibility(),g=grant(),t=target,i=input(),calls=[];
+ let providerCalls=0;
+ const closure=createHermesMaintainerGithubCreatePullRequestE2eDurableClosure({
+  pool:pool(),
+  invokeMissionGateway:async arg=>{
+   calls.push(arg.operation);
+   if(arg.operation==='list_runs')return {runs:[{id:'real-existing-web-read-run',espaco_id:'workspace-1',
+    mission_id:e.source_evidence.single_use_authorization.mission_id,
+    status:'concluida',dispatch_simulado:false,
+    contrato_json:'{"contract_version":"1.0"}',contract_hash:'sha256:'+'f'.repeat(64)}]};
+   if(arg.operation==='verify_integrity')return {ok:true,expected:'sha256:'+'f'.repeat(64),actual:'sha256:'+'f'.repeat(64)};
+   return {error:'Operação inválida'};
+  },
+  environment:{HERMES_GITHUB_CREATE_PULL_REQUEST_STAGING_TOKEN:'synthetic-token'},
+  fetchImpl:async()=>{providerCalls++;throw Error('no write allowed');},
+  createTimeoutSignal:()=>new AbortController().signal
+ });
+ const out=await closure.execute(e,g,t,i);
+ assert.equal(out.closure_valid,false);
+ assert.deepEqual(out.blockers,['DURABLE_ADMISSION_NOT_CONFIRMED']);
+ assert.deepEqual(calls,['list_runs','verify_integrity','verify_a3_provenance']);
+ assert.equal(providerCalls,0);
+});

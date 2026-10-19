@@ -262,3 +262,48 @@ Do not use Base44 entity direct reads as a runtime authority shortcut, inject
 the existing public-web run into the A3 contract, or fabricate a new MissionRun.
 Until the gateway exposes such evidence, `readMissionRun` remains unconfigured
 and A3 `update_file` / Draft PR fail closed before consumption.
+
+## Existing Mission Gateway read bridge (2026-10-19)
+
+The staging Hermes A3 code now has a **read-only**, server-injected bridge
+(`hermes_maintainer_maestro_missionrun_reader_v1`) for the identified
+Maestro Pessoal `missionGateway`. This is an integration boundary, **not**
+the missing operational proof. Given a trusted, independently authenticated
+server-side `invokeMissionGateway`, it first requests the existing
+`list_runs` operation, resolves one MissionRun for the requested mission,
+and requires the existing `verify_integrity` contract-hash check to pass.
+
+**Important: `verify_integrity` proves only the Mission Contract hash.**
+It is not permission to write, nor does it prove a simulated staging gate
+or single-use issuance. The bridge therefore requires a *separate* gateway
+verification operation, `verify_a3_provenance`, bound to exactly:
+`run_id`, `mission_id`, `a3_operation`, `repository`,
+`environment=staging`, `target_digest`, `intent_digest`,
+`approval_reference`, `authorization_reference`, and
+`single_use_authorization_id`. Only an issuer-verified authoritative
+record proceeds to the existing strict A3 validator.
+
+**Not yet available:** the observed Maestro `router.ts` does **not**
+implement `verify_a3_provenance`; its MissionRun schema does not carry
+the requisite separately attestable A3 proof. No deployed authenticated
+Hermes→Maestro invocation channel has been verified/configured. With no
+server-supplied `invokeMissionGateway`, or a gateway returning unknown
+operation/404/invalid proof, the reader returns no source proof. Both A3
+mutation admissions continue to block **before** authorization consumption
+and any SCM network call. Tests mock the future gateway response *only in
+test code*, including negative tests proving a legacy public-web run with a
+valid contract hash still cannot become A3 authority.
+
+To complete this bridge later, evolve the **existing** missionGateway
+under its current workspace membership and service-role contracts to
+issue/verify a protected, immutable A3 source attestation from a genuinely
+authorized MissionRun and simulation gate. Then connect a server-owned
+authenticated invoker; never pass a client-controlled invoker, plain
+MissionRun field, or bearer token through user input. Source authenticity
+must be enforced by the gateway's privileged issuer (canonical digests
+alone establish integrity, not authenticity). Do not retrofit that proof
+onto the historical one-shot `update_file` canary. Until a separate
+successful staging E2E and explicit human promotion, keep
+`source_reader_connected=false`, `proven_e2e=false`,
+`operational=false`, `human_promotion_authorized=false`,
+`candidate=null`; A4, production and merge authority remain forbidden.

@@ -1,11 +1,13 @@
 'use strict';
 const {createHermesMaintainerGithubCreatePullRequestOperationalAdmissionComposition}=require('./hermes-maintainer-github-create-pull-request-operational-admission-composition');
+const {createHermesMaintainerMaestroMissionRunReader}=require('./hermes-maintainer-maestro-missionrun-reader');
 const {createHermesMaintainerGithubCreatePullRequestRuntimeComposition}=require('./hermes-maintainer-github-create-pull-request-runtime-composition');
 const {createHermesMaintainerGithubCreatePullRequestOperationalFinalizationComposition}=require('./hermes-maintainer-github-create-pull-request-operational-finalization-composition');
 const COMPOSITION_VERSION='hermes_maintainer_github_create_pull_request_e2e_durable_closure_v2';
 function blocked(reason,execution,finalization){return Object.freeze({composition_version:COMPOSITION_VERSION,status:'CREATE_PULL_REQUEST_E2E_DURABLE_CLOSURE_BLOCKED',closure_valid:false,durable:false,execution:execution||null,finalization:finalization||null,receipt:null,network_call_performed:execution?.network_call_performed===true,write_performed:execution?.write_performed===true,production_used:false,blockers:Object.freeze([reason])});}
-function createHermesMaintainerGithubCreatePullRequestE2eDurableClosure({pool,environment,fetchImpl,createTimeoutSignal,timeoutMs,readMissionRun}={}){
- const admission=createHermesMaintainerGithubCreatePullRequestOperationalAdmissionComposition({pool,readMissionRun});
+function createHermesMaintainerGithubCreatePullRequestE2eDurableClosure({pool,environment,fetchImpl,createTimeoutSignal,timeoutMs,readMissionRun,invokeMissionGateway}={}){
+ const trustedReader=typeof invokeMissionGateway==='function'?createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}).readMissionRun:readMissionRun;
+ const admission=createHermesMaintainerGithubCreatePullRequestOperationalAdmissionComposition({pool,readMissionRun:trustedReader});
  const runtime=createHermesMaintainerGithubCreatePullRequestRuntimeComposition({environment,fetchImpl,createTimeoutSignal,timeoutMs});
  const finalization=createHermesMaintainerGithubCreatePullRequestOperationalFinalizationComposition({pool});
  return Object.freeze({composition_version:COMPOSITION_VERSION,environment:'staging',credential_reference:runtime.credential_reference,credential_material_present:false,network_call_performed:false,write_performed:false,production_used:false,async execute(eligibilityInput,grant,target,input){

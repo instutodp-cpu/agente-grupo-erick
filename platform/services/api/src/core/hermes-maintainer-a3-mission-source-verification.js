@@ -32,7 +32,7 @@ function createHermesMaintainerA3MissionSourceVerifier({readMissionRun}={}){
   if(!OPERATIONS[input?.operation]||!a||!g||!t||input.environment!=='staging'||!validateHermesMaintainerSingleUseAuthorization(a).valid)return blocked('MISSION_SOURCE_INPUT_INVALID');
   if(typeof readMissionRun!=='function')return blocked('INDEPENDENT_MISSION_READER_REQUIRED');
   let record;try{
-   record=await readMissionRun(Object.freeze({mission_id:a.mission_id,operation:input.operation,repository:REPOSITORY,environment:'staging'}));
+   record=await readMissionRun(Object.freeze({mission_id:a.mission_id,operation:input.operation,repository:REPOSITORY,environment:'staging',target_digest:t.target_digest,intent_digest:input.action_intent_digest,approval_reference:input.source_evidence.approval_binding?.approval_reference,authorization_reference:g.authorization_reference,single_use_authorization_id:a.authorization_id}));
   }catch{return blocked('MISSION_SOURCE_READ_FAILED');}
   if(!record||typeof record!=='object'||Array.isArray(record)||Object.keys(record).sort().join('|')!==[...FIELDS].sort().join('|'))return blocked('MISSION_SOURCE_RECORD_INVALID');
   if(record.contract_version!==RECORD_VERSION||record.source!=='MISSION_GATEWAY_DURABLE'||

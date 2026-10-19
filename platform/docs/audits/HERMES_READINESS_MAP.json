@@ -499,7 +499,7 @@
   "inventory": {
     "platform_docs": 141,
     "core_source_files": 729,
-    "api_tests": 620,
+    "api_tests": 621,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
@@ -696,7 +696,18 @@
         ],
         "existing_record_only_public_web": true,
         "source_a3_attestation_fields_available": false,
-        "next_dependency": "Extend authenticated missionGateway read-only A3 provenance to attest the exact MissionRun, simulation-gate receipt and single-use issuance. Do not change current autonomy or replay the used canary."
+        "next_dependency": "Implement and audit a server-validated, immutable A3 gate/single-use attestation in the existing Maestro missionGateway (verify_a3_provenance), then configure an independently authenticated Hermes server-side invoker. Do not mint retroactive evidence or replay canary.",
+        "maestro_authenticated_reader_bridge": "implemented_tested_only",
+        "maestro_gateway_read_operations": [
+          "list_runs",
+          "verify_integrity"
+        ],
+        "maestro_gateway_required_a3_operation": "verify_a3_provenance",
+        "maestro_gateway_a3_operation_available": false,
+        "maestro_network_invoker_configured": false,
+        "gateway_contract_hash_alone_is_a3_attestation": false,
+        "read_only_bridge_can_issue_a3_authority": false,
+        "trusted_source_adapter_operational": false
       }
     }
   }
