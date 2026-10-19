@@ -47,3 +47,4 @@ npm start
 ├── .env.example
 └── README.md
 ```
+<!-- HERMES_A3_UPDATE_FILE_CANARY_STAGING_20261018: isolated branch only; no main or production change -->
