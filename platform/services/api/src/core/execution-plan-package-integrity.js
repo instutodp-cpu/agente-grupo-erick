@@ -1,4 +1,5 @@
 'use strict';
+const { computeBoundedCanonicalFingerprint } = require('./canonical-content-digest');
 
 const { isPlainObject } = require('./read-only-adapter-contract');
 const { stablePayload } = require('./agent-identity-contract');
@@ -105,7 +106,7 @@ function buildExecutionPlanPackage(input = {}) {
 // versus autenticidade".
 function computeExecutionPlanPackageFingerprint(pkg) {
   if (!isPlainObject(pkg)) throw new Error('execution_plan_package_must_be_object');
-  return stablePayload(pkg);
+  return computeBoundedCanonicalFingerprint(pkg);
 }
 
 module.exports = {

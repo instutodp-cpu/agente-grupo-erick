@@ -1,4 +1,5 @@
 'use strict';
+const { computeBoundedCanonicalFingerprint } = require('./canonical-content-digest');
 
 const { cloneFrozen, stablePayload } = require('./agent-identity-contract');
 const { buildExecutionRegistrySnapshotReference } = require('./execution-registry-snapshot-reference');
@@ -94,10 +95,10 @@ function assembleExecutionPlanRequest(input = {}) {
       session_reference_id: planning.session_reference_id,
       expected_registry_version: request.expected_registry_version,
       registry_entity_fingerprints: {
-        execution_plan_request: stablePayload(shallowIdentity),
+        execution_plan_request: computeBoundedCanonicalFingerprint(shallowIdentity),
         stage_manifest: request.stage_manifest_reference.manifest_fingerprint,
         dependency_graph: request.dependency_graph_reference.graph_fingerprint,
-        provenance: stablePayload(request.authorization_provenance_reference),
+        provenance: computeBoundedCanonicalFingerprint(request.authorization_provenance_reference),
         scope: request.authorization_scope_reference.scope_fingerprint,
         execution_plan_budget: request.execution_plan_budget.budget_fingerprint,
         idempotency_policy: request.idempotency_policy_reference.idempotency_fingerprint

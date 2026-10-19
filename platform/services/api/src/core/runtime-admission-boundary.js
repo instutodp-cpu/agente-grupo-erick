@@ -209,7 +209,7 @@ function evaluateRuntimeReadinessRequest(request, context = {}) {
   // boundary.js itself already cross-checked once, at Gateway time). Two old upstream fingerprints
   // agreeing with each other proves nothing about the object actually received in *this* request;
   // only recomputing from the real, received provenanceRef does.
-  const recomputedProvenanceFingerprint = stablePayload(provenanceRef);
+  const recomputedProvenanceFingerprint = typeof plan.authorization_provenance_fingerprint === 'string' && /^sha256:[a-f0-9]{64}$/.test(plan.authorization_provenance_fingerprint) ? computeCanonicalContentDigest(provenanceRef) : stablePayload(provenanceRef);
   if (
     provenanceRef.authorization_provenance_reference_id !== packageRef.authorization_provenance_reference_id
     || provenanceRef.authorization_decision_id !== gatewayPackageRef.authorization_decision_id

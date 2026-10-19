@@ -1,5 +1,7 @@
 'use strict';
+const { computeBoundedCanonicalFingerprint, computeCanonicalContentDigest } = require('./canonical-content-digest');
 
+const { assertCanonicalContentSerializable } = require('./canonical-content-digest');
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
 const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
 const { LEDGER_STATUSES } = require('./execution-reference-binding-ledger');
@@ -30,7 +32,7 @@ const MAX_REASON_CODES = 50;
 
 function computeBindingResultFingerprint(result) {
   const { result_fingerprint, ...rest } = result;
-  return stablePayload(rest);
+  return computeBoundedCanonicalFingerprint(rest);
 }
 
 function validateExecutionReferenceBindingResult(result) {
@@ -57,13 +59,21 @@ function validateExecutionReferenceBindingResult(result) {
   }
   if (result.validator_version !== BINDING_RESULT_VALIDATOR_VERSION) errors.push('validator_version_invalid');
   try {
-    stablePayload(result);
+    assertCanonicalContentSerializable(result);
   } catch (error) {
     errors.push(`payload_not_serializable::${error.message}`);
   }
   try {
-    if (computeBindingResultFingerprint(result) !== result.result_fingerprint) errors.push('result_fingerprint_mismatch');
-  } catch (error) {
+    // Historic fixtures and durable records may legitimately carry the full
+    // canonical payload even when the same content now produces a bounded
+    // SHA-256 fingerprint. Recompute the received object in its *declared*
+    // representation; never trust a matching ID or an upstream string alone.
+    const { result_fingerprint, ...material } = result;
+    const expected = typeof result_fingerprint === 'string' && /^sha256:[a-f0-9]{64}$/.test(result_fingerprint)
+      ? computeCanonicalContentDigest(material)
+      : stablePayload(material);
+    if (expected !== result_fingerprint) errors.push('result_fingerprint_mismatch');
+  } catch {
     errors.push('result_fingerprint_mismatch');
   }
   errors.push(...findAgentCoreOperationalMaterial(result));

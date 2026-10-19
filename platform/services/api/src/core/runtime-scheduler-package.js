@@ -1,4 +1,6 @@
 'use strict';
+const { matchesCanonicalFingerprint } = require('./canonical-content-digest');
+const { computeBoundedCanonicalFingerprint } = require('./canonical-content-digest');
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
 const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
@@ -106,7 +108,7 @@ function isSortedUniqueStringList(list, maxItems = MAX_LIST_ITEMS) {
 
 function computeSchedulerPackageFingerprint(pkg) {
   const { scheduler_package_fingerprint, scheduler_package_digest, ...rest } = pkg;
-  return stablePayload(rest);
+  return computeBoundedCanonicalFingerprint(rest);
 }
 
 function computeSchedulerPackageDigest(pkg) {
@@ -184,7 +186,8 @@ function validateRuntimeSchedulerPackage(pkg) {
     errors.push(`payload_not_serializable::${error.message}`);
   }
   try {
-    if (computeSchedulerPackageFingerprint(pkg) !== pkg.scheduler_package_fingerprint) errors.push('scheduler_package_fingerprint_mismatch');
+    const { scheduler_package_fingerprint: _omitted_fp, scheduler_package_digest: _omitted_digest, ...fingerprintMaterial } = pkg;
+    if (!matchesCanonicalFingerprint(fingerprintMaterial, pkg.scheduler_package_fingerprint)) errors.push('scheduler_package_fingerprint_mismatch');
   } catch (error) {
     errors.push('scheduler_package_fingerprint_mismatch');
   }

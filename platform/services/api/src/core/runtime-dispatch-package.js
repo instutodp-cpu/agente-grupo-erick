@@ -1,4 +1,7 @@
 'use strict';
+const { matchesCanonicalFingerprint } = require('./canonical-content-digest');
+const { assertCanonicalContentSerializable } = require('./canonical-content-digest');
+const { computeBoundedCanonicalFingerprint } = require('./canonical-content-digest');
 
 const { isNonEmptyString, isPlainObject, uniqueSorted } = require('./read-only-adapter-contract');
 const { cloneFrozen, exactFields, findAgentCoreOperationalMaterial, stablePayload } = require('./agent-identity-contract');
@@ -115,7 +118,7 @@ function isSortedUniqueList(list, maxItems = MAX_LIST_ITEMS) {
 
 function computeDispatchPackageFingerprint(pkg) {
   const { dispatch_package_fingerprint, dispatch_package_digest, ...rest } = pkg;
-  return stablePayload(rest);
+  return computeBoundedCanonicalFingerprint(rest);
 }
 
 function computeDispatchPackageDigest(pkg) {
@@ -165,12 +168,13 @@ function validateRuntimeDispatchPackage(pkg) {
   if (pkg.rollout_percentage !== 0) errors.push('rollout_percentage_must_be_zero');
   if (pkg.validator_version !== RUNTIME_DISPATCH_PACKAGE_VALIDATOR_VERSION) errors.push('validator_version_invalid');
   try {
-    stablePayload(pkg);
+    assertCanonicalContentSerializable(pkg);
   } catch (error) {
     errors.push(`payload_not_serializable::${error.message}`);
   }
   try {
-    if (computeDispatchPackageFingerprint(pkg) !== pkg.dispatch_package_fingerprint) errors.push('dispatch_package_fingerprint_mismatch');
+    const { dispatch_package_fingerprint: _omitted_fp, dispatch_package_digest: _omitted_digest, ...fingerprintMaterial } = pkg;
+    if (!matchesCanonicalFingerprint(fingerprintMaterial, pkg.dispatch_package_fingerprint)) errors.push('dispatch_package_fingerprint_mismatch');
   } catch (error) {
     errors.push('dispatch_package_fingerprint_mismatch');
   }
