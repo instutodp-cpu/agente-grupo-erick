@@ -497,7 +497,7 @@
     }
   ],
   "inventory": {
-    "platform_docs": 140,
+    "platform_docs": 141,
     "core_source_files": 728,
     "api_tests": 618,
     "github_workflows": 2,
@@ -650,13 +650,26 @@
       "merge_authority": false,
       "production_allowed": false,
       "durable_ownership_ordering_fix": {
-        "status": "implemented_tested_not_executed",
+        "status": "implemented_tested_real_canary_observed_provenance_pending",
         "goal": "pre-ownership A3 scope and payload validation before persistence; bind actual durable SCM ownership receipt after create-if-absent, then revalidate full A3 at the runner before credential/network",
         "source": "official_maintainer_scm_write_durable_ownership_binding_v1_from_durable_persistence",
-        "simulation_evidence_only": true,
-        "real_provider_write_performed": false,
-        "actual_canary_pending": true,
+        "simulation_evidence_only": false,
+        "real_provider_write_performed": true,
+        "actual_canary_pending": false,
         "promotion_authorized": false
+      },
+      "update_file_canary_review": {
+        "status": "real_write_and_durable_closure_confirmed_provenance_pending",
+        "evidence_file": "platform/docs/audits/HERMES_A3_UPDATE_FILE_CANARY_20261019.json",
+        "real_provider_write_confirmed": true,
+        "provider_status": 200,
+        "durable_closure_confirmed": true,
+        "staging_gate_source_verified": false,
+        "single_use_mission_source_verified": false,
+        "trusted_e2e_promotion_evidence_complete": false,
+        "promotion_eligible": false,
+        "human_promotion_authorized": false,
+        "operational": false
       }
     }
   }

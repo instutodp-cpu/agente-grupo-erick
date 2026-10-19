@@ -1,0 +1,68 @@
+{
+  "schema_version": "hermes_a3_update_file_canary_evidence_v1",
+  "scope": {
+    "repository": "instutodp-cpu/agente-grupo-erick",
+    "environment": "staging",
+    "operation": "update_file",
+    "branch": "hermes/a3-maintenance-multiop",
+    "path": "README.md",
+    "base_ref": "main",
+    "production_used": false,
+    "merge_authority": false,
+    "human_merge_required": true
+  },
+  "human_authorized_intent_digest": "sha256:55bffd2fcced4099e9f08a3cf7a1a753ca50fb89a77bd7ff618fea7ce30b7a33",
+  "observed_execution": {
+    "status": "REAL_CANARY_CONFIRMED",
+    "provider_status": 200,
+    "runtime_reported_provider_write_attempts": 1,
+    "previous_blob_sha": "f3d113661bf53b1744006f996fec5eb44ea24afa",
+    "new_blob_sha": "6145a08810c51a85b906dd96b8cbe0b9218ed6c7",
+    "branch_commit_sha": "27023bb6d239077a6efd1874289cf3e7372abbf0",
+    "branch_parent_sha": "a2044f1b4ecb3659641148c5282ea3d29fbb93b9",
+    "main_sha_after": "ca9b20c0be72c17da4b40d81877d899b0146e3c3",
+    "github_commit_url": "https://github.com/instutodp-cpu/agente-grupo-erick/commit/27023bb6d239077a6efd1874289cf3e7372abbf0",
+    "readback_matches_exact_blob": true,
+    "observed_canary_commit_signature_verified": false
+  },
+  "durable_evidence": {
+    "source": "staging_vps_postgresql_verified_read_only",
+    "maintainer_scm_write_consumption_records": 1,
+    "maintainer_scm_write_attempt_ownership_records": 1,
+    "maintainer_github_update_file_execution_outcome_matching_records": 1,
+    "maintainer_github_update_file_finalization_matching_records": 1,
+    "operational_acceptance_status": "OPERATIONAL_ACCEPTANCE_CONFIRMED",
+    "finalization_status": "GITHUB_UPDATE_FILE_DURABLE_FINALIZATION_CONFIRMED"
+  },
+  "provenance_review": {
+    "staging_gate_origin": "local_runner_constructed_controlled_execution_object",
+    "official_controlled_workflow_source_bound_to_gate": false,
+    "independent_staging_gate_source_attestation_present": false,
+    "single_use_artifact_linked_to_durable_mission_run_receipt": false,
+    "runtime_result_persisted_single_use_authorization_id": false,
+    "human_approval_and_authorization_payload_bound": true,
+    "verified_github_operator_scope": true,
+    "promotion_blockers": [
+      "STAGING_GATE_SOURCE_NOT_INDEPENDENTLY_ATTESTED",
+      "SINGLE_USE_MISSION_SOURCE_NOT_DURABLY_LINKED"
+    ]
+  },
+  "decision": {
+    "canary_real_write_confirmed": true,
+    "durable_effect_confirmed": true,
+    "trusted_e2e_promotion_evidence_complete": false,
+    "promotion_eligible": false,
+    "human_promotion_authorized": false,
+    "operational": false,
+    "production_allowed": false,
+    "a4_authorized": false,
+    "merge_authority": false,
+    "requires_additional_real_write_now": false,
+    "next_safe_step": "Bind the staging simulation gate and single-use issuance to independently verifiable official mission evidence; seek a separate human promotion decision only after provenance review. Do not replay the used authorization."
+  },
+  "private_evidence_locations": {
+    "vps_canary_proposal_dir": "/tmp/hermes-a3-update-file-proposal-20261018",
+    "runtime_result_file": "runtime-execute_once-result-20261019.json",
+    "db_readback_file": "independent-db-verification-20261019.json"
+  }
+}
