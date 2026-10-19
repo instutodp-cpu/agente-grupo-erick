@@ -186,3 +186,48 @@ The user explicitly authorized one exact staging `update_file` intent (`sha256:5
 Consequently the evidence is `real_write_and_durable_closure_confirmed_provenance_pending`, **not** automatic A3 operational promotion. Keep `proven_e2e=false`, `operational=false`, `human_promotion_authorized=false`, `candidate=null` and A4/production/merge protected. Do **not** replay the consumed authorization, reissue evidence for that historical write, or repeat the write to disguise missing provenance. Before a new qualifying canary or promotion request, require independently verifiable official staging-gate source and mission-linked single-use provenance, while retaining the existing exact scoped human authorization path.
 
 Evidence: `platform/docs/audits/HERMES_A3_UPDATE_FILE_CANARY_20261019.json`. No new external execution or operational promotion was performed by this readiness-audit increment.
+
+
+## A3 MissionRun-origin gate (fail-closed; source not connected)
+
+The 2026-10-19 real `update_file` canary was confirmed at GitHub and in durable
+PostgreSQL receipts. However, the staging-gate simulation in that one-shot
+runner was assembled locally; it did **not** provide independently verifiable
+MissionRun provenance. Those historical facts remain unchanged; no receipt
+can be minted retroactively for that write.
+
+This increment adds `hermes_maintainer_a3_mission_source_verification_v1` as
+a hard check for **both** `update_file` and Draft `create_pull_request`
+operational admission, immediately **before** consuming the authorization
+or acquiring Postgres ownership. The verifier requires a read through a
+server-owned `readMissionRun` dependency. It does not accept a caller's
+`source_evidence` as proof and has **no default reader** or local-fixture
+fallback. If the reader is missing, inaccessible, returns a different
+mission/operation/branch/target, lacks the exact human grant or single-use
+fingerprint, or reports a nonzero simulation effect, admission fails closed
+without consuming authorization or fetching write credentials.
+
+The returned MissionRun record must carry the exact durable status
+`STAGING_SIMULATION_RECONCILED`, source `MISSION_GATEWAY_DURABLE`, matching
+`mission_run_id` and `mission_id`, valid workflow operation, original
+target/intent digests, approval/authorization references, single-use ID
+and fingerprint, simulation receipt/workflow/authorization/gate fingerprints,
+zero-effect flags, and a canonical record digest.
+
+**Critical trust boundary:** a canonical digest verifies internal consistency,
+**not** issuer authenticity. An implementation may wire `readMissionRun`
+**only** to the separately authenticated authoritative Mission Gateway
+record store, using server-managed credentials and a read-only interface.
+No such source adapter is connected in this PR. Do not expose dependency
+injection to untrusted request parameters or accept evidence manufactured
+from the runner's `controlled_execution` object. This guard is deliberately
+blocking in staging until that independent backing source exists; test
+helpers mock it only for isolated validation and regression tests.
+
+The existing official approval/grant, A3 v3 scoped eligibility, PostgreSQL
+`CREATE_IF_ABSENT`, and update-file / Draft PR transport contracts remain
+intact. `create_branch` promotion and authority are not expanded. The
+readiness state stays `implemented_tested_unpromoted`, and
+`proven_e2e`, `operational`, `human_promotion_authorized`, A4 and production
+remain false. No new MissionRun, dispatch, provider write or merge is part
+of this fix.

@@ -498,8 +498,8 @@
   ],
   "inventory": {
     "platform_docs": 141,
-    "core_source_files": 728,
-    "api_tests": 618,
+    "core_source_files": 729,
+    "api_tests": 620,
     "github_workflows": 2,
     "marketing_files": 202,
     "core_family_counts": {
@@ -670,6 +670,24 @@
         "promotion_eligible": false,
         "human_promotion_authorized": false,
         "operational": false
+      },
+      "mission_source_gate": {
+        "status": "implemented_tested_trusted_source_unwired",
+        "contract": "hermes_maintainer_a3_mission_source_verification_v1",
+        "operations": [
+          "update_file",
+          "create_pull_request"
+        ],
+        "required_source": "independently_authenticated_durable_mission_gateway_MissionRun",
+        "read_side": "trusted_server_owned_readMissionRun_dependency",
+        "verify_before": "postgres_authorization_consumption_and_ownership",
+        "requires": "mission_run_id,mission_id,workflow_operation,staging_simulation_receipt_digests,exact_target_digest,intent_digest,approval_and_authorization_references,single_use_id_and_fingerprint,zero_effect,immutable_record_digest",
+        "synthetic_evidence_permitted_in_real_runtime": false,
+        "source_reader_connected": false,
+        "legacy_create_branch_authority_changed": false,
+        "proven_e2e": false,
+        "operational": false,
+        "human_promotion_authorized": false
       }
     }
   }

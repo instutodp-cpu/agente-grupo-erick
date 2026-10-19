@@ -1,6 +1,7 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),Module=require('node:module');
 const {buildUpdateA3,buildPullA3}=require('./helpers/a3-maintenance-operation-test-data');
+const {readFor}=require('./helpers/a3-mission-origin-test-evidence');
 const {evaluateA3ScopedExternalActionEligibility}=require('../src/core/a3-scoped-external-action-eligibility');
 function pending(d){return{...d.eligibilityInput,source_evidence:{...d.eligibilityInput.source_evidence,durable_target:null}};}
 function withStubs(transport,callback){
@@ -25,7 +26,7 @@ for(const [make,filename,createName] of [
  test(make().eligibilityInput.operation+' pre-ownership denies forged A3 before persistence, then hydrates real DB proof',async()=>{
   const d=make(),p=pending(d);
   await withStubs(filename,async(mod,calls)=>{
-   const op=mod[createName]({pool:{connect(){},query(){}}});
+   const op=mod[createName]({pool:{connect(){},query(){}},readMissionRun:readFor(p)});
    const drift={...p,environment:'production'};
    const rejected=await op.prepare(drift,d.grant,d.target,d.operationalInput);
    assert.equal(rejected.admission_valid,false);assert.deepEqual(calls,[]);
@@ -71,3 +72,45 @@ test('2026-10-19 observed update_file canary cannot silently promote without sou
  assert.equal(autonomy.candidate,null);
  assert.equal(autonomy.a3_canary.operation,'create_branch');
 });
+
+for(const [make,filename,createName] of [
+ [buildUpdateA3,'hermes-maintainer-github-update-file-operational-admission-composition','createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition'],
+ [buildPullA3,'hermes-maintainer-github-create-pull-request-operational-admission-composition','createHermesMaintainerGithubCreatePullRequestOperationalAdmissionComposition']
+]){
+ test(make().eligibilityInput.operation+' refuses untrusted mission proof before DB consumption',async()=>{
+  const d=make(),p=pending(d);
+  await withStubs(filename,async(mod,calls)=>{
+   const blocked=await mod[createName]({pool:{connect(){},query(){}}}).prepare(p,d.grant,d.target,d.operationalInput);
+   assert.equal(blocked.admission_valid,false);
+   assert.deepEqual(blocked.blockers,['A3_MISSION_SOURCE_UNVERIFIED']);
+   assert.deepEqual(calls,[]);
+   const invalid=await mod[createName]({pool:{connect(){},query(){}},readMissionRun:async()=>({verified:true})}).prepare(p,d.grant,d.target,d.operationalInput);
+   assert.equal(invalid.admission_valid,false);
+   assert.deepEqual(calls,[]);
+   const spoofed=await mod[createName]({pool:{connect(){},query(){}},readMissionRun:async()=>({...require('./helpers/a3-mission-origin-test-evidence').recordFor(p),mission_id:'forged'})}).prepare(p,d.grant,d.target,d.operationalInput);
+   assert.equal(spoofed.admission_valid,false);
+   assert.deepEqual(calls,[]);
+  });
+ });
+}
+
+for(const [make,filename,createName] of [
+ [buildUpdateA3,'hermes-maintainer-github-update-file-operational-admission-composition','createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition'],
+ [buildPullA3,'hermes-maintainer-github-create-pull-request-operational-admission-composition','createHermesMaintainerGithubCreatePullRequestOperationalAdmissionComposition']
+]){
+ test(make().eligibilityInput.operation+' blocks request mutation during MissionRun lookup before any DB writes',async()=>{
+  const d=make(),p=pending(d);
+  await withStubs(filename,async(mod,calls)=>{
+   const {recordFor}=require('./helpers/a3-mission-origin-test-evidence');
+   const record=recordFor(p);
+   const op=mod[createName]({pool:{connect(){},query(){}},readMissionRun:async()=>{
+    p.target_reference.branch_name='hermes/mutated';
+    return record;
+   }});
+   const out=await op.prepare(p,d.grant,d.target,d.operationalInput);
+   assert.equal(out.admission_valid,false);
+   assert.deepEqual(out.blockers,['A3_MISSION_SOURCE_READ_SCOPE_DRIFT']);
+   assert.deepEqual(calls,[]);
+  });
+ });
+}

@@ -4,8 +4,8 @@ const {createHermesMaintainerGithubUpdateFileRuntimeComposition}=require('./herm
 const {createHermesMaintainerGithubUpdateFileOperationalFinalizationComposition}=require('./hermes-maintainer-github-update-file-operational-finalization-composition');
 const COMPOSITION_VERSION='hermes_maintainer_github_update_file_e2e_durable_closure_v2';
 function blocked(reason,execution){return Object.freeze({composition_version:COMPOSITION_VERSION,status:'UPDATE_FILE_E2E_DURABLE_CLOSURE_BLOCKED',closure_valid:false,durable:false,execution:execution||null,receipt:null,network_call_performed:execution?.network_call_performed===true,write_performed:execution?.write_performed===true,production_used:false,blockers:Object.freeze([reason])});}
-function createHermesMaintainerGithubUpdateFileE2eDurableClosure({pool,environment,fetchImpl,createTimeoutSignal,timeoutMs}={}){
- const admission=createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({pool});
+function createHermesMaintainerGithubUpdateFileE2eDurableClosure({pool,environment,fetchImpl,createTimeoutSignal,timeoutMs,readMissionRun}={}){
+ const admission=createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({pool,readMissionRun});
  const runtime=createHermesMaintainerGithubUpdateFileRuntimeComposition({environment,fetchImpl,createTimeoutSignal,timeoutMs});
  const finalization=createHermesMaintainerGithubUpdateFileOperationalFinalizationComposition({pool});
  return Object.freeze({composition_version:COMPOSITION_VERSION,environment:'staging',credential_reference:runtime.credential_reference,credential_material_present:false,network_call_performed:false,write_performed:false,production_used:false,async execute(eligibilityInput,grant,target,input){
