@@ -9,6 +9,7 @@ const {createHermesMaintainerMaestroInvokerFromServerEnv}=
 const {createHermesMaintainerMaestroMissionRunReader}=
  require('./hermes-maintainer-maestro-missionrun-reader');
 const {spawn,execFileSync}=require('node:child_process');
+const fs=require('node:fs');
 const path=require('node:path');
 const {createHermesMaintainerTestExecutionBoundary}=
  require('../core/hermes-maintainer-test-execution-boundary');
@@ -27,28 +28,45 @@ const TEST_FILES=Object.freeze([
 // Never accept command lines, image names, repo paths or Docker flags from
 // MissionRun metadata, client requests or HTTP input.
 function createHermesMaintainerA3NetworkIsolatedTestRunner({
- imageId,cwd=ROOT,spawnImpl=spawn,
- readRevision=()=>execFileSync('git',['-C',cwd,'rev-parse','HEAD'],
+ imageId,cwd=ROOT,sourceRoot=ROOT,spawnImpl=spawn,
+ readRevision=()=>execFileSync('git',['-C',sourceRoot,'rev-parse','HEAD'],
+  {encoding:'utf8',timeout:4000,env:{PATH:'/usr/local/bin:/usr/bin:/bin'}}).trim(),
+ readWorktreeStatus=()=>execFileSync('git',['-C',sourceRoot,'status','--porcelain'],
   {encoding:'utf8',timeout:4000,env:{PATH:'/usr/local/bin:/usr/bin:/bin'}}).trim(),
  timeoutMs=120000
 }={}){
+ // The trusted runtime remains in the checked-out application. The SOURCE
+ // under test may live in a separately detached, immutable Git worktree so
+ // the already approved MissionRun SHA never changes when runner code evolves.
  if(cwd!==ROOT)throw new TypeError('fixed_a3_test_workspace_required');
+ if(typeof sourceRoot!=='string'||!path.isAbsolute(sourceRoot)||
+    path.normalize(sourceRoot)!==sourceRoot||
+    !sourceRoot.endsWith(path.join('platform','services','api')))
+  throw new TypeError('a3_test_source_checkout_must_be_absolute_api_directory');
+ let realSource;
+ try{realSource=fs.realpathSync(sourceRoot);}catch{
+  throw new TypeError('a3_test_source_checkout_unavailable');
+ }
+ if(realSource!==sourceRoot)
+  throw new TypeError('a3_test_source_symlink_forbidden');
  if(!Number.isInteger(timeoutMs)||timeoutMs<1000||timeoutMs>120000)
   throw new TypeError('bounded_timeout_required');
  return async candidate=>{
   if(!IMAGE_ID.test(imageId||'')||!SHA.test(candidate?.revision_sha||''))
    return {test_id:'hermes_core_smoke',passed:false,receipt:'sandbox_not_configured'};
-  let actual;
-  try{actual=readRevision();}
+  let actual,dirty;
+  try{actual=readRevision();dirty=readWorktreeStatus();}
   catch{return {test_id:'hermes_core_smoke',passed:false,receipt:'checkout_unavailable'};}
   if(actual!==candidate.revision_sha)
    return {test_id:'hermes_core_smoke',passed:false,receipt:'checkout_revision_drift'};
+  if(typeof dirty!=='string'||dirty.length>0)
+   return {test_id:'hermes_core_smoke',passed:false,receipt:'checkout_not_clean'};
   const args=[
    'run','--rm','--pull=never','--network=none','--read-only',
    '--cap-drop=ALL','--security-opt=no-new-privileges',
    '--pids-limit=64','--memory=384m','--cpus=1','--user=65534:65534',
    '--tmpfs=/tmp:rw,nosuid,nodev,size=32m',
-   '--mount','type=bind,source='+ROOT+',target=/a3,readonly',
+   '--mount','type=bind,source='+sourceRoot+',target=/a3,readonly',
    '--workdir=/a3','--entrypoint=node',
    imageId,'--test',...TEST_FILES
   ];
@@ -168,7 +186,10 @@ function createHermesMaintainerA3ZeroEffectTestFromServerEnv({
     transport.invokeMissionGateway:async()=>null
  });
  const runSandboxTest=createHermesMaintainerA3NetworkIsolatedTestRunner({
-  imageId:environment?.HERMES_A3_TEST_IMAGE_ID,spawnImpl,timeoutMs
+  imageId:environment?.HERMES_A3_TEST_IMAGE_ID,
+  // Process-owned staging configuration, never user/MissionRun-controlled.
+  sourceRoot:environment?.HERMES_A3_TEST_SOURCE_API_DIR||ROOT,
+  spawnImpl,timeoutMs
  });
  const observer=createHermesMaintainerA3ZeroEffectTestRuntime({
   readSimulatedRunCandidate:reader.readSimulatedRunCandidate,
