@@ -224,6 +224,10 @@ test('migration 035 is strictly staging-only observation, with global single-use
  assert.match(sql,/observation_evidence->>'network_call_performed' IS NULL/);
  assert.match(sql,/ALTER TABLE hermes\.maintainer_a3_process_observations ENABLE ROW LEVEL SECURITY/);
  assert.match(sql,/REVOKE ALL ON TABLE hermes\.maintainer_a3_process_observations/);
+ assert.match(sql,/REVOKE USAGE ON SCHEMA hermes FROM PUBLIC/);
+ assert.match(sql,/FROM pg_roles WHERE rolname = 'anon'/);
+ assert.match(sql,/FROM pg_roles WHERE rolname = 'authenticated'/);
+ assert.doesNotMatch(sql,/FROM PUBLIC, anon, authenticated/);
  assert.doesNotMatch(sql,/INSERT INTO hermes\.|UPDATE hermes\.|maintainer_scm_write_consumption|MAESTRO_A3_PRIVATE_KEY/);
 });
 
@@ -245,12 +249,10 @@ test('real temporary PostgreSQL rejects replay and persists only non-authoritati
   try{
    const pre=await pool.query("SELECT to_regclass('hermes.maintainer_a3_process_observations') AS tab");
    if(pre.rows[0].tab){t.skip('existing test table must not be overwritten');return;}
-   let sql=fs.readFileSync(path.resolve(__dirname,
+   const sql=fs.readFileSync(path.resolve(__dirname,
     '../../../migrations/hermes/035_create_maintainer_a3_process_observations.sql'),'utf8');
-   // Vanilla disposable CI PostgreSQL has no Supabase anon/authenticated
-   // roles. Only these staging ACL statements are skipped in CI fixture.
-   sql=sql.replace(/REVOKE ALL ON TABLE hermes\.maintainer_a3_process_observations\s+FROM PUBLIC, anon, authenticated;/,'')
-     .replace(/REVOKE USAGE ON SCHEMA hermes FROM PUBLIC, anon, authenticated;/,'');
+   // Run the EXACT staging migration. Standalone PostgreSQL has no
+   // Supabase-specific roles, so the ACL guards must be portable as-is.
    await pool.query(sql);created=true;
    const persistence=createHermesMaintainerA3ProcessObservationPersistence({
     pool,imageId:IMAGE,environment:READY});
