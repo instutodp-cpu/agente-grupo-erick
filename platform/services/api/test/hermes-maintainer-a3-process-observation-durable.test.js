@@ -1,5 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
+const fs=require('node:fs'),path=require('node:path');
 const {COLS,SELECT,INSERT,FINALIZE,createHermesMaintainerA3ProcessObservationPersistence}=
  require('../src/core/hermes-maintainer-a3-process-observation-persistence');
 const {createHermesMaintainerA3DurableProcessObservation,
@@ -208,4 +209,20 @@ test('runtime composition remains inert without server-owned Gateway and pinned 
  assert.equal(fetches,0);
  assert.equal(processes,0);
  assert.equal(f.rows.size,0);
+});
+
+test('migration 035 is strictly staging-only observation, with global single-use and RLS',()=>{
+ const sql=fs.readFileSync(path.resolve(__dirname,'../../../migrations/hermes/035_create_maintainer_a3_process_observations.sql'),'utf8');
+ assert.match(sql,/CREATE TABLE IF NOT EXISTS hermes\.maintainer_a3_process_observations/);
+ assert.match(sql,/mission_run_id TEXT PRIMARY KEY/);
+ assert.match(sql,/mission_id TEXT NOT NULL UNIQUE/);
+ assert.match(sql,/state IN \('reserved','process_observed','failed_safe'\)/);
+ assert.match(sql,/state='process_observed' AND observation_digest IS NOT NULL/);
+ assert.match(sql,/observation_evidence->>'independent_issuer_verified'='false'/);
+ assert.match(sql,/observation_evidence->>'simulation_receipt_durable'='false'/);
+ assert.match(sql,/observation_evidence->>'execution_authorized'='false'/);
+ assert.match(sql,/observation_evidence->>'network_call_performed' IS NULL/);
+ assert.match(sql,/ALTER TABLE hermes\.maintainer_a3_process_observations ENABLE ROW LEVEL SECURITY/);
+ assert.match(sql,/REVOKE ALL ON TABLE hermes\.maintainer_a3_process_observations/);
+ assert.doesNotMatch(sql,/INSERT INTO hermes\.|UPDATE hermes\.|maintainer_scm_write_consumption|MAESTRO_A3_PRIVATE_KEY/);
 });
