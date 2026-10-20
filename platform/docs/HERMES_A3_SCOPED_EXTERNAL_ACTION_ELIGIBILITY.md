@@ -487,3 +487,29 @@ attestation was issued, no authorization consumed and no new MissionRun
 created. Integrating the real issuer callback and durable claims into
 the Maestro↔Hermes admission decision remains a separate gate in the
 same ongoing PR, not a reason to fabricate evidence or open micro-PRs.
+
+
+### A3 ownership read-time revalidation (October 20, 2026)
+
+The existing default-disabled `hermes-maintainer-a3-source-claim-postgres-persistence`
+adapter now exposes `verifyOwned(input)` as a **read-only** check. It
+reinvokes its separately provisioned privileged `verifyOfficialSource` callback
+for *every* read, checks the entire official claim scope against input, and
+reads the PostgreSQL staging ownership row by the authoritative single-use
+authorization ID. It requires exactly one row with matching immutable
+workspace, mission, MissionRun, approval, operation, target, intent, signed
+source digest and independent simulation receipt digest.
+
+Missing or revoked approval, invalid issuer, unavailable issuer, missing row,
+any mismatch, unavailable DB or disabled staging flags deny before a positive
+ownership response. Even a positive `verifyOwned` response explicitly has
+`execution_authorized=false`, `write_performed=false`,
+`production_allowed=false` and `merge_authority=false`. No HTTP route or
+automatic SCM authorization is created.
+
+This does **not** mean the authoritative receipt has been produced: there is
+still no newly completed A3 MissionRun, independent observed simulation
+receipt, issuer provisioned, exact post-run approval, or connected
+Maestro↔PostgreSQL trusted verifier. The observation API must remain
+non-executing. Revalidation is a prerequisite for a future authorized
+admission gate, not its replacement.
