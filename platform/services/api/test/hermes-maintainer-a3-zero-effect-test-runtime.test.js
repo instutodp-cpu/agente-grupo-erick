@@ -234,13 +234,18 @@ test('pinned approved code SHA uses separate clean source worktree, not runner H
   assert.throws(()=>createHermesMaintainerA3NetworkIsolatedTestRunner({
    sourceRoot:'/tmp',imageId:'sha256:'+'d'.repeat(64)
   }),/a3_test_source_checkout_must_be_absolute_api_directory/);
-  const link=path.join(root,'platform','services','api-symlink');
-  fs.symlinkSync(sourceRoot,link);
-  // Non-canonical path and symlink roots are not accepted.
+  // Non-canonical paths remain unnormalized UNTIL the runner rejects them.
   assert.throws(()=>createHermesMaintainerA3NetworkIsolatedTestRunner({
-   sourceRoot:path.join(root,'platform','services','api','..','api'),
+   sourceRoot:sourceRoot+'/../api',
    imageId:'sha256:'+'d'.repeat(64)
   }),/a3_test_source_checkout_must_be_absolute_api_directory/);
+  const linkParent=path.join(root,'alternate','platform','services');
+  fs.mkdirSync(linkParent,{recursive:true});
+  const link=path.join(linkParent,'api');
+  fs.symlinkSync(sourceRoot,link);
+  assert.throws(()=>createHermesMaintainerA3NetworkIsolatedTestRunner({
+   sourceRoot:link,imageId:'sha256:'+'d'.repeat(64)
+  }),/a3_test_source_symlink_forbidden/);
  }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 test('server-only entry has no external access or process execution without configured gateway',async()=>{
