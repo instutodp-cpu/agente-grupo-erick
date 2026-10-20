@@ -10,6 +10,8 @@ const {createHermesMaintainerMaestroMissionRunReader}=
  require('./hermes-maintainer-maestro-missionrun-reader');
 const {createHermesMaintainerA3ZeroEffectTestFromServerEnv}=
  require('./hermes-maintainer-a3-zero-effect-test-runtime');
+const {createSignedQueueSourceReaderFromServerEnv}=
+ require('./hermes-maintainer-maestro-signed-queue-snapshot');
 const denied=reason=>Object.freeze({
  status:reason,process_observation_durable:false,
  simulation_receipt_durable:false,issuer_verified:false,
@@ -71,22 +73,29 @@ function createHermesMaintainerA3DurableProcessObservationFromServerEnv({
   throw new TypeError('official_a3_postgres_pool_required');
  const gateway=createHermesMaintainerMaestroProcessReadInvokerFromServerEnv({
   env:environment,fetchImpl});
+ const signedSource=createSignedQueueSourceReaderFromServerEnv({env:environment});
  const reader=createHermesMaintainerMaestroMissionRunReader({
   invokeMissionGateway:gateway.configured?
    gateway.invokeMissionGateway:async()=>null
  });
+ // Prefer the exact issuer-sealed queued source. Never fall back to unsigned
+ // information if the configured snapshot expires or fails signature checks.
+ const verifiedRead=signedSource.configured?
+  signedSource.readSimulatedRunCandidate:reader.readSimulatedRunCandidate;
  const process=createHermesMaintainerA3ZeroEffectTestFromServerEnv({
-  environment,fetchImpl,spawnImpl,timeoutMs});
+  environment,fetchImpl,spawnImpl,timeoutMs,
+  serverOwnedSignedQueueSourceReader:signedSource.configured?verifiedRead:undefined
+ });
  const persistence=createHermesMaintainerA3ProcessObservationPersistence({
   pool,imageId:environment?.HERMES_A3_TEST_IMAGE_ID,environment
  });
  const composition=createHermesMaintainerA3DurableProcessObservation({
-  readSimulatedRunCandidate:reader.readSimulatedRunCandidate,
+  readSimulatedRunCandidate:verifiedRead,
   observeIsolatedProcess:process.observe,
   persistence
  });
  return Object.freeze({
-  configured:gateway.configured&&process.configured,
+  configured:(signedSource.configured||gateway.configured)&&process.configured,
   observeOnce:composition.observeOnce
  });
 }
