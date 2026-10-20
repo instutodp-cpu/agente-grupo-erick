@@ -108,6 +108,9 @@ function createHermesMaintainerA3ProcessObservationPersistence({
    observation.mission_run_id!==row.mission_run_id||
    observation.mission_id!==row.mission_id||
    observation.workspace_id!==row.workspace_id||
+   observation.operation!==row.operation||
+   observation.repository!==row.repository||
+   observation.revision_sha!==row.revision_sha||
    observation.contract_hash!==row.contract_hash||
    observation.receipt_durable!==false||
    observation.issuer_verified!==false||
