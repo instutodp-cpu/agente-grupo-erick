@@ -29,8 +29,13 @@ function createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}={}
   if(!listed||!Array.isArray(listed.runs)||listed.runs.length<1||listed.runs.length>500)return null;
   const candidates=listed.runs.filter(run=>
    run&&typeof run==='object'&&run.mission_id===query.mission_id&&
-   ID.test(run.id||'')&&ID.test(run.espaco_id||'')&&run.dispatch_simulado===false&&
-   ['em_execucao','concluida'].includes(run.status)&&
+   ID.test(run.id||'')&&ID.test(run.espaco_id||'')&&(
+    (run.dispatch_simulado===false&&['em_execucao','concluida'].includes(run.status))||
+    // Official zero-effect mission simulations remain simulated. They can
+    // become candidates ONLY after the gateway verifies the separately
+    // signed provenance + exact post-run human decision + reconciled outbox.
+    (run.dispatch_simulado===true&&run.status==='concluida'&&ID.test(run.dispatch_token||''))
+   )&&
    typeof run.contract_hash==='string'&&/^sha256:[0-9a-f]{64}$/.test(run.contract_hash)&&
    typeof run.contrato_json==='string'&&run.contrato_json.length>1&&
    run.contrato_json.length<=65536);
@@ -44,8 +49,8 @@ function createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}={}
      integrity.actual!==run.contract_hash)return null;
   // verify_integrity authenticates the *dispatch contract*, not the A3 gate.
   // Require a distinct gateway-side verification against privileged, immutable
-  // issuer evidence. The current Maestro gateway does NOT yet expose this
-  // operation; its 400/404/error remains fail-closed.
+  // issuer evidence. Absent/unpublished/rejecting gateway verification is
+  // always fail-closed: completed simulated runs grant NO direct authority.
   let proof;
   try{proof=await privilegedInvoke(Object.freeze({
    operation:VERIFY_A3_OPERATION,run_id:run.id,mission_id:query.mission_id,
