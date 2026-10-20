@@ -20,7 +20,7 @@ test('A3 source-claim ledger binds official mission, human approval and signed s
   'target_digest','intent_digest','simulation_receipt_digest','staging_gate_fingerprint','source_record_digest'])
   assert.match(migration,new RegExp('\\b'+field+' TEXT NOT NULL\\b'));
  for(const name of ['target_digest','intent_digest','simulation_receipt_digest','staging_gate_fingerprint','source_record_digest'])
-  assert.match(migration,new RegExp('CONSTRAINT maintainer_a3_source_'+name+'_valid'));
+  assert.match(migration,new RegExp('CONSTRAINT maintainer_a3_source_'+(name==='source_record_digest'?'record_digest':name)+'_valid'));
  assert.doesNotMatch(migration,/\bINSERT INTO\b|\bUPDATE\b|\bDELETE FROM\b|\bDO\s+\$\$\b/i);
  assert.doesNotMatch(migration,/\bexecution_authorized\b|\bwrite_performed\b|\bprovider_called\b|\bproduction_allowed\b|\bsecret\s*=|\btoken\s*=|api\.github\.com|postgres(?:ql)?:\/\//i);
  assert.doesNotMatch(migration,/CREATE TABLE IF NOT EXISTS hermes\.maintainer_scm_write_consumption/);
