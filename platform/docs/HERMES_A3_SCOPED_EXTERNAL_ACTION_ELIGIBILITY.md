@@ -415,3 +415,37 @@ trusting input-supplied source proof. Maestro 29/29 synthetic tests passed
 The independent zero-effect receipt, exact post-run human approval,
 global transactional single-use ownership and signing/deployment gates
 remain mandatory and are **not** provided by this compatibility fix.
+
+
+### Staging PostgreSQL global single-use claim migration — 20 Oct 2026
+
+PR #563 includes `034_create_maintainer_a3_source_authorization_claims.sql`
+as a deliberately **unapplied** staging-only schema migration in the existing
+`hermes` PostgreSQL namespace. It is distinct from
+`maintainer_scm_write_consumption` and does **not** consume an SCM
+authorization or attest a simulation. Database-enforced exclusivity applies
+globally across workspaces to
+`single_use_authorization_id` (PRIMARY KEY), `approval_reference`,
+`simulation_receipt_digest` and `source_record_digest`. The table
+stores bound mission/workspace/run/operation/target/intent/issuer-signed-record
+digests only, no credentials or provider capabilities.
+
+The exact migration was tested against staging PostgreSQL inside an
+outer explicit transaction, stripping only the migration's own
+`BEGIN`/`COMMIT` wrappers and ending with **ROLLBACK**. Observed:
+schema creation, rejection of duplicate authorization IDs, duplicate approvals,
+duplicate simulation receipts and the `production` environment; one
+synthetic row before rollback, zero table persistence afterward.
+No migration was deployed and no official Base44 evidence was written.
+
+Two further explicit blocks remain:
+1. The independent, trusted issuer must prove a **real**, newly completed
+   zero-effect A3 simulation receipt bound to an official code-scoped MissionRun
+   and an exact post-run human decision, not merely an acknowledged mock outbox.
+2. A privileged staging service must atomically claim this durable PostgreSQL
+   key **before** the Maestro attestation is finalized or consumed by Hermes;
+   until the real authority path uses the database constraint, the schema
+   remains a tested contract, **not** enforcement in the live A3 gate.
+
+Neither observation-only HTTP, a valid contract hash, nor this migration
+authorizes an external SCM operation, merge, production or A4.
