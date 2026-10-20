@@ -60,7 +60,19 @@ CREATE TABLE IF NOT EXISTS hermes.maintainer_a3_process_observations (
     AND length(failure_code)<=128 AND finished_at IS NOT NULL))
 );
 ALTER TABLE hermes.maintainer_a3_process_observations ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON TABLE hermes.maintainer_a3_process_observations
- FROM PUBLIC, anon, authenticated;
-REVOKE USAGE ON SCHEMA hermes FROM PUBLIC, anon, authenticated;
+-- PUBLIC always exists; Supabase-style roles do not necessarily exist
+-- in the standalone staging PostgreSQL. Preserve deny-by-default there too.
+REVOKE ALL ON TABLE hermes.maintainer_a3_process_observations FROM PUBLIC;
+REVOKE USAGE ON SCHEMA hermes FROM PUBLIC;
+DO $
+BEGIN
+ IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+   REVOKE ALL ON TABLE hermes.maintainer_a3_process_observations FROM anon;
+   REVOKE USAGE ON SCHEMA hermes FROM anon;
+ END IF;
+ IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+   REVOKE ALL ON TABLE hermes.maintainer_a3_process_observations FROM authenticated;
+   REVOKE USAGE ON SCHEMA hermes FROM authenticated;
+ END IF;
+END $;
 COMMIT;
