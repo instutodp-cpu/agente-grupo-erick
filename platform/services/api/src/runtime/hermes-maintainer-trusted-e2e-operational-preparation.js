@@ -7,7 +7,8 @@ const {prepareHermesMaintainerTrustedE2eCanaryWorkflow}=require('./hermes-mainta
 const COMPOSITION_VERSION='hermes_maintainer_trusted_e2e_operational_preparation_v3';
 function blocked(stage,value){return Object.freeze({composition_version:COMPOSITION_VERSION,status:'MAINTAINER_TRUSTED_E2E_OPERATIONAL_PREPARATION_BLOCKED',prepared:false,stage,value:value||null,workflow:null,production_used:false,merge_authority:false,human_merge_required:true});}
 function createHermesMaintainerTrustedE2eOperationalPreparation({pool,readMissionRun,invokeMissionGateway}={}){
- const trustedReader=typeof invokeMissionGateway==='function'?createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}).readMissionRun:readMissionRun;
+ const missionReader=createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway});
+ const trustedReader=missionReader.configured?missionReader.readMissionRun:readMissionRun;
  const branchAdmission=createHermesMaintainerGithubWriteOperationalAdmissionComposition({pool});
  const editAdmission=createHermesMaintainerGithubUpdateFileOperationalAdmissionComposition({pool,readMissionRun:trustedReader});
  const pullAdmission=createHermesMaintainerGithubCreatePullRequestOperationalAdmissionComposition({pool,readMissionRun:trustedReader});
