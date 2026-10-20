@@ -513,3 +513,72 @@ receipt, issuer provisioned, exact post-run approval, or connected
 Maestro↔PostgreSQL trusted verifier. The observation API must remain
 non-executing. Revalidation is a prerequisite for a future authorized
 admission gate, not its replacement.
+
+
+### Official A3 smoke isolation and revision binding (20 October 2026)
+
+The official pre-simulation candidate reader now accepts ONLY an existing
+authenticated, integrally verified **queued, simulated, code-test MissionRun**
+with one exact mission/run ID. Its hashed Mission Contract must have
+`metadata.tipo=testar`, `allowed_tools=["github_api"]`, deny merge,
+publish and production, and a strictly scoped `context`:
+
+```json
+{
+  "a3_simulation": {
+    "version": "a3_zero_effect_smoke_v1",
+    "operation": "update_file",
+    "repository": "instutodp-cpu/agente-grupo-erick",
+    "test_id": "hermes_core_smoke",
+    "revision_sha": "<the exact real 40-character staging commit SHA>",
+    "network_allowed": false,
+    "write_allowed": false,
+    "production_allowed": false
+  }
+}
+```
+
+The operation and commit SHA must be fixed **inside the official hashed
+MissionRun contract**, not added from caller-supplied request fields after
+dispatch. The existing runtime test executor/allowlisted smoke tests are
+reused through the established test-execution boundary. The new A3-specific
+runner requires server-owned `HERMES_A3_TEST_IMAGE_ID` pinned to a local
+Docker `sha256:` image ID; exact local Git checkout HEAD must equal the
+signed-off Mission Contract `revision_sha`.
+
+A3's subprocess is invoked only through the local Docker CLI with fixed
+`--pull=never --network=none --read-only --cap-drop=ALL`,
+`--security-opt=no-new-privileges`, an unprivileged user, memory/CPU/PID
+limits, ephemeral `/tmp`, a read-only source bind and two fixed allowlisted
+Node tests. It cannot receive arbitrary CLI parameters, network endpoints,
+credentials or mount paths from an A3 request. The staged server must keep
+`HERMES_EXECUTION_ENABLED=false`,
+`HERMES_EXECUTION_KILL_SWITCH=true`,
+`HERMES_MISSION_INGRESS_ENABLED=false`; the separate A3 test feature flag
+is OFF by default.
+
+Real VPS verification on the isolated checkout (GitHub PR #563 revision
+`8689708a7ae1219f73072bb382066fe2c77655c0`) ran:
+* 29/29 relevant A3 unit tests, self-audit `errors:[]`;
+* 5/5 subprocess smoke tests in manually verified Docker no-network,
+  read-only, reduced-privilege mode;
+* the **actual pinned-image A3 test runner** on that checkout, reporting
+  `test_id=hermes_core_smoke`, `passed=true`,
+  `receipt=test_process_passed` (an **ephemeral process return**, NOT an
+  independent A3 receipt or issuer-signed attestation);
+* healthy HTTPS 200 for the untouched staging observation container, a
+  healthy PostgreSQL staging container, 0 source authorization claims.
+
+**No real A3 MissionRun was created, dispatched, claimed or completed by
+these tests**. The test run did not update the official outbox or Maestro
+MissionRun. The resulting process observation is deliberately insufficient
+for `STAGING_SIMULATION_RECONCILED`; it has no independent durable receipt,
+no verified issuer, no exact post-run human decision, no permission to claim
+the PostgreSQL single-use authorization or consume SCM authority.
+
+The production A3 observation composition remains uninstalled on any HTTP
+route or operational ingress. A real zero-effect receipt must eventually
+bind actual sandbox/container/process identity, exact verified commit, issuer
+identity/signature, official MissionRun/contract digest, audit timestamps and
+independently attested effect policy. Until that evidence is generated and
+reconciled by a trustworthy issuer, all downstream A3 gates remain CLOSED.
