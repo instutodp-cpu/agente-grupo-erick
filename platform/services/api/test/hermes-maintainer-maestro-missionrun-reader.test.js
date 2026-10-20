@@ -21,7 +21,7 @@ const run=q=>{
   denied_actions:['merge','publish','production'],callback:null};
  return {id:'mission-run-unit-1',espaco_id:'workspace-unit-1',mission_id:q.mission_id,
   status:'em_execucao',dispatch_simulado:false,contract_hash:HASH,
-  issued_at:issued,idempotency_key:'official-test-key',emitted_by:'human-test',
+  issued_at:'2026-10-20T11:30:25.000Z',idempotency_key:'official-test-key',emitted_by:'dispatch-actor-test',
   contrato_json:JSON.stringify(contract)};
 };
 function gateway(d,override={}){
@@ -80,7 +80,10 @@ for(const make of [buildUpdateA3,buildPullA3]){
    {runs:[{...run(q),dispatch_simulado:true}]},
    {runs:[{...run(q),dispatch_simulado:true,status:'concluida'}]},
    {runs:[{...run(q),dispatch_simulado:true,status:'concluida',dispatch_token:''}]},
-   {runs:[{...run(q),emitted_by:'other-user'}]},
+   {runs:[{...run(q),emitted_by:''}]},
+   {runs:[{...run(q),issued_at:'2026-10-20T11:29:59.000Z'}]},
+   {runs:[{...run(q),issued_at:'2026-10-20T11:35:01.000Z'}]},
+   {runs:[{...run(q),issued_at:'not-iso'}]},
    {runs:[{...run(q),espaco_id:'different-workspace'}]},
    {runs:[{...run(q),contrato_json:JSON.stringify({
     ...JSON.parse(run(q).contrato_json),metadata:{tipo:'pesquisar',emitted_by:'human-test',
