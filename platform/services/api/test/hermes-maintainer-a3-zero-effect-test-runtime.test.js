@@ -9,6 +9,9 @@ const {createHermesMaintainerA3ZeroEffectTestRuntime,
 const {createHermesMaintainerTestExecutionRuntimeComposition}=
  require('../src/runtime/hermes-maintainer-test-execution-runtime-composition');
 const {EventEmitter}=require('node:events');
+const fs=require('node:fs');
+const os=require('node:os');
+const path=require('node:path');
 const D='sha256:'+'a'.repeat(64),REPO='instutodp-cpu/agente-grupo-erick';
 const query=Object.freeze({
  environment:'staging',mission_id:'official-new-a3-test',
@@ -195,6 +198,50 @@ test('real existing allowlisted Node smoke subprocess can execute as a TEST, not
  assert.equal(result.network_authorized,false);
  assert.equal(result.write_authorized,false);
  assert.equal(result.production_allowed,false);
+});
+test('pinned approved code SHA uses separate clean source worktree, not runner HEAD',async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'hermes-a3-pinned-'));
+ const sourceRoot=path.join(root,'platform','services','api');
+ fs.mkdirSync(sourceRoot,{recursive:true});
+ const expected='9aef9cc4a2bbd0ebc97ea3826663642541716c59';
+ let processes=0,args;
+ try{
+  const runner=createHermesMaintainerA3NetworkIsolatedTestRunner({
+   imageId:'sha256:'+'d'.repeat(64),sourceRoot,
+   readRevision:()=>expected,readWorktreeStatus:()=>'',timeoutMs:4000,
+   spawnImpl:(_bin,a)=>{
+    processes++;args=a;
+    const child=new EventEmitter();child.kill=()=>{};
+    process.nextTick(()=>child.emit('exit',0));return child;
+   }
+  });
+  const good=await runner({revision_sha:expected});
+  assert.equal(good.passed,true,'approved source still tests with newer controller code');
+  assert.equal(processes,1);
+  assert.equal(args[args.indexOf('--mount')+1],
+   'type=bind,source='+sourceRoot+',target=/a3,readonly');
+  assert.ok(args.includes('--network=none'));
+  assert.ok(args.includes('--read-only'));
+  assert.equal((await runner({revision_sha:'a'.repeat(40)})).passed,false);
+  assert.equal(processes,1,'a different SHA can never start Docker');
+  const dirty=createHermesMaintainerA3NetworkIsolatedTestRunner({
+   imageId:'sha256:'+'d'.repeat(64),sourceRoot,
+   readRevision:()=>expected,readWorktreeStatus:()=>' M src/modified.js',
+   timeoutMs:4000,spawnImpl:()=>{processes++;throw Error('dirty must block')}
+  });
+  assert.equal((await dirty({revision_sha:expected})).receipt,'checkout_not_clean');
+  assert.equal(processes,1,'uncommitted changes can never start Docker');
+  assert.throws(()=>createHermesMaintainerA3NetworkIsolatedTestRunner({
+   sourceRoot:'/tmp',imageId:'sha256:'+'d'.repeat(64)
+  }),/a3_test_source_checkout_must_be_absolute_api_directory/);
+  const link=path.join(root,'platform','services','api-symlink');
+  fs.symlinkSync(sourceRoot,link);
+  // Non-canonical path and symlink roots are not accepted.
+  assert.throws(()=>createHermesMaintainerA3NetworkIsolatedTestRunner({
+   sourceRoot:path.join(root,'platform','services','api','..','api'),
+   imageId:'sha256:'+'d'.repeat(64)
+  }),/a3_test_source_checkout_must_be_absolute_api_directory/);
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
 });
 test('server-only entry has no external access or process execution without configured gateway',async()=>{
  let network=0,spawned=0;
