@@ -10,6 +10,9 @@ const REPOSITORY='instutodp-cpu/agente-grupo-erick';
 // never forward the server-held user bearer to a foreign HTTPS origin.
 const MAESTRO_APP_ID='69f62cbb266971d4deeb4938';
 const GATEWAY_URL='https://base44.app/api/apps/'+MAESTRO_APP_ID+'/functions/missionGateway';
+// The currently verified Maestro Pessoal UI uses Base44 functionsVersion=preview.
+// An unversioned call can hit a different deployed Gateway implementation.
+const GATEWAY_FUNCTIONS_VERSION='preview';
 const ID=/^[^\x00-\x20\x7f]{1,255}$/;
 const DIGEST=/^sha256:[a-f0-9]{64}$/;
 const OPS=Object.freeze({
@@ -56,7 +59,9 @@ function createHermesMaintainerMaestroAuthenticatedInvoker({environment,gatewayU
   try{
    const result=await fetchImpl(gatewayUrl,{
     method:'POST',redirect:'error',credentials:'omit',cache:'no-store',
-    headers:{'content-type':'application/json',accept:'application/json',authorization:'Bearer '+accessToken},
+    headers:{'content-type':'application/json',accept:'application/json',
+     'Base44-Functions-Version':GATEWAY_FUNCTIONS_VERSION,
+     authorization:'Bearer '+accessToken},
     body:JSON.stringify(body),signal:AbortSignal.timeout(8000)
    });
    if(!result||result.status!==200||result.ok!==true||
@@ -78,6 +83,6 @@ function createHermesMaintainerMaestroInvokerFromServerEnv({env=process.env,fetc
   accessToken:cfg?.accessToken,fetchImpl
  });
 }
-module.exports={CONTRACT_VERSION,MAESTRO_APP_ID,GATEWAY_URL,
+module.exports={CONTRACT_VERSION,MAESTRO_APP_ID,GATEWAY_URL,GATEWAY_FUNCTIONS_VERSION,
  validRequest,validGatewayUrl,serverSettingsFromEnv,
  createHermesMaintainerMaestroAuthenticatedInvoker,createHermesMaintainerMaestroInvokerFromServerEnv};
