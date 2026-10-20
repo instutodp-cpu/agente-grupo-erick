@@ -226,3 +226,51 @@ test('migration 035 is strictly staging-only observation, with global single-use
  assert.match(sql,/REVOKE ALL ON TABLE hermes\.maintainer_a3_process_observations/);
  assert.doesNotMatch(sql,/INSERT INTO hermes\.|UPDATE hermes\.|maintainer_scm_write_consumption|MAESTRO_A3_PRIVATE_KEY/);
 });
+
+function safeTemporaryTestPgUrl(raw){
+ try{
+  const u=new URL(raw||'');
+  return ['postgres:','postgresql:'].includes(u.protocol)&&
+   ['localhost','127.0.0.1','::1'].includes(u.hostname)&&
+   /^hermes_test(?:_[a-z0-9_-]+)?$/i.test(decodeURIComponent(u.pathname.slice(1)));
+ }catch{return false;}
+}
+test('real temporary PostgreSQL rejects replay and persists only non-authoritative process observation',
+ {skip:!safeTemporaryTestPgUrl(process.env.HERMES_POSTGRES_TEST_DATABASE_URL)},
+ async t=>{
+  const {Pool}=require('pg');
+  const pool=new Pool({connectionString:process.env.HERMES_POSTGRES_TEST_DATABASE_URL,
+   max:4,connectionTimeoutMillis:4000});
+  let created=false;
+  try{
+   const pre=await pool.query("SELECT to_regclass('hermes.maintainer_a3_process_observations') AS tab");
+   if(pre.rows[0].tab){t.skip('existing test table must not be overwritten');return;}
+   let sql=fs.readFileSync(path.resolve(__dirname,
+    '../../../migrations/hermes/035_create_maintainer_a3_process_observations.sql'),'utf8');
+   // Vanilla disposable CI PostgreSQL has no Supabase anon/authenticated
+   // roles. Only these staging ACL statements are skipped in CI fixture.
+   sql=sql.replace(/REVOKE ALL ON TABLE hermes\.maintainer_a3_process_observations\s+FROM PUBLIC, anon, authenticated;/,'')
+     .replace(/REVOKE USAGE ON SCHEMA hermes FROM PUBLIC, anon, authenticated;/,'');
+   await pool.query(sql);created=true;
+   const persistence=createHermesMaintainerA3ProcessObservationPersistence({
+    pool,imageId:IMAGE,environment:READY});
+   const attempts=await Promise.all(Array.from({length:4},
+    ()=>persistence.reserve(candidate())));
+   assert.equal(attempts.filter(x=>x.attempt_reserved).length,1);
+   const finished=await persistence.finish(candidate(),observation());
+   assert.equal(finished.process_observation_durable,true);
+   assert.equal(finished.simulation_receipt_durable,false);
+   const persisted=await pool.query(
+    'SELECT state,observation_digest,observation_evidence FROM hermes.maintainer_a3_process_observations');
+   assert.equal(persisted.rows.length,1);
+   assert.equal(persisted.rows[0].state,'process_observed');
+   assert.equal(persisted.rows[0].observation_digest,finished.observation_digest);
+   assert.equal(persisted.rows[0].observation_evidence.independent_issuer_verified,false);
+   assert.equal(persisted.rows[0].observation_evidence.network_call_performed,null);
+   assert.equal((await persistence.reserve(candidate())).attempt_reserved,false);
+   assert.equal((await persistence.finish(candidate(),observation())).process_observation_durable,false);
+  }finally{
+   if(created)await pool.query('DROP TABLE IF EXISTS hermes.maintainer_a3_process_observations');
+   await pool.end();
+  }
+ });
