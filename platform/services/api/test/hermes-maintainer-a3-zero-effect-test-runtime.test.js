@@ -3,10 +3,12 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {createHermesMaintainerMaestroMissionRunReader}=
  require('../src/runtime/hermes-maintainer-maestro-missionrun-reader');
 const {createHermesMaintainerA3ZeroEffectTestRuntime,
+ createHermesMaintainerA3NetworkIsolatedTestRunner,
  createHermesMaintainerA3ZeroEffectTestFromServerEnv}=
  require('../src/runtime/hermes-maintainer-a3-zero-effect-test-runtime');
 const {createHermesMaintainerTestExecutionRuntimeComposition}=
  require('../src/runtime/hermes-maintainer-test-execution-runtime-composition');
+const {EventEmitter}=require('node:events');
 const D='sha256:'+'a'.repeat(64),REPO='instutodp-cpu/agente-grupo-erick';
 const query=Object.freeze({
  environment:'staging',mission_id:'official-new-a3-test',
@@ -154,6 +156,7 @@ test('unverified reader, attacker payload and failed subprocess deny with zero a
    source:'MAESTRO_MISSION_GATEWAY_OFFICIAL_QUEUE_CANDIDATE',
    mission_id:query.mission_id,mission_run_id:query.run_id,
    workspace_id:'official-workspace',contract_hash:D,
+   revision_sha:'b'.repeat(40),
    test_id:'hermes_core_smoke',verified_contract_integrity:true,
    simulated_run_queued:true,outbox_acknowledged:true,
    simulation_observed:false,receipt_durable:false,
@@ -205,4 +208,50 @@ test('server-only entry has no external access or process execution without conf
  assert.equal(output.simulation_observed,false);
  assert.equal(output.receipt_durable,false);
  assert.equal(spawned,0);assert.equal(network,0);
+});
+
+test('real network-isolated runner selects only immutable local Docker image and read-only repo',async()=>{
+ let calls=0,command,args,options;
+ const runner=createHermesMaintainerA3NetworkIsolatedTestRunner({
+  imageId:'sha256:'+'d'.repeat(64),readRevision:()=> 'b'.repeat(40),
+  timeoutMs:4000,spawnImpl:(bin,a,opt)=>{
+   calls++;command=bin;args=a;options=opt;
+   const child=new EventEmitter();child.kill=()=>{};
+   process.nextTick(()=>child.emit('exit',0));
+   return child;
+  }
+ });
+ const result=await runner({revision_sha:'b'.repeat(40)});
+ assert.equal(result.passed,true);
+ assert.equal(result.receipt,'test_process_passed');
+ assert.equal(calls,1);assert.equal(command,'docker');
+ for(const arg of ['--rm','--pull=never','--network=none','--read-only',
+  '--cap-drop=ALL','--security-opt=no-new-privileges','--user=65534:65534'])
+  assert.ok(args.includes(arg),arg);
+ assert.ok(args.includes('sha256:'+'d'.repeat(64)));
+ assert.ok(args.includes('test/hermes-maintainer-test-execution-boundary.test.js'));
+ const mount=args[args.indexOf('--mount')+1];
+ assert.match(mount,/^type=bind,source=\/.*\/platform\/services\/api,target=\/a3,readonly$/);
+ assert.equal(options.shell,false);
+ assert.deepEqual(options.stdio,['ignore','ignore','ignore']);
+ assert.equal(Object.hasOwn(options.env,'GITHUB_TOKEN'),false);
+ assert.equal(Object.hasOwn(options.env,'MAESTRO_MISSION_GATEWAY_ACCESS_TOKEN'),false);
+});
+test('offline Docker sandbox refuses image/tag/commit drift before subprocess',async()=>{
+ let calls=0;
+ for(const opts of [
+  {imageId:null,readRevision:()=> 'b'.repeat(40)},
+  {imageId:'latest',readRevision:()=> 'b'.repeat(40)},
+  {imageId:'sha256:'+'c'.repeat(64),readRevision:()=> 'f'.repeat(40)},
+  {imageId:'sha256:'+'c'.repeat(64),readRevision:()=>{throw Error('git unavailable')}}
+ ]){
+  const runner=createHermesMaintainerA3NetworkIsolatedTestRunner({
+   ...opts,timeoutMs:4000,spawnImpl:()=>{calls++;throw Error('should not run')}
+  });
+  const output=await runner({revision_sha:'b'.repeat(40)});
+  assert.equal(output.passed,false);
+ }
+ assert.equal(calls,0);
+ assert.throws(()=>createHermesMaintainerA3NetworkIsolatedTestRunner({
+  cwd:'/tmp',imageId:'sha256:'+'c'.repeat(64)}),/fixed_a3_test_workspace_required/);
 });
