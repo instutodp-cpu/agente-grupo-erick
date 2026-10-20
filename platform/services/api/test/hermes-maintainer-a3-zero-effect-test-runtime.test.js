@@ -159,9 +159,10 @@ test('subprocess exit observed but never promoted to independent A3 issuer evide
  assert.equal(result.status,'A3_OFFICIAL_TEST_PROCESS_OBSERVED_NOT_ATTESTED');
  assert.equal(result.reason,'INDEPENDENT_ZERO_EFFECT_RECEIPT_NOT_YET_AVAILABLE');
  for(const k of ['receipt_durable','issuer_verified','approval_verified',
-  'outbox_acknowledged','execution_authorized','network_call_performed',
-  'scm_write_performed','production_allowed','merge_authority'])
+  'outbox_acknowledged','execution_authorized','production_allowed','merge_authority'])
   assert.equal(result[k],false,k);
+ for(const k of ['network_call_performed','scm_write_performed'])
+  assert.equal(result[k],null,'no independent effects witness: '+k);
 });
 test('real existing allowlisted Node smoke subprocess can execute as a TEST, not an A3 receipt',async()=>{
  const runtime=createHermesMaintainerTestExecutionRuntimeComposition({timeoutMs:30000});
