@@ -5,6 +5,7 @@
 // An authorized server composition must supply verifyOfficialSource that
 // authenticates the issuer, official MissionRun, zero-effect receipt and
 // post-run human decision. Nothing calls this adapter by default.
+const {FIELDS:SOURCE_FIELDS,RECORD_VERSION,expectedDigest}=require('./hermes-maintainer-a3-mission-source-verification');
 const TABLE='hermes.maintainer_a3_source_authorization_claims';
 const FIELDS=Object.freeze([
  'single_use_authorization_id','workspace_id','mission_id','mission_run_id',
@@ -41,6 +42,69 @@ function exactScope(claim,input){
  for(const field of FIELDS)
   if(claim[field]!==input[field])return false;
  return true;
+}
+// Server-only bridge: the authenticated Mission Gateway verifies the Ed25519
+// source + post-run human solicitation at EVERY read. A Gateway response is
+// only a source candidate; it is not independent evidence of actual execution
+// unless the issuer independently witnessed and signed that receipt upstream.
+// This callback never receives token, endpoint or issuer key from claim input.
+function createHermesMaintainerA3AuthenticatedSourceClaimVerifier({readMissionRunEvidence}={}){
+ if(typeof readMissionRunEvidence!=='function')
+  throw new TypeError('authenticated_maestro_reader_required');
+ return async input=>{
+  if(!validClaim(input))return null;
+  const query=Object.freeze({
+   mission_id:input.mission_id,operation:input.operation,repository:input.repository,
+   environment:'staging',target_digest:input.target_digest,intent_digest:input.intent_digest,
+   approval_reference:input.approval_reference,
+   authorization_reference:input.authorization_reference,
+   single_use_authorization_id:input.single_use_authorization_id
+  });
+  let proof;
+  try{proof=await readMissionRunEvidence(query);}catch{return null;}
+  const record=proof?.record;
+  if(!proof||!ID.test(proof.workspace_id||'')||
+     proof.workspace_id!==input.workspace_id||
+     !record||typeof record!=='object'||Array.isArray(record)||
+     Object.getPrototypeOf(record)!==Object.prototype||
+     Object.keys(record).sort().join('|')!==[...SOURCE_FIELDS].sort().join('|'))
+    return null;
+  const workflow=input.operation==='update_file'?'code_edit_prepare':'pull_request_prepare';
+  if(record.contract_version!==RECORD_VERSION||
+     record.source!=='MISSION_GATEWAY_DURABLE'||
+     record.status!=='STAGING_SIMULATION_RECONCILED'||
+     record.mission_id!==input.mission_id||
+     record.mission_run_id!==input.mission_run_id||
+     record.environment!=='staging'||record.workflow_operation!==workflow||
+     record.operation!==input.operation||record.repository!==REPOSITORY||
+     record.base_ref!=='main'||
+     !/^hermes\/[a-z0-9][a-z0-9._/-]{0,140}$/.test(record.branch_name||'')||
+     record.target_digest!==input.target_digest||
+     record.intent_digest!==input.intent_digest||
+     record.approval_reference!==input.approval_reference||
+     record.authorization_reference!==input.authorization_reference||
+     record.single_use_authorization_id!==input.single_use_authorization_id||
+     record.simulation_receipt_digest!==input.simulation_receipt_digest||
+     record.staging_gate_fingerprint!==input.staging_gate_fingerprint||
+     record.record_digest!==input.source_record_digest||
+     ![record.single_use_fingerprint,record.workflow_digest,
+       record.authorization_binding_digest].every(v=>DIGEST.test(v||''))||
+     record.simulation_effect!=='ZERO'||record.durably_confirmed!==true||
+     record.executed!==false||record.production_used!==false||
+     record.merge_authority!==false||record.human_merge_required!==true||
+     !Array.isArray(record.blockers)||record.blockers.length!==0)return null;
+  try{if(expectedDigest(record)!==record.record_digest)return null;}
+  catch{return null;}
+  return Object.freeze({
+   verified:true,source:'MISSION_GATEWAY_DURABLE',simulation_effect:'ZERO',
+   durably_confirmed:true,executed:false,production_used:false,merge_authority:false,
+   human_merge_required:true,
+   // These attestations derive from an authenticated, privileged Maestro
+   // verify_a3_provenance response, NOT request-local assertion flags.
+   approval_verified:true,issuer_verified:true,
+   claim:Object.freeze(Object.fromEntries(FIELDS.map(k=>[k,input[k]])))
+  });
+ };
 }
 function createHermesMaintainerA3SourceClaimPostgresPersistence({
  pool,verifyOfficialSource,environment=process.env
@@ -118,4 +182,5 @@ function createHermesMaintainerA3SourceClaimPostgresPersistence({
  return Object.freeze({createIfVerified,verifyOwned});
 }
 module.exports={TABLE,FIELDS,INSERT_SQL,SELECT_SQL,validClaim,
+ createHermesMaintainerA3AuthenticatedSourceClaimVerifier,
  createHermesMaintainerA3SourceClaimPostgresPersistence};
