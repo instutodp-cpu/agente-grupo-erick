@@ -113,6 +113,7 @@ function createHermesMaintainerA3ZeroEffectTestRuntime({
   if(!candidate||candidate.source!=='MAESTRO_MISSION_GATEWAY_OFFICIAL_QUEUE_CANDIDATE'||
      candidate.mission_id!==query.mission_id||
      candidate.mission_run_id!==query.run_id||
+     candidate.operation!==query.operation||candidate.repository!==REPOSITORY||
      !ID.test(candidate.workspace_id||'')||
      !/^sha256:[0-9a-f]{64}$/.test(candidate.contract_hash||'')||
      !SHA.test(candidate.revision_sha||'')||
@@ -150,6 +151,8 @@ function createHermesMaintainerA3ZeroEffectTestRuntime({
    status:'A3_OFFICIAL_TEST_PROCESS_OBSERVED_NOT_ATTESTED',
    mission_run_id:candidate.mission_run_id,
    mission_id:candidate.mission_id,workspace_id:candidate.workspace_id,
+   operation:candidate.operation,repository:REPOSITORY,
+   revision_sha:candidate.revision_sha,
    contract_hash:candidate.contract_hash,test_id:'hermes_core_smoke',
    simulation_observed:true,test_process_passed:true
   });
