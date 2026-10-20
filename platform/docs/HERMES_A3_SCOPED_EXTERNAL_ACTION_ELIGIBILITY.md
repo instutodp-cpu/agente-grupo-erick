@@ -334,3 +334,32 @@ must be bound to the exact post-MissionRun action, and no new human promotion
 has occurred. This change alone is not operational E2E evidence. Do not
 reuse the historic public-web run, replay the previous single-use authorization,
 or repeat the historic update-file canary.
+
+## Simulated official MissionRun source candidate (20 October 2026; NOT A3 promotion)
+
+The existing Maestro dispatch Gateway marks non-public-web dispatches `dispatch_simulado=true`.
+Prior A3 readers required `dispatch_simulado=false` for every run, unintentionally
+excluding the only currently established official zero-effect simulation run path.
+That must **not** be solved by mislabeling a simulated run as operational.
+
+Maestro Pessoal sandbox checkpoint `6ad7534c70b57597c48d7be4` now has a
+read-only eligibility helper for a completed, simulated official `MissionRun`:
+require status `concluida`, an exact single `MissionDispatchOutbox` receipt
+with matching workspace/mission/run/dispatch token/contract hash, simulated mock
+provider and acknowledged dispatch state. This is only **source candidacy**;
+an outbox acknowledgment alone is not an A3 staging-gate receipt.
+
+The Hermes privileged read bridge may now query that run, but remains blocked
+unless Maestro additionally verifies the independently signed Ed25519 A3 source
+attestation, current precisely scoped human approval, globally unique single-use
+ID, durable `sealed` claim, and exact action/target/intent bindings. A missing,
+unpublished, inaccessible or invalid gateway response fails closed. The older
+operational-run rule remains unchanged. Local transport mocks are **tests only**.
+
+**Not done:** deploy or configure Maestro A3 stage and issuer verification
+settings; independently produce and sign genuine zero-effect staging receipts;
+authorize a new A3-specific human decision; establish server-to-server
+service identity; or perform any actual A3 SCM mutation. Production/A4,
+merge authority, and promotion for update_file/Draft create_pull_request
+remain forbidden. The 15 October public-web MissionRun and 19 October
+update_file canary do not meet this new source contract.
