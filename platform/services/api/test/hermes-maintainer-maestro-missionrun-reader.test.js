@@ -12,9 +12,18 @@ const getQuery=d=>{
   approval_reference:i.source_evidence.approval_binding.approval_reference,
   authorization_reference:g.authorization_reference,single_use_authorization_id:a.authorization_id};
 };
-const run=q=>({id:'mission-run-unit-1',espaco_id:'workspace-unit-1',mission_id:q.mission_id,
- status:'em_execucao',dispatch_simulado:false,contract_hash:HASH,
- contrato_json:'{"contract_version":"1.0","mission_id":"unit-mission"}'});
+const run=q=>{
+ const issued='2026-10-20T11:30:00.000Z';
+ const contract={contract_version:'1.0',mission_id:q.mission_id,workspace_id:'workspace-unit-1',
+  idempotency_key:'official-test-key',requested_by:{tipo:'usuario',id:'human-test'},
+  metadata:{tipo:'desenvolver',emitted_by:'human-test',issued_at:issued},
+  approval_policy:'requer_aprovacao',allowed_tools:['github_api'],
+  denied_actions:['merge','publish','production'],callback:null};
+ return {id:'mission-run-unit-1',espaco_id:'workspace-unit-1',mission_id:q.mission_id,
+  status:'em_execucao',dispatch_simulado:false,contract_hash:HASH,
+  issued_at:issued,idempotency_key:'official-test-key',emitted_by:'human-test',
+  contrato_json:JSON.stringify(contract)};
+};
 function gateway(d,override={}){
  const query=getQuery(d),r=run(query),record=recordFor(d.eligibilityInput);
  const calls=[];
@@ -71,6 +80,15 @@ for(const make of [buildUpdateA3,buildPullA3]){
    {runs:[{...run(q),dispatch_simulado:true}]},
    {runs:[{...run(q),dispatch_simulado:true,status:'concluida'}]},
    {runs:[{...run(q),dispatch_simulado:true,status:'concluida',dispatch_token:''}]},
+   {runs:[{...run(q),emitted_by:'other-user'}]},
+   {runs:[{...run(q),espaco_id:'different-workspace'}]},
+   {runs:[{...run(q),contrato_json:JSON.stringify({
+    ...JSON.parse(run(q).contrato_json),metadata:{tipo:'pesquisar',emitted_by:'human-test',
+     issued_at:run(q).issued_at},allowed_tools:['public_web_read']})}]},
+   {runs:[{...run(q),contrato_json:JSON.stringify({
+    ...JSON.parse(run(q).contrato_json),denied_actions:['merge','publish']})}]},
+   {runs:[{...run(q),contrato_json:JSON.stringify({
+    ...JSON.parse(run(q).contrato_json),approval_policy:'automatica'})}]},
    {integrity:{ok:false,expected:HASH,actual:HASH}},
    {integrity:{ok:true,expected:'sha256:'+'a'.repeat(64),actual:HASH}},
    {proof:{verified:true,source:'LOCAL_RUNNER',mission_run_id:'mission-run-unit-1',operation:q.operation,record:{}}},
