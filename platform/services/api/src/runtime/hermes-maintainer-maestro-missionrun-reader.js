@@ -17,12 +17,20 @@ function validA3MissionContractSnapshot(run){
  let c;
  try{c=JSON.parse(run?.contrato_json);}catch{return false;}
  if(!c||typeof c!=='object'||Array.isArray(c))return false;
+ // Contract records the mission creator; MissionRun records the dispatcher.
+ // Both are official but need not be the same person or timestamp.
+ const creator=c.requested_by?.id;
+ const contractAt=Date.parse(c.metadata?.issued_at||'');
+ const runAt=Date.parse(run.issued_at||'');
  return c.contract_version==='1.0'&&
   c.mission_id===run.mission_id&&c.workspace_id===run.espaco_id&&
   ID.test(run.idempotency_key||'')&&c.idempotency_key===run.idempotency_key&&
-  ID.test(run.emitted_by||'')&&c.requested_by?.id===run.emitted_by&&
-  c.metadata?.emitted_by===run.emitted_by&&
-  ID.test(run.issued_at||'')&&c.metadata?.issued_at===run.issued_at&&
+  ID.test(creator||'')&&c.metadata?.emitted_by===creator&&
+  ID.test(run.emitted_by||'')&&
+  Number.isFinite(contractAt)&&Number.isFinite(runAt)&&
+  new Date(contractAt).toISOString()===c.metadata.issued_at&&
+  new Date(runAt).toISOString()===run.issued_at&&
+  runAt>=contractAt&&runAt-contractAt<=5*60*1000&&
   ['requer_aprovacao','requer_aprovacao_critica'].includes(c.approval_policy)&&
   ['desenvolver','gerar_codigo','executar_agente','testar'].includes(c.metadata?.tipo)&&
   Array.isArray(c.allowed_tools)&&c.allowed_tools.includes('github_api')&&
