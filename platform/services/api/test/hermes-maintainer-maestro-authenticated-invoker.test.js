@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
-const {validRequest,validGatewayUrl,MAESTRO_APP_ID,GATEWAY_URL,
+const {validRequest,validGatewayUrl,MAESTRO_APP_ID,GATEWAY_URL,GATEWAY_FUNCTIONS_VERSION,
  createHermesMaintainerMaestroAuthenticatedInvoker,
  createHermesMaintainerMaestroInvokerFromServerEnv}=require('../src/runtime/hermes-maintainer-maestro-authenticated-invoker');
 const URL=GATEWAY_URL;
@@ -57,6 +57,8 @@ test('authenticated POST with no cookie and fixed HTTPS endpoint',async()=>{
  assert.deepEqual(await x.invokeMissionGateway(proof),{verified:false,error:'A3_SOURCE_ATTESTATION_NOT_CONFIGURED'});
  assert.equal(calls.length,1);assert.equal(calls[0].url,URL);assert.equal(calls[0].init.method,'POST');
  assert.equal(calls[0].init.redirect,'error');assert.equal(calls[0].init.credentials,'omit');
+ assert.equal(GATEWAY_FUNCTIONS_VERSION,'preview');
+ assert.equal(calls[0].init.headers['Base44-Functions-Version'],'preview');
  assert.equal(calls[0].init.headers.authorization,'Bearer '+TOKEN);
  assert.deepEqual(JSON.parse(calls[0].init.body),proof);
 });
