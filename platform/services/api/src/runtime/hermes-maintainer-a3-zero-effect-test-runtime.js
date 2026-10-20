@@ -4,7 +4,7 @@
 // MissionRun. This intentionally produces NO signed/durable A3 receipt;
 // a successful subprocess exit is not independent zero-effect attestation.
 // No HTTP handler or external provider transport is installed here.
-const {createHermesMaintainerMaestroInvokerFromServerEnv}=
+const {createHermesMaintainerMaestroProcessReadInvokerFromServerEnv}=
  require('./hermes-maintainer-maestro-authenticated-invoker');
 const {createHermesMaintainerMaestroMissionRunReader}=
  require('./hermes-maintainer-maestro-missionrun-reader');
@@ -179,7 +179,7 @@ function createHermesMaintainerA3ZeroEffectTestRuntime({
 function createHermesMaintainerA3ZeroEffectTestFromServerEnv({
  environment=process.env,fetchImpl=globalThis.fetch,spawnImpl,timeoutMs
 }={}){
- const transport=createHermesMaintainerMaestroInvokerFromServerEnv({
+ const transport=createHermesMaintainerMaestroProcessReadInvokerFromServerEnv({
   env:environment,fetchImpl});
  const reader=createHermesMaintainerMaestroMissionRunReader({
   invokeMissionGateway:transport.configured?
