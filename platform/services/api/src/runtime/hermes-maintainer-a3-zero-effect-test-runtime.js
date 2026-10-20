@@ -8,12 +8,74 @@ const {createHermesMaintainerMaestroInvokerFromServerEnv}=
  require('./hermes-maintainer-maestro-authenticated-invoker');
 const {createHermesMaintainerMaestroMissionRunReader}=
  require('./hermes-maintainer-maestro-missionrun-reader');
-const {createHermesMaintainerTestExecutionRuntimeComposition}=
- require('./hermes-maintainer-test-execution-runtime-composition');
+const {spawn,execFileSync}=require('node:child_process');
+const path=require('node:path');
+const {createHermesMaintainerTestExecutionBoundary}=
+ require('../core/hermes-maintainer-test-execution-boundary');
 const VERSION='hermes_maintainer_a3_official_test_process_observation_v1';
 const REPOSITORY='instutodp-cpu/agente-grupo-erick';
 const ID=/^[^\x00-\x20\x7f]{1,255}$/;
 const FIELDS=['environment','mission_id','operation','repository','run_id'];
+const SHA=/^[a-f0-9]{40}$/;
+const IMAGE_ID=/^sha256:[a-f0-9]{64}$/;
+const ROOT=path.resolve(__dirname,'../..');
+const TEST_FILES=Object.freeze([
+ 'test/hermes-maintainer-e2e-workflow-contract.test.js',
+ 'test/hermes-maintainer-test-execution-boundary.test.js'
+]);
+// The sandbox is an offline, read-only and unprivileged LOCAL Docker process.
+// Never accept command lines, image names, repo paths or Docker flags from
+// MissionRun metadata, client requests or HTTP input.
+function createHermesMaintainerA3NetworkIsolatedTestRunner({
+ imageId,cwd=ROOT,spawnImpl=spawn,
+ readRevision=()=>execFileSync('git',['-C',cwd,'rev-parse','HEAD'],
+  {encoding:'utf8',timeout:4000,env:{PATH:'/usr/local/bin:/usr/bin:/bin'}}).trim(),
+ timeoutMs=120000
+}={}){
+ if(cwd!==ROOT)throw new TypeError('fixed_a3_test_workspace_required');
+ if(!Number.isInteger(timeoutMs)||timeoutMs<1000||timeoutMs>120000)
+  throw new TypeError('bounded_timeout_required');
+ return async candidate=>{
+  if(!IMAGE_ID.test(imageId||'')||!SHA.test(candidate?.revision_sha||''))
+   return {test_id:'hermes_core_smoke',passed:false,receipt:'sandbox_not_configured'};
+  let actual;
+  try{actual=readRevision();}
+  catch{return {test_id:'hermes_core_smoke',passed:false,receipt:'checkout_unavailable'};}
+  if(actual!==candidate.revision_sha)
+   return {test_id:'hermes_core_smoke',passed:false,receipt:'checkout_revision_drift'};
+  const args=[
+   'run','--rm','--pull=never','--network=none','--read-only',
+   '--cap-drop=ALL','--security-opt=no-new-privileges',
+   '--pids-limit=64','--memory=384m','--cpus=1','--user=65534:65534',
+   '--tmpfs=/tmp:rw,nosuid,nodev,size=32m',
+   '--mount','type=bind,source='+ROOT+',target=/a3,readonly',
+   '--workdir=/a3','--entrypoint=node',
+   imageId,'--test',...TEST_FILES
+  ];
+  return new Promise(resolve=>{
+   let settled=false,child,timer;
+   const done=passed=>{
+    if(settled)return;
+    settled=true;
+    clearTimeout(timer);
+    resolve(Object.freeze({test_id:'hermes_core_smoke',passed,
+     receipt:passed?'test_process_passed':'isolated_test_failed'}));
+   };
+   try{child=spawnImpl('docker',args,{
+    shell:false,stdio:['ignore','ignore','ignore'],
+    env:{PATH:'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+     HOME:'/tmp',DOCKER_CONFIG:'/nonexistent'}});}
+   catch{return done(false);}
+   if(!child||typeof child.once!=='function')return done(false);
+   timer=setTimeout(()=>{
+    try{if(typeof child.kill==='function')child.kill('SIGTERM');}catch{}
+    done(false);
+   },timeoutMs);
+   child.once('error',()=>done(false));
+   child.once('exit',code=>done(code===0));
+  });
+ };
+}
 function blocked(reason){
  return Object.freeze({version:VERSION,status:'A3_OFFICIAL_TEST_OBSERVATION_BLOCKED',
   reason,simulation_observed:false,test_process_passed:false,
@@ -53,6 +115,7 @@ function createHermesMaintainerA3ZeroEffectTestRuntime({
      candidate.mission_run_id!==query.run_id||
      !ID.test(candidate.workspace_id||'')||
      !/^sha256:[0-9a-f]{64}$/.test(candidate.contract_hash||'')||
+     !SHA.test(candidate.revision_sha||'')||
      candidate.test_id!=='hermes_core_smoke'||
      candidate.verified_contract_integrity!==true||
      candidate.simulated_run_queued!==true||
@@ -66,7 +129,7 @@ function createHermesMaintainerA3ZeroEffectTestRuntime({
      candidate.merge_authority!==false)
     return blocked('A3_OFFICIAL_SIMULATION_CANDIDATE_UNVERIFIED');
   let observed;
-  try{observed=await executeTrustedTest();}
+  try{observed=await executeTrustedTest(candidate);}
   catch{return blocked('A3_TRUSTED_TEST_EXECUTOR_UNAVAILABLE');}
   if(!observed||observed.executed!==true||
      observed.status!=='MAINTAINER_TEST_EXECUTION_PASSED'||
@@ -101,15 +164,24 @@ function createHermesMaintainerA3ZeroEffectTestFromServerEnv({
   invokeMissionGateway:transport.configured?
     transport.invokeMissionGateway:async()=>null
  });
- const testRuntime=createHermesMaintainerTestExecutionRuntimeComposition({
-  spawnImpl,timeoutMs});
+ const runSandboxTest=createHermesMaintainerA3NetworkIsolatedTestRunner({
+  imageId:environment?.HERMES_A3_TEST_IMAGE_ID,spawnImpl,timeoutMs
+ });
  const observer=createHermesMaintainerA3ZeroEffectTestRuntime({
   readSimulatedRunCandidate:reader.readSimulatedRunCandidate,
-  executeTrustedTest:()=>testRuntime.execute(),environment
+  executeTrustedTest:candidate=>{
+   const boundary=createHermesMaintainerTestExecutionBoundary({
+    runner:{run:async()=>runSandboxTest(candidate)}
+   });
+   return boundary.execute({
+    action:'test_execution',environment:'staging',test_id:'hermes_core_smoke'
+   });
+  },environment
  });
  return Object.freeze({
   version:VERSION,
   configured:transport.configured&&
+   IMAGE_ID.test(environment?.HERMES_A3_TEST_IMAGE_ID||'')&&
    environment?.HERMES_A3_ZERO_EFFECT_TEST_ENABLED==='true'&&
    environment?.HERMES_EXECUTION_ENABLED==='false'&&
    environment?.HERMES_EXECUTION_KILL_SWITCH==='true'&&
@@ -118,4 +190,5 @@ function createHermesMaintainerA3ZeroEffectTestFromServerEnv({
  });
 }
 module.exports={VERSION,createHermesMaintainerA3ZeroEffectTestRuntime,
+ createHermesMaintainerA3NetworkIsolatedTestRunner,
  createHermesMaintainerA3ZeroEffectTestFromServerEnv};
