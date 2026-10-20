@@ -1,8 +1,9 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
-const {validRequest,validGatewayUrl,createHermesMaintainerMaestroAuthenticatedInvoker,
+const {validRequest,validGatewayUrl,MAESTRO_APP_ID,GATEWAY_URL,
+ createHermesMaintainerMaestroAuthenticatedInvoker,
  createHermesMaintainerMaestroInvokerFromServerEnv}=require('../src/runtime/hermes-maintainer-maestro-authenticated-invoker');
-const URL='https://maestro-svc.example.org/functions/missionGateway';
+const URL=GATEWAY_URL;
 const TOKEN='synthetic-staging-identity-token-placeholder';
 const D='sha256:'+'a'.repeat(64);
 const proof={operation:'verify_a3_provenance',run_id:'run-1',mission_id:'mission-1',
@@ -20,10 +21,20 @@ test('missing staging config never performs a network call',async()=>{
   assert.equal(calls,0);
  }
 });
-test('reject unsafe URL with credentials, query, fragment, or alternative function',()=>{
- for(const url of ['http://maestro.example.org/functions/missionGateway',
-  'https://user:pass@maestro.example.org/functions/missionGateway',URL+'?token=x',URL+'#x',
-  URL.replace('missionGateway','arbitrary')])assert.equal(validGatewayUrl(url),false,url);
+test('only the exact official Maestro app function endpoint may receive a user bearer',()=>{
+ assert.equal(MAESTRO_APP_ID,'69f62cbb266971d4deeb4938');
+ assert.equal(URL,'https://base44.app/api/apps/'+MAESTRO_APP_ID+'/functions/missionGateway');
+ for(const url of [
+  'http://base44.app/api/apps/'+MAESTRO_APP_ID+'/functions/missionGateway',
+  'https://user:pass@base44.app/api/apps/'+MAESTRO_APP_ID+'/functions/missionGateway',
+  'https://malicious.example.org/api/apps/'+MAESTRO_APP_ID+'/functions/missionGateway',
+  'https://base44.app.evil.example/api/apps/'+MAESTRO_APP_ID+'/functions/missionGateway',
+  'https://base44.app/functions/missionGateway',
+  'https://base44.app/api/apps/other-app/functions/missionGateway',
+  'https://base44.app/api/apps/'+MAESTRO_APP_ID+'/functions/dispatch',
+  'https://base44.app:444/api/apps/'+MAESTRO_APP_ID+'/functions/missionGateway',
+  URL+'?token=x',URL+'#x',URL+'?operation=dispatch'
+ ])assert.equal(validGatewayUrl(url),false,url);
  assert.equal(validGatewayUrl(URL),true);
 });
 test('strict operation allowlist and exact body fields',async()=>{
@@ -61,6 +72,22 @@ test('non-200, malformed JSON, oversized responses and failures always block',as
    fetchImpl:async()=>{if(res instanceof Error)throw res;return res;}});
   assert.equal(await x.invokeMissionGateway(proof),null);
  }
+});
+test('external origin or wrong app ID never receives a configured bearer',async()=>{
+ let calls=0;
+ for(const bad of [
+  'https://maestro-svc.example.org/functions/missionGateway',
+  'https://base44.app/api/apps/other-app/functions/missionGateway',
+  URL+'?external=1'
+ ]){
+  const x=createHermesMaintainerMaestroAuthenticatedInvoker({
+   environment:'staging',gatewayUrl:bad,accessToken:TOKEN,
+   fetchImpl:async()=>{calls++;return json({runs:[]});}
+  });
+  assert.equal(x.configured,false);
+  assert.equal(await x.invokeMissionGateway({operation:'list_runs',mission_id:'m-1'}),null);
+ }
+ assert.equal(calls,0,'no bearer sent to an unpinned endpoint');
 });
 test('only explicit server staging settings enable transport',async()=>{
  const env={HERMES_DEPLOYMENT_STAGE:'staging',MAESTRO_MISSION_GATEWAY_URL:URL,
