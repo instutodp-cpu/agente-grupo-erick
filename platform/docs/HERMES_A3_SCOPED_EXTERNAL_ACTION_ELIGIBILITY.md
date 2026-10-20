@@ -307,3 +307,30 @@ successful staging E2E and explicit human promotion, keep
 `source_reader_connected=false`, `proven_e2e=false`,
 `operational=false`, `human_promotion_authorized=false`,
 `candidate=null`; A4, production and merge authority remain forbidden.
+
+## Server-authenticated Maestro Mission Gateway read transport (staging-only; unconfigured)
+
+The existing privileged MissionRun reader can now connect to the existing
+Maestro Pessoal `missionGateway` through a server-only HTTPS read transport.
+Only `list_runs`, `verify_integrity`, and `verify_a3_provenance` are
+allowlisted; body field names and exact A3 scope must match. The transport
+rejects non-HTTPS URLs, user-controlled endpoints, redirects, error status
+codes, oversized responses, malformed JSON and network failures. It does not
+create missions, dispatch, write, issue approval, persist evidence, or issue
+A3 authority.
+
+The transport is **inert** until the server (not the action request) provides
+`HERMES_DEPLOYMENT_STAGE=staging`, a verified app-domain
+`MAESTRO_MISSION_GATEWAY_URL` ending exactly with
+`/functions/missionGateway`, and `MAESTRO_MISSION_GATEWAY_ACCESS_TOKEN`
+through its authorized secret manager. The token must authenticate to the
+existing `base44.auth.me()` call as an actual user identity with current
+membership and required role; an arbitrary platform API key is not sufficient.
+No token or app deployment has been configured or exercised.
+
+The live staging A3 write path still fails closed: the Maestro control plane
+has not issued a genuine independent simulation attestation, the approval
+must be bound to the exact post-MissionRun action, and no new human promotion
+has occurred. This change alone is not operational E2E evidence. Do not
+reuse the historic public-web run, replay the previous single-use authorization,
+or repeat the historic update-file canary.
