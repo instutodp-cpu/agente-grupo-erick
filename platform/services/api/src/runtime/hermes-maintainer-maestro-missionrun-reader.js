@@ -100,9 +100,52 @@ function createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}={}
   try{return Object.freeze({workspace_id:run.espaco_id,record:JSON.parse(JSON.stringify(proof.record))});}
   catch{return null;}
  };
+ // Pre-approval, READ-ONLY discovery for a new official code simulation
+ // MissionRun. Never substitute this candidate for signed A3 provenance.
+ // No provider or test process is invoked by this reader.
+ const readSimulatedRunCandidate=async query=>{
+  if(!query||typeof query!=='object'||Array.isArray(query)||
+     Object.keys(query).sort().join('|')!==
+       ['environment','mission_id','operation','repository','run_id'].sort().join('|')||
+     typeof privilegedInvoke!=='function'||query.environment!=='staging'||
+     query.repository!==REPOSITORY||!OPERATIONS.has(query.operation)||
+     !ID.test(query.mission_id||'')||!ID.test(query.run_id||''))return null;
+  let list;
+  try{list=await privilegedInvoke(Object.freeze({
+    operation:'list_runs',mission_id:query.mission_id}));}catch{return null;}
+  if(!Array.isArray(list?.runs)||list.runs.length<1||list.runs.length>500)return null;
+  const candidates=list.runs.filter(run=>
+    run?.id===query.run_id&&run.mission_id===query.mission_id&&
+    ID.test(run.espaco_id||'')&&run.status==='na_fila'&&
+    run.dispatch_simulado===true&&ID.test(run.dispatch_token||'')&&
+    /^sha256:[0-9a-f]{64}$/.test(run.contract_hash||'')&&
+    typeof run.contrato_json==='string'&&run.contrato_json.length<=65536&&
+    validA3MissionContractSnapshot(run));
+  if(candidates.length!==1)return null;
+  const run=candidates[0];let integrity;
+  try{integrity=await privilegedInvoke(Object.freeze({
+    operation:'verify_integrity',run_id:run.id}));}catch{return null;}
+  if(integrity?.ok!==true||integrity.expected!==run.contract_hash||
+     integrity.actual!==run.contract_hash)return null;
+  let contract;
+  try{contract=JSON.parse(run.contrato_json);}catch{return null;}
+  if(contract.metadata?.tipo!=='testar'||!Array.isArray(contract.allowed_tools)||
+     contract.allowed_tools.length!==1||contract.allowed_tools[0]!=='github_api'||
+     contract.denied_actions.includes('write')!==true||
+     !ID.test(contract.objective||''))return null;
+  return Object.freeze({
+   source:'MAESTRO_MISSION_GATEWAY_OFFICIAL_QUEUE_CANDIDATE',
+   workspace_id:run.espaco_id,mission_id:run.mission_id,mission_run_id:run.id,
+   contract_hash:run.contract_hash,test_id:'hermes_core_smoke',
+   verified_contract_integrity:true,simulated_run_queued:true,
+   outbox_acknowledged:false,simulation_observed:false,receipt_durable:false,
+   issuer_verified:false,approval_verified:false,execution_authorized:false,
+   production_allowed:false,merge_authority:false
+  });
+ };
  const readMissionRun=async query=>(await readMissionRunEvidence(query))?.record??null;
  return Object.freeze({contract_version:CONTRACT_VERSION,source:'MAESTRO_MISSION_GATEWAY_AUTHENTICATED_READ_ONLY',
-  readMissionRun,readMissionRunEvidence,configured:typeof privilegedInvoke==='function'});
+  readMissionRun,readMissionRunEvidence,readSimulatedRunCandidate,configured:typeof privilegedInvoke==='function'});
 }
 // Privileged, server-owned read + exclusive claim composition. It is NOT
 // installed on an HTTP route or any SCM operational admission by default.
