@@ -114,6 +114,48 @@ test('no claim on signature, zero-effect, approval or scope failures',async()=>{
  assert.equal(validClaim(claim),true);
  assert.equal(validClaim({...claim,operation:'delete_repository'}),false);
 });
+
+test('read-only ownership requires fresh independent approval and exact durable PostgreSQL claim',async()=>{
+ const store=db(),claim=makeClaim();
+ let source=verified(claim),checks=0;
+ const a=adapter(store,async(input)=>{checks++;return source;});
+ const absent=await a.verifyOwned(claim);
+ assert.equal(absent.status,'A3_SOURCE_CLAIM_ABSENT_OR_SCOPE_DRIFT');
+ assert.equal(absent.durable,false);
+ assert.equal(store.committed.size,0);
+ assert.equal((await a.createIfVerified(claim)).durable,true);
+ const owned=await a.verifyOwned(claim);
+ assert.equal(owned.status,'A3_SOURCE_CLAIM_VERIFIED_CURRENT');
+ assert.equal(owned.durable,true);
+ assert.equal(owned.claim_created,false);
+ for(const field of ['execution_authorized','network_call_performed','write_performed','production_allowed','merge_authority'])
+  assert.equal(owned[field],false);
+ const reads=store.queries.filter(q=>q===SELECT_SQL).length;
+ assert.equal(reads,3);
+ assert.ok(checks>=3,'fresh source callback executed each read');
+ source={...verified(claim),approval_verified:false};
+ const revoked=await a.verifyOwned(claim);
+ assert.equal(revoked.durable,false,'revoked decision cannot reuse a durable row');
+ assert.equal(revoked.status,'A3_OFFICIAL_SOURCE_UNVERIFIED');
+ assert.equal(store.queries.filter(q=>q===SELECT_SQL).length,reads,'invalid source cannot access PG claim');
+ source={...verified(claim),issuer_verified:false};
+ assert.equal((await a.verifyOwned(claim)).durable,false);
+ source=verified(claim);
+ assert.equal((await a.verifyOwned({...claim,mission_run_id:'other'})).durable,false);
+ assert.equal(store.committed.size,1,'read checks never write or delete');
+});
+test('read-only ownership rejects changed DB row, missing DB, and stage not enabled',async()=>{
+ const store=db(),claim=makeClaim(),a=adapter(store);
+ assert.equal((await a.createIfVerified(claim)).durable,true);
+ store.committed.set(claim.single_use_authorization_id,{...claim,workspace_id:'other-space'});
+ assert.equal((await a.verifyOwned(claim)).status,'A3_SOURCE_CLAIM_ABSENT_OR_SCOPE_DRIFT');
+ store.committed.delete(claim.single_use_authorization_id);
+ assert.equal((await a.verifyOwned(claim)).durable,false);
+ store.failRead();
+ assert.equal((await a.verifyOwned(claim)).status,'A3_SOURCE_CLAIM_READ_UNAVAILABLE');
+ const disabled=adapter(store,async()=>{throw Error('must not invoke')},{});
+ assert.equal((await disabled.verifyOwned(claim)).status,'A3_SOURCE_CLAIM_STAGING_DISABLED');
+});
 test('privileged issuer unavailable fails closed without DB query',async()=>{
  const store=db(),claim=makeClaim();
  const out=await adapter(store,async()=>{throw Error('unavailable')}).createIfVerified(claim);
