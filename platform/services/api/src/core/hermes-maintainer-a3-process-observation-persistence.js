@@ -139,7 +139,7 @@ function createHermesMaintainerA3ProcessObservationPersistence({
   const record=await pool.query(SELECT,[row.mission_run_id]).catch(()=>null);
   const stored=record?.rows?.[0];
   if(!stored||stored.observation_digest!==digest||
-   JSON.stringify(stored.observation_evidence)!==JSON.stringify(evidence))
+   JSON.stringify(Object.entries(stored.observation_evidence||{}).sort(([a],[b])=>a.localeCompare(b)))!==JSON.stringify(Object.entries(evidence).sort(([a],[b])=>a.localeCompare(b))))
     return denied('A3_OBSERVATION_READBACK_MISMATCH');
   return Object.freeze({...denied('A3_PROCESS_OBSERVATION_DURABLE_NOT_ATTESTED'),
    process_observation_durable:true,observation_digest:digest});
