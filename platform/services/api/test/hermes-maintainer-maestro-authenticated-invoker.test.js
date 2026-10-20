@@ -1,6 +1,9 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
+const {EventEmitter}=require('node:events');
 const {validRequest,validGatewayUrl,MAESTRO_APP_ID,GATEWAY_URL,GATEWAY_FUNCTIONS_VERSION,
+ CLI_BIN,CLI_TAG,createHermesMaintainerMaestroCliReadInvoker,
+ createHermesMaintainerMaestroProcessReadInvokerFromServerEnv,
  createHermesMaintainerMaestroAuthenticatedInvoker,
  createHermesMaintainerMaestroInvokerFromServerEnv}=require('../src/runtime/hermes-maintainer-maestro-authenticated-invoker');
 const URL=GATEWAY_URL;
@@ -98,4 +101,91 @@ test('only explicit server staging settings enable transport',async()=>{
  assert.equal(x.configured,true);
  assert.deepEqual(await x.invokeMissionGateway({operation:'verify_integrity',run_id:'run-1'}),{ok:true});
  assert.equal(createHermesMaintainerMaestroInvokerFromServerEnv({env:{...env,HERMES_DEPLOYMENT_STAGE:'production'}}).configured,false);
+});
+
+const cliEnv={HERMES_DEPLOYMENT_STAGE:'staging',
+ HERMES_A3_CLI_GATEWAY_READ_ENABLED:'true',
+ HERMES_A3_ZERO_EFFECT_TEST_ENABLED:'true',
+ HERMES_EXECUTION_ENABLED:'false',HERMES_EXECUTION_KILL_SWITCH:'true',
+ HERMES_MISSION_INGRESS_ENABLED:'false'};
+function fakeCli({payload={runs:[]},code=0,duplicate=false,tooLarge=false}={}){
+ const calls=[];
+ const spawnImpl=(bin,args,opts)=>{
+  calls.push({bin,args,opts});
+  const child=new EventEmitter();
+  child.stdout=new EventEmitter();
+  child.stdin={end:script=>{
+   calls[calls.length-1].script=script;
+   process.nextTick(()=>{
+    child.stdout.emit('data',tooLarge?'X'.repeat(1048600):
+     CLI_TAG+JSON.stringify(payload)+'\n'+
+      (duplicate?CLI_TAG+JSON.stringify(payload)+'\n':''));
+    child.emit('exit',code);
+   });
+  }};
+  child.kill=()=>{};
+  return child;
+ };
+ return {calls,spawnImpl};
+}
+test('CLI staging reader authenticates with official fixed binary, app and read-only scope',async()=>{
+ const {calls,spawnImpl}=fakeCli({payload:{runs:[{id:'run-a'}]}});
+ const reader=createHermesMaintainerMaestroCliReadInvoker({env:cliEnv,spawnImpl,timeoutMs:4000});
+ assert.equal(reader.configured,true);
+ assert.deepEqual(await reader.invokeMissionGateway({operation:'list_runs',mission_id:'mission-a'}),
+  {runs:[{id:'run-a'}]});
+ assert.equal(calls.length,1);
+ assert.equal(calls[0].bin,CLI_BIN);
+ assert.deepEqual(calls[0].args,['--app-id',MAESTRO_APP_ID,'exec']);
+ assert.equal(calls[0].opts.shell,false);
+ assert.deepEqual(Object.keys(calls[0].opts.env).sort(),
+  ['BASE44_APP_ID','HOME','PATH']);
+ assert.equal(calls[0].opts.env.HOME,'/home/hermesadmin');
+ assert.match(calls[0].script,/missionGateway/);
+ assert.doesNotMatch(calls[0].script,/dispatch.*idempotency_key/);
+});
+test('CLI source blocks writes, promotions and disabled/stale staging configuration',async()=>{
+ const {calls,spawnImpl}=fakeCli();
+ const good=createHermesMaintainerMaestroCliReadInvoker({env:cliEnv,spawnImpl});
+ for(const req of [{operation:'dispatch',mission_id:'mission-a'},
+  {operation:'list_outbox',workspace_id:'space'},
+  proof,{operation:'list_runs',mission_id:'mission-a',excess:1}]){
+  assert.equal(await good.invokeMissionGateway(req),null);
+ }
+ assert.equal(calls.length,0,'blocked operations never start CLI');
+ for(const env of [
+  {...cliEnv,HERMES_A3_CLI_GATEWAY_READ_ENABLED:'false'},
+  {...cliEnv,HERMES_DEPLOYMENT_STAGE:'production'},
+  {...cliEnv,HERMES_EXECUTION_ENABLED:'true'},
+  {...cliEnv,HERMES_EXECUTION_KILL_SWITCH:'false'},
+  {...cliEnv,HERMES_MISSION_INGRESS_ENABLED:'true'}
+ ]){
+  const x=createHermesMaintainerMaestroCliReadInvoker({env,spawnImpl});
+  assert.equal(x.configured,false);
+  assert.equal(await x.invokeMissionGateway({operation:'list_runs',mission_id:'m'}),null);
+ }
+ assert.equal(calls.length,0);
+});
+test('CLI errors, duplicate output and oversized responses never grant a candidate',async()=>{
+ for(const config of [{code:1},{duplicate:true},{tooLarge:true}]){
+  const fake=fakeCli(config);
+  const reader=createHermesMaintainerMaestroCliReadInvoker({
+   env:cliEnv,spawnImpl:fake.spawnImpl,timeoutMs:4000});
+  assert.equal(await reader.invokeMissionGateway({operation:'verify_integrity',run_id:'r'}),null);
+ }
+});
+test('explicit process-only adapter prefers the configured bearer, otherwise CLI',async()=>{
+ const cli=fakeCli({payload:{runs:[]}});
+ const usingCli=createHermesMaintainerMaestroProcessReadInvokerFromServerEnv({
+  env:cliEnv,spawnImpl:cli.spawnImpl});
+ assert.equal(usingCli.configured,true);
+ assert.deepEqual(await usingCli.invokeMissionGateway({operation:'list_runs',mission_id:'m'}),{runs:[]});
+ const usingBearer=createHermesMaintainerMaestroProcessReadInvokerFromServerEnv({
+  env:{...cliEnv,MAESTRO_MISSION_GATEWAY_URL:URL,
+   MAESTRO_MISSION_GATEWAY_ACCESS_TOKEN:TOKEN},
+  spawnImpl:()=>{throw Error('CLI must not run when bearer configured')},
+  fetchImpl:async()=>json({runs:[]})
+ });
+ assert.equal(usingBearer.configured,true);
+ assert.deepEqual(await usingBearer.invokeMissionGateway({operation:'list_runs',mission_id:'m'}),{runs:[]});
 });
