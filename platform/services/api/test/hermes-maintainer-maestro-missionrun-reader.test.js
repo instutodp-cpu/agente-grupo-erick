@@ -42,6 +42,19 @@ for(const make of [buildUpdateA3,buildPullA3]){
   const result=await createHermesMaintainerA3MissionSourceVerifier({readMissionRun:reader.readMissionRun}).verify(d.eligibilityInput);
   assert.equal(result.verified,true);
  });
+
+ test(op+' accepts completed simulation only after authenticated official A3 gateway attestation',async()=>{
+  const d=make(),q=getQuery(d);
+  const simulated={...run(q),status:'concluida',dispatch_simulado:true,dispatch_token:'official-dispatch-token'};
+  const gw=gateway(d,{runs:[simulated]});
+  const reader=createHermesMaintainerMaestroMissionRunReader(gw);
+  const signedGatewayRecord=await reader.readMissionRun(q);
+  assert.equal(signedGatewayRecord?.mission_run_id,simulated.id);
+  assert.deepEqual(gw.calls,['list_runs','verify_integrity',VERIFY_A3_OPERATION]);
+  const invalid=gateway(d,{runs:[simulated],noAttestation:true});
+  assert.equal(await createHermesMaintainerMaestroMissionRunReader(invalid).readMissionRun(q),null);
+  assert.deepEqual(invalid.calls,['list_runs','verify_integrity',VERIFY_A3_OPERATION]);
+ });
  test(op+' fails closed if A3 endpoint does not exist despite valid dispatch hash',async()=>{
   const gw=gateway(d,{noAttestation:true}),reader=createHermesMaintainerMaestroMissionRunReader(gw);
   assert.equal(await reader.readMissionRun(gw.query),null);
@@ -56,6 +69,8 @@ for(const make of [buildUpdateA3,buildPullA3]){
    {runs:[]},{runs:[run(q),run(q)]},
    {runs:[{...run(q),mission_id:'different'}]},
    {runs:[{...run(q),dispatch_simulado:true}]},
+   {runs:[{...run(q),dispatch_simulado:true,status:'concluida'}]},
+   {runs:[{...run(q),dispatch_simulado:true,status:'concluida',dispatch_token:''}]},
    {integrity:{ok:false,expected:HASH,actual:HASH}},
    {integrity:{ok:true,expected:'sha256:'+'a'.repeat(64),actual:HASH}},
    {proof:{verified:true,source:'LOCAL_RUNNER',mission_run_id:'mission-run-unit-1',operation:q.operation,record:{}}},
