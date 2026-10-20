@@ -4,6 +4,12 @@
 // No request may supply the target URL, token, function name, or arbitrary operation.
 const CONTRACT_VERSION='hermes_maintainer_maestro_authenticated_invoker_v1';
 const REPOSITORY='instutodp-cpu/agente-grupo-erick';
+// Verified against the installed official @base44/sdk functions.invoke:
+// POST https://base44.app/api/apps/<appId>/functions/<functionName>.
+// Pin BOTH authority and app/function path so a misconfigured env can
+// never forward the server-held user bearer to a foreign HTTPS origin.
+const MAESTRO_APP_ID='69f62cbb266971d4deeb4938';
+const GATEWAY_URL='https://base44.app/api/apps/'+MAESTRO_APP_ID+'/functions/missionGateway';
 const ID=/^[^\x00-\x20\x7f]{1,255}$/;
 const DIGEST=/^sha256:[a-f0-9]{64}$/;
 const OPS=Object.freeze({
@@ -29,9 +35,9 @@ function validGatewayUrl(value){
  try{
   if(typeof value!=='string'||value.length>2048)return false;
   const u=new URL(value);
-  return u.protocol==='https:'&&!u.username&&!u.password&&!u.search&&!u.hash&&
-   (!u.port||u.port==='443')&&/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/.test(u.hostname)&&
-   u.pathname==='/functions/missionGateway';
+  return u.href===GATEWAY_URL&&u.origin==='https://base44.app'&&
+   u.protocol==='https:'&&!u.username&&!u.password&&!u.search&&!u.hash&&
+   (!u.port||u.port==='443');
  }catch{return false;}
 }
 function serverSettingsFromEnv(env=process.env){
@@ -72,5 +78,6 @@ function createHermesMaintainerMaestroInvokerFromServerEnv({env=process.env,fetc
   accessToken:cfg?.accessToken,fetchImpl
  });
 }
-module.exports={CONTRACT_VERSION,validRequest,validGatewayUrl,serverSettingsFromEnv,
+module.exports={CONTRACT_VERSION,MAESTRO_APP_ID,GATEWAY_URL,
+ validRequest,validGatewayUrl,serverSettingsFromEnv,
  createHermesMaintainerMaestroAuthenticatedInvoker,createHermesMaintainerMaestroInvokerFromServerEnv};
