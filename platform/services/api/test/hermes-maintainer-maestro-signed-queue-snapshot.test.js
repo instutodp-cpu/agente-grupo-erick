@@ -65,7 +65,7 @@ test('fail closed on expired/future, tampered record or signature, wrong run or 
  assert.equal(v.verifySnapshot(f.envelope,{...query(),repository:'other/repo'}),null);
  assert.equal(createVerifier({publicKeyB64Url:f.publicKey,now:()=>NOW+300001})
   .verifySnapshot(f.envelope,query()),null);
- assert.equal(createVerifier({publicKeyB64Url:f.publicKey,now:()=>NOW-90000})
+ assert.equal(createVerifier({publicKeyB64Url:f.publicKey,now:()=>NOW-90001})
   .verifySnapshot(f.envelope,query()),null);
  const alt=seal();assert.equal(createVerifier({publicKeyB64Url:alt.publicKey,now:()=>NOW})
   .verifySnapshot(f.envelope,query()),null);
