@@ -266,6 +266,9 @@ test('real network-isolated runner selects only immutable local Docker image and
  let calls=0,command,args,options;
  const runner=createHermesMaintainerA3NetworkIsolatedTestRunner({
   imageId:'sha256:'+'d'.repeat(64),readRevision:()=> 'b'.repeat(40),
+  // Fake-spawn unit test must not depend on the concurrently written CI
+  // workspace; actual runtime still checks real Git cleanliness.
+  readWorktreeStatus:()=> '',
   timeoutMs:4000,spawnImpl:(bin,a,opt)=>{
    calls++;command=bin;args=a;options=opt;
    const child=new EventEmitter();child.kill=()=>{};
