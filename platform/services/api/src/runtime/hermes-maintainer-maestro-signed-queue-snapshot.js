@@ -4,6 +4,8 @@
 // Maestro only; a valid signature NEVER attests zero external effects, an ACK,
 // A3 authority, or any independent receipt.
 const crypto=require('node:crypto');
+const fs=require('node:fs');
+const path=require('node:path');
 const VERSION='hermes_a3_authenticated_queued_snapshot_v1';
 const KID='maestro-a3-queued-staging-v1';
 const REPO='instutodp-cpu/agente-grupo-erick';
@@ -100,4 +102,32 @@ function createVerifierFromServerEnv({env=process.env}={}){
  if(env.HERMES_DEPLOYMENT_STAGE!=='staging')return createVerifier();
  return createVerifier({publicKeyB64Url:env.MAESTRO_A3_QUEUED_PUBLIC_KEY_B64URL});
 }
-module.exports={VERSION,KID,FIELDS,createVerifier,createVerifierFromServerEnv};
+// Staging's local observer consumes only a short-lived, gateway-SIGNED,
+// manually delivered, process-owned snapshot file. This avoids copying a
+// Base44 user bearer onto VPS; it is not an independent effect receipt.
+function createSignedQueueSourceReaderFromServerEnv({env=process.env,fsImpl=fs}={}){
+ const v=createVerifierFromServerEnv({env});
+ const snapshotPath=env.HERMES_A3_SIGNED_QUEUED_SNAPSHOT_PATH;
+ const configured=v.configured&&typeof snapshotPath==='string'&&
+  path.isAbsolute(snapshotPath)&&snapshotPath.length<1024;
+ async function readSimulatedRunCandidate(query){
+  if(!configured)return null;
+  let fd,raw;
+  try{
+   fd=fsImpl.openSync(snapshotPath,fsImpl.constants.O_RDONLY|fsImpl.constants.O_NOFOLLOW);
+   const st=fsImpl.fstatSync(fd);
+   if(!st.isFile()||st.size<2||st.size>16384||
+      (st.mode&0o077)!==0||
+      (typeof process.getuid==='function'&&st.uid!==process.getuid()))
+     return null;
+   raw=fsImpl.readFileSync(fd,{encoding:'utf8'});
+  }catch{return null;}finally{if(fd!==undefined){try{fsImpl.closeSync(fd);}catch{}}}
+  if(typeof raw!=='string'||Buffer.byteLength(raw)>16384)return null;
+  let envelope;
+  try{envelope=JSON.parse(raw);}catch{return null;}
+  return v.verifySnapshot(envelope,query);
+ }
+ return Object.freeze({configured,readSimulatedRunCandidate});
+}
+module.exports={VERSION,KID,FIELDS,createVerifier,createVerifierFromServerEnv,
+ createSignedQueueSourceReaderFromServerEnv};
