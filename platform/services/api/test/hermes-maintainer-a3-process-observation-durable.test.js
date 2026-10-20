@@ -27,6 +27,8 @@ const observation=()=>({
  status:'A3_OFFICIAL_TEST_PROCESS_OBSERVED_NOT_ATTESTED',
  mission_id:'official-a3-mission',mission_run_id:'official-a3-run',
  workspace_id:'official-workspace',contract_hash:HASH,
+ operation:'update_file',repository:'instutodp-cpu/agente-grupo-erick',
+ revision_sha:'b'.repeat(40),
  simulation_observed:true,test_process_passed:true,
  receipt_durable:false,issuer_verified:false,approval_verified:false,
  outbox_acknowledged:false,execution_authorized:false,
@@ -152,6 +154,8 @@ test('unverified observation never finalizes, even after reservation',async()=>{
   {outbox_acknowledged:true},{execution_authorized:true},
   {network_call_performed:false},{scm_write_performed:false},
   {mission_run_id:'other-run'},{workspace_id:'other-workspace'},
+  {operation:'create_pull_request'},{repository:'other/repository'},
+  {revision_sha:'f'.repeat(40)},
   {contract_hash:'sha256:'+'c'.repeat(64)},{test_process_passed:false}
  ]){
   const f=db(),persist=store(f),source=candidate();
