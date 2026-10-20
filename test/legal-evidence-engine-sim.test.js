@@ -1,0 +1,13 @@
+const test=require('node:test');const assert=require('node:assert/strict');
+const {evaluateClaim,evaluateBundle,renderClaimLabel}=require('../src/hermes/legal/evidence-engine');
+const claim=(type='legal_authority',refs=['e1'])=>({claim_id:'c1',claim_type:type,statement:'x',evidence_refs:refs});
+const ev=(over={})=>({evidence_id:'e1',evidence_type:'legal_authority',source_snapshot_ref:'s1',supports:['c1'],contradicts:[],integrity_status:'verified',...over});
+test('missing referenced evidence cannot certify a claim',()=>assert.equal(evaluateClaim(claim('legal_authority',['missing']),[]).status,'unsupported'));
+test('unverified evidence cannot certify a claim',()=>assert.equal(evaluateClaim(claim(),[ev({integrity_status:'unverified'})]).status,'unsupported'));
+test('verified authority evidence supports authority claim',()=>assert.equal(evaluateClaim(claim(),[ev()]).certifiable,true));
+test('contrary verified evidence forces conflict instead of silent choice',()=>assert.equal(evaluateClaim(claim(),[ev(),ev({evidence_id:'e2',supports:[],contradicts:['c1']})]).status,'conflicted'));
+test('internal fact alone is insufficient to certify substantive legal authority',()=>assert.equal(evaluateClaim(claim(),[ev({evidence_type:'internal_document'})]).status,'insufficient'));
+test('bundle abstains when any material claim lacks support',()=>{const r=evaluateBundle({claims:[claim()],evidence:[]});assert.equal(r.certifiable,false);assert.equal(r.review_status,'insufficient');});
+test('bundle exposes conflict when contrary evidence exists',()=>{const r=evaluateBundle({claims:[claim()],evidence:[ev(),ev({evidence_id:'e2',supports:[],contradicts:['c1']})]});assert.equal(r.review_status,'conflicted');});
+test('bundle verifies only when all claims are certifiable',()=>assert.equal(evaluateBundle({claims:[claim()],evidence:[ev()]}).review_status,'verified'));
+test('claim type remains explicit in presentation',()=>{assert.equal(renderClaimLabel(claim('fact')),'FACT');assert.equal(renderClaimLabel(claim('recommendation')),'RECOMMENDATION');});

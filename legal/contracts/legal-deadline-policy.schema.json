@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalDeadlinePolicy",
+  "type": "object",
+  "required": [
+    "policy_id",
+    "version",
+    "count_mode",
+    "days",
+    "start_rule",
+    "authority_refs",
+    "calendar_required"
+  ],
+  "properties": {
+    "policy_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "count_mode": {
+      "enum": [
+        "calendar_days",
+        "business_days"
+      ]
+    },
+    "days": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "start_rule": {
+      "enum": [
+        "same_day",
+        "next_day"
+      ]
+    },
+    "authority_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "calendar_required": {
+      "type": "boolean"
+    },
+    "jurisdiction": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
