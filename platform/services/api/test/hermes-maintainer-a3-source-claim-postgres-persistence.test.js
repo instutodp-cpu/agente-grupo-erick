@@ -3,6 +3,9 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {FIELDS,INSERT_SQL,SELECT_SQL,validClaim,
  createHermesMaintainerA3SourceClaimPostgresPersistence:createAdapter}=
  require('../src/core/hermes-maintainer-a3-source-claim-postgres-persistence');
+const {buildUpdateA3,buildPullA3}=require('./helpers/a3-maintenance-operation-test-data');
+const {recordFor}=require('./helpers/a3-mission-origin-test-evidence');
+const {createHermesMaintainerA3AuthenticatedSourceClaimVerifier}=require('../src/core/hermes-maintainer-a3-source-claim-postgres-persistence');
 const D=x=>'sha256:'+x.repeat(64);
 function makeClaim(){return {
  single_use_authorization_id:'new-a3-single-use-claim',
@@ -169,4 +172,66 @@ test('database unavailability, uncertain commit or post-commit read never return
   assert.equal(out.durable,false,fail);
   assert.equal(out.execution_authorized,false,fail);
  }
+});
+
+for(const make of [buildUpdateA3,buildPullA3]){
+ const operation=make().eligibilityInput.operation;
+ test(operation+': server-owned authenticated MissionRun evidence binds an exact global claim',async()=>{
+  const sample=make().eligibilityInput,record=recordFor(sample);
+  const claim={
+   single_use_authorization_id:record.single_use_authorization_id,
+   workspace_id:'maestro-official-workspace',mission_id:record.mission_id,
+   mission_run_id:record.mission_run_id,
+   approval_reference:record.approval_reference,
+   authorization_reference:record.authorization_reference,
+   operation:record.operation,repository:record.repository,
+   environment:record.environment,target_digest:record.target_digest,
+   intent_digest:record.intent_digest,
+   simulation_receipt_digest:record.simulation_receipt_digest,
+   staging_gate_fingerprint:record.staging_gate_fingerprint,
+   source_record_digest:record.record_digest
+  };
+  let reads=0,reply={workspace_id:claim.workspace_id,record};
+  const readMissionRunEvidence=async query=>{
+   reads++;
+   assert.deepEqual(Object.keys(query).sort(),['mission_id','operation','repository','environment',
+    'target_digest','intent_digest','approval_reference','authorization_reference',
+    'single_use_authorization_id'].sort(),'no arbitrary URL/token or caller auth flags');
+   assert.equal(query.mission_id,claim.mission_id);
+   return reply;
+  };
+  const verifier=createHermesMaintainerA3AuthenticatedSourceClaimVerifier({readMissionRunEvidence});
+  const store=db(),persist=adapter(store,verifier);
+  const first=await persist.createIfVerified(claim);
+  assert.equal(first.durable,true);
+  assert.equal(first.execution_authorized,false);
+  assert.equal((await persist.verifyOwned(claim)).durable,true);
+  assert.equal(reads,2,'fresh gateway provenance on every insert/read');
+  reply={workspace_id:'wrong-tenant',record};
+  assert.equal((await persist.verifyOwned(claim)).durable,false);
+  reply={workspace_id:claim.workspace_id,record:{...record,simulation_receipt_digest:D('f')}};
+  assert.equal((await persist.verifyOwned(claim)).durable,false);
+  reply={workspace_id:claim.workspace_id,record:{...record,record_digest:D('a')}};
+  assert.equal((await persist.verifyOwned(claim)).durable,false);
+  reply={workspace_id:claim.workspace_id,record:{...record,mission_run_id:'old-run'}};
+  assert.equal((await persist.verifyOwned(claim)).durable,false);
+  reply=null;
+  assert.equal((await persist.verifyOwned(claim)).durable,false);
+  reply={workspace_id:claim.workspace_id,record};
+  assert.equal((await persist.verifyOwned(claim)).durable,true);
+  assert.equal(store.committed.size,1,'verifyOwned is read-only and never consumes SCM');
+ });
+}
+test('source verifier requires separate authenticated gateway read and rejects forged caller proof',async()=>{
+ assert.throws(()=>createHermesMaintainerA3AuthenticatedSourceClaimVerifier({}),
+  /authenticated_maestro_reader_required/);
+ let reads=0;
+ const verifier=createHermesMaintainerA3AuthenticatedSourceClaimVerifier({
+  readMissionRunEvidence:async()=>{reads++;return {verified:true,issuer_verified:true,approval_verified:true};}
+ });
+ const forged={...makeClaim(),verified:true,source:'MISSION_GATEWAY_DURABLE'};
+ assert.equal(await verifier(forged),null,'caller supplied verification cannot be authority');
+ assert.equal(reads,0,'bad input blocked before Gateway invocation');
+ assert.equal(await verifier(makeClaim()),null,'flags alone not an official record');
+ assert.equal(reads,1);
 });
