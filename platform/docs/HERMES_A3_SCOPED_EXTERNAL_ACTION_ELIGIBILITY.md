@@ -449,3 +449,41 @@ Two further explicit blocks remain:
 
 Neither observation-only HTTP, a valid contract hash, nor this migration
 authorizes an external SCM operation, merge, production or A4.
+
+
+### A3 source claim persistence — non-executing adapter (20 October 2026)
+
+The existing PR now contains
+`platform/services/api/src/core/hermes-maintainer-a3-source-claim-postgres-persistence.js`,
+a non-HTTP, default-disabled PostgreSQL persistence adapter for migration 034.
+It is **not** the independent Ed25519 issuer, the authoritative Maestro
+approval decision, an execution action, or the pre-existing SCM write
+consumption. No production dispatch path imports or enables this adapter.
+
+An intentionally absent privileged server callback
+`verifyOfficialSource` must eventually authenticate the official
+MissionRun, specific post-run human decision, correctly signed source and
+independently confirmed zero-effect simulation receipt. A request's
+`verified` flag is not trusted as authority. The callback cannot be supplied
+from HTTP input; server composition will remain fail-closed until genuine
+evidence can be verified. Enabling also requires both
+`HERMES_DEPLOYMENT_STAGE=staging` and
+`HERMES_A3_SOURCE_CLAIMS_ENABLED=true` from server-owned configuration.
+
+Given a trusted verifier, this component validates exact claim scope,
+atomically inserts into the existing migration-034 PostgreSQL table,
+commits and read-verifies the immutable binding. All conflicts, replays,
+unavailable verifiers and uncertain persistence return a denial. It
+never returns `execution_authorized=true`, never calls a provider and
+never inserts into the SCM consumption ledger.
+
+Synthetic adapter/schema tests 9/9 passed on staging VPS; the focused
+self-audit + A3 reader suite passed 24/24 and returned an empty
+`errors` array after refreshing source/test inventory counts.
+PostgreSQL uniqueness was previously tested in rollback-only staging
+transactions. **Migration 034 remains unapplied in the durable staging
+database; the adapter has no live execution wiring.** No signed A3
+attestation was issued, no authorization consumed and no new MissionRun
+created. Integrating the real issuer callback and durable claims into
+the Maestro↔Hermes admission decision remains a separate gate in the
+same ongoing PR, not a reason to fabricate evidence or open micro-PRs.
