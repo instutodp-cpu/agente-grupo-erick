@@ -23,6 +23,10 @@ function run(override={},contractOverride={}){
  const contract={contract_version:'1.0',mission_id:query.mission_id,
   workspace_id:'official-workspace',idempotency_key:'official-fresh-dispatch-key',
   objective:'Test official code preparation without external effects',
+  context:JSON.stringify({a3_simulation:{
+    version:'a3_zero_effect_smoke_v1',operation:query.operation,
+    repository:REPO,test_id:'hermes_core_smoke',revision_sha:'b'.repeat(40),
+    network_allowed:false,write_allowed:false,production_allowed:false}}),
   requested_by:{tipo:'usuario',id:'official-creator'},
   metadata:{tipo:'testar',emitted_by:'official-creator',
    issued_at:'2026-10-20T12:00:00.000Z'},
@@ -55,6 +59,7 @@ test('official queued simulation is identified with integrity but WITHOUT any si
  assert.equal(candidate.source,'MAESTRO_MISSION_GATEWAY_OFFICIAL_QUEUE_CANDIDATE');
  assert.equal(candidate.mission_run_id,query.run_id);
  assert.equal(candidate.workspace_id,'official-workspace');
+ assert.equal(candidate.revision_sha,'b'.repeat(40));
  assert.equal(candidate.test_id,'hermes_core_smoke');
  assert.equal(candidate.outbox_acknowledged,false);
  assert.equal(candidate.receipt_durable,false);
@@ -80,6 +85,19 @@ test('outdated public-web and ambiguous/incomplete/forged run never enter A3 sub
   {runs:[run({}, {metadata:{tipo:'pesquisar',emitted_by:'official-creator',
     issued_at:'2026-10-20T12:00:00.000Z'},allowed_tools:['public_web_read']})]},
   {runs:[run({}, {allowed_tools:['github_api','public_web_read']})]},
+  {runs:[run({}, {context:JSON.stringify({a3_simulation:{
+    version:'a3_zero_effect_smoke_v1',operation:'create_pull_request',
+    repository:REPO,test_id:'hermes_core_smoke',revision_sha:'b'.repeat(40),
+    network_allowed:false,write_allowed:false,production_allowed:false}})})]},
+  {runs:[run({}, {context:JSON.stringify({a3_simulation:{
+    version:'a3_zero_effect_smoke_v1',operation:query.operation,
+    repository:REPO,test_id:'hermes_core_smoke',revision_sha:'invalid',
+    network_allowed:false,write_allowed:false,production_allowed:false}})})]},
+  {runs:[run({}, {context:JSON.stringify({a3_simulation:{
+    version:'a3_zero_effect_smoke_v1',operation:query.operation,
+    repository:REPO,test_id:'hermes_core_smoke',revision_sha:'b'.repeat(40),
+    network_allowed:true,write_allowed:false,production_allowed:false}})})]},
+  {runs:[run({}, {context:'{}'})]},
   {runs:[run({}, {denied_actions:['merge','publish']})]},
   {runs:[run({}, {metadata:{tipo:'desenvolver',emitted_by:'official-creator',
     issued_at:'2026-10-20T12:00:00.000Z'}})]},
