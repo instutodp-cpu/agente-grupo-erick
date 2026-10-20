@@ -2,7 +2,7 @@
 // Staging-only OBSERVATION of an official isolated test process.
 // Never an independently issuer-signed simulation receipt, human approval,
 // outbox ACK, execution grant, or SCM consumption.
-const {createHash}=require('node:crypto');
+const {computeCanonicalContentDigest}=require('./canonical-content-digest');
 const TABLE='hermes.maintainer_a3_process_observations';
 const SHA=/^[a-f0-9]{40}$/,DIGEST=/^sha256:[a-f0-9]{64}$/;
 const ID=/^[^\x00-\x20\x7f]{1,255}$/;
@@ -134,7 +134,7 @@ function createHermesMaintainerA3ProcessObservationPersistence({
    outbox_acknowledged:false,network_call_performed:null,
    scm_write_performed:null
   });
-  const digest='sha256:'+createHash('sha256').update(JSON.stringify(evidence)).digest('hex');
+  const digest=computeCanonicalContentDigest(evidence);
   const ok=await transaction(FINALIZE,
    ['process_observed',digest,JSON.stringify(evidence),null,...COLS.map(k=>row[k])],
    row,'process_observed');
