@@ -131,8 +131,8 @@ function createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}={}
   try{contract=JSON.parse(run.contrato_json);}catch{return null;}
   if(contract.metadata?.tipo!=='testar'||!Array.isArray(contract.allowed_tools)||
      contract.allowed_tools.length!==1||contract.allowed_tools[0]!=='github_api'||
-     contract.denied_actions.includes('write')!==true||
-     !ID.test(contract.objective||''))return null;
+     typeof contract.objective!=='string'||
+     !contract.objective.trim()||contract.objective.length>2048)return null;
   return Object.freeze({
    source:'MAESTRO_MISSION_GATEWAY_OFFICIAL_QUEUE_CANDIDATE',
    workspace_id:run.espaco_id,mission_id:run.mission_id,mission_run_id:run.id,
