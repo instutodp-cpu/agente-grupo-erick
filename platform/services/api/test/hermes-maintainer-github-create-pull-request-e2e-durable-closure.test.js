@@ -15,7 +15,7 @@ test('replay fails closed before a second provider write',async()=>{let calls=0;
 test('invalid target fails closed before provider',async()=>{let calls=0;const out=await createHermesMaintainerGithubCreatePullRequestE2eDurableClosure({pool:pool(),readMissionRun:readFor(eligibility()),environment:{HERMES_GITHUB_CREATE_PULL_REQUEST_STAGING_TOKEN:'synthetic-token'},fetchImpl:async()=>{calls++;},createTimeoutSignal:()=>new AbortController().signal}).execute(eligibility(),grant(),{...target,draft:false},input());assert.equal(out.closure_valid,false);assert.equal(calls,0);});
 test('construction is inert and credential remains isolated',()=>{let calls=0;const c=createHermesMaintainerGithubCreatePullRequestE2eDurableClosure({pool:pool(),readMissionRun:readFor(eligibility()),environment:{HERMES_GITHUB_CREATE_PULL_REQUEST_STAGING_TOKEN:'synthetic-token'},fetchImpl:async()=>{calls++;},createTimeoutSignal:()=>new AbortController().signal});assert.equal(c.composition_version,'hermes_maintainer_github_create_pull_request_e2e_durable_closure_v2');assert.equal(c.credential_reference,'github_create_pull_request_hermes_branch_staging');assert.equal(calls,0);assert.equal(c.production_used,false);assert.throws(()=>createHermesMaintainerGithubCreatePullRequestE2eDurableClosure(),/postgres_pool_required/);});
 
-test('official Maestro legacy list_runs and verify_integrity cannot supply A3 authority without separate attestation',async()=>{
+test('official public-web read MissionRun cannot supply A3 authority even before attestation checks',async()=>{
  const e=eligibility(),g=grant(),t=target,i=input(),calls=[];
  let providerCalls=0;
  const closure=createHermesMaintainerGithubCreatePullRequestE2eDurableClosure({
@@ -36,6 +36,6 @@ test('official Maestro legacy list_runs and verify_integrity cannot supply A3 au
  const out=await closure.execute(e,g,t,i);
  assert.equal(out.closure_valid,false);
  assert.deepEqual(out.blockers,['DURABLE_ADMISSION_NOT_CONFIRMED']);
- assert.deepEqual(calls,['list_runs','verify_integrity','verify_a3_provenance']);
+ assert.deepEqual(calls,['list_runs']); // Stronger fail-closed: invalid mission purpose rejects before hash/provenance.
  assert.equal(providerCalls,0);
 });
