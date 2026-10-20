@@ -391,3 +391,27 @@ calling `verify_integrity` or `verify_a3_provenance`. Missing source
 authentication, independent zero-effect simulation receipt, issuer key,
 current scoped human approval and actual deployment remain hard blocks.
 No issuer was created and no real A3 source/mutation was emitted.
+
+
+### Contract issuer vs. dispatch actor compatibility — 20 Oct 2026
+
+Official `dispatchService` snapshots `buildMissionContract` **before** acquiring
+its Mission dispatch lock. Its contract `requested_by.id` and
+`metadata.emitted_by` identify the *mission creator*, while
+`MissionRun.emitted_by` identifies the authenticated *dispatcher*.
+The `MissionRun.issued_at` is recorded after contract creation; therefore
+the timestamps must be valid canonical ISO datetimes in strictly
+non-decreasing order, within five minutes, not exactly equal.
+
+The Maestro and Hermes authenticated-read guards now bind
+mission/workspace/idempotency key exactly, independently validate both
+actor roles and original creator binding, and require the issuer timestamp
+to precede the official run timestamp within the bounded dispatch window.
+This resolves a confirmed false-negative in the previous guard without
+trusting input-supplied source proof. Maestro 29/29 synthetic tests passed
+(checkpoint `6ad77c9fd0aa036752cc7539`, commit
+`46869922ec40030ecf63ce256f6b7c94cd1d16b7`).
+
+The independent zero-effect receipt, exact post-run human approval,
+global transactional single-use ownership and signing/deployment gates
+remain mandatory and are **not** provided by this compatibility fix.
