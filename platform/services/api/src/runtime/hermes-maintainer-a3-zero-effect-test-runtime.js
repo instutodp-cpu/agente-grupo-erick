@@ -19,7 +19,8 @@ function blocked(reason){
   reason,simulation_observed:false,test_process_passed:false,
   receipt_durable:false,issuer_verified:false,approval_verified:false,
   outbox_acknowledged:false,execution_authorized:false,
-  network_call_performed:false,scm_write_performed:false,
+  // Execution effects were NOT independently measured; do not invent zeros.
+  network_call_performed:null,scm_write_performed:null,
   production_allowed:false,merge_authority:false});
 }
 function createHermesMaintainerA3ZeroEffectTestRuntime({
