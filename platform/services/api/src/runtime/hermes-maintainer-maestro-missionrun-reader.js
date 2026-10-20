@@ -44,7 +44,7 @@ function createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}={}
  // A caller cannot provide credentials or a URL through the A3 query.
  const serverTransport=typeof invokeMissionGateway==='function'?null:createHermesMaintainerMaestroInvokerFromServerEnv();
  const privilegedInvoke=typeof invokeMissionGateway==='function'?invokeMissionGateway:(serverTransport?.configured?serverTransport.invokeMissionGateway:null);
- const readMissionRun=async query=>{
+ const readMissionRunEvidence=async query=>{
   if(typeof privilegedInvoke!=='function'||!query||query.environment!=='staging'||
      query.repository!==REPOSITORY||!OPERATIONS.has(query.operation)||!ID.test(query.mission_id||'')||
      !/^sha256:[a-f0-9]{64}$/.test(query.target_digest||'')||
@@ -94,9 +94,11 @@ function createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}={}
      proof.record.mission_run_id!==run.id)return null;
   // Pass through, don't generate or "repair" a record. The A3 validator
   // independently verifies exact fields and all canonical digests.
-  try{return JSON.parse(JSON.stringify(proof.record));}catch{return null;}
+  try{return Object.freeze({workspace_id:run.espaco_id,record:JSON.parse(JSON.stringify(proof.record))});}
+  catch{return null;}
  };
+ const readMissionRun=async query=>(await readMissionRunEvidence(query))?.record??null;
  return Object.freeze({contract_version:CONTRACT_VERSION,source:'MAESTRO_MISSION_GATEWAY_AUTHENTICATED_READ_ONLY',
-  readMissionRun,configured:typeof privilegedInvoke==='function'});
+  readMissionRun,readMissionRunEvidence,configured:typeof privilegedInvoke==='function'});
 }
 module.exports={CONTRACT_VERSION,VERIFY_A3_OPERATION,createHermesMaintainerMaestroMissionRunReader};
