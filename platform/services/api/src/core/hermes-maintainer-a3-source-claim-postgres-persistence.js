@@ -47,29 +47,48 @@ function createHermesMaintainerA3SourceClaimPostgresPersistence({
 }={}){
  if(!pool||typeof pool.connect!=='function')throw new TypeError('postgres_pool_required');
  if(typeof verifyOfficialSource!=='function')throw new TypeError('independent_source_verifier_required');
+ function stagingEnabled(){
+  return environment?.HERMES_DEPLOYMENT_STAGE==='staging'&&
+    environment?.HERMES_A3_SOURCE_CLAIMS_ENABLED==='true';
+ }
+ // A database row does not establish an unrevoked human approval, a valid
+ // issuer signature or a durable zero-effect simulation. These are rechecked
+ // on EVERY ownership read, without falling back to caller-provided flags.
+ async function verifiedClaim(input){
+  let source;
+  try{source=await verifyOfficialSource(input);}
+  catch{return null;}
+  if(source?.verified!==true||
+     source.source!=='MISSION_GATEWAY_DURABLE'||
+     source.simulation_effect!=='ZERO'||
+     source.durably_confirmed!==true||
+     source.executed!==false||
+     source.production_used!==false||
+     source.merge_authority!==false||
+     source.human_merge_required!==true||
+     source.approval_verified!==true||
+     source.issuer_verified!==true||
+     !validClaim(source.claim)||
+     !exactScope(source.claim,input))return null;
+  return source.claim;
+ }
+ async function verifyOwned(input){
+  if(!stagingEnabled())return denied('A3_SOURCE_CLAIM_STAGING_DISABLED');
+  const claim=await verifiedClaim(input);
+  if(!claim)return denied('A3_OFFICIAL_SOURCE_UNVERIFIED');
+  let result;
+  try{result=await pool.query(SELECT_SQL,[claim.single_use_authorization_id]);}
+  catch{return denied('A3_SOURCE_CLAIM_READ_UNAVAILABLE');}
+  if(!result||!Array.isArray(result.rows)||result.rows.length!==1||
+     FIELDS.some(k=>result.rows[0][k]!==claim[k]))
+    return denied('A3_SOURCE_CLAIM_ABSENT_OR_SCOPE_DRIFT');
+  return Object.freeze({...denied('A3_SOURCE_CLAIM_VERIFIED_CURRENT'),
+    durable:true});
+ }
  async function createIfVerified(input){
-  if(environment?.HERMES_DEPLOYMENT_STAGE!=='staging'||
-     environment?.HERMES_A3_SOURCE_CLAIMS_ENABLED!=='true')
-    return denied('A3_SOURCE_CLAIM_STAGING_DISABLED');
-  // Only privileged callback may supply the authoritative, fully scoped
-  // claim; request-provided verified flags or signatures are never accepted.
-  let verified;
-  try{verified=await verifyOfficialSource(input);}
-  catch{return denied('A3_OFFICIAL_SOURCE_UNAVAILABLE');}
-  if(verified?.verified!==true||
-     verified.source!=='MISSION_GATEWAY_DURABLE'||
-     verified.simulation_effect!=='ZERO'||
-     verified.durably_confirmed!==true||
-     verified.executed!==false||
-     verified.production_used!==false||
-     verified.merge_authority!==false||
-     verified.human_merge_required!==true||
-     verified.approval_verified!==true||
-     verified.issuer_verified!==true||
-     !validClaim(verified.claim)||
-     !exactScope(verified.claim,input))
-    return denied('A3_OFFICIAL_SOURCE_UNVERIFIED');
-  const claim=verified.claim;
+  if(!stagingEnabled())return denied('A3_SOURCE_CLAIM_STAGING_DISABLED');
+  const claim=await verifiedClaim(input);
+  if(!claim)return denied('A3_OFFICIAL_SOURCE_UNVERIFIED');
   let client,began=false;
   try{
    client=await pool.connect();
@@ -94,7 +113,7 @@ function createHermesMaintainerA3SourceClaimPostgresPersistence({
    return denied('A3_SOURCE_CLAIM_DB_UNAVAILABLE_OR_UNCONFIRMED');
   }finally{if(client){try{client.release();}catch{}}}
  }
- return Object.freeze({createIfVerified});
+ return Object.freeze({createIfVerified,verifyOwned});
 }
 module.exports={TABLE,FIELDS,INSERT_SQL,SELECT_SQL,validClaim,
  createHermesMaintainerA3SourceClaimPostgresPersistence};
