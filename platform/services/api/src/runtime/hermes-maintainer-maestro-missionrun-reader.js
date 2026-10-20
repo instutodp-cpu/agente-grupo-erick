@@ -133,10 +133,29 @@ function createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}={}
      contract.allowed_tools.length!==1||contract.allowed_tools[0]!=='github_api'||
      typeof contract.objective!=='string'||
      !contract.objective.trim()||contract.objective.length>2048)return null;
+  // The Mission Contract itself MUST fix the exact checkout revision and
+  // requested A3 operation. Test intent cannot be supplied later by caller,
+  // or inferred merely from the presence of github_api in allowed_tools.
+  let context;
+  try{context=JSON.parse(contract.context);}catch{return null;}
+  if(!context||typeof context!=='object'||Array.isArray(context)||
+     Object.keys(context).join('|')!=='a3_simulation')return null;
+  const scope=context.a3_simulation;
+  const fields=['version','operation','repository','test_id','revision_sha',
+   'network_allowed','write_allowed','production_allowed'];
+  if(!scope||typeof scope!=='object'||Array.isArray(scope)||
+     Object.keys(scope).sort().join('|')!==fields.sort().join('|')||
+     scope.version!=='a3_zero_effect_smoke_v1'||
+     scope.operation!==query.operation||scope.repository!==REPOSITORY||
+     scope.test_id!=='hermes_core_smoke'||
+     !/^[a-f0-9]{40}$/.test(scope.revision_sha||'')||
+     scope.network_allowed!==false||scope.write_allowed!==false||
+     scope.production_allowed!==false)return null;
   return Object.freeze({
    source:'MAESTRO_MISSION_GATEWAY_OFFICIAL_QUEUE_CANDIDATE',
    workspace_id:run.espaco_id,mission_id:run.mission_id,mission_run_id:run.id,
-   contract_hash:run.contract_hash,test_id:'hermes_core_smoke',
+   contract_hash:run.contract_hash,revision_sha:scope.revision_sha,
+   test_id:'hermes_core_smoke',
    verified_contract_integrity:true,simulated_run_queued:true,
    outbox_acknowledged:false,simulation_observed:false,receipt_durable:false,
    issuer_verified:false,approval_verified:false,execution_authorized:false,
