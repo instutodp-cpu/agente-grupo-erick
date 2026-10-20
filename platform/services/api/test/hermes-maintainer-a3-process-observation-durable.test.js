@@ -227,6 +227,8 @@ test('migration 035 is strictly staging-only observation, with global single-use
  assert.match(sql,/REVOKE USAGE ON SCHEMA hermes FROM PUBLIC/);
  assert.match(sql,/FROM pg_roles WHERE rolname = 'anon'/);
  assert.match(sql,/FROM pg_roles WHERE rolname = 'authenticated'/);
+ assert.match(sql,/DO \$a3_portable_acl\$[\s\S]*END \$a3_portable_acl\$;/);
+ assert.doesNotMatch(sql,/DO \$\s*\n/);
  assert.doesNotMatch(sql,/FROM PUBLIC, anon, authenticated/);
  assert.doesNotMatch(sql,/INSERT INTO hermes\.|UPDATE hermes\.|maintainer_scm_write_consumption|MAESTRO_A3_PRIVATE_KEY/);
 });
