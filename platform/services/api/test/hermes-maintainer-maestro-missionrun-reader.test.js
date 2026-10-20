@@ -47,7 +47,11 @@ for(const make of [buildUpdateA3,buildPullA3]){
   assert.equal(reader.configured,true);
   const record=await reader.readMissionRun(gw.query);
   assert.equal(record.mission_run_id,gw.r.id);
-  assert.deepEqual(gw.calls,['list_runs','verify_integrity',VERIFY_A3_OPERATION]);
+  const sourceEnvelope=await reader.readMissionRunEvidence(gw.query);
+  assert.equal(sourceEnvelope?.workspace_id,gw.r.espaco_id);
+  assert.equal(sourceEnvelope?.record?.mission_run_id,gw.r.id);
+  assert.equal(Object.keys(sourceEnvelope).sort().join('|'),'record|workspace_id');
+  assert.deepEqual(gw.calls,Array(2).fill(['list_runs','verify_integrity',VERIFY_A3_OPERATION]).flat());
   const result=await createHermesMaintainerA3MissionSourceVerifier({readMissionRun:reader.readMissionRun}).verify(d.eligibilityInput);
   assert.equal(result.verified,true);
  });
@@ -67,7 +71,8 @@ for(const make of [buildUpdateA3,buildPullA3]){
  test(op+' fails closed if A3 endpoint does not exist despite valid dispatch hash',async()=>{
   const gw=gateway(d,{noAttestation:true}),reader=createHermesMaintainerMaestroMissionRunReader(gw);
   assert.equal(await reader.readMissionRun(gw.query),null);
-  assert.deepEqual(gw.calls,['list_runs','verify_integrity',VERIFY_A3_OPERATION]);
+  assert.equal(await reader.readMissionRunEvidence(gw.query),null);
+  assert.deepEqual(gw.calls,Array(2).fill(['list_runs','verify_integrity',VERIFY_A3_OPERATION]).flat());
   assert.equal((await createHermesMaintainerA3MissionSourceVerifier({readMissionRun:reader.readMissionRun}).verify(d.eligibilityInput)).verified,false);
  });
  test(op+' rejects missing privileges, ambiguous missions, hash mismatch or forged proof',async()=>{
