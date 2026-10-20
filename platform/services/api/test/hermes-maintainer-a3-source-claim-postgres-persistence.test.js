@@ -159,7 +159,7 @@ test('read-only ownership rejects changed DB row, missing DB, and stage not enab
 test('privileged issuer unavailable fails closed without DB query',async()=>{
  const store=db(),claim=makeClaim();
  const out=await adapter(store,async()=>{throw Error('unavailable')}).createIfVerified(claim);
- assert.equal(out.status,'A3_OFFICIAL_SOURCE_UNAVAILABLE');assert.deepEqual(store.queries,[]);
+ assert.equal(out.status,'A3_OFFICIAL_SOURCE_UNVERIFIED');assert.equal(out.durable,false);assert.deepEqual(store.queries,[]);
 });
 test('database unavailability, uncertain commit or post-commit read never return a grant',async()=>{
  const claim=makeClaim();
