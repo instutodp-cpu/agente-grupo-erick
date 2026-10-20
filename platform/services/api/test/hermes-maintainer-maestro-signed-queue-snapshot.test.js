@@ -30,6 +30,7 @@ function seal(recordOverride={},time='2026-10-20T23:00:00.000Z'){
   envelope:{issued:true,signature_version:VERSION,key_id:KID,
    issued_at:time,canonical_record_json:canonical,
    ed25519_signature:crypto.sign(null,Buffer.from(bytes),pair.privateKey).toString('base64url'),
+   public_key_b64url:pk,
    execution_authorized:false,simulation_receipt_durable:false,production_allowed:false}
  };
 }
