@@ -177,7 +177,8 @@ function createHermesMaintainerA3ZeroEffectTestRuntime({
  }});
 }
 function createHermesMaintainerA3ZeroEffectTestFromServerEnv({
- environment=process.env,fetchImpl=globalThis.fetch,spawnImpl,timeoutMs
+ environment=process.env,fetchImpl=globalThis.fetch,spawnImpl,timeoutMs,
+ serverOwnedSignedQueueSourceReader
 }={}){
  const transport=createHermesMaintainerMaestroProcessReadInvokerFromServerEnv({
   env:environment,fetchImpl});
@@ -185,6 +186,10 @@ function createHermesMaintainerA3ZeroEffectTestFromServerEnv({
   invokeMissionGateway:transport.configured?
     transport.invokeMissionGateway:async()=>null
  });
+ // A signature-verified, process-owned snapshot source may be injected only
+ // by the trusted durable server composition. Never by an HTTP/A3 payload.
+ const authenticatedRead=typeof serverOwnedSignedQueueSourceReader==='function'?
+  serverOwnedSignedQueueSourceReader:reader.readSimulatedRunCandidate;
  const runSandboxTest=createHermesMaintainerA3NetworkIsolatedTestRunner({
   imageId:environment?.HERMES_A3_TEST_IMAGE_ID,
   // Process-owned staging configuration, never user/MissionRun-controlled.
@@ -192,7 +197,7 @@ function createHermesMaintainerA3ZeroEffectTestFromServerEnv({
   spawnImpl,timeoutMs
  });
  const observer=createHermesMaintainerA3ZeroEffectTestRuntime({
-  readSimulatedRunCandidate:reader.readSimulatedRunCandidate,
+  readSimulatedRunCandidate:authenticatedRead,
   executeTrustedTest:candidate=>{
    const boundary=createHermesMaintainerTestExecutionBoundary({
     runner:{run:async()=>runSandboxTest(candidate)}
@@ -204,7 +209,7 @@ function createHermesMaintainerA3ZeroEffectTestFromServerEnv({
  });
  return Object.freeze({
   version:VERSION,
-  configured:transport.configured&&
+  configured:(transport.configured||typeof serverOwnedSignedQueueSourceReader==='function')&&
    IMAGE_ID.test(environment?.HERMES_A3_TEST_IMAGE_ID||'')&&
    environment?.HERMES_A3_ZERO_EFFECT_TEST_ENABLED==='true'&&
    environment?.HERMES_EXECUTION_ENABLED==='false'&&
