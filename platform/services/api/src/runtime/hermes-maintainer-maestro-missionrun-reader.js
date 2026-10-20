@@ -5,6 +5,9 @@
 // It must authenticate separately, enforce the official membership/service-role
 // policy and must never be obtained from caller-controlled request input.
 const {createHermesMaintainerMaestroInvokerFromServerEnv}=require('./hermes-maintainer-maestro-authenticated-invoker');
+const {createHermesMaintainerA3AuthenticatedSourceClaimVerifier,
+ createHermesMaintainerA3SourceClaimPostgresPersistence}=
+ require('../core/hermes-maintainer-a3-source-claim-postgres-persistence');
 const CONTRACT_VERSION='hermes_maintainer_maestro_missionrun_reader_v1';
 const REPOSITORY='instutodp-cpu/agente-grupo-erick';
 const VERIFY_A3_OPERATION='verify_a3_provenance'; // Requires a deployed authoritative source; fail closed.
@@ -101,4 +104,31 @@ function createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}={}
  return Object.freeze({contract_version:CONTRACT_VERSION,source:'MAESTRO_MISSION_GATEWAY_AUTHENTICATED_READ_ONLY',
   readMissionRun,readMissionRunEvidence,configured:typeof privilegedInvoke==='function'});
 }
-module.exports={CONTRACT_VERSION,VERIFY_A3_OPERATION,createHermesMaintainerMaestroMissionRunReader};
+// Privileged, server-owned read + exclusive claim composition. It is NOT
+// installed on an HTTP route or any SCM operational admission by default.
+// Only staging process config may enable it, and gateway credentials are
+// never accepted from a caller's A3 input.
+function createHermesMaintainerA3SourceClaimFromServerEnv({
+ pool,env=process.env,fetchImpl=globalThis.fetch
+}={}){
+ const transport=createHermesMaintainerMaestroInvokerFromServerEnv({env,fetchImpl});
+ const reader=createHermesMaintainerMaestroMissionRunReader({
+  invokeMissionGateway:transport.configured?transport.invokeMissionGateway:async()=>null
+ });
+ const verifyOfficialSource=createHermesMaintainerA3AuthenticatedSourceClaimVerifier({
+  readMissionRunEvidence:reader.readMissionRunEvidence
+ });
+ const persistence=createHermesMaintainerA3SourceClaimPostgresPersistence({
+  pool,verifyOfficialSource,environment:env
+ });
+ const configured=transport.configured&&env?.HERMES_DEPLOYMENT_STAGE==='staging'&&
+  env?.HERMES_A3_SOURCE_CLAIMS_ENABLED==='true';
+ return Object.freeze({
+  configured,
+  createIfVerified:persistence.createIfVerified,
+  verifyOwned:persistence.verifyOwned
+ });
+}
+module.exports={CONTRACT_VERSION,VERIFY_A3_OPERATION,
+ createHermesMaintainerMaestroMissionRunReader,
+ createHermesMaintainerA3SourceClaimFromServerEnv};
