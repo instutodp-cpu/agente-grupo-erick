@@ -57,7 +57,7 @@ function createHermesMaintainerA3SourceClaimPostgresPersistence({
  async function verifiedClaim(input){
   let source;
   try{source=await verifyOfficialSource(input);}
-  catch{return null;}
+  catch{return {error:'A3_OFFICIAL_SOURCE_UNAVAILABLE'};}
   if(source?.verified!==true||
      source.source!=='MISSION_GATEWAY_DURABLE'||
      source.simulation_effect!=='ZERO'||
@@ -69,13 +69,14 @@ function createHermesMaintainerA3SourceClaimPostgresPersistence({
      source.approval_verified!==true||
      source.issuer_verified!==true||
      !validClaim(source.claim)||
-     !exactScope(source.claim,input))return null;
-  return source.claim;
+     !exactScope(source.claim,input))return {error:'A3_OFFICIAL_SOURCE_UNVERIFIED'};
+  return {claim:source.claim};
  }
  async function verifyOwned(input){
   if(!stagingEnabled())return denied('A3_SOURCE_CLAIM_STAGING_DISABLED');
-  const claim=await verifiedClaim(input);
-  if(!claim)return denied('A3_OFFICIAL_SOURCE_UNVERIFIED');
+  const checked=await verifiedClaim(input);
+  if(checked.error)return denied(checked.error);
+  const claim=checked.claim;
   let result;
   try{result=await pool.query(SELECT_SQL,[claim.single_use_authorization_id]);}
   catch{return denied('A3_SOURCE_CLAIM_READ_UNAVAILABLE');}
@@ -87,8 +88,9 @@ function createHermesMaintainerA3SourceClaimPostgresPersistence({
  }
  async function createIfVerified(input){
   if(!stagingEnabled())return denied('A3_SOURCE_CLAIM_STAGING_DISABLED');
-  const claim=await verifiedClaim(input);
-  if(!claim)return denied('A3_OFFICIAL_SOURCE_UNVERIFIED');
+  const checked=await verifiedClaim(input);
+  if(checked.error)return denied(checked.error);
+  const claim=checked.claim;
   let client,began=false;
   try{
    client=await pool.connect();
