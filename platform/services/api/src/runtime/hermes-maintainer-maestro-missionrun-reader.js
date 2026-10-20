@@ -154,6 +154,7 @@ function createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}={}
   return Object.freeze({
    source:'MAESTRO_MISSION_GATEWAY_OFFICIAL_QUEUE_CANDIDATE',
    workspace_id:run.espaco_id,mission_id:run.mission_id,mission_run_id:run.id,
+   operation:query.operation,repository:REPOSITORY,
    contract_hash:run.contract_hash,revision_sha:scope.revision_sha,
    test_id:'hermes_core_smoke',
    verified_contract_integrity:true,simulated_run_queued:true,
