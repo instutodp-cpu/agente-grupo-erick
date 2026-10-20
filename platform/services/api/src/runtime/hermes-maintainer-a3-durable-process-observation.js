@@ -4,7 +4,7 @@
 // PROCESS observation. Never create, sign or imply an independent A3 receipt.
 const {createHermesMaintainerA3ProcessObservationPersistence}=
  require('../core/hermes-maintainer-a3-process-observation-persistence');
-const {createHermesMaintainerMaestroInvokerFromServerEnv}=
+const {createHermesMaintainerMaestroProcessReadInvokerFromServerEnv}=
  require('./hermes-maintainer-maestro-authenticated-invoker');
 const {createHermesMaintainerMaestroMissionRunReader}=
  require('./hermes-maintainer-maestro-missionrun-reader');
@@ -69,7 +69,7 @@ function createHermesMaintainerA3DurableProcessObservationFromServerEnv({
 }={}){
  if(!pool||typeof pool.connect!=='function'||typeof pool.query!=='function')
   throw new TypeError('official_a3_postgres_pool_required');
- const gateway=createHermesMaintainerMaestroInvokerFromServerEnv({
+ const gateway=createHermesMaintainerMaestroProcessReadInvokerFromServerEnv({
   env:environment,fetchImpl});
  const reader=createHermesMaintainerMaestroMissionRunReader({
   invokeMissionGateway:gateway.configured?
