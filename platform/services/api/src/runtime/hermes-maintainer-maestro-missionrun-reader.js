@@ -11,6 +11,26 @@ const VERIFY_A3_OPERATION='verify_a3_provenance'; // Requires a deployed authori
 const OPERATIONS=new Set(['update_file','create_pull_request']);
 const ID=/^[^\x00-\x20\x7f]{1,255}$/;
 
+function validA3MissionContractSnapshot(run){
+ // The canonical hash alone proves integrity, not permission for a code write.
+ // Do not turn the historical public-web READ into an A3 SCM source.
+ let c;
+ try{c=JSON.parse(run?.contrato_json);}catch{return false;}
+ if(!c||typeof c!=='object'||Array.isArray(c))return false;
+ return c.contract_version==='1.0'&&
+  c.mission_id===run.mission_id&&c.workspace_id===run.espaco_id&&
+  ID.test(run.idempotency_key||'')&&c.idempotency_key===run.idempotency_key&&
+  ID.test(run.emitted_by||'')&&c.requested_by?.id===run.emitted_by&&
+  c.metadata?.emitted_by===run.emitted_by&&
+  ID.test(run.issued_at||'')&&c.metadata?.issued_at===run.issued_at&&
+  ['requer_aprovacao','requer_aprovacao_critica'].includes(c.approval_policy)&&
+  ['desenvolver','gerar_codigo','executar_agente','testar'].includes(c.metadata?.tipo)&&
+  Array.isArray(c.allowed_tools)&&c.allowed_tools.includes('github_api')&&
+  !c.allowed_tools.includes('public_web_read')&&c.callback===null&&
+  Array.isArray(c.denied_actions)&&
+  ['merge','publish','production'].every(x=>c.denied_actions.includes(x));
+}
+
 function createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}={}){
  // The only implicit transport comes from process-owned staging settings.
  // A caller cannot provide credentials or a URL through the A3 query.
@@ -38,7 +58,7 @@ function createHermesMaintainerMaestroMissionRunReader({invokeMissionGateway}={}
    )&&
    typeof run.contract_hash==='string'&&/^sha256:[0-9a-f]{64}$/.test(run.contract_hash)&&
    typeof run.contrato_json==='string'&&run.contrato_json.length>1&&
-   run.contrato_json.length<=65536);
+   run.contrato_json.length<=65536&&validA3MissionContractSnapshot(run));
   // Requiring exactly one candidate prevents ambiguous mission/run provenance.
   if(candidates.length!==1)return null;
   const run=candidates[0];
