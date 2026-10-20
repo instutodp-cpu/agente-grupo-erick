@@ -64,7 +64,7 @@ ALTER TABLE hermes.maintainer_a3_process_observations ENABLE ROW LEVEL SECURITY;
 -- in the standalone staging PostgreSQL. Preserve deny-by-default there too.
 REVOKE ALL ON TABLE hermes.maintainer_a3_process_observations FROM PUBLIC;
 REVOKE USAGE ON SCHEMA hermes FROM PUBLIC;
-DO $
+DO $a3_portable_acl$
 BEGIN
  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
    REVOKE ALL ON TABLE hermes.maintainer_a3_process_observations FROM anon;
@@ -74,5 +74,5 @@ BEGIN
    REVOKE ALL ON TABLE hermes.maintainer_a3_process_observations FROM authenticated;
    REVOKE USAGE ON SCHEMA hermes FROM authenticated;
  END IF;
-END $;
+END $a3_portable_acl$;
 COMMIT;
