@@ -24,7 +24,7 @@ const FIELDS=Object.freeze([
  'execution_authorized','production_allowed','merge_authority'
 ]);
 const ENVELOPE=Object.freeze(['issued','signature_version','key_id','issued_at',
- 'canonical_record_json','ed25519_signature','execution_authorized',
+ 'canonical_record_json','ed25519_signature','public_key_b64url','execution_authorized',
  'simulation_receipt_durable','production_allowed']);
 const QUERY=Object.freeze(['environment','mission_id','operation','repository','run_id']);
 const sameKeys=(obj,keys)=>obj&&typeof obj==='object'&&!Array.isArray(obj)&&
@@ -49,7 +49,8 @@ function createVerifier({publicKeyB64Url,now=()=>Date.now()}={}){
     query.operation!=='update_file'||!ID.test(query.mission_id||'')||
     !ID.test(query.run_id||'')||!sameKeys(envelope,ENVELOPE)||
     envelope.issued!==true||envelope.signature_version!==VERSION||
-    envelope.key_id!==KID||envelope.execution_authorized!==false||
+    envelope.key_id!==KID||envelope.public_key_b64url!==publicKeyB64Url||
+    envelope.execution_authorized!==false||
     envelope.simulation_receipt_durable!==false||
     envelope.production_allowed!==false||
     typeof envelope.canonical_record_json!=='string'||
