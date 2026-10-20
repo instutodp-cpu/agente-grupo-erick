@@ -363,3 +363,31 @@ service identity; or perform any actual A3 SCM mutation. Production/A4,
 merge authority, and promotion for update_file/Draft create_pull_request
 remain forbidden. The 15 October public-web MissionRun and 19 October
 update_file canary do not meet this new source contract.
+
+
+### A3 source hardening — exact Mission Contract and cross-approval replay (20 Oct 2026)
+
+Maestro Pessoal sandbox checkpoint `6ad76bacc924d49ff794f174`
+(c03c5046ff257b623f36f2842dc462d87ab635d3) requires the
+original official Mission Contract to match the exact MissionRun's
+mission/workspace/dispatch idempotency key/emitter/issue time and to
+declare `github_api`, an explicit human-approval policy, a code/test mission
+type and `merge`, `publish`, `production` denied actions.
+A correct contract hash is **necessary but not sufficient**. In particular,
+the historical `public_web_read` canary must never qualify as an A3 source.
+
+Both signed admission and provenance read now require exactly one official
+`SolicitacaoAprovacao` across **all workspaces** for the proposed
+`a3_single_use_authorization_id`, rechecked during persistence and on reads.
+Duplicates deny without accepting a second approval, including if a second
+approval appears after a source was sealed. These read/check/claim controls
+**do not provide atomic global uniqueness** across independent concurrent
+approval creations: an authoritative storage `UNIQUE` constraint or
+equivalent exclusive ledger remains required before operational promotion.
+
+Maestro Deno synthetic tests: 29 passed, 0 failed. The Hermes
+authenticated read bridge duplicates the purpose/scope check before even
+calling `verify_integrity` or `verify_a3_provenance`. Missing source
+authentication, independent zero-effect simulation receipt, issuer key,
+current scoped human approval and actual deployment remain hard blocks.
+No issuer was created and no real A3 source/mutation was emitted.
