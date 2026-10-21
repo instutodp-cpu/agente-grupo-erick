@@ -8,12 +8,14 @@ services:
   api:
     profiles: ["observation"]
     build: ./services/api
-    restart: "no"
+    # Durable observation-only listener; never enable operational ingress here.
+    restart: unless-stopped
     environment:
       HERMES_VERSION: "2.0.0-staging-observation"
       API_PORT: "8080"
       HERMES_EXECUTION_ENABLED: "false"
       HERMES_EXECUTION_KILL_SWITCH: "true"
+      HERMES_MISSION_INGRESS_ENABLED: "false"
       NODE_ENV: "staging"
     ports:
       - "127.0.0.1:${OBSERVATION_API_PORT:-8080}:8080"

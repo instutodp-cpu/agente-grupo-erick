@@ -67,6 +67,9 @@ const GROUPS = Object.freeze({
     'test/runtime-execution-attempt-worker-capacity-reservation-postgres.integration.test.js',
     'test/hermes-vps-postgres-authorization-lifecycle-persistence.test.js',
     'test/postgres-confirmation-persistence.test.js',
+    // Run the EXACT migration 035 against the isolated CI PostgreSQL,
+    // not in residual shards where the test DB env is absent and it skips.
+    'test/hermes-maintainer-a3-process-observation-durable.test.js',
     'test/public-web-canary-third-atomic-resource-commit-postgres.integration.test.js',
       'test/public-web-canary-third-durable-resource-materialization-postgres.integration.test.js'
   ]),
