@@ -295,3 +295,84 @@ test('poller persists owner scoped cache 0600 and audits no financial values',as
   assert.doesNotMatch(audit,/2\.657\.483|13\.250,12/);
  }finally{fs.rmSync(d,{recursive:true,force:true});}
 });
+
+const historicalFixture=()=>({
+ version:1,tenant_id:'grupo_erick',project_id:'yxmdrrwqxwzsdgcgskrm',
+ source_table:'softcom_import.cadastro_de_vendas',
+ extracted_at:new Date(now).toISOString(),latest_sale_date:'2026-06-08',
+ registered:60,marked_cancelled:6,
+ months:['2026-01','2026-02','2026-03','2026-04','2026-05','2026-06']
+  .map(month=>({month,registered:10,marked_cancelled:1})),
+ stores:['CALCADOS','SIRINHAEM','MAGAZINE','SPORTS-(DESATIVADO)',
+   'ERICK SPORTS','VARIEDADES'].map(raw_label=>({raw_label,registered:10,marked_cancelled:1}))
+});
+test('historical summary and dimensions cite source, vintage and no-revenue caveats',()=>{
+ const x=historicalFixture();
+ assert.equal(core.safeHistorySnapshot(x,now),true);
+ const answer=core.historicalReply('historico',x,now);
+ assert.match(answer,/60/);
+ assert.match(answer,/6/);
+ assert.match(answer,/8 jun\/2026/);
+ assert.match(answer,/NÃO faturamento/);
+ assert.match(core.historicalReply('historico_lojas',x,now),/SPORTS-\(DESATIVADO\)/);
+ assert.match(core.historicalReply('historico_meses',x,now),/2026-06/);
+});
+test('historical data fails closed on wrong tenant, source, totals, freshness and injection',()=>{
+ const x=historicalFixture();
+ for(const bad of [
+  {...x,tenant_id:'personal::1'}, {...x,project_id:'wrong'},
+  {...x,registered:61},{...x,source_table:'auth.users'},
+  {...x,extracted_at:'9999-01-01T00:00:00Z'},
+  {...x,stores:[{...x.stores[0],raw_label:'unauthorized'},...x.stores.slice(1)]}
+ ]){
+  assert.equal(core.safeHistorySnapshot(bad,now),false);
+  assert.throws(()=>core.historicalReply('historico',bad,now));
+ }
+});
+test('owner-only historical query is answered without business provider call or 12/day quota',async()=>{
+ const sent=[];let historyReads=0,upstreamReads=0;
+ const args={ownerId:800,clock:()=>now,
+   readHistory:async()=>{historyReads++;return historicalFixture()},
+   query:async()=>{upstreamReads++;throw Error('must never call upstream')},
+   send:async(_,text)=>sent.push(text)};
+ const result=await core.processUpdate({...args,update:update(101,800,'/historico')});
+ assert.equal(result.kind,'answered');
+ assert.equal(result.source,'softcom_snapshot');
+ assert.equal(historyReads,1);
+ assert.equal(upstreamReads,0);
+ assert.match(sent[0],/Histórico de vendas/);
+ const denied=await core.processUpdate({...args,update:update(102,801,'/historico lojas')});
+ assert.equal(denied.kind,'unauthorized');
+ assert.equal(historyReads,1);
+ assert.equal(sent.length,1);
+});
+test('missing historical snapshot shows no fabricated company numbers',async()=>{
+ let answer='';
+ await core.processUpdate({ownerId:800,clock:()=>now,
+  update:update(103,800,'/historico'),
+  readHistory:async()=>null,query:async()=>{throw Error('provider called')},
+  send:async(_,text)=>{answer=text}});
+ assert.match(answer,/indisponível ou não validado/);
+ assert.doesNotMatch(answer,/25\.482/);
+});
+test('poller reads protected historical snapshot via existing state path',async()=>{
+ const d=dir();
+ try{
+  fs.chmodSync(d,0o700);
+  runner.saveState(d,'owner.json',{owner_id:800,bound_at:now});
+  runner.saveState(d,'history-softcom.json',historicalFixture());
+  let calls=0,responded='';
+  const api=async(method,p)=>{
+   if(method==='getUpdates')return p.offset>104?[]:[update(104,800,'/historico lojas')];
+   if(method==='sendMessage'){responded=p.text;return {message_id:41};}
+  };
+  await runner.pollOnce({stateDir:d,api,clock:()=>now,
+   query:async()=>{calls++;throw Error('must not query')}});
+  assert.equal(calls,0);
+  assert.match(responded,/CALCADOS/);
+  assert.equal(fs.statSync(path.join(d,'history-softcom.json')).mode&0o777,0o600);
+  const log=fs.readFileSync(path.join(d,'audit.jsonl'),'utf8');
+  assert.match(log,/"intent":"historico_lojas"/);
+  assert.doesNotMatch(log,/CALCADOS|nome_do_cliente|secret/i);
+ }finally{fs.rmSync(d,{recursive:true,force:true});}
+});

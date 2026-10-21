@@ -6,7 +6,7 @@ const ROUTES=Object.freeze({
  lotoia:'/internal/lotoia-read-pilot/health',status:'/health'
 });
 const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
- 'Comandos: /compras, /lotoia, /status, /ajuda.\n'+
+ 'Comandos: /compras, /lotoia, /historico, /historico lojas, /historico meses, /status, /ajuda.\n'+
  'Também aceito "resumo das compras" e "situação do LotoIA".\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
@@ -16,6 +16,12 @@ function intentFor(text){
  const t=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
  if(/^\/(?:start|ajuda|help)(?:@\w+)?$/.test(t)||t==='ajuda')return 'help';
  if(/^\/status(?:@\w+)?$/.test(t)||t==='status')return 'status';
+ if(/^\/historico(?:@\w+)?\s+lojas$/.test(t)||t==='vendas por loja'||
+    t==='qual loja teve mais vendas?')return 'historico_lojas';
+ if(/^\/historico(?:@\w+)?\s+meses$/.test(t)||t==='vendas por mes')
+  return 'historico_meses';
+ if(/^\/historico(?:@\w+)?$/.test(t)||t==='historico de vendas'||
+    t==='resumo historico de vendas')return 'historico';
  if(/^\/compras(?:@\w+)?$/.test(t)||
   (/\b(compras|duplicatas)\b/.test(t)&&
    /\b(resumo|saldo|venciment\w*|pendenc\w*|total|quanto|qual|quais|mostre|mostra|situacao|relatorio)\b/.test(t)))
@@ -63,6 +69,62 @@ function cachedReply(x){
  const date=new Date(x.at).toLocaleString('pt-BR',{timeZone:'America/Recife',hour12:false});
  return x.reply+'\n\n⏱️ DADOS EM CACHE — consulta real de '+date+
   '. Não foi feita nova consulta; os valores podem ter mudado.';
+}
+const HISTORY_PROJECT='yxmdrrwqxwzsdgcgskrm';
+const HISTORY_SOURCE='softcom_import.cadastro_de_vendas';
+const HISTORY_STORES=['CALCADOS','SIRINHAEM','MAGAZINE',
+ 'SPORTS-(DESATIVADO)','ERICK SPORTS','VARIEDADES'];
+const HISTORY_MONTHS=['2026-01','2026-02','2026-03','2026-04','2026-05','2026-06'];
+function safeHistorySnapshot(x,now=Date.now()){
+ if(!x||x.version!==1||x.tenant_id!=='grupo_erick'||
+  x.project_id!==HISTORY_PROJECT||x.source_table!==HISTORY_SOURCE||
+  !Number.isSafeInteger(now)||typeof x.extracted_at!=='string'||
+  !/^20\d{2}-\d{2}-\d{2}T/.test(x.extracted_at)||
+  !Number.isFinite(Date.parse(x.extracted_at))||
+  Date.parse(x.extracted_at)>now+60000||
+  x.latest_sale_date!=='2026-06-08'||
+  !Array.isArray(x.months)||x.months.length!==6||
+  !Array.isArray(x.stores)||x.stores.length!==6)return false;
+ let total=0,excluded=0,storeTotal=0,storeExcluded=0;
+ for(let i=0;i<HISTORY_MONTHS.length;i++){
+  const m=x.months[i];
+  if(m?.month!==HISTORY_MONTHS[i]||!safeCount(m.registered)||
+   !safeCount(m.marked_cancelled)||m.marked_cancelled>m.registered)return false;
+  total+=m.registered;excluded+=m.marked_cancelled;
+ }
+ for(let i=0;i<HISTORY_STORES.length;i++){
+  const v=x.stores[i];
+  if(v?.raw_label!==HISTORY_STORES[i]||!safeCount(v.registered)||
+   !safeCount(v.marked_cancelled)||v.marked_cancelled>v.registered)return false;
+  storeTotal+=v.registered;storeExcluded+=v.marked_cancelled;
+ }
+ return total===storeTotal&&excluded===storeExcluded&&
+  x.registered===total&&x.marked_cancelled===excluded&&
+  x.registered<=1000000;
+}
+function historicalReply(intent,x,now=Date.now()){
+ if(!safeHistorySnapshot(x,now))throw Error('historical_snapshot_unverified');
+ const stamp=new Date(x.extracted_at).toLocaleString('pt-BR',{
+  timeZone:'America/Recife',hour12:false});
+ const root=['📚 Histórico de vendas — Grupo Erick',
+  'Fonte: Supabase softcom-grupo-erick / softcom_import.cadastro_de_vendas',
+  'Extração verificada: '+stamp,
+  'Cobertura analisada: jan–8 jun/2026 (junho parcial; julho ausente)',
+  'Registros no período: '+num.format(x.registered),
+  'Marcados como cancelados: '+num.format(x.marked_cancelled),
+  'Não marcados como cancelados: '+num.format(x.registered-x.marked_cancelled)];
+ if(intent==='historico_lojas')
+  root.push('Por código original de loja:',
+   ...x.stores.map(v=>'• '+v.raw_label+': '+num.format(v.registered)+
+    ' registros ('+num.format(v.marked_cancelled)+' marcados cancelados)'));
+ if(intent==='historico_meses')
+  root.push('Por mês:',
+   ...x.months.map(v=>'• '+v.month+': '+num.format(v.registered)+
+    ' registros ('+num.format(v.marked_cancelled)+' marcados cancelados)'));
+ root.push('⚠️ Contagem de registros, NÃO faturamento nem vendas líquidas; códigos de lojas não conciliados.',
+  'Snapshot privado e datado; nenhuma consulta online ao Supabase nesta resposta.',
+  'Somente leitura; não consome quota de Compras/LotoIA.');
+ return root.join('\n');
 }
 function hermesReply(intent,x){
  if(intent==='status')return x===true?
@@ -142,7 +204,7 @@ function hermesReply(intent,x){
 }
 async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.now(),
  send,saveOwner,savePairing,query,
- readCache=async()=>null,writeCache=async()=>{}}){
+ readCache=async()=>null,writeCache=async()=>{},readHistory=async()=>null}){
  const msg=privateMessage(update);
  if(!msg)return {kind:'ignored'};
  if(typeof send!=='function'||typeof query!=='function')
@@ -169,6 +231,13 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  if(intent==='unknown'){
   await send(msg.userId,'Ainda não tenho essa operação liberada.\n\n'+HELP);
   return {kind:'unsupported',intent};
+ }
+ if(['historico','historico_lojas','historico_meses'].includes(intent)){
+  let response;
+  try{response=historicalReply(intent,await readHistory(),clock());}
+  catch{response='Histórico ainda indisponível ou não validado. Não exibirei números não verificados.';}
+  await send(msg.userId,response);
+  return {kind:'answered',intent,source:'softcom_snapshot'};
  }
  let response,cacheStatus=null;
  try{
@@ -202,4 +271,4 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  await send(msg.userId,response);
  return {kind:'answered',intent,cache:cacheStatus};
 }
-module.exports={ROUTES,HELP,intentFor,privateMessage,pairValid,hermesReply,verifiedCache,cachedReply,processUpdate};
+module.exports={ROUTES,HELP,intentFor,privateMessage,pairValid,hermesReply,verifiedCache,cachedReply,safeHistorySnapshot,historicalReply,processUpdate};
