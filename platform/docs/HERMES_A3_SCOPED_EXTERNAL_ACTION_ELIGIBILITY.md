@@ -808,3 +808,26 @@ Base44 function deployment and an actual signed POST from the VPS
 are verified. Hermes' HTTP ingress with shared audit and quota must still
 be validated and reconciled with the remote GitHub PR before public rollout. The endpoint must NOT be put behind public
 Caddy until its authenticated test and deployment rights are confirmed.
+
+#### Commercial priorities (increment after live signed read)
+
+The existing **same-tenant, machine-authenticated** staging read ingress
+supports a fixed `GET /internal/commercial-read-pilot/brief` route. One
+request calls the pinned official **Compras homologação** Base44 summary
+function once under the existing Ed25519 signature, persists the same
+two-stage fsync audit and consumes the **shared** 12-attempt rolling
+24-hour budget. No background cron, delivery, new external integration
+or extra permissions are introduced.
+
+The result is a deterministic executive brief with read-only verification
+priorities: check overdue registered titles, upcoming-30-day titles, and
+reconcile with Linx. It returns aggregated counts/amounts only, rejects
+other tenants, contradictory balances, invalid amounts, future snapshots,
+or source snapshots older than one Recife-local calendar day. Flags
+`alerts_dispatched:false`, `payment_authorized:false`,
+`external_write_performed:false` and `erp_linx_conciliated:false`
+make the advisory nature explicit.
+
+These registered balances are **not** independently reconciled ERP debts.
+The route must not be exposed in Caddy until this exact code commit
+passes CI and an isolated localhost service has been validated.

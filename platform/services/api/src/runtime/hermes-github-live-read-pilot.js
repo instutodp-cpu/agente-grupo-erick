@@ -12,6 +12,8 @@ const {readBcbEconomicIndicator,INDICATORS}=
  require('./hermes-bcb-economic-read');
 const {readBase44CommercialSummary}=
  require('./hermes-base44-commercial-read');
+const {createHermesCommercialPriorityBrief}=
+ require('./hermes-commercial-priority-brief');
 const REPOSITORY='instutodp-cpu/agente-grupo-erick';
 const REF='main',WINDOW_MS=86400000;
 const RESOURCES=Object.freeze({
@@ -53,9 +55,10 @@ function createHermesGithubLiveReadPilot({
      !/^[A-Za-z0-9_.:-]{1,128}$/.test(identity.key_id||''))
    return denied('identity_invalid');
   if(!Object.hasOwn(RESOURCES,resource)&&
-     !Object.hasOwn(INDICATORS,resource)&&resource!=='commercial')
+     !Object.hasOwn(INDICATORS,resource)&&resource!=='commercial'&&
+     resource!=='commercial_brief')
    return denied('resource_not_allowed');
-  if(resource==='commercial'&&
+  if((resource==='commercial'||resource==='commercial_brief')&&
      environment.HERMES_BASE44_COMMERCIAL_READ_ENABLED!=='true')
    return denied('commercial_disabled');
   const time=clock();
@@ -69,7 +72,7 @@ function createHermesGithubLiveReadPilot({
    return denied('quota_store_unavailable');
   if(attempts>=maxRequests)return denied('request_budget_exhausted');
   const isEconomy=Object.hasOwn(INDICATORS,resource);
-  const isCommercial=resource==='commercial';
+  const isCommercial=resource==='commercial'||resource==='commercial_brief';
   const path=isEconomy||isCommercial?null:RESOURCES[resource],trace_id=randomUUID();
   const bound={trace_id,tenant_id:identity.tenant_id,
    principal_id:identity.principal.id,key_id:identity.key_id,
@@ -92,6 +95,11 @@ function createHermesGithubLiveReadPilot({
      }
     });
    }catch{/* No provider detail, URL, credential or financial payload in audit. */}
+   let brief=null;
+   if(summary&&resource==='commercial_brief'){
+    try{brief=createHermesCommercialPriorityBrief(summary,{clock});}
+    catch{summary=null;}
+   }
    const success=Boolean(summary);
    const audit=Object.freeze({...bound,event:'result',
     at:new Date(clock()).toISOString(),adapter_outcome:success?'SUCCEEDED':'FAILED',
@@ -102,7 +110,8 @@ function createHermesGithubLiveReadPilot({
    if(!success)return Object.freeze({...denied('provider_failed'),trace_id});
    return Object.freeze({status:'succeeded',trace_id,executed:true,
     network_call_performed:true,simulated:false,
-    write_performed:false,production_used:false,...summary});
+    write_performed:false,production_used:false,
+    ...(resource==='commercial_brief'?{brief}:summary)});
   }
   if(isEconomy){
    let indicator=null,providerCalled=false,error=null;

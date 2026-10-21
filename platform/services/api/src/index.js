@@ -149,7 +149,8 @@ function createServer({
         url === '/internal/github-read-pilot/readiness' ||
         url === '/internal/economy-read-pilot/selic' ||
         url === '/internal/economy-read-pilot/ipca' ||
-        url === '/internal/commercial-read-pilot/summary') {
+        url === '/internal/commercial-read-pilot/summary' ||
+        url === '/internal/commercial-read-pilot/brief') {
       if (method !== 'GET' || req.url !== url) {
         return sendJson(res, 405, { error: 'method_not_allowed' });
       }
@@ -168,7 +169,8 @@ function createServer({
       }
       return Promise.resolve().then(()=>githubReadPilot.execute({identity,resource:url.endsWith('/readiness')?'readiness':
           url.endsWith('/selic')?'selic':url.endsWith('/ipca')?'ipca':
-          url.endsWith('/summary')?'commercial':'readme'})).then(result=>{
+          url.endsWith('/summary')?'commercial':
+          url.endsWith('/brief')?'commercial_brief':'readme'})).then(result=>{
         const code=result.status==='succeeded'?200:
           result.status==='request_budget_exhausted'?429:503;
         res.setHeader('Cache-Control','no-store');
