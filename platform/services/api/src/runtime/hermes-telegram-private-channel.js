@@ -46,6 +46,24 @@ function pairValid(code,record,now){
 }
 const safeCount=n=>Number.isSafeInteger(n)&&n>=0&&n<=1000000;
 const safeMoney=n=>typeof n==='number'&&Number.isFinite(n)&&n>=0&&n<1e10;
+const CACHE_REUSE_MS=6*3600000,CACHE_MAX_MS=24*3600000;
+function verifiedCache(x,ownerId,intent,now){
+ if(!x||!['compras','lotoia'].includes(intent)||x.owner_id!==ownerId||
+    x.tenant_id!=='grupo_erick'||x.intent!==intent||
+    !Number.isSafeInteger(x.at)||!Number.isSafeInteger(now))return null;
+ const age=now-x.at;
+ const prefix=intent==='compras'?'📦 Compras — Grupo Erick (homologação)':
+    '🎟️ LotoIA — duas lotéricas Erick';
+ if(age<0||age>CACHE_MAX_MS||typeof x.reply!=='string'||
+    Buffer.byteLength(x.reply,'utf8')>1500||!x.reply.startsWith(prefix)||
+    !/Somente leitura\. Rastreio: [a-f0-9]{8}$/.test(x.reply))return null;
+ return {reply:x.reply,at:x.at,age};
+}
+function cachedReply(x){
+ const date=new Date(x.at).toLocaleString('pt-BR',{timeZone:'America/Recife',hour12:false});
+ return x.reply+'\n\n⏱️ DADOS EM CACHE — consulta real de '+date+
+  '. Não foi feita nova consulta; os valores podem ter mudado.';
+}
 function hermesReply(intent,x){
  if(intent==='status')return x===true?
   '✅ Hermes online em staging. Consultas somente leitura.':
@@ -123,7 +141,8 @@ function hermesReply(intent,x){
  throw Error('intent_not_allowed');
 }
 async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.now(),
- send,saveOwner,savePairing,query}){
+ send,saveOwner,savePairing,query,
+ readCache=async()=>null,writeCache=async()=>{}}){
  const msg=privateMessage(update);
  if(!msg)return {kind:'ignored'};
  if(typeof send!=='function'||typeof query!=='function')
@@ -151,18 +170,36 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
   await send(msg.userId,'Ainda não tenho essa operação liberada.\n\n'+HELP);
   return {kind:'unsupported',intent};
  }
- let response;
+ let response,cacheStatus=null;
  try{
+  const isDomain=intent==='compras'||intent==='lotoia';
+  const cached=isDomain?verifiedCache(await readCache(intent),msg.userId,intent,clock()):null;
+  if(cached&&cached.age<=CACHE_REUSE_MS){
+   await send(msg.userId,cachedReply(cached));
+   return {kind:'answered',intent,cache:'hit'};
+  }
   const data=await query(intent,ROUTES[intent]);
-  response=data?.denied_status==='request_budget_exhausted'?
-   'Limite compartilhado de 12 consultas em 24h atingido. Não repetirei a consulta.':
-   data?.denied_status?
-   'Consulta indisponível. Nenhum dado foi considerado confirmado.':
-   hermesReply(intent,data);
+  if(data?.denied_status==='request_budget_exhausted'){
+   response=cached?cachedReply(cached)+
+    '\n⚠️ Quota compartilhada esgotada; exibindo apenas a leitura anterior.':
+    'Limite compartilhado de 12 consultas em 24h atingido. Não repetirei a consulta.';
+   cacheStatus=cached?'quota_fallback':'miss';
+  }else if(data?.denied_status){
+   response='Consulta indisponível. Nenhum dado foi considerado confirmado.';
+  }else{
+   response=hermesReply(intent,data);
+   if(isDomain){
+    const record={owner_id:msg.userId,tenant_id:'grupo_erick',intent,at:clock(),reply:response};
+    if(Buffer.byteLength(JSON.stringify(record),'utf8')<=2048){
+     try{await writeCache(intent,record);cacheStatus='stored';}
+     catch{cacheStatus='store_failed';}
+    }else cacheStatus='oversize';
+   }
+  }
  }catch{
   response='Não consegui validar a resposta na origem. Nenhum dado foi tratado como confirmado.';
  }
  await send(msg.userId,response);
- return {kind:'answered',intent};
+ return {kind:'answered',intent,cache:cacheStatus};
 }
-module.exports={ROUTES,HELP,intentFor,privateMessage,pairValid,hermesReply,processUpdate};
+module.exports={ROUTES,HELP,intentFor,privateMessage,pairValid,hermesReply,verifiedCache,cachedReply,processUpdate};
