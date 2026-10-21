@@ -582,3 +582,49 @@ bind actual sandbox/container/process identity, exact verified commit, issuer
 identity/signature, official MissionRun/contract digest, audit timestamps and
 independently attested effect policy. Until that evidence is generated and
 reconciled by a trustworthy issuer, all downstream A3 gates remain CLOSED.
+
+
+### A3 independent-witness read gate (PR #563; 20 Oct 2026)
+
+Official staging facts, verified directly after the initial operator session:
+* Official Mission `6ad7e310737fee5ec40456e6` and MissionRun
+  `6ad7f24438f9d9c3f10d93dc` remain `na_fila`.
+* Exactly one **durable process-only observation** exists in migration 035:
+  `process_observed`, digest
+  `sha256:3ebdaa2c663351147d67b8effd741a6272ec58ca81ec806e034dd5fea4b2c00d`.
+  Reserved `2026-10-20T23:48:18.767340Z`, finished
+  `2026-10-20T23:48:19.481864Z`.
+  `subprocess_passed=true`; network/SCM effects **unknown**.
+* Official outbox `6ad7f244dd5fbd0781cbab02` remains
+  `pending`, `mock`, not acknowledged; there are 0 source claims.
+* Maestro Ed25519 queued snapshot signature verified against the independently
+  pinned public key **at the instant of reservation**. It expired afterwards.
+  This is *source authentication only*, not a simulation-effects receipt.
+
+Added **pure read-only independent-witness receipt verifier**, a staging-only
+durable receipt schema 036 and a default-disabled PostgreSQL admission reader.
+Schema 036 has a foreign key to the existing observation, UNIQUE run/mission/
+outbox/receipt and observational digest, RLS, revoked public access and
+bounded issuance/commit times. The independent witness receipt requires
+a separately pinned Ed25519 issuer public key, immutable official MissionRun,
+contract/image/SHA/outbox binding, process observation digest and timeline,
+exact Docker isolation controls and a container identity. The admission reader
+cross-checks the signed issuer statement with both PostgreSQL rows and a
+current **authenticated** Maestro source callback; on mismatch or outage it
+fails closed. A valid *synthetic* signature in tests is not evidence of a real
+witness. Neither verification nor stored receipt authorizes SCM or production.
+
+**Critically missing**: the physically independent live supervisor/issuer,
+external private-key custody and independent database writer role; a
+contemporaneously witnessed single process; durable receipt entry; an
+official reconciliation service allowed to ACK the outbox; and a new human
+decision bound after the verified execution. Migration 036 is tested only in
+a transaction with `ROLLBACK`, not deployed. The witness reader is NOT
+installed on any HTTP route or operational execution path, and the flag
+`HERMES_A3_INDEPENDENT_WITNESS_READ_ENABLED` defaults to OFF.
+Never provide the issuer private key to Hermes/Maestro. Do not
+retroactively sign the existing observed run, repeat its process, treat
+mock ACK as receipt, or mark it `concluida`. The current run is
+**not eligible** for a verified zero-effect receipt after the fact.
+Only a separate future, explicitly authorized and simultaneously witnessed
+execution could produce that evidence, and no such execution has occurred.
