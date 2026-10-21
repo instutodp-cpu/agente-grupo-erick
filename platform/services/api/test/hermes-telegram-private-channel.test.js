@@ -172,10 +172,11 @@ test('Telegram API is fixed-method POST with no arbitrary network target',async(
    {status:200,headers:{'content-type':'application/json'}});
  });
  assert.deepEqual(await api('getMe',{}),{is_bot:true,id:33});
+ assert.deepEqual(await api('getWebhookInfo',{}),{is_bot:true,id:33});
  assert.equal(calls[0].opts.method,'POST');
  assert.ok(calls[0].url.startsWith('https://api.telegram.org/bot'));
  await assert.rejects(api('deleteMessage',{}),/denied/);
- assert.equal(calls.length,1);
+ assert.equal(calls.length,2);
 });
 test('Hermes client only permits fixed GET paths and machine identity',async()=>{
  let called=0;
@@ -189,4 +190,24 @@ test('Hermes client only permits fixed GET paths and machine identity',async()=>
  assert.equal((await c('lotoia',core.ROUTES.lotoia)).source,'LotoIA');
  await assert.rejects(c('lotoia','/internal/admin/execute'),/denied/);
  assert.equal(called,1);
+});
+
+test('failed Telegram send does not automatically repeat a read or consume quota twice',async()=>{
+ const d=dir();let upstream=0;
+ try{
+  fs.chmodSync(d,0o700);
+  runner.saveState(d,'owner.json',{owner_id:800,bound_at:now});
+  const api=async(method,data)=>{
+   if(method==='getUpdates')
+    return data.offset>20?[]:[update(20,800,'resumo das compras')];
+   if(method==='sendMessage')throw Error('telegram_delivery_failed');
+   throw Error('unexpected_method');
+  };
+  const query=async()=>{upstream++;return compras();};
+  await assert.rejects(
+   runner.pollOnce({stateDir:d,api,query,clock:()=>now}),/telegram_delivery_failed/);
+  assert.equal(runner.loadState(d,'offset.json').offset,21);
+  assert.equal((await runner.pollOnce({stateDir:d,api,query,clock:()=>now})).handled,0);
+  assert.equal(upstream,1);
+ }finally{fs.rmSync(d,{recursive:true,force:true});}
 });
