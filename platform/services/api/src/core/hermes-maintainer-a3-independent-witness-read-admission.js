@@ -3,7 +3,6 @@
 // supervisor receipt with its pinned external signing key, current official
 // MissionRun identity, and immutable observation 035. Cannot ACK, write SCM,
 // complete Maestro runs, or promote. No private issuer key in this process.
-const {verifyIndependentWitnessReceipt}=require('./hermes-maintainer-a3-independent-witness-receipt');
 const OBS_TABLE='hermes.maintainer_a3_process_observations';
 const WIT_TABLE='hermes.maintainer_a3_independent_witness_receipts';
 const READ_OBS='SELECT * FROM '+OBS_TABLE+' WHERE mission_run_id=$1';
@@ -15,11 +14,12 @@ const disabled=status=>Object.freeze({status,
  outbox_acknowledged:false,merge_authority:false,network_call_performed:null,
  scm_write_performed:null});
 function createHermesMaintainerA3IndependentWitnessReadAdmission({
- pool,readOfficialMissionRun,publicKeyB64Url,issuerId,environment=process.env,
- now=()=>Date.now()
+ pool,readOfficialMissionRun,verifyIndependentWitnessReceipt,
+ publicKeyB64Url,issuerId,environment=process.env,now=()=>Date.now()
 }={}){
  if(!pool||typeof pool.query!=='function')throw new TypeError('postgres_required');
  if(typeof readOfficialMissionRun!=='function')throw new TypeError('official_maestro_reader_required');
+ if(typeof verifyIndependentWitnessReceipt!=='function')throw new TypeError('separate_issuer_verifier_required');
  const gates=()=>environment.HERMES_DEPLOYMENT_STAGE==='staging'&&
   environment.HERMES_A3_INDEPENDENT_WITNESS_READ_ENABLED==='true'&&
   environment.HERMES_EXECUTION_ENABLED==='false'&&

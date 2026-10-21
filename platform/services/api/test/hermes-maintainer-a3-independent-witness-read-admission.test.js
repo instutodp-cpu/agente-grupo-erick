@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {computeCanonicalContentDigest}=require('../src/core/canonical-content-digest');
-const {VERSION,PURPOSE}=require('../src/core/hermes-maintainer-a3-independent-witness-receipt');
+const {VERSION,PURPOSE,verifyIndependentWitnessReceipt}=require('../src/runtime/hermes-maintainer-a3-independent-witness-receipt');
 const {READ_OBS,READ_WIT,createHermesMaintainerA3IndependentWitnessReadAdmission}=
  require('../src/core/hermes-maintainer-a3-independent-witness-read-admission');
 const {privateKey,publicKey}=crypto.generateKeyPairSync('ed25519');
@@ -68,7 +68,7 @@ function fixture(patches={}){
    sql===READ_WIT?patches.missingWitness?[]:[wit]:[]};
  }};
  const reader=createHermesMaintainerA3IndependentWitnessReadAdmission({
-  pool,publicKeyB64Url:patches.key||key,issuerId:'independent-witness',
+  pool,verifyIndependentWitnessReceipt,publicKeyB64Url:patches.key||key,issuerId:'independent-witness',
   readOfficialMissionRun:async()=>{if(patches.failGateway)throw Error('outage');
    return patches.official||official()},
   environment:patches.env||env,

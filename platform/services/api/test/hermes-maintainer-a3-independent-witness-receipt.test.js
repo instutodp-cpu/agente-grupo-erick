@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const crypto=require('node:crypto');
 const {computeCanonicalContentDigest}=require('../src/core/canonical-content-digest');
 const {VERSION,PURPOSE,verifyIndependentWitnessReceipt:verify}=
- require('../src/core/hermes-maintainer-a3-independent-witness-receipt');
+ require('../src/runtime/hermes-maintainer-a3-independent-witness-receipt');
 const kid='independent-staging-witness-qa';
 const privateKey=crypto.generateKeyPairSync('ed25519');
 const pub=privateKey.publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64url');
@@ -110,7 +110,7 @@ test('witness must overlap reserved execution and signed receipt must follow exe
 test('signature and format mutation fail closed',()=>{
  const e=sign(record());
  for(const bad of [
-  {...e,signature:e.signature.slice(0,-1)+'A'},
+  {...e,signature:(e.signature[0]==='A'?'B':'A')+e.signature.slice(1)},
   {...e,record:{...e.record,test_exit_code:1}},
   {...e,record:{...e.record,execution_authorized:true}}
  ])assert.equal(verify({envelope:bad,observation:observation(),

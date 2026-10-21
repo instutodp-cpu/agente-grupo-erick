@@ -4,7 +4,7 @@
 // A Maestro queue snapshot, Hermes process exit, or backfilled observation
 // can never substitute for its Ed25519 attestation. No SCM authority.
 const crypto=require('node:crypto');
-const {computeCanonicalContentDigest}=require('./canonical-content-digest');
+const {computeCanonicalContentDigest}=require('../core/canonical-content-digest');
 const VERSION='hermes_a3_independent_supervisor_receipt_v1';
 const PURPOSE='HERMES_A3_INDEPENDENT_SUPERVISOR_RECEIPT_V1';
 const REPO='instutodp-cpu/agente-grupo-erick';
