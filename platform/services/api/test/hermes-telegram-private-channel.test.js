@@ -222,3 +222,76 @@ test('failed Telegram send does not automatically repeat a read or consume quota
   assert.equal(upstream,1);
  }finally{fs.rmSync(d,{recursive:true,force:true});}
 });
+
+test('authorized private owner reuses a verified commercial reply without extra read',async()=>{
+ let saved=null,reads=0,messages=[];
+ const props={ownerId:800,clock:()=>now,
+  query:async()=>{reads++;return compras()},
+  readCache:async()=>saved,writeCache:async(_,x)=>{saved=x},
+  send:async(_,text)=>messages.push(text)};
+ let a=await core.processUpdate({...props,update:update(81,800,'/compras')});
+ assert.equal(a.cache,'stored');
+ assert.equal(saved.owner_id,800);
+ assert.equal(saved.tenant_id,'grupo_erick');
+ assert.match(saved.reply,/Compras dos últimos 30 dias/);
+ a=await core.processUpdate({...props,update:update(82,800,'/compras')});
+ assert.equal(a.cache,'hit');
+ assert.equal(reads,1);
+ assert.match(messages.at(-1),/DADOS EM CACHE/);
+ assert.match(messages.at(-1),/22222222/);
+ const denied=await core.processUpdate({...props,update:update(83,801,'/compras')});
+ assert.equal(denied.kind,'unauthorized');
+ assert.equal(messages.length,2);
+ assert.equal(reads,1);
+});
+test('quota exhaustion can cite only a previously verified and dated LotoIA reply',async()=>{
+ const snapshot={owner_id:800,tenant_id:'grupo_erick',intent:'lotoia',
+  at:now-12*3600000,reply:core.hermesReply('lotoia',lotoia())};
+ let answer='',reads=0;
+ const a=await core.processUpdate({ownerId:800,clock:()=>now,
+  update:update(84,800,'/lotoia'),readCache:async()=>snapshot,
+  query:async()=>{reads++;return {denied_status:'request_budget_exhausted'}},
+  send:async(_,x)=>{answer=x}});
+ assert.equal(a.cache,'quota_fallback');
+ assert.equal(reads,1);
+ assert.match(answer,/DADOS EM CACHE/);
+ assert.match(answer,/Quota compartilhada esgotada/);
+ assert.match(answer,/NÃO comprova ausência de pendências/);
+});
+test('cross-owner, other tenant, expired and tampered snapshots fail closed',async()=>{
+ const snapshot={owner_id:800,tenant_id:'grupo_erick',intent:'compras',
+  at:now,reply:core.hermesReply('compras',compras())};
+ for(const x of [{...snapshot,owner_id:801},{...snapshot,tenant_id:'outside'},
+  {...snapshot,at:now-86400001},{...snapshot,reply:'fake balances'}]){
+  assert.equal(core.verifiedCache(x,800,'compras',now),null);
+ }
+ let text='';
+ await core.processUpdate({ownerId:800,clock:()=>now,
+  update:update(85,800,'/compras'),
+  readCache:async()=>({...snapshot,at:now-86400001}),
+  query:async()=>({denied_status:'request_budget_exhausted'}),
+  send:async(_,x)=>{text=x}});
+ assert.match(text,/12 consultas/);
+ assert.doesNotMatch(text,/2\.657\.483/);
+});
+test('poller persists owner scoped cache 0600 and audits no financial values',async()=>{
+ const d=dir();
+ try{
+  fs.chmodSync(d,0o700);
+  runner.saveState(d,'owner.json',{owner_id:800,bound_at:now});
+  let queries=0;
+  const api=async(method,arg)=>{
+   if(method==='getUpdates')return arg.offset>88?[]:[update(88,800,'/compras')];
+   if(method==='sendMessage')return {message_id:40};
+  };
+  await runner.pollOnce({stateDir:d,api,clock:()=>now,
+   query:async()=>{queries++;return compras()}});
+  const f=path.join(d,'cache-compras.json');
+  assert.equal(fs.statSync(f).mode&0o777,0o600);
+  assert.equal(runner.loadState(d,'cache-compras.json').owner_id,800);
+  assert.equal(queries,1);
+  const audit=fs.readFileSync(path.join(d,'audit.jsonl'),'utf8');
+  assert.match(audit,/"cache":"stored"/);
+  assert.doesNotMatch(audit,/2\.657\.483|13\.250,12/);
+ }finally{fs.rmSync(d,{recursive:true,force:true});}
+});
