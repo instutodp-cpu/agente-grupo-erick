@@ -20,6 +20,16 @@ O token oficial do bot é secreto e não pode ser enviado por chat, issue, commi
 
 O canal é fail-closed sem `HERMES_TELEGRAM_ENABLED=true`, `HERMES_DEPLOYMENT_STAGE=staging`, execução desativada, kill switch habilitado, ingresso de missões desativado, token válido e arquivos protegidos. O polling nunca recupera conversas de terceiros; recebe apenas novas mensagens ao próprio bot. O ledger escreve apenas update IDs e intenções aprovadas, **nunca o texto bruto**. O cursor de update é persistido **antes** da consulta de leitura: uma falha na entrega da resposta do Telegram não repete automaticamente a consulta nem consome a cota duas vezes. Uma resposta perdida pode ser solicitada de novo pelo usuário.
 
+## Provisionamento simplificado (preferencial)
+
+No Web Console da VPS como `hermesadmin`, depois de atualizar a cópia de trabalho para o commit aprovado no CI, execute:
+
+```bash
+bash platform/services/api/scripts/hermes-telegram-provision.sh
+```
+
+O script solicita o token **somente no terminal com eco desativado**, instala no arquivo protegido do contrato oficial, e gera um código de vínculo de 15 minutos usando o gerador já existente. Não cole o token/código em chats, GitHub, logs ou comandos de processo. O serviço continuará inativo até a implantação do polling, com identidade de máquina e flags fail-closed.
+
 ## Operação de ativação (depende de ação humana)
 
 1. **Criar bot:** no Telegram, abrir `@BotFather` oficial e executar `/newbot`. Escolher nome e username. O BotFather fornecerá um token. **Não colar o token nesta conversa.** [Guia oficial](https://core.telegram.org/bots/tutorial).
