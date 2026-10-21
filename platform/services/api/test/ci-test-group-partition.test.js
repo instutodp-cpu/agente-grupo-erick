@@ -182,3 +182,15 @@ test('local `npm test` script is untouched -- still delegates to full discovery,
   const packageJson = JSON.parse(fs.readFileSync(PACKAGE_JSON_PATH, 'utf8'));
   assert.equal(packageJson.scripts.test, 'node scripts/discover-tests.js');
 });
+
+test('shared PostgreSQL group serializes test files; other groups and shards preserve concurrency',()=>{
+  const {parseInvocation,buildNodeTestArgs}=require('../scripts/run-residual-tests');
+  const pg=parseInvocation(['--group=postgres-persistence']);
+  const standard=parseInvocation(['--group=runtime-attempt-contracts']);
+  const shard=parseInvocation(['--shard=1/6']);
+  const files=['test/a.test.js','test/b.test.js'];
+  assert.deepEqual(buildNodeTestArgs(pg,files),
+    ['--test','--test-concurrency=1',...files]);
+  assert.deepEqual(buildNodeTestArgs(standard,files),['--test',...files]);
+  assert.deepEqual(buildNodeTestArgs(shard,files),['--test',...files]);
+});
