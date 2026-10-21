@@ -45,6 +45,15 @@ O script solicita o token **somente no terminal com eco desativado**, instala no
 
 O leitor Hermes em staging compartilha **12 tentativas por 24 horas** com GitHub, economia, Compras e LotoIA. A primeira versão do bot *não* contorna esse orçamento nem tenta consultas repetitivas para evitar limites. Durante o piloto, as mensagens comerciais podem retornar limite atingido. Para escalonar uso diário, será necessária uma decisão explícita sobre quota, cache seguro e concorrência, com auditoria.
 
+### Cache de leitura com identidade e rastreio
+O canal agora reaproveita, por **até 6 horas**, uma resposta previamente obtida e validada do leitor Hermes. A resposta em cache não aciona novamente Compras ou LotoIA e traz o rótulo **DADOS EM CACHE**, horário da última leitura real e trace original. O limite de 12 consultas por 24 horas permanece inalterado e auditável.
+
+Depois de 6 horas o bot tenta atualizar pelo leitor oficial. Se o limite tiver sido atingido, pode exibir a última resposta autenticada, com aviso de dados possivelmente desatualizados, somente enquanto ela tiver **até 24 horas** de idade. Sem registro válido, mantém o bloqueio original. Quedas de serviço e respostas sem validação não são tratadas como dados atuais.
+
+O cache é separado por domínio e vinculado ao `owner_id` Telegram e ao tenant `grupo_erick`; os arquivos `cache-compras.json` e `cache-lotoia.json` residem no diretório privado existente (0700), com permissão 0600. Somente o texto resumido previamente validado é guardado (nunca token ou payload bruto). Auditoria registra apenas sucesso, cache ou fallback, sem valores financeiros. Leitura de outro usuário, tenant ou registro expirado é recusada.
+
+**Ativação:** a alteração nesta PR não implanta a VPS automaticamente. Validar CI e fazer implantação segura no poller único já vinculado, preservando token, proprietário e cursor; o cache inicia vazio e só ganha conteúdo na próxima consulta real bem-sucedida. A retenção lógica máxima da resposta é de 24 horas; exclusão física periódica dos arquivos cache deve integrar a governança LGPD. Não remover auditoria para liberar quota.
+
 ## Segundo cérebro — próximo marco, não presumir implementado
 
 O contrato `SECOND_BRAIN_INBOX_CONTRACT.md` atualmente é declarativo. ChatGPT e Claude requerem importação autorizada de exportações; histórico pessoal de WhatsApp não pode ser tratado como automaticamente acessível pela API do WhatsApp Business. Ingestão real precisa de armazenamento e busca, segregação de contexto pessoal/empresarial, controle por pessoa, retenção, revogação de consentimento e origem citável. **Não confundir o canal conversável com segundo cérebro pronto.**
