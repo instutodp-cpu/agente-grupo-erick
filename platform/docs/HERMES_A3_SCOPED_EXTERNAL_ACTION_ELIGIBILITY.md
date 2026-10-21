@@ -752,3 +752,26 @@ distributed quota and is not a permission to scale replicas or enable
 a production stage. The protected audit file retains its 1 MiB cap and
 requires explicit operator rotation when full. The existing A3 mission,
 outbox, code-writing, merge and general execution authorities are unchanged.
+
+#### Second real read-only domain: Brazil monetary indicators (BCB/SGS)
+
+Existing authenticated HTTPS machine endpoint also supports the fixed routes
+`GET /internal/economy-read-pilot/selic` (Copom meta Selic, series 432, %
+per year) and `GET /internal/economy-read-pilot/ipca` (monthly IPCA, series
+433, % per month). The BCB public SGS API returns JSON using a fixed URL,
+no credentials, no user-supplied parameters, no arbitrary domain fetch. <8KiB
+response, max 20 rows, 8-second timeout, strict schema and date validation,
+and sanitized numeric output only.
+
+Important data caveat: SGS series 432 can include future-dated records. The
+runtime selects the latest **observation on or before the Recife-local
+calendar date**, and rejects missing or stale records (>14 days for Selic,
+>95 days for monthly IPCA); it never silently promotes an upcoming date
+into an effective current value. BCB rates are reference data, not
+financial recommendations.
+
+The **same** machine identity, `grupo_erick` tenant, single-instance
+serialized gate, persisted 12-attempt rolling 24h shared audit/quota and
+staging-only kill switches cover BOTH the GitHub and BCB read domains.
+The separate old public-web canary is not imported, replayed or dispatched.
+This is still staging and not permission for production data writes.

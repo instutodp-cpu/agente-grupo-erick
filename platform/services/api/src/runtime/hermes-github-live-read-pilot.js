@@ -8,6 +8,8 @@ const {buildHermesMaintainerGithubRepositoryReaderRequest}=
  require('../core/hermes-maintainer-github-repository-reader-contract');
 const {invokeHermesMaintainerGithubRepositoryReader}=
  require('../core/hermes-maintainer-github-repository-reader-adapter');
+const {readBcbEconomicIndicator,INDICATORS}=
+ require('./hermes-bcb-economic-read');
 const REPOSITORY='instutodp-cpu/agente-grupo-erick';
 const REF='main',WINDOW_MS=86400000;
 const RESOURCES=Object.freeze({
@@ -48,7 +50,8 @@ function createHermesGithubLiveReadPilot({
      !/^[A-Za-z0-9_.:-]{1,128}$/.test(identity.principal.id||'')||
      !/^[A-Za-z0-9_.:-]{1,128}$/.test(identity.key_id||''))
    return denied('identity_invalid');
-  if(!Object.hasOwn(RESOURCES,resource))return denied('resource_not_allowed');
+  if(!Object.hasOwn(RESOURCES,resource)&&
+     !Object.hasOwn(INDICATORS,resource))return denied('resource_not_allowed');
   const time=clock();
   if(!Number.isSafeInteger(time))return denied('clock_unavailable');
   let attempts;
@@ -59,15 +62,39 @@ function createHermesGithubLiveReadPilot({
   if(!Number.isSafeInteger(attempts)||attempts<0)
    return denied('quota_store_unavailable');
   if(attempts>=maxRequests)return denied('request_budget_exhausted');
-  const path=RESOURCES[resource],trace_id=randomUUID();
+  const isEconomy=Object.hasOwn(INDICATORS,resource);
+  const path=isEconomy?null:RESOURCES[resource],trace_id=randomUUID();
   const bound={trace_id,tenant_id:identity.tenant_id,
    principal_id:identity.principal.id,key_id:identity.key_id,
-   operation:'GET',repository:REPOSITORY,path,ref:REF,resource,
+   operation:'GET',provider:isEconomy?'BCB_SGS':'GITHUB',
+   repository:isEconomy?null:REPOSITORY,path,ref:isEconomy?null:REF,resource,
    real_provider_called:false,write_performed:false,production_used:false};
   // Durable attempt reservation before the external GET; failed requests
   // consume budget. A restart cannot reset it because usage is replayed.
   try{await appendAudit(Object.freeze({...bound,event:'attempt',at:new Date(time).toISOString()}));}
   catch{return denied('audit_unavailable');}
+  if(isEconomy){
+   let indicator=null,providerCalled=false,error=null;
+   try{
+    indicator=await readBcbEconomicIndicator({
+     kind:resource,clock,fetchImpl:async(url,options)=>{
+      providerCalled=true;
+      return fetchImpl(url,options);
+     }
+    });
+   }catch(e){error='bcb_provider_or_data_invalid';}
+   const audit=Object.freeze({...bound,event:'result',
+    at:new Date(clock()).toISOString(),adapter_outcome:indicator?'SUCCEEDED':'FAILED',
+    real_provider_called:providerCalled,
+    series_code:INDICATORS[resource].series,
+    observation_date:indicator?.observation_date||null,
+    error_code:error});
+   try{await appendAudit(audit);}
+   catch{return denied('audit_unavailable_after_provider');}
+   if(!indicator)return Object.freeze({...denied('provider_failed'),trace_id});
+   return Object.freeze({status:'succeeded',trace_id,executed:true,
+    network_call_performed:true,...indicator});
+  }
   const request=buildHermesMaintainerGithubRepositoryReaderRequest({
    provider:'GITHUB',repository:REPOSITORY,ref:REF,path,method:'GET',read_only:true
   });
