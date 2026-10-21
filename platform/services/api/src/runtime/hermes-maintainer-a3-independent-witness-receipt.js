@@ -5,6 +5,7 @@
 // can never substitute for its Ed25519 attestation. No SCM authority.
 const crypto=require('node:crypto');
 const {computeCanonicalContentDigest}=require('../core/canonical-content-digest');
+const {stablePayload}=require('../core/agent-identity-contract');
 const VERSION='hermes_a3_independent_supervisor_receipt_v1';
 const PURPOSE='HERMES_A3_INDEPENDENT_SUPERVISOR_RECEIPT_V1';
 const REPO='instutodp-cpu/agente-grupo-erick';
@@ -126,7 +127,7 @@ function verifyIndependentWitnessReceipt({envelope,observation,official,
   const signature=Buffer.from(envelope.signature,'base64url');
   if(signature.length!==64||
      signature.toString('base64url')!==envelope.signature||
-     !crypto.verify(null,Buffer.from(PURPOSE+'\n'+JSON.stringify(r)),
+     !crypto.verify(null,Buffer.from(PURPOSE+'\n'+stablePayload(r)),
        key,signature))
    return denied('A3_INDEPENDENT_RECEIPT_SIGNATURE_INVALID');
  }catch{return denied('A3_INDEPENDENT_RECEIPT_SIGNATURE_INVALID');}

@@ -2,6 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const crypto=require('node:crypto');
 const {computeCanonicalContentDigest}=require('../src/core/canonical-content-digest');
+const {stablePayload}=require('../src/core/agent-identity-contract');
 const {VERSION,PURPOSE,verifyIndependentWitnessReceipt:verify}=
  require('../src/runtime/hermes-maintainer-a3-independent-witness-receipt');
 const kid='independent-staging-witness-qa';
@@ -51,7 +52,7 @@ const record=()=>({
  scope:'isolated_test_container_only',controls:controls()
 });
 const sign=r=>({record:r,signature:crypto.sign(null,
- Buffer.from(PURPOSE+'\n'+JSON.stringify(r)),privateKey.privateKey).toString('base64url')});
+ Buffer.from(PURPOSE+'\n'+stablePayload(r)),privateKey.privateKey).toString('base64url')});
 const check=(r=record(),obs=observation(),source=official(),key=pub,issuer=kid)=>
  verify({envelope:sign(r),observation:obs,official:source,
  publicKeyB64Url:key,issuerId:issuer,now:()=>Date.parse('2026-10-20T23:48:21.000Z')});
@@ -115,4 +116,22 @@ test('signature and format mutation fail closed',()=>{
   {...e,record:{...e.record,execution_authorized:true}}
  ])assert.equal(verify({envelope:bad,observation:observation(),
   official:official(),publicKeyB64Url:pub,issuerId:kid}).verified,false);
+});
+
+test('signed receipt remains verifiable after PostgreSQL JSONB key-order changes',()=>{
+ const r=record(),original=sign(r);
+ const reorder=v=>{
+  if(Array.isArray(v))return v.map(reorder);
+  if(v&&typeof v==='object')return Object.fromEntries(
+   Object.keys(v).reverse().map(k=>[k,reorder(v[k])]));
+  return v;
+ };
+ const sqlRoundtrip={...original,record:reorder(r)};
+ const out=verify({
+  envelope:sqlRoundtrip,observation:observation(),official:official(),
+  publicKeyB64Url:pub,issuerId:kid,
+  now:()=>Date.parse('2026-10-20T23:48:21.000Z')
+ });
+ assert.equal(out.verified,true);
+ assert.equal(out.receipt_digest,computeCanonicalContentDigest(r));
 });

@@ -2,6 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {computeCanonicalContentDigest}=require('../src/core/canonical-content-digest');
+const {stablePayload}=require('../src/core/agent-identity-contract');
 const {VERSION,PURPOSE,verifyIndependentWitnessReceipt}=require('../src/runtime/hermes-maintainer-a3-independent-witness-receipt');
 const {READ_OBS,READ_WIT,createHermesMaintainerA3IndependentWitnessReadAdmission}=
  require('../src/core/hermes-maintainer-a3-independent-witness-read-admission');
@@ -49,7 +50,7 @@ const receipt=(obs=observation())=>{
    host_pid:false,unprivileged_user:'65534:65534'}
  };
  const envelope={record:r,signature:crypto.sign(null,
-  Buffer.from(PURPOSE+'\n'+JSON.stringify(r)),privateKey).toString('base64url')};
+  Buffer.from(PURPOSE+'\n'+stablePayload(r)),privateKey).toString('base64url')};
  return {...official(),issuer_id:'independent-witness',
   process_observation_digest:obs.observation_digest,
   receipt_digest:computeCanonicalContentDigest(r),
