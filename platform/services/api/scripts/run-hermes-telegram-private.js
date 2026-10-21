@@ -75,7 +75,7 @@ function telegramClient(token,fetchImpl=globalThis.fetch){
  if(!/^[0-9]{5,16}:[a-zA-Z0-9_-]{30,120}$/.test(token))
   throw Error('telegram_bot_token_invalid');
  return async(method,payload)=>{
-  if(!['getMe','getUpdates','sendMessage'].includes(method))
+  if(!['getMe','getWebhookInfo','getUpdates','sendMessage'].includes(method))
    throw Error('telegram_api_method_denied');
   const res=await fetchImpl(TELEGRAM_ORIGIN+'/bot'+token+'/'+method,{
    method:'POST',redirect:'error',
@@ -123,6 +123,10 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now()}){
    event:'ingress',update_id:item.update_id});
   const owner=loadState(stateDir,'owner.json');
   const pairing=loadState(stateDir,'pairing.json');
+  // Claim an update before outbound queries. A failed reply will not trigger
+  // a repeated provider read on restart.
+  current=item.update_id+1;
+  saveState(stateDir,'offset.json',{offset:current});
   const result=await processUpdate({
    update:item,ownerId:owner?.owner_id??null,pairing,
    clock,query,
@@ -138,8 +142,6 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now()}){
   audit(stateDir,{at:new Date(clock()).toISOString(),
    event:'outcome',update_id:item.update_id,
    outcome:result.kind,intent:result.intent||null});
-  current=item.update_id+1;
-  saveState(stateDir,'offset.json',{offset:current});
   handled++;
  }
  return {handled,next_offset:current};
@@ -159,8 +161,11 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  const api=telegramClient(botToken,fetchImpl);
  const query=hermesClient(machineToken,fetchImpl);
  const identity=await api('getMe',{});
- if(identity?.is_bot!==true||!Number.isSafeInteger(identity?.id))
+ if(identity?.is_bot!==true||!Number.isSafeInteger(identity?.id)||
+    String(identity?.username||'').toLowerCase()!=='grupoerick_bot')
   throw Error('telegram_bot_identity_invalid');
+ const hook=await api('getWebhookInfo',{});
+ if(hook?.url)throw Error('telegram_webhook_conflict');
  audit(dir,{at:new Date(clock()).toISOString(),event:'gateway_started',
   stage:'staging',writes_enabled:false});
  for(;;)await pollOnce({stateDir:dir,api,query,clock});
