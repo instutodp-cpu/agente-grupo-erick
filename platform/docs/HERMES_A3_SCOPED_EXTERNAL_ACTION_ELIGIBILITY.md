@@ -679,3 +679,23 @@ dispatch/repeat any MissionRun. Production and SCM writes stay blocked.
 A deployment of the independent supervisor needs an explicit future
 authorization for that future run, separate external infrastructure,
 credentials and trust policy. CI synthetic signatures cannot substitute.
+
+#### Strengthened cross-process replay guard (subsequent increment in PR #563)
+
+The independently controlled PostgreSQL attempt writer performs a conditional
+`INSERT ... SELECT` only when the authoritative migration-035 row is still
+`reserved`, matches the mission/run/workspace/contract/revision/image and was
+reserved within the previous 120 seconds. `FOR UPDATE OF o` locks that
+observation row within the same transaction to prevent a stale concurrent
+`process_observed` transition from being admitted. No row/no confirmation
+means zero Docker starts; no retry after an uncertain result.
+
+The default-disabled read admission requires **all three** matching records:
+process observation (035), independently signed receipt (036), and globally
+unique witness attempt (037), with bounded order of timestamps. Signed
+receipt alone is never enough. The supervisor independently checks every
+returned claim field, source pinning again after process exit, added
+container capabilities and successful disposal; any uncertainty rejects
+the receipt. Neither the stronger checks nor the SQL migration creates a
+new mission, a second test, a proof of zero effects or authority to ACK
+an outbox, write SCM, merge or deploy.

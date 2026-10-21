@@ -83,3 +83,13 @@ test('migration 037 preserves single-use PK and requires independent-role provis
   'ENABLE ROW LEVEL SECURITY','REVOKE ALL','CHECK (environment='])
   assert.equal(sql.includes(word),true,word);
 });
+
+test('global witness SQL cannot claim an already observed or stale 035 row',()=>{
+ for(const required of [
+  'FROM hermes.maintainer_a3_process_observations o',
+  'o.mission_run_id=$1','o.mission_id=$2','o.workspace_id=$3',
+  'o.contract_hash=$5','o.revision_sha=$6','o.docker_image_id=$7',
+  "o.state='reserved'", "INTERVAL '120 seconds'",
+  'FOR UPDATE OF o','ON CONFLICT DO NOTHING RETURNING mission_run_id'
+ ])assert.ok(ATTEMPT_INSERT.includes(required),required);
+});

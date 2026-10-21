@@ -4,7 +4,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {computeCanonicalContentDigest}=require('../src/core/canonical-content-digest');
 const {stablePayload}=require('../src/core/agent-identity-contract');
 const {VERSION,PURPOSE,verifyIndependentWitnessReceipt}=require('../src/runtime/hermes-maintainer-a3-independent-witness-receipt');
-const {READ_OBS,READ_WIT,createHermesMaintainerA3IndependentWitnessReadAdmission}=
+const {READ_OBS,READ_WIT,READ_ATTEMPT,createHermesMaintainerA3IndependentWitnessReadAdmission}=
  require('../src/core/hermes-maintainer-a3-independent-witness-read-admission');
 const {privateKey,publicKey}=crypto.generateKeyPairSync('ed25519');
 const key=publicKey.export({format:'der',type:'spki'}).subarray(-32).toString('base64url');
@@ -62,11 +62,18 @@ const receipt=(obs=observation())=>{
 };
 function fixture(patches={}){
  const obs=patches.obs||observation(),wit=patches.wit||receipt(obs);
+ const attempt=patches.attempt||{
+  mission_run_id:'run',mission_id:'m',workspace_id:'w',
+  official_outbox_id:'o',contract_hash:hash,revision_sha:sha,
+  docker_image_id:image,environment:'staging',
+  reserved_at:new Date('2026-10-20T23:48:18.250Z')
+ };
  const calls=[],pool={query:async(sql,args)=>{
   calls.push([sql,args]);
   if(patches.failDb)throw Error('db unavailable');
   return {rows:sql===READ_OBS?patches.missingObs?[]:[obs]:
-   sql===READ_WIT?patches.missingWitness?[]:[wit]:[]};
+   sql===READ_WIT?patches.missingWitness?[]:[wit]:
+   sql===READ_ATTEMPT?patches.missingAttempt?[]:[attempt]:[]};
  }};
  const reader=createHermesMaintainerA3IndependentWitnessReadAdmission({
   pool,verifyIndependentWitnessReceipt,publicKeyB64Url:patches.key||key,issuerId:'independent-witness',
@@ -84,11 +91,11 @@ test('durable, contemporaneous signed receipt is read-only and never authorizes 
  assert.equal(r.outbox_acknowledged,false);
  assert.equal(r.merge_authority,false);
  assert.equal(r.scm_write_performed,null);
- assert.deepEqual(f.calls.map(x=>x[0]),[READ_OBS,READ_WIT]);
- assert.deepEqual(f.calls.map(x=>x[1]),[['run'],['run']]);
+ assert.deepEqual(f.calls.map(x=>x[0]),[READ_OBS,READ_WIT,READ_ATTEMPT]);
+ assert.deepEqual(f.calls.map(x=>x[1]),[['run'],['run'],['run']]);
 });
 test('missing witness, official data, revoked scope and outages deny',async()=>{
- for(const patches of [{missingObs:true},{missingWitness:true},{failDb:true},
+ for(const patches of [{missingObs:true},{missingWitness:true},{missingAttempt:true},{failDb:true},
   {failGateway:true},{official:{...official(),official_outbox_id:'different'}},
   {official:{...official(),verified_contract_integrity:false}},
   {official:{...official(),run_status:'concluida'}},
@@ -123,4 +130,27 @@ test('migration 036 requires unique sealed receipts, staging-only permissions an
   'receipt_digest TEXT NOT NULL UNIQUE','ENABLE ROW LEVEL SECURITY',
   'REVOKE ALL','witnessed_started_at<=witnessed_finished_at'])
   assert.ok(ddl.includes(s),s);
+});
+
+test('witness attempt readback must bind exact source and precede signed container creation',async()=>{
+ const baseline=fixture();
+ assert.equal((await baseline.reader.readVerified('run')).receipt_durable,true);
+ const base={
+  mission_run_id:'run',mission_id:'m',workspace_id:'w',
+  official_outbox_id:'o',contract_hash:hash,revision_sha:sha,
+  docker_image_id:image,environment:'staging',
+  reserved_at:new Date('2026-10-20T23:48:18.250Z')
+ };
+ for(const mutation of [
+  {contract_hash:'sha256:'+'a'.repeat(64)}, {revision_sha:'a'.repeat(40)},
+  {official_outbox_id:'other'}, {docker_image_id:'sha256:'+'1'.repeat(64)},
+  {workspace_id:'other'}, {environment:'production'},
+  {reserved_at:new Date('2026-10-20T23:48:19.000Z')},
+  {reserved_at:new Date('2026-10-20T23:40:18.250Z')},
+  {reserved_at:new Date('2026-10-20T23:48:17.250Z')}
+ ]){
+  const x=fixture({attempt:{...base,...mutation}});
+  assert.equal((await x.reader.readVerified('run')).receipt_durable,false,
+   JSON.stringify(mutation));
+ }
 });

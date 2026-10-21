@@ -5,8 +5,10 @@
 // complete Maestro runs, or promote. No private issuer key in this process.
 const OBS_TABLE='hermes.maintainer_a3_process_observations';
 const WIT_TABLE='hermes.maintainer_a3_independent_witness_receipts';
+const ATTEMPT_TABLE='hermes.maintainer_a3_witness_attempts';
 const READ_OBS='SELECT * FROM '+OBS_TABLE+' WHERE mission_run_id=$1';
 const READ_WIT='SELECT * FROM '+WIT_TABLE+' WHERE mission_run_id=$1';
+const READ_ATTEMPT='SELECT * FROM '+ATTEMPT_TABLE+' WHERE mission_run_id=$1';
 const ID=/^[^\x00-\x20\x7f]{1,255}$/;
 const disabled=status=>Object.freeze({status,
  independently_attested:false,receipt_durable:false,
@@ -33,15 +35,36 @@ function createHermesMaintainerA3IndependentWitnessReadAdmission({
   catch{return disabled('A3_WITNESS_OFFICIAL_READ_UNAVAILABLE');}
   if(!official||official.mission_run_id!==runId)
    return disabled('A3_WITNESS_OFFICIAL_SOURCE_UNVERIFIED');
-  let obs,wit;
+  let obs,wit,attempt;
   try{
-   const [o,w]=await Promise.all([
-    pool.query(READ_OBS,[runId]),pool.query(READ_WIT,[runId])
+   const [o,w,a]=await Promise.all([
+    pool.query(READ_OBS,[runId]),pool.query(READ_WIT,[runId]),
+    pool.query(READ_ATTEMPT,[runId])
    ]);
-   if(o?.rows?.length!==1||w?.rows?.length!==1)
-    return disabled('A3_WITNESS_RECEIPT_OR_OBSERVATION_ABSENT');
-   obs=o.rows[0];wit=w.rows[0];
+   if(o?.rows?.length!==1||w?.rows?.length!==1||a?.rows?.length!==1)
+    return disabled('A3_WITNESS_RECEIPT_OBSERVATION_OR_ATTEMPT_ABSENT');
+   obs=o.rows[0];wit=w.rows[0];attempt=a.rows[0];
   }catch{return disabled('A3_WITNESS_DB_READ_UNAVAILABLE');}
+  // A signed statement and completed observation are insufficient without
+  // the independent global single-process reservation (migration 037).
+  if(attempt.mission_run_id!==runId||
+     attempt.mission_id!==official.mission_id||
+     attempt.workspace_id!==official.workspace_id||
+     attempt.official_outbox_id!==official.official_outbox_id||
+     attempt.contract_hash!==official.contract_hash||
+     attempt.revision_sha!==official.revision_sha||
+     attempt.docker_image_id!==official.docker_image_id||
+     attempt.environment!=='staging')
+   return disabled('A3_WITNESS_ATTEMPT_SCOPE_MISMATCH');
+  const attemptTime=attempt.reserved_at instanceof Date?
+   attempt.reserved_at.getTime():Date.parse(attempt.reserved_at||'');
+  const observationTime=obs.reserved_at instanceof Date?
+   obs.reserved_at.getTime():Date.parse(obs.reserved_at||'');
+  const witnessTime=Date.parse(wit.receipt_envelope?.record?.witness_started_at||'');
+  if(![attemptTime,observationTime,witnessTime].every(Number.isFinite)||
+     attemptTime<observationTime||attemptTime>witnessTime||
+     witnessTime-attemptTime>120000)
+   return disabled('A3_WITNESS_ATTEMPT_NOT_CONTEMPORANEOUS');
   if(wit.mission_run_id!==runId||wit.mission_id!==official.mission_id||
      wit.workspace_id!==official.workspace_id||
      wit.official_outbox_id!==official.official_outbox_id||
@@ -83,5 +106,5 @@ function createHermesMaintainerA3IndependentWitnessReadAdmission({
  }
  return Object.freeze({readVerified});
 }
-module.exports={OBS_TABLE,WIT_TABLE,READ_OBS,READ_WIT,
+module.exports={OBS_TABLE,WIT_TABLE,ATTEMPT_TABLE,READ_OBS,READ_WIT,READ_ATTEMPT,
  createHermesMaintainerA3IndependentWitnessReadAdmission};

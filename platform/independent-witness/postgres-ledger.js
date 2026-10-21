@@ -18,7 +18,17 @@ const insert=(table,fields)=>
  'INSERT INTO '+table+' ('+fields.join(',')+') VALUES ('+
  fields.map((_,i)=>'$'+(i+1)+(i===7&&table===RECEIPTS?'::jsonb':'')).join(',')+
  ') ON CONFLICT DO NOTHING RETURNING mission_run_id';
-const ATTEMPT_INSERT=insert(ATTEMPTS,FIELDS);
+// Lock the official 035 reservation in the SAME transaction as the witness
+// reservation INSERT. A previously observed/failed/stale run must not be
+// resurrected by a racing or untrusted caller.
+const ATTEMPT_INSERT='INSERT INTO '+ATTEMPTS+' ('+FIELDS.join(',')+') '+
+ 'SELECT '+FIELDS.map((_,i)=>'$'+(i+1)).join(',')+
+ ' FROM (SELECT mission_run_id FROM hermes.maintainer_a3_process_observations o '+
+ 'WHERE o.mission_run_id=$1 AND o.mission_id=$2 AND o.workspace_id=$3 '+
+ 'AND o.contract_hash=$5 AND o.revision_sha=$6 AND o.docker_image_id=$7 '+
+ "AND o.state='reserved' AND o.reserved_at >= CURRENT_TIMESTAMP - INTERVAL '120 seconds' "+
+ 'AND o.reserved_at <= CURRENT_TIMESTAMP FOR UPDATE OF o) eligible '+
+ 'WHERE TRUE ON CONFLICT DO NOTHING RETURNING mission_run_id';
 const RECEIPT_INSERT=insert(RECEIPTS,RECEIPT_FIELDS);
 const ATTEMPT_READ='SELECT '+FIELDS.join(',')+' FROM '+ATTEMPTS+' WHERE mission_run_id=$1';
 const RECEIPT_READ='SELECT '+RECEIPT_FIELDS.join(',')+' FROM '+RECEIPTS+' WHERE mission_run_id=$1';

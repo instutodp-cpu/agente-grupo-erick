@@ -90,7 +90,7 @@ function fixture(patch={}){
   readRevision:async()=>revision,readClean:async()=>true,
   readSnapshot:async()=>queueEnvelope(),
   readObservation:async()=>obs,
-  reserveWitnessAttempt:async data=>{claimed++;return data;},
+  reserveWitnessAttempt:async data=>{claimed++;return {...data,environment:'staging'};},
   docker,
   finalizeObservation:async()=>{
    finalized++;clock+=100;
@@ -225,4 +225,45 @@ test('witness attempt migration has independent global replay constraint',()=>{
   'ENABLE ROW LEVEL SECURITY','REVOKE ALL',
   "CHECK (environment='staging')"
  ])assert.ok(sql.includes(required),required);
+});
+
+test('rejects stale reserved observations before persistent claim or Docker',async()=>{
+ const f=fixture({readObservation:async()=>({
+  mission_run_id:q.run_id,mission_id:q.mission_id,
+  workspace_id:'workspace-fixture',contract_hash:'sha256:'+'d'.repeat(64),
+  revision_sha:revision,docker_image_id:imageId,operation:'update_file',
+  repository:q.repository,state:'reserved',
+  reserved_at:new Date(baseTime-180000).toISOString()
+ })});
+ const result=await f.op.superviseOnce(q);
+ assert.equal(result.status,'A3_INDEPENDENT_SUPERVISOR_NOT_FRESHLY_RESERVED');
+ assert.equal(f.stats().claimed,0);assert.equal(f.stats().created,0);
+});
+test('requires exact independently persisted witness attempt identity',async()=>{
+ for(const drift of [{workspace_id:'different'},{
+   contract_hash:'sha256:'+'1'.repeat(64)},{revision_sha:'a'.repeat(40)},
+   {docker_image_id:'sha256:'+'a'.repeat(64)},{environment:'production'}]){
+  const f=fixture({reserveWitnessAttempt:async input=>({...input,environment:'staging',...drift})});
+  const result=await f.op.superviseOnce(q);
+  assert.equal(result.receipt_durable,false);
+  assert.equal(f.stats().created,0);
+ }
+});
+test('failed Docker cleanup and source drift during process forbid signing',async()=>{
+ const badCleanup=fixture({docker:{
+  async create(){return containerId;},
+  async inspect(){return inspect('created');},
+  async start(){},async wait(){return 0;},
+  async remove(){throw Error('rm failed')}
+ }});
+ assert.equal((await badCleanup.op.superviseOnce(q)).receipt_durable,false);
+ assert.equal(badCleanup.stats().signed,0);
+ let checks=0;
+ const changed=fixture({readRevision:async()=>++checks===1?revision:'a'.repeat(40)});
+ assert.equal((await changed.op.superviseOnce(q)).receipt_durable,false);
+ assert.equal(changed.stats().signed,0);
+});
+test('inspector rejects added container capabilities',()=>{
+ const d=inspect();d.HostConfig.CapAdd=['SYS_ADMIN'];
+ assert.equal(inspectIsolation(d,{containerId,imageId,sourceRoot}),null);
 });

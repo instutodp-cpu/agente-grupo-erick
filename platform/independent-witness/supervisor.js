@@ -31,7 +31,9 @@ function inspectIsolation(info,{containerId,imageId,sourceRoot}){
  const h=info.HostConfig||{},c=info.Config||{},mounts=info.Mounts;
  if(h.NetworkMode!=='none'||h.ReadonlyRootfs!==true||
    h.Privileged!==false||!Array.isArray(h.CapDrop)||
-   !h.CapDrop.includes('ALL')||!Array.isArray(h.SecurityOpt)||
+   !h.CapDrop.includes('ALL')||
+   (Array.isArray(h.CapAdd)&&h.CapAdd.length!==0)||
+   !Array.isArray(h.SecurityOpt)||
    !h.SecurityOpt.includes('no-new-privileges')||
    c.User!=='65534:65534'||h.PidMode==='host'||h.IpcMode==='host'||
    h.UsernsMode==='host'||h.PortBindings&&Object.keys(h.PortBindings).length>0||
@@ -106,7 +108,8 @@ function createIndependentA3Supervisor({
     reserved.revision_sha!==r.revision_sha||
     reserved.docker_image_id!==imageId||
     !Number.isFinite(Date.parse(iso(reserved.reserved_at)||''))||
-    now()<Date.parse(iso(reserved.reserved_at)))
+    now()<Date.parse(iso(reserved.reserved_at))||
+    now()-Date.parse(iso(reserved.reserved_at))>120000)
    return denial('A3_INDEPENDENT_SUPERVISOR_NOT_FRESHLY_RESERVED');
   try{if(await readRevision()!==r.revision_sha||
     await readClean()!==true) return denial('A3_INDEPENDENT_SUPERVISOR_SOURCE_NOT_PINNED');}
@@ -125,10 +128,16 @@ function createIndependentA3Supervisor({
   }catch{return denial('A3_INDEPENDENT_SUPERVISOR_ATTEMPT_UNCONFIRMED');}
   if(!claim||claim.mission_run_id!==r.mission_run_id||
     claim.mission_id!==r.mission_id||
-    claim.official_outbox_id!==r.official_outbox_id)
+    claim.workspace_id!==r.workspace_id||
+    claim.official_outbox_id!==r.official_outbox_id||
+    claim.contract_hash!==r.contract_hash||
+    claim.revision_sha!==r.revision_sha||
+    claim.docker_image_id!==imageId||
+    claim.environment!=='staging')
    return denial('A3_INDEPENDENT_SUPERVISOR_ATTEMPT_ALREADY_CLAIMED');
   const createdAt=new Date(now()).toISOString();
   let containerId=null,controls=null,finishedAt=null,exitCode=null;
+  let removed=false,executionVerified=false;
   try{
    containerId=await docker.create(Object.freeze({imageId,sourceRoot,
     revisionSha:r.revision_sha,runId:r.mission_run_id}));
@@ -144,12 +153,17 @@ function createIndependentA3Supervisor({
       after?.State?.Status!=='exited'||after.State.ExitCode!==0||
       !inspectIsolation(after,{containerId,imageId,sourceRoot}))
     throw Error('docker_process_or_postflight_unconfirmed');
-  }catch{return denial('A3_INDEPENDENT_SUPERVISOR_DOCKER_UNCONFIRMED');}
+   if(await readRevision()!==r.revision_sha||await readClean()!==true)
+    throw Error('docker_source_changed_during_execution');
+   executionVerified=true;
+  }catch{/* A failed or ambiguous Docker operation must never authorize a receipt. */}
   finally{
    if(containerId&&C_ID.test(containerId)){
-    try{await docker.remove(containerId);}catch{}
+    try{await docker.remove(containerId);removed=true;}catch{}
    }
   }
+  if(!executionVerified||!removed)
+   return denial('A3_INDEPENDENT_SUPERVISOR_DOCKER_UNCONFIRMED');
   // Hermes must finalize precisely this single witnessed subprocess before
   // signing; no pre-existing historical process can be retroactively signed.
   let observation;
