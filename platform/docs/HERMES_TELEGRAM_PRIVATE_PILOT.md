@@ -18,7 +18,7 @@ Somente mensagens de **chat privado** com `from.id === chat.id`, **não encaminh
 
 O token oficial do bot é secreto e não pode ser enviado por chat, issue, commit ou log. Guardar somente no arquivo protegido `/home/hermesadmin/.hermes-telegram/secret/token` mode0600 e montar read-only no contêiner. O bearer machine existente do Hermes também é montado read-only, nunca impresso, compartilhado ou copiado para o bot Telegram. Usar uma pasta de estado mode0700 com `owner.json`, `pairing.json`, `offset.json`, `audit.jsonl` mode0600.
 
-O canal é fail-closed sem `HERMES_TELEGRAM_ENABLED=true`, `HERMES_DEPLOYMENT_STAGE=staging`, execução desativada, kill switch habilitado, ingresso de missões desativado, token válido e arquivos protegidos. O polling nunca recupera conversas de terceiros; recebe apenas novas mensagens ao próprio bot. O ledger escreve apenas update IDs e intenções aprovadas, **nunca o texto bruto**. O cursor de update é persistido após a resposta: uma falha na entrega do Telegram pode causar repetição de uma pergunta de leitura, nunca uma escrita financeira.
+O canal é fail-closed sem `HERMES_TELEGRAM_ENABLED=true`, `HERMES_DEPLOYMENT_STAGE=staging`, execução desativada, kill switch habilitado, ingresso de missões desativado, token válido e arquivos protegidos. O polling nunca recupera conversas de terceiros; recebe apenas novas mensagens ao próprio bot. O ledger escreve apenas update IDs e intenções aprovadas, **nunca o texto bruto**. O cursor de update é persistido **antes** da consulta de leitura: uma falha na entrega da resposta do Telegram não repete automaticamente a consulta nem consome a cota duas vezes. Uma resposta perdida pode ser solicitada de novo pelo usuário.
 
 ## Operação de ativação (depende de ação humana)
 
@@ -35,3 +35,7 @@ O leitor Hermes em staging compartilha **12 tentativas por 24 horas** com GitHub
 ## Segundo cérebro — próximo marco, não presumir implementado
 
 O contrato `SECOND_BRAIN_INBOX_CONTRACT.md` atualmente é declarativo. ChatGPT e Claude requerem importação autorizada de exportações; histórico pessoal de WhatsApp não pode ser tratado como automaticamente acessível pela API do WhatsApp Business. Ingestão real precisa de armazenamento e busca, segregação de contexto pessoal/empresarial, controle por pessoa, retenção, revogação de consentimento e origem citável. **Não confundir o canal conversável com segundo cérebro pronto.**
+
+## Endurecimento adicional da autorização do bot
+
+O processo valida o token pelo método getMe e confirma que o username é **@Grupoerick_bot**; também verifica getWebhookInfo e falha se houver webhook ativo, sem removê-lo automaticamente. A conexão não deve ser declarada operacional até uma mensagem real ser respondida no Telegram.
