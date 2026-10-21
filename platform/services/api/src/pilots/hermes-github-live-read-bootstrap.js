@@ -24,8 +24,10 @@ function createHermesGithubLiveReadBootstrap({environment=process.env,fetchImpl}
  const data=JSON.parse(fs.readFileSync(identityFile,'utf8'));
  const machineIdentityRegistry=createMachineIdentityRegistry(data);
  if(machineIdentityRegistry.size!==1)throw new TypeError('single_pilot_principal_required');
+ const journal=createDurableJsonLineAudit({filePath:auditFile});
  const githubReadPilot=createHermesGithubLiveReadPilot({
-  environment,fetchImpl,appendAudit:createDurableJsonLineAudit({filePath:auditFile})
+  environment,fetchImpl,appendAudit:journal,
+  readUsage:journal.countAttempts,maxRequests:12
  });
  return Object.freeze({machineIdentityRegistry,githubReadPilot});
 }

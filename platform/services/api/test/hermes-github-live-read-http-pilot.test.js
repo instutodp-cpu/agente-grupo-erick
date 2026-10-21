@@ -30,7 +30,9 @@ async function fixture({environment=env(),auditFailure=false,invalidNetwork=fals
    network.push({url,method:opt.method,redirect:opt.redirect,headers:opt.headers});
    return invalidNetwork?new Response('no',{status:503}):makeResponse();
   },
-  appendAudit:async record=>{if(auditFailure)throw Error('audit offline');audits.push(record);}
+  appendAudit:async record=>{if(auditFailure)throw Error('audit offline');audits.push(record);},
+  readUsage:async({tenant_id,since,now})=>audits.filter(x=>x.event==='attempt'&&
+    x.tenant_id===tenant_id&&x.at>=since&&x.at<=now).length
  });
  const server=createServer({githubReadPilot:pilot,machineIdentityRegistry:principalRegistry});
  await new Promise((resolve,reject)=>server.listen(0,'127.0.0.1',e=>e?reject(e):resolve()));
@@ -166,4 +168,115 @@ test('durable append audit uses protected file and refuses relaxed permissions',
   fs.chmodSync(file,0o644);
   await assert.rejects(append({event:'result'}),/audit_file_not_protected/);
  }finally{fs.rmSync(dirname,{force:true,recursive:true});}
+});
+
+test('fixed readiness endpoint uses the official GitHub reader and returns only safe operational counts',async()=>{
+ const raw=JSON.stringify({capabilities:[{
+  id:'development',tested:true,proven_e2e:true,operational:false
+ },{id:'other',tested:true,proven_e2e:false,operational:false},
+ {id:'done',tested:true,proven_e2e:true,operational:true}]});
+ const audits=[],network=[];
+ const envs=env();
+ const pilot=createHermesGithubLiveReadPilot({
+  environment:envs,maxRequests:5,
+  appendAudit:async r=>audits.push(r),
+  readUsage:async()=>audits.filter(r=>r.event==='attempt').length,
+  fetchImpl:async(url,options)=>{
+   network.push({url,method:options.method});
+   return new Response(JSON.stringify({
+    type:'file',path:'platform/docs/audits/HERMES_READINESS_MAP.json',
+    sha:'b'.repeat(40),encoding:'base64',content:Buffer.from(raw).toString('base64')
+   }),{status:200});
+  }
+ });
+ const server=createServer({githubReadPilot:pilot,machineIdentityRegistry:identity()});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ try{
+  const endpoint='http://127.0.0.1:'+server.address().port+'/internal/github-read-pilot/readiness';
+  assert.equal((await fetch(endpoint)).status,401);
+  const result=await fetch(endpoint,{headers:{Authorization:SAFE}});
+  assert.equal(result.status,200);
+  const body=await result.json();
+  assert.deepEqual(body.readiness,{
+   capabilities_total:3,tested_count:3,proven_e2e_count:2,operational_count:1
+  });
+  assert.equal(body.resource,'readiness');
+  assert.equal(body.path,'platform/docs/audits/HERMES_READINESS_MAP.json');
+  assert.equal(network.length,1);
+  assert.equal(network[0].method,'GET');
+  assert.ok(network[0].url.endsWith('/contents/platform/docs/audits/HERMES_READINESS_MAP.json?ref=main'));
+  assert.equal(audits.length,2);
+  assert.equal(audits[1].path,body.path);
+  assert.doesNotMatch(JSON.stringify(body),/development|other|done/);
+  assert.equal((await fetch(endpoint+'?resource=anything',{headers:{Authorization:SAFE}})).status,405);
+  assert.equal((await fetch(endpoint+'/other',{headers:{Authorization:SAFE}})).status,404);
+  assert.equal(network.length,1);
+ }finally{await new Promise(r=>server.close(r));}
+});
+test('persistent journal enforces rolling 24h quota after process recreation',async()=>{
+ const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+ const {createDurableJsonLineAudit}=
+  require('../src/runtime/hermes-github-live-read-pilot');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'hermes-durable-usage-'));
+ const journal=path.join(dir,'events.jsonl');
+ fs.writeFileSync(journal,'',{mode:0o600});
+ const time=Date.parse('2026-10-21T03:00:00.000Z');
+ let providerCalls=0;
+ const options={
+  environment:env(),maxRequests:2,clock:()=>time,
+  fetchImpl:async()=>{
+   providerCalls++;
+   return makeResponse();
+  }
+ };
+ try{
+  for(let i=0;i<2;i++){
+   const audit=createDurableJsonLineAudit({filePath:journal});
+   const pilot=createHermesGithubLiveReadPilot({...options,
+    appendAudit:audit,readUsage:audit.countAttempts});
+   assert.equal((await pilot.execute({
+    identity:{principal:{type:'machine',id:'pilot-reader'},
+     tenant_id:'grupo_erick',key_id:'id'},
+    resource:'readme'
+   })).status,'succeeded');
+  }
+  const audit=createDurableJsonLineAudit({filePath:journal});
+  const denied=createHermesGithubLiveReadPilot({...options,
+   appendAudit:audit,readUsage:audit.countAttempts});
+  const result=await denied.execute({
+   identity:{principal:{type:'machine',id:'pilot-reader'},
+    tenant_id:'grupo_erick',key_id:'id'},resource:'readme'
+  });
+  assert.equal(result.status,'request_budget_exhausted');
+  assert.equal(providerCalls,2);
+  assert.equal((await audit.countAttempts({
+   tenant_id:'grupo_erick',
+   since:new Date(time-86400000).toISOString(),now:new Date(time).toISOString()
+  })),2);
+  fs.chmodSync(journal,0o644);
+  assert.equal((await denied.execute({
+   identity:{principal:{type:'machine',id:'pilot-reader'},
+    tenant_id:'grupo_erick',key_id:'id'},resource:'readme'
+  })).status,'quota_store_unavailable');
+  assert.equal(providerCalls,2);
+ }finally{fs.rmSync(dir,{force:true,recursive:true});}
+});
+test('invalid journal JSON denies requests rather than resetting limits',async()=>{
+ const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+ const {createDurableJsonLineAudit}=
+  require('../src/runtime/hermes-github-live-read-pilot');
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'hermes-durable-invalid-'));
+ const journal=path.join(dir,'audit.jsonl');
+ fs.writeFileSync(journal,'{not json}\n',{mode:0o600});
+ try{
+  const audit=createDurableJsonLineAudit({filePath:journal});
+  const pilot=createHermesGithubLiveReadPilot({environment:env(),
+   appendAudit:audit,readUsage:audit.countAttempts,
+   fetchImpl:async()=>{throw Error('network_must_not_run');}});
+  const result=await pilot.execute({
+   identity:{principal:{type:'machine',id:'pilot-reader'},
+    tenant_id:'grupo_erick',key_id:'id'}
+  });
+  assert.equal(result.status,'quota_store_unavailable');
+ }finally{fs.rmSync(dir,{force:true,recursive:true});}
 });

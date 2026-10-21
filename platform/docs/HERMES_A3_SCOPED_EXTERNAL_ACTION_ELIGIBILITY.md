@@ -729,3 +729,26 @@ from A3's historical MissionRun and any SCM write authority.
   disabled flags, cross-tenant attempts, concurrent budget, provider errors,
   durable audit and success. Real GitHub read evidence is **not** an
   independent zero-effect A3 attestation.
+
+#### Read domain iteration: durable budget and GitHub readiness
+
+The live-read domain now supports exactly two GET resources,
+`/internal/github-read-pilot` (README) and
+`/internal/github-read-pilot/readiness` (official readiness-map JSON).
+Both use the same authenticated machine tenant, pinned repository/main
+GitHub reader adapter, TLS path and durable append-only audit.
+
+The second operation returns bounded aggregate counts only (capabilities
+total, tested, proven-E2E and operational). It does not accept arbitrary
+repository/path/ref, does not expose the raw readiness document and cannot
+execute updates. The staging adapter remains production-gated.
+
+The staging service budget is **12 attempts per rolling 24-hour window**,
+loaded from the protected fsync JSONL ledger on every request, rather than
+resetting after service restart. A failed attempt consumes budget. In-process
+calls are serialized, and malformed/unavailable ledger fails closed. This
+budget assumes **exactly one bound staging service instance**; it is not a
+distributed quota and is not a permission to scale replicas or enable
+a production stage. The protected audit file retains its 1 MiB cap and
+requires explicit operator rotation when full. The existing A3 mission,
+outbox, code-writing, merge and general execution authorities are unchanged.
