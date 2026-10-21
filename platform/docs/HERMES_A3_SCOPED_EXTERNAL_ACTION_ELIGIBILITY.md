@@ -628,3 +628,54 @@ mock ACK as receipt, or mark it `concluida`. The current run is
 **not eligible** for a verified zero-effect receipt after the fact.
 Only a separate future, explicitly authorized and simultaneously witnessed
 execution could produce that evidence, and no such execution has occurred.
+
+### A3 external independent supervisor contract (PR #563, following CI #1816)
+
+The operator-independent module lives at
+`platform/independent-witness/`, kept OUTSIDE the Hermes runtime and
+Maestro service code, with **no private key, credential, HTTP route, automatic
+execution, or deployed agent**. It is a separately deployable adapter contract,
+NOT proof that a separate trust domain currently exists. Do not deploy it
+inside the current Hermes/VPS application process or pass Hermes/Maestro
+credentials to its operator. An actual independent issuer host/principal,
+separate signing-key custody and an issuer-only PostgreSQL path with explicit
+RLS policies must be independently authorized/provisioned.
+
+For any **future separately authorized** MissionRun:
+1. Hermes must reserve migration 035 exactly once before any process.
+2. The independently managed supervisor verifies the short-lived
+   Maestro-signed queued snapshot against a separately pinned Maestro
+   public key, the immutable checkout SHA, and the staging kill-switch
+   configuration. A `process_observed` or otherwise non-reserved run is
+   categorically rejected. The old A3 MissionRun
+   `6ad7f24438f9d9c3f10d93dc` is ineligible.
+3. The issuer DB role must atomically reserve migration 037's globally
+   unique witness-attempt row **before** Docker create. Ambiguous commits
+   or duplicate mission/run/outbox reservations permanently deny replay.
+4. A separately controlled Docker daemon creates a pinned-image, no-network,
+   read-only-rootfs, read-only-source, cap-drop-ALL, unprivileged,
+   no-new-privileges container. The supervisor inspects its immutable
+   identity and controls before start and after exit, waits for exactly one
+   process, and removes only its own known container. There is no user-
+   supplied Docker command, image tag, provider request, SCM write or
+   production action. The signed statement attests isolation controls and
+   process exit, NOT independently observed network syscall counts.
+5. Only after **that exact supervised subprocess** is durably finalized in
+   migration 035 can the external signer create its canonical Ed25519
+   record, verify it with the independently pinned public key, and
+   atomically insert/read back migration 036's unique receipt row.
+   Signing and DB commit have bounded timing. Any failure stays locked.
+6. The existing disabled read-admission rechecks the receipt, official
+   source, signed scope and durable observation; successful verification
+   **still does not** ACK the mock outbox, complete a MissionRun, confer
+   SCM authority, or bypass later post-run human approval.
+
+Migration 036 was deployed after a green CI with 0 receipts. Migration 037
+is **schema-only proposed** and was verified on the real staging PostgreSQL
+inside a transaction with mandatory ROLLBACK. There is NO independent key,
+external witness deployment, connected issuer-owned DB writer, signed
+receipt, reconciliation engine, human post-run approval, or permission to
+dispatch/repeat any MissionRun. Production and SCM writes stay blocked.
+A deployment of the independent supervisor needs an explicit future
+authorization for that future run, separate external infrastructure,
+credentials and trust policy. CI synthetic signatures cannot substitute.
