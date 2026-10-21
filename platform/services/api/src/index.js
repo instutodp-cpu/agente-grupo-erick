@@ -29,6 +29,7 @@ const {
 } = require('./core/request-identity');
 const { beginCallerObservation, confirmationMetadata } = require('./core/caller-observability');
 const { resolveMachineIdentity } = require('./core/machine-identity-resolver');
+const { createHermesGithubLiveReadBootstrap } = require('./pilots/hermes-github-live-read-bootstrap');
 const { createPublicWebOperationalMissionIngressBootstrap } = require('./pilots/public-web-operational-mission-ingress-bootstrap');
 
 const SERVICE = 'hermes-api';
@@ -127,6 +128,7 @@ function readJsonBody(req) {
 function createServer({
   machineIdentityRegistry = null,
   missionIngress = null,
+  githubReadPilot = null,
   requestIdentityMode = REQUEST_IDENTITY_MODES.PUBLIC
 } = {}) {
   return http.createServer((req, res) => {
@@ -142,6 +144,31 @@ function createServer({
 
     const { method } = req;
     const url = (req.url || '/').split('?')[0];
+
+    if (url === '/internal/github-read-pilot') {
+      if (method !== 'GET' || req.url !== url) {
+        return sendJson(res, 405, { error: 'method_not_allowed' });
+      }
+      if (!githubReadPilot || typeof githubReadPilot.execute !== 'function' ||
+          typeof githubReadPilot.enabled !== 'function' ||
+          !githubReadPilot.enabled()) {
+        return sendJson(res, 503, { error: 'pilot_disabled' });
+      }
+      let identity;
+      try {
+        identity=resolveMachineIdentity({
+          authorization:req.headers?.authorization
+        },machineIdentityRegistry);
+      } catch {
+        return sendJson(res, 401, { error: 'unauthorized' });
+      }
+      return Promise.resolve().then(()=>githubReadPilot.execute({identity})).then(result=>{
+        const code=result.status==='succeeded'?200:
+          result.status==='request_budget_exhausted'?429:503;
+        res.setHeader('Cache-Control','no-store');
+        return sendJson(res,code,result);
+      }).catch(()=>sendJson(res,503,{error:'pilot_failed'}));
+    }
 
     if (method === 'GET' && url === '/health') {
       return sendJson(res, 200, { status: 'ok', service: SERVICE, version: VERSION });
@@ -481,9 +508,12 @@ function createServer({
 // quando `createServer` é importado por testes.
 if (require.main === module) {
   const missionIngressComposition = createPublicWebOperationalMissionIngressBootstrap();
+  const liveReadComposition = createHermesGithubLiveReadBootstrap();
   const server = createServer({
-    machineIdentityRegistry: missionIngressComposition.machineIdentityRegistry,
-    missionIngress: missionIngressComposition.missionIngress
+    machineIdentityRegistry: liveReadComposition.machineIdentityRegistry ||
+      missionIngressComposition.machineIdentityRegistry,
+    missionIngress: missionIngressComposition.missionIngress,
+    githubReadPilot:liveReadComposition.githubReadPilot
   });
 
   server.listen(PORT, () => {

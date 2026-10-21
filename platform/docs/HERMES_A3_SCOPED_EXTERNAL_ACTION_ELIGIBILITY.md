@@ -699,3 +699,33 @@ container capabilities and successful disposal; any uncertainty rejects
 the receipt. Neither the stronger checks nor the SQL migration creates a
 new mission, a second test, a proof of zero effects or authority to ACK
 an outbox, write SCM, merge or deploy.
+
+### Minimal real GitHub read-only service pilot (separate from A3)
+
+Operational acceleration increment: `GET /internal/github-read-pilot`
+inside the existing Hermes HTTP API, using the already contracted
+`hermes-maintainer-github-repository-reader-adapter`. Strictly separate
+from A3's historical MissionRun and any SCM write authority.
+
+* Explicit staging-only flag `HERMES_GITHUB_READ_PILOT_ENABLED=true`;
+  all existing execution/mission ingress kill-switch settings remain blocked.
+* Authenticate against the **existing machine identity registry**, loaded
+  from a mode-0600 identity digest file. Only the mapped `grupo_erick`
+  tenant; no caller-supplied repository, path, ref, URL, body or arbitrary
+  prompt. Target: GitHub `instutodp-cpu/agente-grupo-erick`,
+  `main:README.md`, GET only.
+* One external GitHub HTTPS GET per API pilot process by default, max 3
+  configurable, 8-second timeout, redirect disabled, 128 KiB provider cap,
+  64 KiB decoded content cap. No OAuth or token needed for public README.
+* Sanitized append-only JSONL audit must sync to disk **before** the provider
+  call (attempt) and before reporting success (result). Protected file 0600,
+  no raw content, token, headers or response payload; response reports only
+  trace ID, hashes and non-sensitive metadata.
+* `/message`, `/confirm`, Mission Gateway A3, merge, SCM actions, and
+  production remain exactly unchanged. Existing staging observation API
+  container is NOT redeployed by this pilot; one loopback-only standalone
+  Hermes HTTP server is sufficient for a controlled E2E.
+* Unit tests with synthetic GitHub HTTP verify missing/wrong identity,
+  disabled flags, cross-tenant attempts, concurrent budget, provider errors,
+  durable audit and success. Real GitHub read evidence is **not** an
+  independent zero-effect A3 attestation.
