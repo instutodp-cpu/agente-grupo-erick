@@ -14,6 +14,8 @@ const {readBase44CommercialSummary}=
  require('./hermes-base44-commercial-read');
 const {createHermesCommercialPriorityBrief}=
  require('./hermes-commercial-priority-brief');
+const {readHermesLotoiaHealth}=
+ require('./hermes-lotoia-operational-read');
 const REPOSITORY='instutodp-cpu/agente-grupo-erick';
 const REF='main',WINDOW_MS=86400000;
 const RESOURCES=Object.freeze({
@@ -56,11 +58,14 @@ function createHermesGithubLiveReadPilot({
    return denied('identity_invalid');
   if(!Object.hasOwn(RESOURCES,resource)&&
      !Object.hasOwn(INDICATORS,resource)&&resource!=='commercial'&&
-     resource!=='commercial_brief')
+     resource!=='commercial_brief'&&resource!=='lotoia_health')
    return denied('resource_not_allowed');
   if((resource==='commercial'||resource==='commercial_brief')&&
      environment.HERMES_BASE44_COMMERCIAL_READ_ENABLED!=='true')
    return denied('commercial_disabled');
+  if(resource==='lotoia_health'&&
+     environment.HERMES_LOTOIA_READ_ENABLED!=='true')
+   return denied('lotoia_disabled');
   const time=clock();
   if(!Number.isSafeInteger(time))return denied('clock_unavailable');
   let attempts;
@@ -73,18 +78,42 @@ function createHermesGithubLiveReadPilot({
   if(attempts>=maxRequests)return denied('request_budget_exhausted');
   const isEconomy=Object.hasOwn(INDICATORS,resource);
   const isCommercial=resource==='commercial'||resource==='commercial_brief';
-  const path=isEconomy||isCommercial?null:RESOURCES[resource],trace_id=randomUUID();
+  const isLotoia=resource==='lotoia_health';
+  const path=isEconomy||isCommercial||isLotoia?null:RESOURCES[resource],trace_id=randomUUID();
   const bound={trace_id,tenant_id:identity.tenant_id,
    principal_id:identity.principal.id,key_id:identity.key_id,
-   operation:isCommercial?'POST': 'GET',
-   provider:isCommercial?'BASE44_COMPRAS':isEconomy?'BCB_SGS':'GITHUB',
-   repository:isEconomy||isCommercial?null:REPOSITORY,
-   path,ref:isEconomy||isCommercial?null:REF,resource,
+   operation:isCommercial||isLotoia?'POST':'GET',
+   provider:isLotoia?'BASE44_LOTOIA':isCommercial?'BASE44_COMPRAS':
+    isEconomy?'BCB_SGS':'GITHUB',
+   repository:isEconomy||isCommercial||isLotoia?null:REPOSITORY,
+   path,ref:isEconomy||isCommercial||isLotoia?null:REF,resource,
    real_provider_called:false,write_performed:false,production_used:false};
   // Durable attempt reservation before the external GET; failed requests
   // consume budget. A restart cannot reset it because usage is replayed.
   try{await appendAudit(Object.freeze({...bound,event:'attempt',at:new Date(time).toISOString()}));}
   catch{return denied('audit_unavailable');}
+  if(isLotoia){
+   let operational=null,providerCalled=false;
+   try{
+    operational=await readHermesLotoiaHealth({
+     environment,clock,fetchImpl:async(url,options)=>{
+      providerCalled=true;
+      return fetchImpl(url,options);
+     }
+    });
+   }catch{/* Fixed audit only: never log signing material or upstream payload. */}
+   const audit=Object.freeze({...bound,event:'result',
+    at:new Date(clock()).toISOString(),
+    adapter_outcome:operational?'SUCCEEDED':'FAILED',
+    real_provider_called:providerCalled,
+    source:'LotoIA',schema_valid:Boolean(operational)});
+   try{await appendAudit(audit);}
+   catch{return denied('audit_unavailable_after_provider');}
+   if(!operational)return Object.freeze({...denied('provider_failed'),trace_id});
+   return Object.freeze({status:'succeeded',trace_id,executed:true,
+    network_call_performed:true,simulated:false,
+    write_performed:false,production_used:false,...operational});
+  }
   if(isCommercial){
    let summary=null,providerCalled=false;
    try{

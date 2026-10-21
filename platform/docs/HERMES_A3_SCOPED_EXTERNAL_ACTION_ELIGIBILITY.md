@@ -831,3 +831,31 @@ make the advisory nature explicit.
 These registered balances are **not** independently reconciled ERP debts.
 The route must not be exposed in Caddy until this exact code commit
 passes CI and an isolated localhost service has been validated.
+
+#### LotoIA: independent tenant-pinned operational health (disabled by default)
+
+The official Base44 `LotoIA` app `68d304fd3c2a6353d2cb0b4d` has an
+owner-managed pilot scope limited to the **two active Erick lotteries in
+Barreiros and Sirinhaém**. QA stores and tenants cannot be counted.
+The separate `GET /internal/lotoia-read-pilot/health` on the same
+existing machine-authenticated staging reader uses an app-specific
+Ed25519 signing key to call one pinned official Base44 backend function
+`POST /functions/getHermesLotoiaHealth` with literal `{}`, while
+sharing the existing single-instance fsynced JSONL audit and 12 attempts
+per 24-hour budget with Github, BCB and Compras. This route is disabled
+unless `HERMES_LOTOIA_READ_ENABLED=true` and
+`HERMES_LOTOIA_FUNCTION_URL`, `HERMES_LOTOIA_ALLOWED_ORIGIN`, and
+`HERMES_LOTOIA_SIGNING_KEY_FILE` are all provisioned. The origin
+must be an explicitly approved HTTPS Base44 app hostname.
+
+Only aggregate counts of pending closing settlements, unresolved alerts,
+and cash closures in the past seven days are emitted; known outstanding
+amounts are distinguished from records lacking values. Zero rows
+mean *no records in this tenant*, not proof of reconciled operations.
+No bet, lottery game, boleto, Pix, customer, operator or financial
+movement raw entity is accessible from this endpoint. No record writes,
+notifications, payments, or A3/production execution are authorized.
+Tenant scope is **pinned in the Base44 backend**, and the Hermes reader
+accepts only the canonical two-store aggregate and date-fresh responses.
+First live deployment requires publication of the official Base44
+function, exact-HEAD GitHub CI green, and a scoped HTTPS E2E test.
