@@ -152,7 +152,7 @@ test('one scoped authenticated HTTPS ingress shares quota and durable safe audit
  assert.equal(audit[1].provider,'BASE44_COMPRAS');
  assert.equal(audit[1].adapter_outcome,'SUCCEEDED');
  const dumped=JSON.stringify(audit);
- assert.doesNotMatch(dumped,/385410|2657483|123|Authorization|bearer/i);
+ assert.doesNotMatch(dumped,/385410|2657483|SHOULD_NEVER_APPEAR|ignored_pii|cnpj|Authorization|bearer/i);
  assert.equal((await fetch(url,{headers:{Authorization:'Bearer '+MACHINE}})).status,429);
  assert.equal(provider.length,1);
  }finally{await new Promise(resolve=>server.close(resolve));tok.close();}
