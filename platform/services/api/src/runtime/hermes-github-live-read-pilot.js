@@ -10,6 +10,8 @@ const {invokeHermesMaintainerGithubRepositoryReader}=
  require('../core/hermes-maintainer-github-repository-reader-adapter');
 const {readBcbEconomicIndicator,INDICATORS}=
  require('./hermes-bcb-economic-read');
+const {readBase44CommercialSummary}=
+ require('./hermes-base44-commercial-read');
 const REPOSITORY='instutodp-cpu/agente-grupo-erick';
 const REF='main',WINDOW_MS=86400000;
 const RESOURCES=Object.freeze({
@@ -51,7 +53,11 @@ function createHermesGithubLiveReadPilot({
      !/^[A-Za-z0-9_.:-]{1,128}$/.test(identity.key_id||''))
    return denied('identity_invalid');
   if(!Object.hasOwn(RESOURCES,resource)&&
-     !Object.hasOwn(INDICATORS,resource))return denied('resource_not_allowed');
+     !Object.hasOwn(INDICATORS,resource)&&resource!=='commercial')
+   return denied('resource_not_allowed');
+  if(resource==='commercial'&&
+     environment.HERMES_BASE44_COMMERCIAL_READ_ENABLED!=='true')
+   return denied('commercial_disabled');
   const time=clock();
   if(!Number.isSafeInteger(time))return denied('clock_unavailable');
   let attempts;
@@ -63,16 +69,41 @@ function createHermesGithubLiveReadPilot({
    return denied('quota_store_unavailable');
   if(attempts>=maxRequests)return denied('request_budget_exhausted');
   const isEconomy=Object.hasOwn(INDICATORS,resource);
-  const path=isEconomy?null:RESOURCES[resource],trace_id=randomUUID();
+  const isCommercial=resource==='commercial';
+  const path=isEconomy||isCommercial?null:RESOURCES[resource],trace_id=randomUUID();
   const bound={trace_id,tenant_id:identity.tenant_id,
    principal_id:identity.principal.id,key_id:identity.key_id,
-   operation:'GET',provider:isEconomy?'BCB_SGS':'GITHUB',
-   repository:isEconomy?null:REPOSITORY,path,ref:isEconomy?null:REF,resource,
+   operation:isCommercial?'POST': 'GET',
+   provider:isCommercial?'BASE44_COMPRAS':isEconomy?'BCB_SGS':'GITHUB',
+   repository:isEconomy||isCommercial?null:REPOSITORY,
+   path,ref:isEconomy||isCommercial?null:REF,resource,
    real_provider_called:false,write_performed:false,production_used:false};
   // Durable attempt reservation before the external GET; failed requests
   // consume budget. A restart cannot reset it because usage is replayed.
   try{await appendAudit(Object.freeze({...bound,event:'attempt',at:new Date(time).toISOString()}));}
   catch{return denied('audit_unavailable');}
+  if(isCommercial){
+   let summary=null,providerCalled=false;
+   try{
+    summary=await readBase44CommercialSummary({
+     environment,fetchImpl:async(url,options)=>{
+      providerCalled=true;
+      return fetchImpl(url,options);
+     }
+    });
+   }catch{/* No provider detail, URL, credential or financial payload in audit. */}
+   const success=Boolean(summary);
+   const audit=Object.freeze({...bound,event:'result',
+    at:new Date(clock()).toISOString(),adapter_outcome:success?'SUCCEEDED':'FAILED',
+    real_provider_called:providerCalled,source:'Compras homologacao',
+    schema_valid:success});
+   try{await appendAudit(audit);}
+   catch{return denied('audit_unavailable_after_provider');}
+   if(!success)return Object.freeze({...denied('provider_failed'),trace_id});
+   return Object.freeze({status:'succeeded',trace_id,executed:true,
+    network_call_performed:true,simulated:false,
+    write_performed:false,production_used:false,...summary});
+  }
   if(isEconomy){
    let indicator=null,providerCalled=false,error=null;
    try{

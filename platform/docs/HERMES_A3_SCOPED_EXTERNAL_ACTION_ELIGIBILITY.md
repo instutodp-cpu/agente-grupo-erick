@@ -775,3 +775,36 @@ serialized gate, persisted 12-attempt rolling 24h shared audit/quota and
 staging-only kill switches cover BOTH the GitHub and BCB read domains.
 The separate old public-web canary is not imported, replayed or dispatched.
 This is still staging and not permission for production data writes.
+
+#### Official Purchases aggregate integration — prepared, disabled until scoped identity
+
+The next allowed resource uses `POST /internal/commercial-read-pilot/summary`
+on the **existing** staging Hermes machine-authenticated read ingress,
+which invokes only the official `Compras homologação` Base44 backend function
+`getHermesCommercialSummary` at pinned app `69c495eb174a34cc5ccf8577`.
+The operation is a POST transport for read-only aggregation, not any mutation.
+No arbitrary input/body/repository/URL, and the external Base44 URL must
+match the exact official HTTPS app origin `compras-evolucao-copy-5ccf8577.base44.app`
+and the fixed `/functions/getHermesCommercialSummary` endpoint path.
+No service-role authentication from outside Base44. The Base44 backend
+verifies a short-lived Ed25519 signature over the fixed aggregate request,
+using a pinned public key; only the corresponding mode-0600 private key in
+the VPS can sign. No Base44 user session, administrative bearer, shared
+secret, raw financial record or external service-role token is copied to
+the VPS. The backend maps the signature only to an aggregate-only Grupo
+Erick read, never to generic app entity operations.
+
+`HERMES_BASE44_COMMERCIAL_READ_ENABLED` defaults to false and requires
+`HERMES_BASE44_COMMERCIAL_FUNCTION_URL` and
+`HERMES_BASE44_COMMERCIAL_SIGNING_KEY_FILE` before any external HTTP call can run.
+The same staging-only flags, existing machine principal, shared persistent
+audit and 12-attempt rolling 24h quota apply. No raw rows, invoices, staff,
+supplier identities, tokens, or HTTP request bodies are emitted in evidence.
+The Base44 return shape is validated against a tight aggregate-only schema
+and explicitly marks `erp_linx_conciliated:false`.
+
+**Operational status at construction:** Base44 code/checkpoint exists, but
+Base44 function deployment and an actual signed POST from the VPS
+are verified. Hermes' HTTP ingress with shared audit and quota must still
+be validated and reconciled with the remote GitHub PR before public rollout. The endpoint must NOT be put behind public
+Caddy until its authenticated test and deployment rights are confirmed.
