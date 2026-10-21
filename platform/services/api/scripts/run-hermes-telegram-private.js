@@ -133,6 +133,8 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now()}){
   const result=await processUpdate({
    update:item,ownerId:owner?.owner_id??null,pairing,
    clock,query,
+   readCache:intent=>loadState(stateDir,'cache-'+intent+'.json'),
+   writeCache:(intent,record)=>saveState(stateDir,'cache-'+intent+'.json',record),
    send:(chatId,text)=>api('sendMessage',{chat_id:chatId,text,
     disable_web_page_preview:true}),
    savePairing:next=>saveState(stateDir,'pairing.json',next),
@@ -144,7 +146,8 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now()}){
   });
   audit(stateDir,{at:new Date(clock()).toISOString(),
    event:'outcome',update_id:item.update_id,
-   outcome:result.kind,intent:result.intent||null});
+   outcome:result.kind,intent:result.intent||null,
+   cache:result.cache||null});
   handled++;
  }
  return {handled,next_offset:current};
