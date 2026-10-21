@@ -9,6 +9,8 @@ const APP_ID='68d304fd3c2a6353d2cb0b4d';
 const ENDPOINT='/functions/getHermesLotoiaHealth';
 const CONTEXT='hermes-lotoia-health-v1';
 const EXPECTED_NAMES=Object.freeze(['Erick Lotérica Barreiros','Erick Lotérica Sirinhaém']);
+const COVERAGE_NAMES=Object.freeze(['operator_cash','physical_counts',
+ 'caixa_reports','financial_movements','closures']);
 function validEndpoint(url,origin){
  if(typeof url!=='string'||typeof origin!=='string'||
     url.length>450||origin.length>250)return false;
@@ -84,6 +86,35 @@ function shapeLotoiaHealth(x,{clock=()=>Date.now()}={}){
   const total=field.endsWith('_brl')?Math.round(x[field]*100):x[field];
   if(sum!==total)throw Error('lotoia_aggregate_inconsistent');
  }
+ const coverage=x.data_coverage;
+ if(coverage?.window_days!==7||
+  !['no_recent_records','partial_records','sources_present_unverified']
+   .includes(coverage.status)||
+  coverage.real_world_completeness_verified!==false||
+  !count(coverage.stores_with_recent_records)||
+  coverage.stores_with_recent_records>2)
+   throw Error('lotoia_coverage_invalid');
+ function shapeSourceCounts(source){
+  if(!source||Object.keys(source).length!==COVERAGE_NAMES.length||
+    COVERAGE_NAMES.some(key=>!Object.hasOwn(source,key)||!count(source[key])))
+   throw Error('lotoia_coverage_counts_invalid');
+  return Object.fromEntries(COVERAGE_NAMES.map(k=>[k,source[k]]));
+ }
+ const totalCounts=shapeSourceCounts(coverage.recent_source_counts);
+ const perStore=x.stores.map(s=>shapeSourceCounts(s.recent_source_counts));
+ const active=perStore.filter(c=>COVERAGE_NAMES.some(k=>c[k]>0)).length;
+ if(active!==coverage.stores_with_recent_records||
+  totalCounts.closures!==x.cash_closures_last_7_days||
+  x.stores.some((store,i)=>perStore[i].closures!==store.cash_closures_last_7_days))
+   throw Error('lotoia_coverage_inconsistent');
+ for(const k of COVERAGE_NAMES){
+  if(perStore.reduce((a,c)=>a+c[k],0)!==totalCounts[k])
+   throw Error('lotoia_coverage_inconsistent');
+ }
+ const expectedStatus=active===0?'no_recent_records':
+  active===2&&perStore.every(o=>COVERAGE_NAMES.every(k=>o[k]>0))?
+   'sources_present_unverified':'partial_records';
+ if(coverage.status!==expectedStatus)throw Error('lotoia_coverage_status_invalid');
  const safe={
   source:'LotoIA',company:'Grupo Erick',pilot_scope:x.pilot_scope,
   source_state:x.source_state,qa_included:false,as_of:x.as_of,
@@ -95,8 +126,14 @@ function shapeLotoiaHealth(x,{clock=()=>Date.now()}={}){
   stores:EXPECTED_NAMES.map(name=>{
    const z=x.stores.find(a=>a.name===name);
    return {name,...Object.fromEntries([...numberFields,...currencyFields]
-    .map(k=>[k,z[k]]))};
+    .map(k=>[k,z[k]])),recent_source_counts:shapeSourceCounts(z.recent_source_counts)};
   }),
+  data_coverage:{
+   window_days:7,status:coverage.status,
+   stores_with_recent_records:coverage.stores_with_recent_records,
+   recent_source_counts:totalCounts,
+   real_world_completeness_verified:false
+  },
   write_performed:false,notifications_dispatched:false,
   financial_authority:false,real_world_operations_verified:false
  };

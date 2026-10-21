@@ -859,3 +859,29 @@ Tenant scope is **pinned in the Base44 backend**, and the Hermes reader
 accepts only the canonical two-store aggregate and date-fresh responses.
 First live deployment requires publication of the official Base44
 function, exact-HEAD GitHub CI green, and a scoped HTTPS E2E test.
+
+#### LotoIA reporting coverage — advisory visibility, not a reconciliation
+
+The same existing `GET /internal/lotoia-read-pilot/health` now includes a
+bounded **7-calendar-day data coverage check** for both explicitly pinned
+Erick lottery stores: operator cash, cash physical counts, Caixa reports,
+financial movements and closing records. The Base44 function reads only
+those five entity types (the cash closures already in the health read),
+restricts every scan by exact operational tenant and store ID, denies
+cross-tenant/duplicate rows, rejects invalid dates and refuses to publish
+partially fetched pages (200-row cap). This adds **no new route, job,
+agent, signed identity, permission or outbound notification**.
+
+`data_coverage.status` must be one of `no_recent_records`,
+`partial_records`, or `sources_present_unverified`. Even when all
+five sources have entries for both stores, `real_world_completeness_verified`
+remains `false`. Missing recent entries cannot be interpreted as
+absence of pending settlements or as evidence of reconciled cash.
+Hermes independently validates per-store vs aggregate source counts
+before returning only whitelisted fields. No raw financial movement,
+customer, Pix or bet record escapes.
+
+Operational activation requires the updated LotoIA Base44 function to be
+published and the exact GitHub HEAD CI to pass, followed by authenticated
+HTTPS E2E and durable audit; current deployed v6 must remain untouched
+until the successor passes this gate.

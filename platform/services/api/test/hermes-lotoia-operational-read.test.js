@@ -17,13 +17,21 @@ const fixture=()=>({
  qa_included:false,as_of:'2026-10-21',store_count:2,
  open_pending_count:0,open_pending_known_balance_brl:0,
  amount_unknown_count:0,unresolved_alert_count:0,cash_closures_last_7_days:0,
+ data_coverage:{window_days:7,status:'no_recent_records',
+  stores_with_recent_records:0,real_world_completeness_verified:false,
+  recent_source_counts:{operator_cash:0,physical_counts:0,
+   caixa_reports:0,financial_movements:0,closures:0}},
  stores:[
  {name:'Erick Lotérica Barreiros',open_pending_count:0,
   open_pending_known_balance_brl:0,amount_unknown_count:0,
-  unresolved_alert_count:0,cash_closures_last_7_days:0},
+  unresolved_alert_count:0,cash_closures_last_7_days:0,
+  recent_source_counts:{operator_cash:0,physical_counts:0,
+   caixa_reports:0,financial_movements:0,closures:0}},
  {name:'Erick Lotérica Sirinhaém',open_pending_count:0,
   open_pending_known_balance_brl:0,amount_unknown_count:0,
-  unresolved_alert_count:0,cash_closures_last_7_days:0}
+  unresolved_alert_count:0,cash_closures_last_7_days:0,
+  recent_source_counts:{operator_cash:0,physical_counts:0,
+   caixa_reports:0,financial_movements:0,closures:0}}
  ],
  write_performed:false,notifications_dispatched:false,
  financial_authority:false,real_world_operations_verified:false
@@ -59,6 +67,7 @@ test('fixed host/path rejects an arbitrary app URL, raw query and origin mismatc
 test('only scoped, fresh two-store LotoIA counts are returned',async()=>{
  const f=fixture();
  assert.equal(shapeLotoiaHealth(f,{clock:()=>NOW}).open_pending_count,0);
+ assert.equal(shapeLotoiaHealth(f,{clock:()=>NOW}).data_coverage.status,'no_recent_records');
  const bad=[
   s=>{s.qa_included=true;},
   s=>{s.company='Tenant QA';},
@@ -71,7 +80,14 @@ test('only scoped, fresh two-store LotoIA counts are returned',async()=>{
   s=>{s.as_of='2026-10-22';},
   s=>{s.real_world_operations_verified=true;},
   s=>{s.financial_authority=true;},
-  s=>{s.stores[1].open_pending_known_balance_brl=1.001;}
+  s=>{s.stores[1].open_pending_known_balance_brl=1.001;},
+  s=>{s.data_coverage.status='sources_present_unverified';},
+  s=>{s.data_coverage.stores_with_recent_records=1;},
+  s=>{s.data_coverage.recent_source_counts.operator_cash=1;},
+  s=>{s.stores[0].recent_source_counts.closures=1;},
+  s=>{s.stores[1].recent_source_counts.physical_counts=-1;},
+  s=>{s.data_coverage.real_world_completeness_verified=true;},
+  s=>{s.stores[1].recent_source_counts.qa_field=1;}
  ];
  for(const mutation of bad){
   const data=fixture();mutation(data);
@@ -168,4 +184,18 @@ test('Hermes ingress shares identity quota and audit with other domains',async()
   assert.equal((await fetch(url,{headers:{Authorization:'Bearer '+MACHINE}})).status,429);
   assert.equal(network.length,1);
  }finally{await new Promise(r=>server.close(r));f.close();}
+});
+
+test('consistent partial coverage never authorizes financial action',()=>{
+ const d=fixture();
+ d.stores[0].recent_source_counts.operator_cash=2;
+ d.data_coverage.recent_source_counts.operator_cash=2;
+ d.data_coverage.stores_with_recent_records=1;
+ d.data_coverage.status='partial_records';
+ const safe=shapeLotoiaHealth(d,{clock:()=>NOW});
+ assert.equal(safe.data_coverage.status,'partial_records');
+ assert.equal(safe.data_coverage.stores_with_recent_records,1);
+ assert.equal(safe.data_coverage.real_world_completeness_verified,false);
+ assert.equal(safe.financial_authority,false);
+ assert.equal(safe.write_performed,false);
 });
