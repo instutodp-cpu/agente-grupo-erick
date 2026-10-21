@@ -114,6 +114,9 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now()}){
   offset,limit:5,timeout:12,allowed_updates:['message']
  });
  if(!Array.isArray(updates)||updates.length>5)throw Error('update_batch_invalid');
+ // Authenticated polling heartbeat: genuine Telegram API response, not an HTTP
+ // port healthcheck inherited from the unrelated Hermes API image.
+ saveState(stateDir,'heartbeat.json',{at:clock()});
  let current=offset,handled=0;
  for(const item of updates){
   if(!Number.isSafeInteger(item?.update_id)||item.update_id<current)

@@ -19,6 +19,13 @@ const lotoia=()=>({status:'succeeded',executed:true,
  qa_included:false,real_world_operations_verified:false,
  financial_authority:false,as_of:'2026-10-21',
  open_pending_count:0,unresolved_alert_count:0,
+ open_pending_known_balance_brl:0,
+ stores:['Erick Lotérica Barreiros','Erick Lotérica Sirinhaém'].map(name=>({
+  name,open_pending_count:0,unresolved_alert_count:0,
+  open_pending_known_balance_brl:0,
+  recent_source_counts:{operator_cash:0,physical_counts:0,caixa_reports:0,
+   financial_movements:0,closures:0}
+ })),
  data_coverage:{window_days:7,status:'no_recent_records',
   real_world_completeness_verified:false}
 });
@@ -29,6 +36,7 @@ const compras=()=>({status:'succeeded',executed:true,
  brief:{source:'Compras homologacao',company:'Grupo Erick',
   source_state:'homologacao',erp_linx_conciliated:false,
   alerts_dispatched:false,payment_authorized:false,as_of:'2026-10-21',
+  purchases_last_30_days:{count:15,net_brl:13250.12},
   open_titles:{count:942,balance_brl:2657483.43},
   overdue_titles:{count:471,balance_brl:1198243.10},
   next_30_days_titles:{count:88,balance_brl:189280.82}}
@@ -64,7 +72,9 @@ test('live responses are fixed, audit-traceable and NEVER claim ERP or lottery r
  assert.match(a,/22222222/);
  const b=core.hermesReply('lotoia',lotoia());
  assert.match(b,/sem lançamentos recentes/);
- assert.match(b,/não comprova caixa regular/);
+ assert.match(b,/Erick Lotérica Barreiros/);
+ assert.match(b,/Erick Lotérica Sirinhaém/);
+ assert.match(b,/NÃO comprova ausência de pendências/);
  assert.match(b,/11111111/);
  assert.throws(()=>core.hermesReply('lotoia',{...lotoia(),qa_included:true}));
  assert.throws(()=>core.hermesReply('compras',{...compras(),simulated:true}));
@@ -158,6 +168,7 @@ test('polling persists update offset and ignores repeats across restarts',async(
   assert.equal(first.handled,0);
   assert.equal(sent.length,1);
   assert.equal(runner.loadState(d,'offset.json').offset,11);
+  assert.equal(runner.loadState(d,'heartbeat.json').at,now);
   const log=fs.readFileSync(path.join(d,'audit.jsonl'),'utf8');
   assert.match(log,/"outcome":"answered"/);
   assert.doesNotMatch(log,/LotoIA —|situação do LotoIA/);

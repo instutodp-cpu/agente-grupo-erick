@@ -20,6 +20,9 @@ O token oficial do bot é secreto e não pode ser enviado por chat, issue, commi
 
 O canal é fail-closed sem `HERMES_TELEGRAM_ENABLED=true`, `HERMES_DEPLOYMENT_STAGE=staging`, execução desativada, kill switch habilitado, ingresso de missões desativado, token válido e arquivos protegidos. O polling nunca recupera conversas de terceiros; recebe apenas novas mensagens ao próprio bot. O ledger escreve apenas update IDs e intenções aprovadas, **nunca o texto bruto**. O cursor de update é persistido **antes** da consulta de leitura: uma falha na entrega da resposta do Telegram não repete automaticamente a consulta nem consome a cota duas vezes. Uma resposta perdida pode ser solicitada de novo pelo usuário.
 
+### Healthcheck do poller
+A imagem Docker do Hermes API contém um healthcheck HTTP para `/health` na porta 8080, **inadequado** para este processo que não abre servidor HTTP. O poller agora grava `heartbeat.json` após cada resposta válida de `getUpdates`, mesmo com lote vazio. Na implantação exclusiva do Telegram, substituir o healthcheck herdado por um que confira `at` nesse arquivo em `/var/lib/hermes-telegram` com idade máxima de 75 segundos. A verificação é local, não lê tokens nem usa a quota Hermes; um processo parado ou uma comunicação perdida com o Telegram fica `unhealthy`.
+
 ## Provisionamento simplificado (preferencial)
 
 No Web Console da VPS como `hermesadmin`, depois de atualizar a cópia de trabalho para o commit aprovado no CI, execute:

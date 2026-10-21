@@ -62,10 +62,14 @@ function hermesReply(intent,x){
    b.alerts_dispatched!==false||b.payment_authorized!==false)
    throw Error('wrong_commercial_scope');
   const opened=b.open_titles,over=b.overdue_titles,upcoming=b.next_30_days_titles;
+  const purchases=b.purchases_last_30_days;
   if(![opened,over,upcoming].every(v=>safeCount(v?.count)&&safeMoney(v.balance_brl))||
+   !safeCount(purchases?.count)||!safeMoney(purchases?.net_brl)||
    over.balance_brl>opened.balance_brl)throw Error('invalid_balances');
   return ['📦 Compras — Grupo Erick (homologação)',
    'Referência: '+b.as_of,
+   'Compras dos últimos 30 dias: '+brl.format(purchases.net_brl)+
+    ' ('+num.format(purchases.count)+' registros)',
    'Registrado em aberto: '+brl.format(opened.balance_brl),
    'Marcado como vencido: '+brl.format(over.balance_brl)+
     ' ('+num.format(over.count)+' títulos)',
@@ -90,11 +94,30 @@ function hermesReply(intent,x){
    partial_records:'registros parciais por loja/fonte',
    sources_present_unverified:'fontes com registros, mas sem conciliação'
   }[c.status];
+  if(!Array.isArray(x.stores)||x.stores.length!==2||
+   !safeMoney(x.open_pending_known_balance_brl))throw Error('invalid_lotoia_stores');
+  const names=['Erick Lotérica Barreiros','Erick Lotérica Sirinhaém'];
+  const storeLines=names.map(name=>{
+   const s=x.stores.find(item=>item?.name===name);
+   if(!s||!safeCount(s.open_pending_count)||
+    !safeCount(s.unresolved_alert_count)||
+    !safeMoney(s.open_pending_known_balance_brl)||
+    !s.recent_source_counts||
+    !['operator_cash','physical_counts','caixa_reports','financial_movements','closures']
+      .every(k=>safeCount(s.recent_source_counts[k])))
+    throw Error('invalid_lotoia_store_coverage');
+   const hasRecords=Object.values(s.recent_source_counts).some(n=>n>0);
+   return name+': '+num.format(s.open_pending_count)+
+    ' pendência(s) registrada(s), '+brl.format(s.open_pending_known_balance_brl)+
+    ' de valor conhecido; '+(hasRecords?'há lançamentos, sem conciliação':
+     'sem registros recentes nas fontes consultadas');
+  });
   return ['🎟️ LotoIA — duas lotéricas Erick',
    'Referência: '+x.as_of,'Cobertura de 7 dias: '+state,
-   'Pendências registradas: '+num.format(x.open_pending_count),
+   ...storeLines,
+   'Pendências registradas no aplicativo: '+num.format(x.open_pending_count),
    'Alertas registrados: '+num.format(x.unresolved_alert_count),
-   '⚠️ Falta de lançamentos não comprova caixa regular.',
+   '⚠️ Ausência de registro NÃO comprova ausência de pendências ou conciliação de caixa.',
    'Somente leitura. Rastreio: '+trace].join('\n');
  }
  throw Error('intent_not_allowed');
