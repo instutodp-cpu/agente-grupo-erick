@@ -5,12 +5,13 @@ umask 077
 ACTION="$1"; EXPECTED_SHA="$2"
 [[ "$ACTION" =~ ^--(check|deploy|rollback)$ ]] || { echo INVALID_ACTION;exit 2; }
 [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]] || { echo INVALID_SHA;exit 2; }
-ROOT=/home/hermesadmin/hermes-softcom-history-v1
+ROOT=/home/hermesadmin/hermes-analyst-release-fix-v1
+LEGACY_WORKTREE=/home/hermesadmin/hermes-softcom-history-v1
 BASE=/home/hermesadmin/.hermes-telegram
 STATE="$BASE/state"
 OLD=hermes-telegram-private-v1
-BACKUP=hermes-telegram-private-preanalyst-v1
-IMAGE=hermes-softcom-analyst-release:v1
+BACKUP=hermes-telegram-private-preanalyst-safe-v2
+IMAGE=hermes-softcom-analyst-safe:v2
 PASS="$BASE/secret/softcom-history-db-password"
 CA=/home/hermesadmin/supabase-staging-root-ca.pem
 BOT="$BASE/secret/token"
@@ -27,6 +28,24 @@ done
 # Rebuild from exact PR HEAD to avoid running a stale local candidate image.
 docker build --pull=false -q -t "$IMAGE" -f "$ROOT/platform/services/api/Dockerfile" "$ROOT/platform/services/api" >/dev/null
 docker image inspect "$IMAGE" >/dev/null || deny missing_image
+# Freeze the new runtime entrypoint independently of the worktree.
+# The stopped previous poller remains mounted to the untouched, compatible old script.
+RELEASE_DIR="$BASE/releases"
+mkdir -p "$RELEASE_DIR"
+chmod 700 "$RELEASE_DIR"
+RELEASE_SCRIPT="$RELEASE_DIR/analyst-$EXPECTED_SHA.js"
+if [[ ! -f "$RELEASE_SCRIPT" ]];then
+ install -m 600 "$ROOT/platform/services/api/scripts/run-hermes-telegram-private.js" "$RELEASE_SCRIPT"
+fi
+[[ "$(stat -c '%a' "$RELEASE_SCRIPT")" == 600 ]] || deny release_script_permissions
+cmp -s "$ROOT/platform/services/api/scripts/run-hermes-telegram-private.js" "$RELEASE_SCRIPT" || deny immutable_script_mismatch
+docker run --rm --network none --read-only --user 1000:1000 --cap-drop ALL  -v "$RELEASE_SCRIPT:/app/scripts/run-hermes-telegram-private.js:ro"  --entrypoint node "$IMAGE" -e '
+const a=require("/app/src/runtime/hermes-analyst-templates");
+const r=require("/app/scripts/run-hermes-telegram-private");
+if(typeof a.planQuestion!=="function"||typeof r.createLiveQuery!=="function")
+ process.exit(2);
+console.log("NONROOT_IMAGE_IMPORT_GATE_OK");'
+
 exec 9>"$BASE/.deploy-lock"
 flock -n 9 || deny overlapping_deployment
 count_pollers(){ docker ps --format '{{.Names}}' | grep -c '^hermes-telegram-private-' || :; }
@@ -47,7 +66,7 @@ fi
 [[ "$(docker inspect "$OLD" --format '{{.State.Health.Status}}')" == healthy ]] || deny bot_unhealthy
 [[ "$(count_pollers)" == 1 ]] || deny duplicate_pollers
 [[ "$(docker inspect hermes-read-pilot-v7 --format '{{.State.Health.Status}}')" == healthy ]] || deny read_pilot
-[[ "$(docker inspect "$OLD" --format '{{range .Mounts}}{{if eq .Destination "/app/scripts/run-hermes-telegram-private.js"}}{{.Source}}{{end}}{{end}}')" == "$ROOT/platform/services/api/scripts/run-hermes-telegram-private.js" ]] || deny unexpected_bot_mounts
+[[ "$(docker inspect "$OLD" --format '{{range .Mounts}}{{if eq .Destination "/app/scripts/run-hermes-telegram-private.js"}}{{.Source}}{{end}}{{end}}')" == "$LEGACY_WORKTREE/platform/services/api/scripts/run-hermes-telegram-private.js" ]] || deny unexpected_bot_mounts
 ! docker container inspect "$BACKUP" >/dev/null 2>&1 || deny existing_backup
 echo PRECHECK_DATABASE_ONLY
 docker run --rm --network bridge --read-only --user 1000:1000 \
@@ -73,6 +92,10 @@ RESTORE=1
 restore(){
  if [[ "$RESTORE" == 0 ]]; then return;fi
  echo ROLLBACK_IN_PROGRESS
+ if docker container inspect "$OLD" >/dev/null 2>&1;then
+  docker logs --tail 80 "$OLD" > "$BASE/state/.analyst-rollback-diagnostic.log" 2>&1 || :
+  chmod 600 "$BASE/state/.analyst-rollback-diagnostic.log" 2>/dev/null || :
+ fi
  if docker container inspect "$BACKUP" >/dev/null 2>&1; then
   docker stop -t 10 "$OLD" >/dev/null 2>&1 || :
   docker rm "$OLD" >/dev/null 2>&1 || :
@@ -93,7 +116,7 @@ docker run -d --name "$OLD" --restart unless-stopped \
  --log-driver local --log-opt max-size=2m --log-opt max-file=2 \
  --health-cmd "$HEALTH" --health-interval 10s \
  --health-timeout 4s --health-start-period 20s --health-retries 4 \
- -v "$ROOT/platform/services/api/scripts/run-hermes-telegram-private.js:/app/scripts/run-hermes-telegram-private.js:ro" \
+ -v "$RELEASE_SCRIPT:/app/scripts/run-hermes-telegram-private.js:ro" \
  -v "$BOT:/run/hermes-telegram-token:ro" \
  -v "$MACHINE:/run/hermes-machine-token:ro" \
  -v "$PASS:/run/hermes-history-password:ro" \

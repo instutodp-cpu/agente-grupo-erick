@@ -103,3 +103,14 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   --rollback, HEAD exato, fail-closed, um único poller e testes online.
 - Próximas dependências: LLM autorizado, JEV em modo sombra, memória real
   pessoal/empresarial e reconciliação Compras Homologação/Linx.
+
+### Correção de isolamento e rollback imutável do analista
+- Primeira promoção do analista falhou por EACCES: novo módulo copiado
+  pela imagem como 0600 root-owned (worktree criado com umask 077).
+- Dockerfile garante RUN chmod -R a+rX /app/src /app/scripts após COPY;
+  conserva runtime uid 1000 sem root, read-only, cap_drop ALL.
+- O backup pré-analista usa o script antigo no worktree legado intocado.
+  A nova versão usa script congelado em BASE/releases por SHA exato,
+  conferido via cmp e importado com uid 1000 antes de qualquer stop.
+- Se gate de saúde falhar, diagnóstico privado .analyst-rollback-diagnostic.log
+  modo 0600 antes do rollback. Sem aumento de heap nem nova PR.
