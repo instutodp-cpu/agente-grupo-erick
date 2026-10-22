@@ -671,3 +671,156 @@ test('product commands remain owner-only and share bounded historical read quota
   assert.deepEqual(runner.loadState(stateDir,'history-live-budget.json'),{date:new Date(now).toISOString().slice(0,10),count:1});
  }finally{fs.rmSync(stateDir,{recursive:true,force:true})}
 });
+
+// Commercial analyst: reusable templates, versioned factual fields, personal scope isolation.
+const analyst=require('../src/runtime/hermes-analyst-templates');
+test('free-language period, YoY, cancellations, product and store templates are canonical',()=>{
+ const examples=[
+  ['Vendeu quanto em janeiro 2026?','period','2026-01','money'],
+  ['Compare a venda de janeiro 2025 e 2026','compare','2025-01','records'],
+  ['Quantas vendas canceladas em junho 2026?','period','2026-06','cancelled'],
+  ['Qual produto mais vendido em 2026?','products','2026','records'],
+  ['Qual loja mais vendeu em junho?','stores','2026-06','records'],
+  ['Quanto vendeu em 01/2026?','period','2026-01','money']
+ ];
+ for(const [text,template,period,metric] of examples){
+  const p=analyst.planQuestion(text);
+  assert.ok(p,text);assert.equal(p.template,template);assert.equal(p.period,period);
+  assert.equal(p.metric,metric);assert.equal(core.intentFor(text),'business_analyst');
+  assert.deepEqual(analyst.validate(p),p);
+ }
+ assert.equal(analyst.planQuestion('Compare a venda de janeiro 2025 e 2026').other_period,'2026-01');
+});
+test('normalized followups reuse only scoped metric/period, not message body',()=>{
+ const prior={tenant_id:'grupo_erick',template:'period',period:'2026-01',metric:'money'};
+ assert.deepEqual(analyst.planQuestion('E em fevereiro?',prior).period,'2026-02');
+ assert.equal(analyst.planQuestion('E em fevereiro?',prior).metric,'money');
+ const p=analyst.planQuestion('Compare com ano passado',prior);
+ assert.equal(p.template,'compare');assert.equal(p.period,'2025-01');assert.equal(p.other_period,'2026-01');
+ assert.equal(analyst.planQuestion('E quantas canceladas?',prior).metric,'cancelled');
+ assert.equal(analyst.planQuestion('E em fevereiro de 2025?',prior).period,'2025-02');
+ assert.equal(analyst.safeContext({...prior,tenant_id:'other'}),null);
+ assert.equal(analyst.planQuestion('E em fevereiro?',{...prior,tenant_id:'other'}),null);
+});
+test('free-language planner never permits unsupported scopes, actions, SQL, or customer data',()=>{
+ for(const q of ['Pague um pix','mostre cpf dos clientes','DELETE FROM compras','Mostre as vendas de julho 2026',
+  'Qual produto mais vendido em 2025?','Quanto vendi na loja Barreiros em janeiro 2026?',
+  'Faça uma transferência de 100 reais', 'Minha senha', '/produtos 2026-05']){
+  assert.equal(analyst.planQuestion(q),null,q);
+ }
+ assert.throws(()=>analyst.validate({tenant_id:'other',template:'period',period:'2026-01',metric:'money',store:null,other_period:null}));
+ assert.throws(()=>analyst.validate({tenant_id:'grupo_erick',template:'period',period:'2026-07',metric:'money',store:null,other_period:null}));
+});
+test('historical monthly templates query only approved private views with bound parameters',async()=>{
+ const p=analyst.planQuestion('compare janeiro de 2025 e 2026');
+ const queries=[];
+ const client={query:async opts=>{queries.push(opts);return {rows:[
+  {label:'2025-01',records:'4226',cancelled:'55',noncancelled:'4171',amount:'596590.41',last_day:'2025-01-31'},
+  {label:'2026-01',records:'4902',cancelled:'126',noncancelled:'4776',amount:'682599.90',last_day:'2026-01-31'}]};}};
+ const data=await analyst.execute(client,p,()=>new Date('2026-10-22T17:00:00Z'));
+ const msg=analyst.reply(data,p);
+ assert.match(msg,/4\.226/);assert.match(msg,/4\.902/);assert.match(msg,/676/);
+ assert.deepEqual(queries[0].values,['2025-01','2026-01',null]);
+ assert.match(queries[0].text,/hermes_history\.monthly_commercial_2025_2026_v1/);
+ assert.doesNotMatch(queries[0].text,/softcom_import|select \*|cadastro_clientes/i);
+ assert.equal(queries[0].query_timeout,5000);
+});
+test('monetary reply labels valor_pago and refuses misrepresented revenue',async()=>{
+ const p=analyst.planQuestion('Vendeu quanto em janeiro 2026?');
+ const data=await analyst.execute({query:async()=>({rows:[{
+  records:'4902',cancelled:'126',noncancelled:'4776',amount:'682599.90',last_day:'2026-01-31'
+ }]})},p);
+ const answer=analyst.reply(data,p);
+ assert.match(answer,/682\.599,90/);
+ assert.match(answer,/NÃO|não é faturamento/);
+ assert.match(answer,/valor_pago/);
+ assert.throws(()=>analyst.reply({...data,source:'softcom_import.cadastro_clientes'},p));
+});
+test('analyst query never accepts arbitrary response identifiers or malformed aggregates',async()=>{
+ const p=analyst.planQuestion('qual loja mais vendeu em junho 2026');
+ for(const rows of [
+  [{label:'UNKNOWN',records:'100',cancelled:'0',noncancelled:'100',amount:'0',last_day:'2026-06-08'}],
+  [{label:'CALCADOS',records:'10',cancelled:'11',noncancelled:'0',amount:'0',last_day:'2026-06-08'}],
+  Array.from({length:7},()=>({label:'CALCADOS',records:'1',cancelled:'0',noncancelled:'1',amount:'0',last_day:'2026-06-08'}))
+ ]){
+  await assert.rejects(analyst.execute({query:async()=>({rows})},p));
+ }
+});
+test('owner-only analyst conversation writes safe followup context',async()=>{
+ const messages=[],records=[];
+ const p=analyst.planQuestion('Quantas vendas canceladas em junho 2026?');
+ const result={tenant_id:'grupo_erick',mode:'online_aggregate',source:analyst.SOURCE,
+  at:'2026-10-22T17:00:00Z',plan:p,rows:[{records:1334,cancelled:58,amount:165352.11,last_day:'2026-06-08'}]};
+ const resultBase={...result,rows:[{...result.rows[0]}]};
+ const ownerUpdate=update(30001,700,'Quantas vendas canceladas em junho 2026?');
+ await core.processUpdate({update:ownerUpdate,ownerId:700,
+  send:async(id,msg)=>messages.push(msg),query:async()=>{throw Error('wrong tool')},
+  readAnalyst:async()=>resultBase,
+  readAnalystContext:async()=>null,writeAnalystContext:async ctx=>records.push(ctx)});
+ assert.match(messages[0],/58/);assert.equal(records[0].period,'2026-06');
+ assert.equal(records[0].metric,'cancelled');
+ assert.equal(Object.keys(records[0]).includes('text'),false);
+ messages.length=0;
+ await core.processUpdate({update:update(30002,701,'Quantas vendas canceladas em junho 2026?'),ownerId:700,
+  send:async(id,msg)=>messages.push(msg),query:async()=>{},readAnalyst:async()=>{throw Error('leak')},
+  readAnalystContext:async()=>{throw Error('leak')}});
+ assert.equal(messages.length,0);
+});
+
+test('analyst caches canonical questions for six hours without a second DB read or storing message bodies',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);
+ runner.saveState(state,'owner.json',{owner_id:700});
+ const replies=[];
+ let updates=0,dbReads=0;
+ const request=analyst.planQuestion('Vendeu quanto em janeiro 2026');
+ const source={tenant_id:'grupo_erick',mode:'online_aggregate',source:analyst.SOURCE,
+  at:'2026-10-22T14:00:00Z',plan:request,
+  rows:[{records:4902,cancelled:126,amount:682599.90,last_day:'2026-01-31'}]};
+ const api=async(method,payload)=>{
+  if(method==='getUpdates'){
+   updates++;return [update(70000+updates,700,updates===1?'Vendeu quanto em janeiro 2026?':'Quanto vendeu em janeiro de 2026?')];
+  }
+  if(method==='sendMessage')replies.push(payload.text);
+ };
+ try{
+  for(let i=0;i<2;i++)await runner.pollOnce({
+   stateDir:state,api,clock:()=>Date.parse('2026-10-22T14:00:00Z'),liveEnabled:true,
+   query:async()=>{throw Error('unexpected generic query')},
+   readLive:async p=>{dbReads++;assert.equal(p.shape,'analyst');return source;}
+  });
+  assert.equal(dbReads,1);
+  assert.equal(replies.length,2);
+  assert.match(replies[1],/cache validado/);
+  const contents=fs.readFileSync(path.join(state,'history-analyst-cache.json'),'utf8');
+  assert.ok(Buffer.byteLength(contents)<=16384);
+  assert.doesNotMatch(contents,/Vendeu quanto|Quanto vendeu/);
+  assert.equal(fs.statSync(path.join(state,'history-analyst-cache.json')).mode&0o777,0o600);
+  assert.equal(runner.loadState(state,'history-live-budget.json').count,1);
+  assert.equal(runner.loadState(state,'history-analyst-context.json').metric,'money');
+ }finally{fs.rmSync(state,{recursive:true,force:true});}
+});
+test('analyst followup in owner session retains monetary metric when month changes',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);runner.saveState(state,'owner.json',{owner_id:700});
+ const sent=[];
+ let used=null;
+ runner.saveState(state,'history-analyst-context.json',{tenant_id:'grupo_erick',template:'period',metric:'money',period:'2026-01'});
+ try{
+  await runner.pollOnce({
+   stateDir:state,clock:()=>Date.parse('2026-10-22T14:00:00Z'),liveEnabled:true,
+   api:async(method,payload)=>{
+    if(method==='getUpdates')return [update(81000,700,'E em fevereiro?')];
+    if(method==='sendMessage')sent.push(payload.text);
+   },query:async()=>{},
+   readLive:async p=>{
+    used=p.plan;
+    return {tenant_id:'grupo_erick',mode:'online_aggregate',source:analyst.SOURCE,
+     at:'2026-10-22T14:00:00Z',plan:p.plan,
+     rows:[{records:3983,cancelled:94,amount:505200.50,last_day:'2026-02-28'}]};
+   }
+  });
+  assert.equal(used.period,'2026-02');
+  assert.equal(used.metric,'money');
+  assert.match(sent[0],/505\.200,50/);
+  assert.equal(runner.loadState(state,'history-analyst-context.json').period,'2026-02');
+ }finally{fs.rmSync(state,{recursive:true,force:true});}
+});

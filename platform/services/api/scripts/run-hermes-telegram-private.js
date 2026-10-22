@@ -6,6 +6,7 @@ const path=require('node:path');
 const {TextDecoder}=require('node:util');
 const {processUpdate,ROUTES}=require('../src/runtime/hermes-telegram-private-channel');
 const {readHistoricalSales}=require('../src/runtime/hermes-softcom-live-reader');
+const analyst=require('../src/runtime/hermes-analyst-templates');
 const STATE='/var/lib/hermes-telegram';
 const TELEGRAM_ORIGIN='https://api.telegram.org';
 const HERMES_ORIGIN='https://hermes-staging.grupoerick.tech';
@@ -31,7 +32,8 @@ function loadState(dir,name){
   const fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
   try{
    const st=fs.fstatSync(fd);
-   if(!st.isFile()||(st.mode&0o777)!==0o600||st.size>2048)
+   const limit=name==='history-analyst-cache.json'?16384:2048;
+   if(!st.isFile()||(st.mode&0o777)!==0o600||st.size>limit)
     throw Error('state_file_unsafe');
    return JSON.parse(fs.readFileSync(fd,'utf8'));
   }finally{fs.closeSync(fd);}
@@ -39,10 +41,13 @@ function loadState(dir,name){
 }
 function saveState(dir,name,data){
  const file=path.join(dir,name),temp=path.join(dir,'.'+name+'.new');
+ const serialized=JSON.stringify(data)+'\n';
+ const limit=name==='history-analyst-cache.json'?16384:2048;
+ if(Buffer.byteLength(serialized,'utf8')>limit)throw Error('state_file_too_large');
  const fd=fs.openSync(temp,fs.constants.O_WRONLY|fs.constants.O_CREAT|
   fs.constants.O_EXCL|fs.constants.O_NOFOLLOW,0o600);
  try{
-  fs.writeFileSync(fd,JSON.stringify(data)+'\n');fs.fsyncSync(fd);
+  fs.writeFileSync(fd,serialized);fs.fsyncSync(fd);
  }finally{fs.closeSync(fd);}
  fs.renameSync(temp,file);
  const parent=fs.openSync(dir,fs.constants.O_RDONLY);
@@ -137,7 +142,9 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
   });
   try{
    await client.connect();
-   return await readHistoricalSales(client,params);
+   return params?.shape==='analyst'?
+    await analyst.execute(client,params.plan):
+    await readHistoricalSales(client,params);
   }finally{await client.end().catch(()=>{});}
  };
 }
@@ -179,14 +186,50 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     const record=loadState(stateDir,'history-live-budget.json');
     if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
       !Number.isInteger(record.count)||record.count<0||
-      record.count>8))throw Error('history_live_budget_invalid');
+      record.count>24))throw Error('history_live_budget_invalid');
     const count=record?.date===today?record.count:0;
-    if(count>=8)return {denied_status:'history_budget_exhausted'};
+    const cap=params?.shape==='analyst'?24:8;
+    if(count>=cap)return {denied_status:'history_budget_exhausted'};
     // Claim before hitting network; never retry reads due to failed writes/crashes.
     saveState(stateDir,'history-live-budget.json',{date:today,count:count+1});
     return readLive(params);
    },
 
+   readAnalystContext:()=>loadState(stateDir,'history-analyst-context.json'),
+   writeAnalystContext:ctx=>saveState(stateDir,'history-analyst-context.json',ctx),
+   readAnalyst:async plan=>{
+    if(!liveEnabled)throw Error('history_live_disabled');
+    analyst.validate(plan);
+    const hash=require('node:crypto').createHash('sha256').update(JSON.stringify(plan)).digest('hex').slice(0,24);
+    const saved=loadState(stateDir,'history-analyst-cache.json');
+    if(saved&&(!Array.isArray(saved.entries)||saved.entries.length>30))throw Error('analyst_cache_invalid');
+    const hit=saved?.entries?.find(x=>x.key===hash);
+    if(hit&&Number.isSafeInteger(hit.at)&&clock()-hit.at>=0&&clock()-hit.at<=6*3600000){
+     analyst.reply(hit.data,plan);
+     return {...hit.data,cached:true};
+    }
+    const data=await (async()=>{
+     const today=new Date(clock()).toISOString().slice(0,10);
+     const budget=loadState(stateDir,'history-live-budget.json');
+     if(budget&&(!/^20\d{2}-\d{2}-\d{2}$/.test(budget.date)||
+       !Number.isInteger(budget.count)||budget.count<0||budget.count>24))throw Error('history_live_budget_invalid');
+     const count=budget?.date===today?budget.count:0;
+     if(count>=24)return {denied_status:'history_budget_exhausted'};
+     saveState(stateDir,'history-live-budget.json',{date:today,count:count+1});
+     return readLive({shape:'analyst',tenant_id:'grupo_erick',plan});
+    })();
+    if(data.denied_status)return data;
+    analyst.reply(data,plan);
+    const entries=(saved?.entries||[]).filter(x=>x.key!==hash&&Number.isSafeInteger(x.at)&&clock()-x.at<=6*3600000).slice(-19);
+    entries.push({key:hash,at:clock(),data});
+    while(entries.length>1&&Buffer.byteLength(JSON.stringify({entries}),'utf8')>15000)
+     entries.shift();
+    if(Buffer.byteLength(JSON.stringify({entries}),'utf8')<=15000){
+     try{saveState(stateDir,'history-analyst-cache.json',{entries});}
+     catch{} // cache is optional; never invalidate a verified answer
+    }
+    return data;
+   },
    readCache:intent=>loadState(stateDir,'cache-'+intent+'.json'),
    writeCache:(intent,record)=>saveState(stateDir,'cache-'+intent+'.json',record),
    send:(chatId,text)=>api('sendMessage',{chat_id:chatId,text,

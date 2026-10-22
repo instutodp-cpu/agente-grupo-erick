@@ -82,3 +82,24 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
 - A nova promoção usa
   scripts/deploy-hermes-telegram-products-staging.sh com --check,
   --deploy e --rollback, sempre com SHA exato e validação online.
+
+## Analista histórico conversacional — incremento em homologação
+- Visão privada hermes_history.monthly_commercial_2025_2026_v1, agregados
+  mensais Softcom: ano de 2025 e jan–8 jun/2026.
+- Métrica financeira: valor_pago_noncancelled_sum, soma do campo importado
+  valor_pago em cabeçalhos não marcados como cancelados. NÃO corresponde
+  a faturamento líquido conciliado, caixa recebido ou DRE.
+- Templates em hermes-analyst-templates.js: period, compare, stores e
+  products. Consultas parametrizadas em visões privadas, sem SQL livre.
+- Linguagem natural delimitada: valor registrado, cancelamentos, comparação,
+  ranking de lojas e itens. NÃO equivale ainda a conversa ilimitada por LLM.
+- Contexto mínimo (template/período/métrica) e cache de plano: nenhum
+  texto de conversa persistido. Cache 6 horas, máximo 16KB, quota de 24/dia
+  para novas consultas de analista, 8/dia para comandos legados.
+- Realidade 2025-01: 4226 registros / 55 cancelamentos / R$596590,41
+  soma valor_pago; 2026-01: 4902 / 126 / R$682599,90.
+  Junho/2026 e ano/2026 parciais.
+- Novo script deploy-hermes-telegram-analyst-staging.sh: --check, --deploy,
+  --rollback, HEAD exato, fail-closed, um único poller e testes online.
+- Próximas dependências: LLM autorizado, JEV em modo sombra, memória real
+  pessoal/empresarial e reconciliação Compras Homologação/Linx.

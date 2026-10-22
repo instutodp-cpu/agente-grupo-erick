@@ -2,13 +2,16 @@
 // Hermes Telegram: private owner-only intent gateway. No generic AI/tool execution.
 const {createHash,timingSafeEqual}=require('node:crypto');
 const {parseSalesCommand,historicalLiveReply}=require('./hermes-softcom-live-channel');
+const analyst=require('./hermes-analyst-templates');
 const ROUTES=Object.freeze({
  compras:'/internal/commercial-read-pilot/brief',
  lotoia:'/internal/lotoia-read-pilot/health',status:'/health'
 });
 const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
  'Comandos: /compras, /lotoia, /historico, /historico lojas, /historico meses, /status, /ajuda.\n'+
- 'Leitura dinâmica: /vendas 2026-05, /vendas lojas 2026-05, /vendas meses e /produtos 2026-05.\n'+
+ 'Pergunte naturalmente: vendeu quanto em janeiro 2026; compare janeiro 2025 e 2026; cancelamentos em junho; qual loja vendeu mais.\n'+
+ 'Consultas usam indicadores históricos auditáveis, não faturamento conciliado.\n'+
+ 'Comandos antigos: /vendas 2026-05, /produtos 2026-05.\n'+
  'Também aceito "resumo das compras" e "situação do LotoIA".\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
@@ -25,6 +28,7 @@ function intentFor(text){
  if(/^\/historico(?:@\w+)?$/.test(t)||t==='historico de vendas'||
     t==='resumo historico de vendas')return 'historico';
  if(parseSalesCommand(text))return 'historico_live';
+ if(analyst.planQuestion(text))return 'business_analyst';
  if(/^\/compras(?:@\w+)?$/.test(t)||
   (/\b(compras|duplicatas)\b/.test(t)&&
    /\b(resumo|saldo|venciment\w*|pendenc\w*|total|quanto|qual|quais|mostre|mostra|situacao|relatorio)\b/.test(t)))
@@ -208,7 +212,9 @@ function hermesReply(intent,x){
 async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.now(),
  send,saveOwner,savePairing,query,
  readCache=async()=>null,writeCache=async()=>{},readHistory=async()=>null,
- readLive=async()=>null}){
+ readLive=async()=>null,
+ readAnalystContext=async()=>null,writeAnalystContext=async()=>{},
+ readAnalyst=async()=>null}){
  const msg=privateMessage(update);
  if(!msg)return {kind:'ignored'};
  if(typeof send!=='function'||typeof query!=='function')
@@ -230,11 +236,30 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
   return {kind:'paired'};
  }
  if(msg.userId!==ownerId)return {kind:'unauthorized'};
- const intent=intentFor(msg.text);
+ const previous=await readAnalystContext();
+ const plan=analyst.planQuestion(msg.text,previous);
+ const intent=plan?'business_analyst':intentFor(msg.text);
  if(intent==='help'){await send(msg.userId,HELP);return {kind:'answered',intent};}
  if(intent==='unknown'){
   await send(msg.userId,'Ainda não tenho essa operação liberada.\n\n'+HELP);
   return {kind:'unsupported',intent};
+ }
+ if(intent==='business_analyst'){
+  let response,cache='miss';
+  try{
+   const data=await readAnalyst(plan);
+   if(data?.denied_status==='history_budget_exhausted'){
+    response='Limite diário de análises históricas alcançado; nenhum dado novo consultado.';
+   }else{
+    response=analyst.reply(data,plan);
+    if(data.cached===true){cache='hit';response+='\n\n⏱️ Resposta reutilizada de cache validado ('+new Date(data.at).toLocaleString('pt-BR',{timeZone:'America/Recife'})+').';}
+    await writeAnalystContext({tenant_id:'grupo_erick',template:plan.template,metric:plan.metric,period:plan.period});
+   }
+  }catch{
+   response='Não consegui validar essa análise no banco. Não vou apresentar números presumidos.';
+  }
+  await send(msg.userId,response);
+  return {kind:'answered',intent,cache,source:'softcom_analyst'};
  }
  if(intent==='historico_live'){
   const req=parseSalesCommand(msg.text);
