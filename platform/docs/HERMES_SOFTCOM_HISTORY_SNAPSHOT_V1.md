@@ -157,3 +157,22 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   de hermesadmin. Sem credencial, NENHUMA promoção ao bot ativo.
 - Chamada paga a modelo depende de autorização explícita do proprietário
   por instalação segura de sua própria credencial na VPS.
+
+## Codex login (ChatGPT) - executor isolado de raciocínio
+- Autenticação humana por device-auth do Codex; CLI oficial instalado
+  fora do repositório. Status de login ChatGPT foi comprovado.
+- Nao usar OAuth como API key: somente CLI oficial e franquia da conta.
+- O modelo roda no contêiner isolado (UID 1000, rootfs somente leitura),
+  sem montagens de senhas Softcom/Telegram/Compras.
+- Conexão Hermes-Codex por Unix socket modo 0600, diretório host 0700,
+  socket montado read-only no bot. Nao ha porta publicada.
+- Codex exec ephemeral, ignore-user-config, ignore-rules, sandbox read-only,
+  timeout de 80s e limite de tamanho de resposta.
+- Canário real concluído: duas chamadas a Codex, SQL agregado histórico
+  real e resumo Compras Homologação real, plano validado e síntese com
+  fatos e hipóteses. Nenhuma ação de escrita; zero chamadas por API key.
+- Rollout com SHA exato em deploy-hermes-telegram-codex-staging.sh,
+  preflight de banco e socket, backup do bot anterior e rollback.
+- Limites do agente: 4 turnos/dia, 2 chamadas LLM/turno, até 3 ferramentas,
+  24 consultas SQL históricas por dia. Sem SQL livre.
+- Memória contextual durável e JEV-Maestro continuam próximas missões.

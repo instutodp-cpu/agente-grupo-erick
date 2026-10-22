@@ -298,15 +298,20 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  const api=telegramClient(botToken,fetchImpl);
  const query=hermesClient(machineToken,fetchImpl);
  const readLive=createLiveQuery(environment);
- const agentModel=governed.createModel({
-  enabled:environment.HERMES_AGENT_LLM_ENABLED==='true',
-  stage:environment.HERMES_DEPLOYMENT_STAGE,
-  killSwitch:environment.HERMES_EXECUTION_KILL_SWITCH==='true',
-  model:environment.HERMES_AGENT_MODEL,
-  key:environment.HERMES_AGENT_LLM_ENABLED==='true'?
-   readSecret(environment.HERMES_AGENT_KEY_FILE):null,
-  fetchImpl
- });
+ const loginEnabled=environment.HERMES_AGENT_LLM_ENABLED==='true';
+ const agentModel=environment.HERMES_AGENT_PROVIDER==='codex-login'?
+  require('../src/runtime/hermes-codex-login-bridge').createCodexModel({
+   enabled:loginEnabled,stage:environment.HERMES_DEPLOYMENT_STAGE,
+   killSwitch:environment.HERMES_EXECUTION_KILL_SWITCH==='true',
+   socketPath:environment.HERMES_CODEX_SOCKET
+  }):
+  governed.createModel({
+   enabled:loginEnabled,stage:environment.HERMES_DEPLOYMENT_STAGE,
+   killSwitch:environment.HERMES_EXECUTION_KILL_SWITCH==='true',
+   model:environment.HERMES_AGENT_MODEL,
+   key:loginEnabled?readSecret(environment.HERMES_AGENT_KEY_FILE):null,
+   fetchImpl
+  });
  const identity=await api('getMe',{});
  if(identity?.is_bot!==true||!Number.isSafeInteger(identity?.id)||
     String(identity?.username||'').toLowerCase()!=='grupoerick_bot')

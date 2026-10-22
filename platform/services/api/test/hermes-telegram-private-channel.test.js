@@ -1006,3 +1006,42 @@ test('runner reserves daily agent budget before model calls and never stores tex
   for(const name of files)assert.doesNotMatch(fs.readFileSync(path.join(state,name),'utf8'),/Analise janeiro 2025/);
  }finally{fs.rmSync(state,{recursive:true,force:true})}
 });
+
+const codexBridge=require('../src/runtime/hermes-codex-login-bridge');
+test('Codex login provider is disabled by default and requires staging read-only gate',()=>{
+ assert.equal(codexBridge.createCodexModel({enabled:false}),null);
+ for(const t of [
+  {enabled:true,stage:'production',killSwitch:true,socketPath:codexBridge.SOCKET},
+  {enabled:true,stage:'staging',killSwitch:false,socketPath:codexBridge.SOCKET},
+  {enabled:true,stage:'staging',killSwitch:true,socketPath:'/tmp/fake.sock'}
+ ])assert.throws(()=>codexBridge.createCodexModel(t));
+ assert.throws(()=>codexBridge.validateMessages([{role:'system',content:'Policy'},{role:'user',content:'Prompt'}],1500,false));
+ assert.throws(()=>codexBridge.validateMessages([{role:'system',content:'Policy'},{role:'admin',content:'Prompt'}],650,false));
+});
+test('Codex login local Unix socket integration returns typed answer and rejects malformed calls',async()=>{
+ const location=dir(),socket=path.join(location,'private.sock');
+ const seen=[];
+ const service=codexBridge.createBridgeServer({socketPath:socket,run:async payload=>{
+  seen.push(payload);
+  return '{"steps":[]}';
+ }});
+ try{
+  await service.listen();
+  assert.equal(fs.statSync(socket).mode&0o777,0o600);
+  const invoke=async body=>new Promise((resolve,reject)=>{
+   const http=require('node:http');
+   const data=JSON.stringify(body);
+   const req=http.request({method:'POST',socketPath:socket,path:'/v1/complete',
+    headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(data)}},res=>{
+    let buf='';res.on('data',c=>buf+=c.toString());res.on('end',()=>resolve({status:res.statusCode,body:JSON.parse(buf)}));
+   });
+   req.on('error',reject);req.end(data);
+  });
+  const valid={messages:[{role:'system',content:'JSON only'},{role:'user',content:'Plan safe tools'}],maxTokens:650,jsonMode:true};
+  const good=await invoke(valid);
+  assert.equal(good.status,200);assert.equal(good.body.text,'{"steps":[]}');
+  assert.deepEqual(seen[0],valid);
+  const denied=await invoke({...valid,unexpected:'sql'});
+  assert.equal(denied.status,400);
+ }finally{await service.close();fs.rmSync(location,{force:true,recursive:true});}
+});
