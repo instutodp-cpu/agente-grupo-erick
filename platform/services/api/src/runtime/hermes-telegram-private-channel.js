@@ -18,7 +18,7 @@ const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
  'Comandos antigos: /vendas 2026-05, /produtos 2026-05.\n'+
  'Também aceito "resumo das compras" e "situação do LotoIA".\n'+
  'Memória de decisões: /decisao (propor, confirmar, cancelar) e /decisoes.\n'+
- 'Métricas privadas de IA: /economia. Diagnóstico histórico: /diagnostico.\n'+
+ 'Métricas privadas de IA: /economia. Diagnóstico: /diagnostico, /diagnostico lojas.\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const num=new Intl.NumberFormat('pt-BR');
@@ -279,6 +279,15 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  }
  // A bounded, static financial diagnostic from approved saved sources only.
  // No LLM, no database read, no implicit execution authority.
+ if(msg.text==='/diagnostico lojas'){
+  let answer;
+  try{answer=diagnostic.byStore({
+   snapshot:await readHistory(),now:clock(),validSnapshot:safeHistorySnapshot
+  });}
+  catch{answer='Indicadores por loja indisponíveis: o snapshot original não passou na validação. Nenhuma taxa foi presumida.';}
+  await send(msg.userId,answer);
+  return {kind:'answered',intent:'business_diagnostic_store',source:'verified_snapshot_raw_labels'};
+ }
  if(msg.text==='/diagnostico'){
   let answer;
   try{answer=diagnostic.build({

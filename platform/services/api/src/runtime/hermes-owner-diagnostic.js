@@ -58,4 +58,42 @@ function build({snapshot,decisions,now=Date.now(),validSnapshot}){
  if(answer.length>2200)throw Error('diagnostic_output_oversize');
  return answer;
 }
-module.exports={build,rate,formatRate};
+// Original source labels are NOT confirmed ERP store IDs; keep their identity
+// intact. A ratio from low volume is descriptive, never a risk classification.
+function byStore({snapshot,now=Date.now(),validSnapshot}){
+ if(!Number.isSafeInteger(now)||typeof validSnapshot!=='function'||
+  !validSnapshot(snapshot,now))throw Error('diagnostic_stores_snapshot_denied');
+ const items=snapshot.stores.map(v=>({
+  raw_label:v.raw_label,registered:v.registered,
+  marked_cancelled:v.marked_cancelled,
+  rate:rate(v.marked_cancelled,v.registered)
+ }));
+ // Original order avoids suggesting an arbitrary business priority.
+ const stamp=new Date(snapshot.extracted_at).toLocaleString('pt-BR',{
+  timeZone:'America/Recife',hour12:false});
+ const lines=[
+  '🏬 Hermes — indicadores por código de loja (sem IA)',
+  'Fonte: Supabase softcom_import.cadastro_de_vendas',
+  'Extração verificada: '+stamp,
+  'Período: jan–8 jun/2026 (junho parcial, julho ausente).',
+  'Códigos originais do Softcom:',
+  ...items.map(x=>'• '+x.raw_label+': '+
+    count.format(x.marked_cancelled)+'/'+count.format(x.registered)+
+    ' marcados cancelados ('+formatRate(x.marked_cancelled,x.registered)+')'),
+  'Total conferido: '+count.format(snapshot.marked_cancelled)+'/'+
+    count.format(snapshot.registered)+' ('+
+    formatRate(snapshot.marked_cancelled,snapshot.registered)+')',
+  '⚠️ Códigos originais NÃO conciliados a lojas físicas: CALCADOS, SIRINHAEM e as duas etiquetas SPORTS não identificam com segurança unidade/cidade.',
+  'Taxas dependem do volume de registros; não são ranking financeiro, perda nem causa comprovada.',
+  'Sem cruzamento mensal por código neste snapshot. Não atribuo o pico de maio a nenhuma loja.',
+  'Próximos passos para revisão humana:',
+  '1. Conciliar códigos antigos às unidades reais usando o ERP.',
+  '2. Obter cancelamentos por mês, unidade e motivo antes de definir prioridades.',
+  '3. Validar documentos, estornos e duplicidades sem presumir prejuízo.',
+  'Somente snapshot datado, sem SQL, Codex ou execução.'
+ ];
+ const answer=lines.join('\n');
+ if(answer.length>2200)throw Error('diagnostic_stores_output_oversize');
+ return answer;
+}
+module.exports={build,byStore,rate,formatRate};

@@ -462,3 +462,31 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   conteúdo do diagnóstico é salvo em logs ou no novo cache.
 - Implantação staging-only via script de SHA exato, CI obrigatório,
   validação sintética isolada, backup V15 para rollback e um poller.
+
+## Hermes V17 — diagnóstico por códigos originais do Softcom, sem LLM
+- Comando proprietário `/diagnostico lojas` usa SOMENTE snapshot
+  empresarial privado já validado por `safeHistorySnapshot`.
+  Não faz SQL, não invoca Codex ou JEV, não cria novas decisões e
+  não consome quotas de modelo, SQL ou apps.
+- Exibe exatamente os seis códigos históricos originais
+  `CALCADOS`, `SIRINHAEM`, `MAGAZINE`,
+  `SPORTS-(DESATIVADO)`, `ERICK SPORTS`, `VARIEDADES`
+  na mesma ordem da origem, contagens e taxas relativas de registros
+  marcados cancelados. Confere soma ao total do snapshot.
+- NÃO converte esses rótulos em loja física, cidade ou unidade de
+  negócios do ERP. Os dois nomes SPORT(S) podem representar fases
+  diferentes e não devem ser juntados sem conciliação. O snapshot
+  não possui cruzamento `mês x código`; portanto não atribuímos o
+  pico de maio a nenhuma loja. Percentuais são indicadores
+  descritivos, não perdas monetárias ou ranking empresarial.
+- Aviso de validade: extração datada, junho incompleto e julho
+  ausente; alertas são sugestões reversíveis para revisão humana,
+  não ações nem causas comprovadas.
+- Integra FinOps como `business_diagnostic_store` na categoria
+  direta de histórico. Registro não inclui texto de perguntas,
+  nomes/códigos de loja, números ou resposta; owner-only, 0600.
+- Testes unitários e E2E: soma e percentuais exatos, recusa
+  tenant/snapshot adulterado, proprietário autorizado, quota
+  Codex e SQL intactas e dados ausentes no log.
+- Staging-only, promoção pelo script com SHA e CI obrigatório,
+  verificação sintética e rollback isolado da versão V16.

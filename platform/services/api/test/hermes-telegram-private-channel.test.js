@@ -1982,3 +1982,63 @@ test('private /diagnostico uses no model, no SQL and FinOps counts response',asy
   assert.doesNotMatch(audit,/Marcados cancelados: 6|10,00%/);
  }finally{fs.rmSync(state,{recursive:true,force:true})}
 });
+
+test('V17 original Softcom store-code diagnostic reports exact ratios with provenance',()=>{
+ const data=historicalFixture();
+ data.months[4].marked_cancelled=2;
+ data.stores[0].marked_cancelled=3;
+ data.stores[1].marked_cancelled=1;
+ data.stores[2].marked_cancelled=0;
+ data.stores[3].marked_cancelled=2;
+ data.stores[4].marked_cancelled=0;
+ data.stores[5].marked_cancelled=1;
+ data.marked_cancelled=7;
+ const report=diagnostic.byStore({snapshot:data,now,validSnapshot:core.safeHistorySnapshot});
+ assert.match(report,/por código de loja \(sem IA\)/);
+ assert.match(report,/CALCADOS: 3\/10 marcados cancelados \(30,00%\)/);
+ assert.match(report,/SIRINHAEM: 1\/10 marcados cancelados \(10,00%\)/);
+ assert.match(report,/SPORTS-\(DESATIVADO\): 2\/10/);
+ assert.match(report,/ERICK SPORTS: 0\/10/);
+ assert.match(report,/Total conferido: 7\/60 \(11,67%\)/);
+ assert.match(report,/não são ranking financeiro/);
+ assert.match(report,/não atribuo o pico de maio/i);
+ assert.match(report,/Sem cruzamento mensal por código/);
+ assert.match(report,/Nenhuma|sem SQL, Codex ou execução/i);
+ assert.throws(()=>diagnostic.byStore({snapshot:{...data,tenant_id:'personal'},
+  now,validSnapshot:core.safeHistorySnapshot}));
+ assert.throws(()=>diagnostic.byStore({snapshot:{...data,registered:59},
+  now,validSnapshot:core.safeHistorySnapshot}));
+ assert.throws(()=>diagnostic.byStore({snapshot:{...data,stores:[{...data.stores[0],raw_label:'PRIVATE'}].concat(data.stores.slice(1))},
+  now,validSnapshot:core.safeHistorySnapshot}));
+});
+test('V17 /diagnostico lojas is owner-only, no Codex or SQL and counted in FinOps',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);
+ runner.saveState(state,'owner.json',{owner_id:700});
+ runner.saveState(state,'history-softcom.json',historicalFixture());
+ const replies=[];let calls=0,id=0;
+ const invoke=(user,query)=>runner.pollOnce({stateDir:state,clock:()=>now,liveEnabled:true,
+  api:async(method,payload)=>{
+   if(method==='getUpdates')return [update(999100+(++id),user,query)];
+   if(method==='sendMessage')replies.push(payload.text);
+  },
+  query:async()=>{calls++;throw Error('NO_COMMERCIAL_TOOL')},
+  readLive:async()=>{calls++;throw Error('NO_SQL')},
+  agentModel:{chat:async()=>{calls++;throw Error('NO_LLM')}}
+ });
+ try{
+  await invoke(701,'/diagnostico lojas');
+  assert.equal(replies.length,0);
+  await invoke(700,'/diagnostico lojas');
+  assert.equal(replies.length,1);
+  assert.equal(calls,0);
+  assert.match(replies[0],/CALCADOS: 1\/10/);
+  assert.match(replies[0],/Códigos originais NÃO conciliados/);
+  assert.equal(runner.loadState(state,'agent-llm-budget.json'),null);
+  assert.equal(runner.loadState(state,'history-live-budget.json'),null);
+  const m=finopsLedger.snapshot(runner.loadState(state,'ai-finops-daily.json'),now);
+  assert.equal(m.direct_history,1);assert.equal(m.direct_requests,1);assert.equal(m.provider_calls,0);
+  const audit=fs.readFileSync(path.join(state,'audit.jsonl'),'utf8');
+  assert.match(audit,/"intent":"business_diagnostic_store"/);
+  assert.doesNotMatch(audit,/CALCADOS: 1\/10|SIRINHAEM: 1\/10/);
+ }finally{fs.rmSync(state,{recursive:true,force:true})}
+});
