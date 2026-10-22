@@ -287,3 +287,25 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
 - Rollout: CI completo, HEAD exato, backup/rollback v10, um poller.
   Ainda não há busca semântica, responsabilidades por equipe, integração
   WhatsApp/Instagram nem reconciliação de decisões no ERP.
+
+## Segundo cérebro — contexto de decisões humanas V11 (staging)
+- Recuperação restrita ao proprietário autenticado e às análises empresariais
+  já autorizadas ao agente Codex, sem nova ferramenta, modelo ou quota.
+- Registros confirmados do owner-decisions.json são consultados em modo leitura,
+  validados com esquema e tenant empresariais, selecionados por relevância do tema
+  e limitados a dois registros e 800 caracteres serializados.
+- Somente a etapa de síntese recebe contexto humano selecionado: ID, data,
+  área, decisão, justificativa, proveniência owner_confirmed_telegram e flags
+  de implementação não verificada e ausência de autoridade operacional.
+  O planejador de novas consultas NÃO recebe essas decisões.
+- Esta V11 altera deliberadamente a V10: registros humanos CONFIRMADOS
+  relevantes podem entrar no prompt da análise do Codex em staging;
+  propostas pendentes, mensagens brutas, dados pessoais, tokens e memória
+  pessoal continuam excluídos. Nenhum registro entra em logs ou Git.
+- As decisões são evidência de escolha humana, NÃO evidência de execução,
+  conciliação financeira ou resultado; nunca integram a lista de fontes
+  verificadas do Supabase. O modelo está proibido de segui-las como ordens.
+- Corrupção, tenant incorreto, origem não humana, shape inesperado e
+  flags falsas falham fechado. Sem alterações ao owner-decisions.json.
+- CI e HEAD governam promoção; script V11 preserva backup separado V10
+  e mantém rollback, um poller, conexões read-only e kill switch.

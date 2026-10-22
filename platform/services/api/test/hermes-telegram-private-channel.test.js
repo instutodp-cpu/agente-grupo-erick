@@ -1416,3 +1416,134 @@ test('owner-only decision memory is durable, idempotent and does not consume mod
   assert.equal(calls.filter(x=>x==='getUpdates').length,5);
  }finally{fs.rmSync(state,{force:true,recursive:true})}
 });
+
+test('confirmed decision becomes a bounded, read-only context, never pending or personal',()=>{
+ const now=Date.parse('2026-10-22T21:20:00Z');
+ const input='/decisao propor financeiro | Revisar compromissos após conciliação | Conferir os dados históricos no ERP antes de agir';
+ const proposed=decisionMemory.handle(input,null,now,()=>'0123456789ab').store;
+ assert.deepEqual(JSON.parse(decisionMemory.context(proposed,
+  'Analise os riscos financeiros do Grupo Erick',now)),[]);
+ const confirmed=decisionMemory.handle('/decisao confirmar 0123456789ab',
+  proposed,now+1000).store;
+ const relevant=decisionMemory.context(confirmed,'Quais riscos financeiros merecem prioridade?',now+2000);
+ const parsed=JSON.parse(relevant);
+ assert.equal(parsed.length,1);
+ assert.equal(parsed[0].id,'0123456789ab');
+ assert.equal(parsed[0].kind,'human_confirmed_decision');
+ assert.equal(parsed[0].origin,'owner_confirmed_telegram');
+ assert.equal(parsed[0].implementation_verified,false);
+ assert.equal(parsed[0].operational_authority,false);
+ assert.match(parsed[0].rationale,/dados históricos/);
+ assert.ok(relevant.length<=1000);
+ assert.equal(JSON.parse(decisionMemory.context(confirmed,'Quais campanhas de marketing são populares?',now+2000)).length,0);
+ assert.throws(()=>decisionMemory.context({...confirmed,tenant_id:'personal'},'riscos financeiros',now));
+ assert.throws(()=>decisionMemory.context({...confirmed,entries:[{...confirmed.entries[0],source:'agent_suggestion'}]},
+  'riscos financeiros',now));
+ assert.equal(decisionMemory.context(confirmed,'Quais riscos financeiros merecem prioridade?',now+2000),relevant);
+});
+
+test('governed agent contextualizes human decisions without treating them as business evidence or execution',async()=>{
+ const stamp=Date.parse('2026-10-22T20:30:00Z');
+ const proposed=decisionMemory.handle(
+  '/decisao propor financeiro | Revisar compromissos após conciliação | Confirmar recebimentos no ERP antes de ampliar compromissos',
+  null,stamp,()=>'112233aabbcc').store;
+ const confirmed=decisionMemory.handle('/decisao confirmar 112233aabbcc',proposed,stamp+1000).store;
+ let turns=0,history=0,decisionReads=0,commercial=0;
+ const goal='Analise os principais riscos financeiros e recomende próximos passos';
+ const model={chat:async messages=>{
+  turns++;
+  if(turns===1){
+   assert.doesNotMatch(messages[1].content,/Revisar compromissos após conciliação/);
+   return JSON.stringify({steps:[{tool:'history',params:agentHistoryPlan}]});
+  }
+  assert.match(messages[0].content,/Decisões humanas confirmadas/);
+  assert.match(messages[1].content,/112233aabbcc/);
+  assert.match(messages[1].content,/owner_confirmed_telegram/);
+  assert.match(messages[1].content,/implementation_verified/);
+  assert.match(messages[1].content,/NÃO evidência de execução/);
+  assert.doesNotMatch(messages[1].content,/agent_llm_budget|senha secreta/);
+  return 'O indicador é histórico. Decisão humana confirmada: revisar compromissos após conciliação. Não está provada sua implementação. Recomendo validar recebimentos com o ERP antes de executar alterações.';
+ }};
+ const result=await agent.runTurn({goal,model,
+  readBusinessContext:()=> '[]',
+  readDecisionContext:()=>{decisionReads++;return decisionMemory.context(confirmed,goal,stamp+2000)},
+  readHistory:async()=>{history++;return agentEvidence},
+  readCommercial:async()=>{commercial++;throw Error('NOT_EXPECTED')}
+ });
+ assert.equal(turns,2);
+ assert.equal(history,1);
+ assert.equal(commercial,0);
+ assert.equal(decisionReads,1);
+ assert.match(result.answer,/Decisões humanas confirmadas consultadas/);
+ assert.equal(result.sources.length,1);
+ assert.equal(result.sources[0],analyst.SOURCE);
+ assert.ok(!result.sources.includes('owner_confirmed_telegram'));
+});
+test('decision context cannot impersonate a confirmed human decision',async()=>{
+ let calls=0;
+ const bad=[
+  'not-json',
+  '[{"kind":"human_confirmed_decision","scope":"personal","origin":"owner_confirmed_telegram","implementation_verified":false,"operational_authority":false}]',
+  '[{"kind":"model_decision","scope":"enterprise","origin":"owner_confirmed_telegram","implementation_verified":false,"operational_authority":false}]',
+  '[{"kind":"human_confirmed_decision","scope":"enterprise","origin":"owner_confirmed_telegram","implementation_verified":true,"operational_authority":false}]'
+ ];
+ for(const payload of bad){
+  let n=0;
+  await assert.rejects(()=>agent.runTurn({
+   goal:'Analise os riscos financeiros do Grupo Erick',
+   model:{chat:async()=>{
+    n++;
+    if(n===1)return JSON.stringify({steps:[{tool:'history',params:agentHistoryPlan}]});
+    throw Error('MUST_NOT_SYNTHESIZE');
+   }},
+   readHistory:async()=>agentEvidence,readCommercial:async()=>{},
+   readDecisionContext:()=>payload
+  }),/agent_decision_context_/);
+  assert.equal(n,1);
+  calls++;
+ }
+ assert.equal(calls,bad.length);
+});
+
+test('staging runner injects only confirmed owner decisions into answer, not into planner or audit',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);
+ const timestamp=Date.parse('2026-10-22T20:35:00Z');
+ runner.saveState(state,'owner.json',{owner_id:700});
+ const pending=decisionMemory.handle(
+  '/decisao propor financeiro | Conciliar títulos antes de assumir despesas | Reconciliar o histórico ao ERP de forma verificável',
+  null,timestamp-3000,()=>'abcdef010203').store;
+ const confirmed=decisionMemory.handle('/decisao confirmar abcdef010203',
+  pending,timestamp-1000).store;
+ runner.saveState(state,'owner-decisions.json',confirmed);
+ const goal='Analise os riscos financeiros e recomende prioridades empresariais';
+ const captures=[],answers=[];let sql=0;
+ try{
+  const model={chat:async messages=>{
+   captures.push(messages);
+   if(captures.length===1)return JSON.stringify({steps:[{tool:'history',params:agentHistoryPlan}]});
+   return 'A decisão humana é conciliar títulos antes de assumir despesas; não comprova execução. As evidências financeiras importadas precisam de validação no ERP.';
+  }};
+  await runner.pollOnce({
+   stateDir:state,clock:()=>timestamp,liveEnabled:true,agentModel:model,
+   api:async(method,payload)=>{
+    if(method==='getUpdates')return [update(992211,700,goal)];
+    if(method==='sendMessage')answers.push(payload.text);
+   },
+   query:async()=>{throw Error('ONLY_HISTORY_ALLOWED')},
+   readLive:async()=>{sql++;return agentEvidence}
+  });
+  assert.equal(captures.length,2);
+  assert.doesNotMatch(captures[0][1].content,/abcdef010203/);
+  assert.match(captures[1][1].content,/abcdef010203/);
+  assert.match(captures[1][1].content,/Conciliar títulos antes de assumir despesas/);
+  assert.match(captures[1][1].content,/implementation_verified/);
+  assert.equal(answers.length,1);
+  assert.match(answers[0],/Decisões humanas confirmadas consultadas/);
+  assert.equal(sql,1);
+  assert.equal(runner.loadState(state,'agent-llm-budget.json').turns,1);
+  assert.equal(runner.loadState(state,'history-live-budget.json').count,1);
+  assert.equal(runner.loadState(state,'owner-decisions.json').entries.length,1);
+  const audit=fs.readFileSync(path.join(state,'audit.jsonl'),'utf8');
+  assert.doesNotMatch(audit,/Conciliar títulos|abcdef010203|Reconciliar o histórico/);
+ }finally{fs.rmSync(state,{recursive:true,force:true})}
+});

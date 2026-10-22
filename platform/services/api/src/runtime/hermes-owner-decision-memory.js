@@ -120,5 +120,33 @@ function handle(message,raw,now=Date.now(),generateId=()=>randomBytes(6).toStrin
  }
  return done('Comando de decisão inválido. '+HELP);
 }
+// Owner-only read context: confirmed records, NEVER proposals or AI advice.
+// This memory describes a human decision, not verified execution or a new mandate.
+function context(store,goal,now=Date.now()){
+ const current=validateStore(store,now);
+ if(typeof goal!=='string'||goal.length<8||goal.length>600)throw Error('decision_context_goal_denied');
+ const normalized=goal.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+ const broad=/\b(decisao|decisoes|aprovad|confirmad|prioridad|estrateg|gestao|empresa|grupo erick|geral|analise|riscos|plano)\b/.test(normalized);
+ const related={
+  financeiro:/\b(financ|concilia|caixa|compromissos|receb|softcom|linx|titulo|duplicata|pagamento|prejuizo)\w*/.test(normalized),
+  compras:/\b(compr|fornecedor|pedido|vencimento|titulo|duplicata|estoque)\w*/.test(normalized),
+  comercial:/\b(comerci|venda|cliente|cancelament|desconto|receita)\w*/.test(normalized),
+  operacoes:/\b(operac|processo|loja|equipe|rotina)\w*/.test(normalized),
+  marketing:/\b(market|campanh|instagram|rede|anuncio)\w*/.test(normalized),
+  rh:/\b(rh|funcionari|colaborador|pessoal|treinamento)\w*/.test(normalized)
+ };
+ const selected=current.entries.filter(e=>broad||related[e.area])
+  .sort((a,b)=>Date.parse(b.confirmed_at)-Date.parse(a.confirmed_at)).slice(0,2);
+ const out=[];
+ for(const e of selected){
+  const item={kind:'human_confirmed_decision',scope:SCOPE,
+   origin:e.source,id:e.id,area:e.area,
+   confirmed_at:e.confirmed_at,decision:e.decision,rationale:e.rationale,
+   implementation_verified:false,operational_authority:false};
+  if(JSON.stringify([...out,item]).length>800)break;
+  out.push(item);
+ }
+ return JSON.stringify(out);
+}
 module.exports={TENANT,SCHEMA,SCOPE,CATEGORIES,MAX,TTL,HELP,
- isCommand,safeText,validateStore,handle};
+ isCommand,safeText,validateStore,handle,context};
