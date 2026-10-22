@@ -190,8 +190,10 @@ function reply(data,requested){
  }
  if(p.metric==='money'&&p.template!=='products')
   lines.push('⚠️ valor_pago é um campo importado do Softcom; não é faturamento líquido, caixa recebido ou DRE conciliada.');
- if(p.period==='2026'||p.period==='2026-06'||p.other_period==='2026'||p.other_period==='2026-06')
-  lines.push('⚠️ Histórico 2026 parcial até 08/06; comparações anuais podem não ter cobertura equivalente.');
+ if(p.template==='compare'&&p.period.length===4)
+  lines.push('⚠️ Histórico 2026 termina em 08/06; esta comparação utiliza apenas janeiro–maio completos nos dois anos.');
+ else if(p.period==='2026'||p.period==='2026-06'||p.other_period==='2026'||p.other_period==='2026-06')
+  lines.push('⚠️ Histórico 2026 disponível somente até 08/06; junho é parcial.');
  lines.push('Somente leitura. Sem dados pessoais.');
  return lines.join('\n');
 }

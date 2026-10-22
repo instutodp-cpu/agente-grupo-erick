@@ -40,6 +40,15 @@ function intentFor(text){
   return 'lotoia';
  return 'unknown';
 }
+// Interpretation/advice must not be demoted to a numeric template merely
+// because the question mentions years, stores or commercial indicators.
+// Explicit slash commands stay deterministic, and this is NOT an approval.
+function advisoryRequest(text){
+ if(typeof text!=='string'||text.length<3||text.length>600)return false;
+ const q=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+ if(q.startsWith('/'))return false;
+ return /\b(?:analise|analisar|avaliar|avaliacao|diagnostico|identifique|identificar|investigue|investigar|prioridade|prioridades|priorize|priorizar|problema|problemas|risco|riscos|insight|insights|melhoria|melhorias|recomende|recomendar|sugira|sugerir|sugestao|sugestoes|evidencia|evidencias|explique|explicar|considerando|proximos passos)\b/.test(q);
+}
 function privateMessage(update){
  const m=update?.message;
  if(!Number.isSafeInteger(update?.update_id)||update.update_id<0||
@@ -237,9 +246,13 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
   return {kind:'paired'};
  }
  if(msg.userId!==ownerId)return {kind:'unauthorized'};
- const previous=await readAnalystContext();
- const plan=analyst.planQuestion(msg.text,previous);
- const intent=plan?'business_analyst':intentFor(msg.text);
+ // Owner-only advisory requests go to the governed LLM so it can retrieve
+ // business evidence and produce recommendations with fresh verified tools.
+ // Direct numeric questions and slash commands retain fixed, cheaper routes.
+ const useAgent=agentEnabled&&advisoryRequest(msg.text);
+ const previous=useAgent?null:await readAnalystContext();
+ const plan=useAgent?null:analyst.planQuestion(msg.text,previous);
+ const intent=useAgent?'unknown':plan?'business_analyst':intentFor(msg.text);
  if(intent==='help'){await send(msg.userId,HELP);return {kind:'answered',intent};}
  if(intent==='unknown'){
   if(!agentEnabled){
@@ -329,4 +342,4 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  await send(msg.userId,response);
  return {kind:'answered',intent,cache:cacheStatus};
 }
-module.exports={ROUTES,HELP,intentFor,privateMessage,pairValid,hermesReply,verifiedCache,cachedReply,safeHistorySnapshot,historicalReply,processUpdate};
+module.exports={ROUTES,HELP,intentFor,advisoryRequest,privateMessage,pairValid,hermesReply,verifiedCache,cachedReply,safeHistorySnapshot,historicalReply,processUpdate};

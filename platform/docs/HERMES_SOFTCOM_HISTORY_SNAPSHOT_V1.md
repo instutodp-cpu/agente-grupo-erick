@@ -207,3 +207,23 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
 - Rollout: deploy-hermes-telegram-business-memory-staging.sh
   com HEAD exato, CI verde, preflight sem root, banco/sockets, gateway
   memória/cobertura, backup antigo e rollback; 1 Telegram poller.
+
+### Real owner follow-up failure and conversation router fix
+- 22/10/2026 ingress at 19:19:04Z produced governed_agent, answered.
+  Persistent enterprise evidence: three verified aggregate records in
+  enterprise-scoped private JSON 0600. Owner follow-up at 19:19:40Z,
+  however, was incorrectly captured by numeric business_analyst because
+  the planQuestion parser ran before the advisory agent path.
+- advisoryRequest now distinguishes explicit interpretation,
+  evidence, risks, priorities, recommendations and contextual follow-ups
+  from bare numeric comparisons. Slash commands remain deterministic.
+  Owner check remains first; no model execution for other Telegram users.
+- Acceptance test uses the two actual intent shapes in sequence:
+  first LLM turn stores factual, sourced business evidence; second
+  LLM turn recovers a prior evidence summary and still issues a
+  fresh allowlisted SQL aggregate query. No Telegram text or PII stored.
+- Annual matched-period reply now explicitly states jan-mai complete
+  in both years; it no longer falsely warns unequal annual coverage
+  after an intentionally matched comparison.
+- Rollout in same PR, exact HEAD, existing bridge guardrails, preflight
+  then health gates and rollback to v6.

@@ -1064,6 +1064,8 @@ test('year-on-year history compares only January through May of both years',asyn
  assert.match(sql.text,/RIGHT\(month,2\) BETWEEN '01' AND '05'/);
  const txt=analyst.reply(data,p);
  assert.match(txt,/janeiro a maio de cada ano/);
+ assert.match(txt,/utiliza apenas janeiro–maio completos nos dois anos/);
+ assert.doesNotMatch(txt,/podem não ter cobertura equivalente/);
  assert.match(txt,/2\.730\.133,04/);
  assert.match(txt,/2\.956\.645,04/);
  assert.doesNotMatch(txt,/-62,5%/);
@@ -1131,4 +1133,81 @@ test('owner business memory is restored on a later agent turn without persisting
   assert.doesNotMatch(fs.readFileSync(path.join(state,'business-evidence-memory.json'),'utf8'),/Analise comercialmente/);
   assert.equal(runner.loadState(state,'agent-llm-budget.json').turns,2);
  }finally{fs.rmSync(state,{force:true,recursive:true});}
+});
+
+test('advisory intent has precedence over numeric template without hijacking direct queries',async()=>{
+ const cases=[
+  'Considerando a análise de 2025 e 2026 que você acabou de fazer, quais problemas merecem prioridade? Consulte as evidências e explique.',
+  'Compare janeiro a maio de 2025 e 2026, incluindo vendas e cancelamentos. Identifique os principais riscos.',
+  'Analise as vendas em janeiro de 2026 e sugira melhorias',
+  'Com base nos dados de 2025 e 2026, explique os riscos',
+  'Quais insights e prioridades para as lojas em junho de 2026?'
+ ];
+ for(const q of cases)assert.equal(core.advisoryRequest(q),true,q);
+ for(const q of [
+  'Compare vendas em janeiro de 2025 e 2026?',
+  'Quantas vendas canceladas em junho de 2026?',
+  '/vendas 2026-05','/produtos 2026-05',
+  '/historico','/compras','/lotoia','/ajuda','/status'
+ ])assert.equal(core.advisoryRequest(q),false,q);
+ const answers=[];let askAgent=0,askAnalyst=0,readContext=0;
+ const common={ownerId:700,query:async()=>{},agentEnabled:true,
+  send:async(_,message)=>answers.push(message),
+  readAgent:async()=>{askAgent++;return {answer:'🧠 Hermes — análise orientada por evidências\n\nProblemas priorizados a partir de dados verificados.'};},
+  readAnalyst:async()=>{askAnalyst++;return agentEvidence;},
+  readAnalystContext:async()=>{readContext++;return null;}};
+ for(let i=0;i<cases.length;i++){
+  const result=await core.processUpdate({...common,update:update(220000+i,700,cases[i])});
+  assert.equal(result.intent,'governed_agent');
+ }
+ assert.equal(askAgent,cases.length);assert.equal(askAnalyst,0);
+ assert.equal(readContext,0);
+ const numerical=await core.processUpdate({...common,
+  update:update(220500,700,'Compare vendas em janeiro de 2025 e 2026?')});
+ assert.equal(numerical.intent,'business_analyst');
+ assert.equal(askAnalyst,1);
+ await core.processUpdate({...common,update:update(220600,701,cases[0]),
+  readAgent:async()=>{throw Error('owner privacy violated');}});
+ assert.equal(askAgent,cases.length);
+});
+test('two-message enterprise conversation remembers grounded evidence and routes followup to governed LLM',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);
+ runner.saveState(state,'owner.json',{owner_id:700});
+ const questions=[
+  'Compare janeiro a maio de 2025 e 2026, incluindo vendas e cancelamentos. Identifique os principais riscos.',
+  'Considerando a análise de 2025 e 2026 que você acabou de fazer, quais problemas merecem prioridade? Consulte as evidências e explique.'
+ ];
+ let index=0,reads=0,requests=0;
+ const prompts=[],sent=[];
+ const model={chat:async messages=>{
+  if(messages[0].content.includes('EXCLUSIVAMENTE JSON')){
+   prompts.push(messages[1].content);
+   return JSON.stringify({steps:[{tool:'history',params:agentHistoryPlan}]});
+  }
+  return 'A comparação histórica indica crescimento de registros, mas exige investigar os cancelamentos por loja. Hipótese ainda não comprovada. Prioridade: verificar cancelamentos, conferir códigos de loja e conciliar o indicador financeiro.';
+ }};
+ const clock=()=>Date.parse('2026-10-22T19:19:20Z');
+ try{
+  for(index=0;index<2;index++)await runner.pollOnce({
+   stateDir:state,clock,agentModel:model,liveEnabled:true,
+   api:async(method,payload)=>{
+    if(method==='getUpdates')return [update(230000+(++requests),700,questions[index])];
+    if(method==='sendMessage')sent.push(payload.text);
+   },
+   readLive:async p=>{reads++;assert.equal(p.shape,'analyst');return agentEvidence;},
+   query:async()=>{throw Error('unpermitted tool')},
+  });
+  assert.equal(sent.length,2);
+  for(const answer of sent)assert.match(answer,/🧠 Hermes — análise orientada por evidências/);
+  assert.equal(reads,2);
+  assert.equal(prompts.length,2);
+  assert.match(prompts[1],/Registros empresariais históricos anteriores/);
+  assert.match(prompts[1],/4\.226/);
+  assert.equal(runner.loadState(state,'agent-llm-budget.json').turns,2);
+  const memory=runner.loadState(state,'business-evidence-memory.json');
+  assert.equal(memory.entries.length,1);
+  assert.equal(fs.statSync(path.join(state,'business-evidence-memory.json')).mode&0o777,0o600);
+  const body=fs.readFileSync(path.join(state,'business-evidence-memory.json'),'utf8');
+  assert.doesNotMatch(body,/Considerando a análise|Identifique os principais riscos/);
+ }finally{fs.rmSync(state,{recursive:true,force:true});}
 });
