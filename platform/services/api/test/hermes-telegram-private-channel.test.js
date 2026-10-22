@@ -437,3 +437,101 @@ test('dynamic historic aggregate is fail-closed on provider failures and absent 
   {query:async()=>{throw Error('network_down')}},{tenant_id:'grupo_erick'}),/network_down/);
  assert.throws(()=>historicalLive.validate({tenant_id:'other'}));
 });
+
+const liveChannel=require('../src/runtime/hermes-softcom-live-channel');
+test('dynamic sales grammar accepts only bounded month, store, and group intents',()=>{
+ const inputs=[
+  ['/vendas 2026-05',{tenant_id:'grupo_erick',month:'2026-05',shape:'total'}],
+  ['/vendas lojas 2026-04',{tenant_id:'grupo_erick',month:'2026-04',shape:'stores'}],
+  ['/vendas meses',{tenant_id:'grupo_erick',shape:'months'}],
+  ['/vendas loja ERICK SPORTS 2026-05',{tenant_id:'grupo_erick',store:'ERICK SPORTS',month:'2026-05',shape:'total'}],
+  ['Quantas vendas em maio de 2026?',{tenant_id:'grupo_erick',month:'2026-05',shape:'total'}],
+  ['Vendas por loja em março de 2026?',{tenant_id:'grupo_erick',month:'2026-03',shape:'stores'}],
+ ];
+ for(const [input,expected] of inputs){
+  assert.deepEqual(liveChannel.parseSalesCommand(input),expected,input);
+  assert.equal(core.intentFor(input),'historico_live');
+ }
+ for(const bad of ['/vendas 2026-07','/vendas 2026-05; DROP TABLE users',
+  '/vendas loja CALCADOS OR 1=1 2026-05','/vendas loja CALCADOS 2027-02',
+  '/vendas lojas 2026-13','mande um pix','/historico 2026-05',
+  'quantas vendas em julho de 2026?']){
+  assert.equal(liveChannel.parseSalesCommand(bad),null,bad);
+ }
+});
+test('verified dynamic monthly response states source and no revenue claims',()=>{
+ const req=liveChannel.parseSalesCommand('/vendas 2026-05');
+ const obj={tenant_id:'grupo_erick',source_table:'hermes_history.daily_sales_v1',
+  mode:'online_aggregate',queried_at:'2026-10-21T23:20:00Z',
+  filter:{month:'2026-05',raw_store:null},shape:'total',
+  rows:[{registered:5933,marked_cancelled:267,last_day:'2026-05-31'}]};
+ const reply=liveChannel.historicalLiveReply(obj,req);
+ assert.match(reply,/5\.933/);
+ assert.match(reply,/267/);
+ assert.match(reply,/NÃO faturamento/);
+ assert.match(reply,/Supabase softcom-grupo-erick/);
+ assert.throws(()=>liveChannel.historicalLiveReply({...obj,tenant_id:'attacker'},req));
+ assert.throws(()=>liveChannel.historicalLiveReply({...obj,filter:{month:'2026-04',raw_store:null}},req));
+});
+test('private live query refuses nonowner before invoking PostgreSQL and never spends quota if off',async()=>{
+ const stateDir=dir();fs.chmodSync(stateDir,0o700);
+ const queryCalls=[];const sent=[];
+ const api=async(method,payload)=>{
+  if(method==='getUpdates')return [update(4321,701,'/vendas 2026-05')];
+  if(method==='sendMessage')sent.push(payload.text);
+ };
+ try{
+  runner.saveState(stateDir,'owner.json',{owner_id:700});
+  const r=await runner.pollOnce({stateDir,api,query:async()=>{},
+   readLive:async p=>{queryCalls.push(p);return null},
+   liveEnabled:true,clock:()=>now});
+  assert.equal(r.handled,1);
+  assert.equal(queryCalls.length,0);
+  assert.equal(sent.length,0);
+  assert.equal(fs.existsSync(path.join(stateDir,'history-live-budget.json')),false);
+ }finally{fs.rmSync(stateDir,{recursive:true,force:true})}
+});
+test('bounded private live query enforces 8 daily queries and no external domain quota',async()=>{
+ const stateDir=dir();fs.chmodSync(stateDir,0o700);
+ const sent=[];let reads=0;
+ const fakeRead=async p=>{
+  reads++;
+  return {tenant_id:'grupo_erick',source_table:'hermes_history.daily_sales_v1',
+   mode:'online_aggregate',queried_at:'2026-10-21T23:20:00Z',
+   filter:{month:p.month||null,raw_store:p.store||null},shape:p.shape||'total',
+   rows:[{registered:10,marked_cancelled:1,last_day:'2026-05-31'}]};
+ };
+ let index=0;
+ const api=async(method,payload)=>{
+  if(method==='getUpdates')return [update(5000+index++,700,'/vendas 2026-05')];
+  if(method==='sendMessage')sent.push(payload.text);
+ };
+ try{
+  runner.saveState(stateDir,'owner.json',{owner_id:700});
+  for(let i=0;i<10;i++)await runner.pollOnce({
+   stateDir,api,readLive:fakeRead,liveEnabled:true,
+   query:async()=>{throw Error('must not query standard Hermes')},clock:()=>now});
+  assert.equal(reads,8);
+  assert.equal(sent.length,10);
+  assert.match(sent[0],/consulta ao banco/);
+  assert.match(sent[9],/Limite privado/);
+  assert.deepEqual(runner.loadState(stateDir,'history-live-budget.json'),{
+   date:new Date(now).toISOString().slice(0,10),count:8});
+  assert.equal(fs.existsSync(path.join(stateDir,'cache-compras.json')),false);
+  assert.equal(fs.statSync(path.join(stateDir,'history-live-budget.json')).mode&0o777,0o600);
+ }finally{fs.rmSync(stateDir,{recursive:true,force:true})}
+});
+test('no live database connector is loaded without explicit stage-safe flag',async()=>{
+ let loaded=false;
+ const disabled=runner.createLiveQuery({HERMES_HISTORY_LIVE_ENABLED:'false'},()=>{
+  loaded=true;throw Error('driver unexpectedly loaded')});
+ await assert.rejects(disabled({tenant_id:'grupo_erick'}),/disabled/);
+ assert.equal(loaded,false);
+ assert.throws(()=>runner.createLiveQuery({
+  HERMES_HISTORY_LIVE_ENABLED:'true',
+  HERMES_DEPLOYMENT_STAGE:'production',
+  HERMES_EXECUTION_ENABLED:'false',
+  HERMES_EXECUTION_KILL_SWITCH:'true'
+ },()=>{loaded=true}),/stage_denied/);
+ assert.equal(loaded,false);
+});

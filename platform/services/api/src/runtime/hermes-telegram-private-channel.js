@@ -1,12 +1,14 @@
 'use strict';
 // Hermes Telegram: private owner-only intent gateway. No generic AI/tool execution.
 const {createHash,timingSafeEqual}=require('node:crypto');
+const {parseSalesCommand,historicalLiveReply}=require('./hermes-softcom-live-channel');
 const ROUTES=Object.freeze({
  compras:'/internal/commercial-read-pilot/brief',
  lotoia:'/internal/lotoia-read-pilot/health',status:'/health'
 });
 const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
  'Comandos: /compras, /lotoia, /historico, /historico lojas, /historico meses, /status, /ajuda.\n'+
+ 'Leitura dinâmica em preparação: /vendas 2026-05, /vendas lojas 2026-05, /vendas meses.\n'+
  'Também aceito "resumo das compras" e "situação do LotoIA".\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
@@ -22,6 +24,7 @@ function intentFor(text){
   return 'historico_meses';
  if(/^\/historico(?:@\w+)?$/.test(t)||t==='historico de vendas'||
     t==='resumo historico de vendas')return 'historico';
+ if(parseSalesCommand(text))return 'historico_live';
  if(/^\/compras(?:@\w+)?$/.test(t)||
   (/\b(compras|duplicatas)\b/.test(t)&&
    /\b(resumo|saldo|venciment\w*|pendenc\w*|total|quanto|qual|quais|mostre|mostra|situacao|relatorio)\b/.test(t)))
@@ -204,7 +207,8 @@ function hermesReply(intent,x){
 }
 async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.now(),
  send,saveOwner,savePairing,query,
- readCache=async()=>null,writeCache=async()=>{},readHistory=async()=>null}){
+ readCache=async()=>null,writeCache=async()=>{},readHistory=async()=>null,
+ readLive=async()=>null}){
  const msg=privateMessage(update);
  if(!msg)return {kind:'ignored'};
  if(typeof send!=='function'||typeof query!=='function')
@@ -231,6 +235,20 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  if(intent==='unknown'){
   await send(msg.userId,'Ainda não tenho essa operação liberada.\n\n'+HELP);
   return {kind:'unsupported',intent};
+ }
+ if(intent==='historico_live'){
+  const req=parseSalesCommand(msg.text);
+  let response;
+  try{
+   const data=await readLive(req);
+   response=data?.denied_status==='history_budget_exhausted'?
+    'Limite privado de consultas históricas alcançado. Não executei nova leitura.':
+    historicalLiveReply(data,req);
+  }catch{
+   response='Consulta dinâmica indisponível ou não autorizada. O histórico anterior permanece acessível em /historico.';
+  }
+  await send(msg.userId,response);
+  return {kind:'answered',intent,source:'softcom_live'};
  }
  if(['historico','historico_lojas','historico_meses'].includes(intent)){
   let response;

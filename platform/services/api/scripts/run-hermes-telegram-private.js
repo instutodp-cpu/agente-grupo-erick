@@ -5,6 +5,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {TextDecoder}=require('node:util');
 const {processUpdate,ROUTES}=require('../src/runtime/hermes-telegram-private-channel');
+const {readHistoricalSales}=require('../src/runtime/hermes-softcom-live-reader');
 const STATE='/var/lib/hermes-telegram';
 const TELEGRAM_ORIGIN='https://api.telegram.org';
 const HERMES_ORIGIN='https://hermes-staging.grupoerick.tech';
@@ -105,7 +106,35 @@ function hermesClient(machineToken,fetchImpl=globalThis.fetch){
   return smallJSON(r,16384);
  };
 }
-async function pollOnce({stateDir,api,query,clock=()=>Date.now()}){
+function createLiveQuery(environment,driverLoader=()=>require('pg')){
+ if(environment.HERMES_HISTORY_LIVE_ENABLED!=='true')
+  return async()=>{throw Error('history_live_disabled')};
+ if(environment.HERMES_DEPLOYMENT_STAGE!=='staging'||
+    environment.HERMES_EXECUTION_ENABLED!=='false'||
+    environment.HERMES_EXECUTION_KILL_SWITCH!=='true')
+  throw Error('history_live_stage_denied');
+ const password=readSecret(environment.HERMES_HISTORY_PASSWORD_FILE);
+ if(password.length<50||password.length>150)
+  throw Error('history_password_invalid');
+ const driver=driverLoader();
+ if(typeof driver?.Client!=='function')throw Error('history_db_driver_missing');
+ return async params=>{
+  const client=new driver.Client({
+   host:'db.yxmdrrwqxwzsdgcgskrm.supabase.co',
+   port:5432,database:'postgres',user:'hermes_history_login',
+   password,ssl:{rejectUnauthorized:true},
+   application_name:'hermes-history-staging-v1',
+   connectionTimeoutMillis:4000,query_timeout:5000,
+   statement_timeout:5000,options:'-c default_transaction_read_only=on'
+  });
+  try{
+   await client.connect();
+   return await readHistoricalSales(client,params);
+  }finally{await client.end().catch(()=>{});}
+ };
+}
+async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
+ readLive=async()=>{throw Error('history_live_disabled')},liveEnabled=false}){
  checkStateDirectory(stateDir);
  const offsetRecord=loadState(stateDir,'offset.json');
  const offset=offsetRecord?.offset??0;
@@ -134,6 +163,22 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now()}){
    update:item,ownerId:owner?.owner_id??null,pairing,
    clock,query,
    readHistory:()=>loadState(stateDir,'history-softcom.json'),
+   readLive:async params=>{
+    if(!liveEnabled)throw Error('history_live_disabled');
+    if(typeof params!=='object'||params?.tenant_id!=='grupo_erick')
+     throw Error('history_live_params_denied');
+    const today=new Date(clock()).toISOString().slice(0,10);
+    const record=loadState(stateDir,'history-live-budget.json');
+    if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
+      !Number.isInteger(record.count)||record.count<0||
+      record.count>8))throw Error('history_live_budget_invalid');
+    const count=record?.date===today?record.count:0;
+    if(count>=8)return {denied_status:'history_budget_exhausted'};
+    // Claim before hitting network; never retry reads due to failed writes/crashes.
+    saveState(stateDir,'history-live-budget.json',{date:today,count:count+1});
+    return readLive(params);
+   },
+
    readCache:intent=>loadState(stateDir,'cache-'+intent+'.json'),
    writeCache:(intent,record)=>saveState(stateDir,'cache-'+intent+'.json',record),
    send:(chatId,text)=>api('sendMessage',{chat_id:chatId,text,
@@ -167,6 +212,7 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  const machineToken=readSecret(environment.HERMES_TELEGRAM_MACHINE_IDENTITY_FILE);
  const api=telegramClient(botToken,fetchImpl);
  const query=hermesClient(machineToken,fetchImpl);
+ const readLive=createLiveQuery(environment);
  const identity=await api('getMe',{});
  if(identity?.is_bot!==true||!Number.isSafeInteger(identity?.id)||
     String(identity?.username||'').toLowerCase()!=='grupoerick_bot')
@@ -175,11 +221,12 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  if(hook?.url)throw Error('telegram_webhook_conflict');
  audit(dir,{at:new Date(clock()).toISOString(),event:'gateway_started',
   stage:'staging',writes_enabled:false});
- for(;;)await pollOnce({stateDir:dir,api,query,clock});
+ for(;;)await pollOnce({stateDir:dir,api,query,clock,readLive,
+  liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true'});
 }
 if(require.main===module){
  runForever().catch(()=>{console.error('hermes_telegram_channel_stopped_fail_closed');
   process.exitCode=1;});
 }
 module.exports={checkStateDirectory,readSecret,loadState,saveState,audit,
- smallJSON,telegramClient,hermesClient,pollOnce,runForever};
+ smallJSON,telegramClient,hermesClient,createLiveQuery,pollOnce,runForever};
