@@ -490,3 +490,34 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   Codex e SQL intactas e dados ausentes no log.
 - Staging-only, promoção pelo script com SHA e CI obrigatório,
   verificação sintética e rollback isolado da versão V16.
+
+## Hermes V18 — cruzamento mês × código do Softcom (somente leitura)
+- Nova operação do proprietário: `/diagnostico cruzamento`. Consulta
+  dinamicamente `hermes_history.daily_sales_v1` usando a conexão
+  PostgreSQL previamente homologada com role de leitura agregada.
+  NÃO usa o conector MCP para transferir o agregado ao ambiente:
+  nenhuma importação de resultados nem acesso à tabela original
+  foram acrescentados à VPS.
+- Shape `matrix` tem SQL estático, janela 2026-01-01 a 2026-06-08,
+  máximo de 36 células (6 meses × 6 códigos), timeout de 5 segundos,
+  sem parâmetros de SQL arbitrário, clientes, usuários ou texto livre.
+  A quota existente de 8 leituras diárias simples permanece em vigor
+  e o claim ocorre antes de qualquer consulta real.
+- O parser rejeita códigos/meses inesperados, negativos, cancelados
+  superiores aos totais, duplicações, excesso de linhas ou fontes
+  incompatíveis; o renderizador exige reconciliação EXATA dos seis
+  totais mensais e seis totais por código com o snapshot privado
+  datado. Divergências falham fechado, sem estimar números.
+- Mostra frações cancelados/registros em cada código histórico por
+  mês e variação abril→maio; junho parcial e julho ausente.
+  NÃO identifica unidade física atual, valor financeiro, estorno
+  ou motivo de cancelamento. `obs`/`mensagem` não foram
+  confirmados como razões de cancelamento e não são consultados.
+- A única capacidade de banco utilizada é a view autorizada;
+  zero chamadas ao LLM/JEV. Não persiste células no repositório,
+  memória privada ou auditoria. FinOps registra somente
+  `business_diagnostic_matrix` como resposta direta histórica.
+- Testes sintéticos abrangem owner-only, cross-check e rejeição
+  de dimensões, SQL parametrizado/fixo e consumos de quota.
+  Promoção staging V18 condicionada a HEAD/CI e rollback V17,
+  um poller, sem merge automático nem mutações empresariais.

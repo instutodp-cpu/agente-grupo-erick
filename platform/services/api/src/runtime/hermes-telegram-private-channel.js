@@ -7,6 +7,7 @@ const governed=require('./hermes-governed-agent');
 const ownerDecisions=require('./hermes-owner-decision-memory');
 const finops=require('./hermes-inference-finops');
 const diagnostic=require('./hermes-owner-diagnostic');
+const matrix=require('./hermes-store-month-matrix');
 const ROUTES=Object.freeze({
  compras:'/internal/commercial-read-pilot/brief',
  lotoia:'/internal/lotoia-read-pilot/health',status:'/health'
@@ -18,7 +19,7 @@ const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
  'Comandos antigos: /vendas 2026-05, /produtos 2026-05.\n'+
  'Também aceito "resumo das compras" e "situação do LotoIA".\n'+
  'Memória de decisões: /decisao (propor, confirmar, cancelar) e /decisoes.\n'+
- 'Métricas privadas de IA: /economia. Diagnóstico: /diagnostico, /diagnostico lojas.\n'+
+ 'Métricas privadas de IA: /economia. Diagnóstico: /diagnostico, /diagnostico lojas, /diagnostico cruzamento.\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const num=new Intl.NumberFormat('pt-BR');
@@ -279,6 +280,22 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  }
  // A bounded, static financial diagnostic from approved saved sources only.
  // No LLM, no database read, no implicit execution authority.
+ if(msg.text==='/diagnostico cruzamento'){
+  let answer;
+  try{
+   const raw=await readLive({tenant_id:'grupo_erick',shape:'matrix'});
+   if(raw?.denied_status==='history_budget_exhausted')
+    answer='Limite privado de consultas históricas atingido; o cruzamento não foi consultado nem estimado.';
+   else answer=matrix.render({
+    snapshot:await readHistory(),aggregate:raw,now:clock(),
+    validSnapshot:safeHistorySnapshot
+   });
+  }catch{
+   answer='Cruzamento mês × código indisponível: a consulta ou conciliação não passou nos controles. Nenhum indicador foi presumido.';
+  }
+  await send(msg.userId,answer);
+  return {kind:'answered',intent:'business_diagnostic_matrix',source:'approved_history_aggregate'};
+ }
  if(msg.text==='/diagnostico lojas'){
   let answer;
   try{answer=diagnostic.byStore({

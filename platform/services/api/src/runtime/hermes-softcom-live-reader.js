@@ -19,7 +19,12 @@ GROUP BY LEFT(sale_day,7) ORDER BY label LIMIT 6`,
  stores:`SELECT raw_store AS label, SUM(registered)::bigint AS registered,
 SUM(marked_cancelled)::bigint AS cancelled ${FILTER}
 GROUP BY raw_store ORDER BY label LIMIT 6`,
- products:'SELECT product_code, product_label, item_records, marked_item_cancelled, not_marked_cancelled'+
+ matrix:`SELECT LEFT(sale_day,7) AS month, raw_store,
+SUM(registered)::bigint AS registered, SUM(marked_cancelled)::bigint AS cancelled
+FROM hermes_history.daily_sales_v1
+WHERE sale_day >= '2026-01-01' AND sale_day < '2026-06-09'
+GROUP BY LEFT(sale_day,7), raw_store ORDER BY month, raw_store LIMIT 36`,
+  products:'SELECT product_code, product_label, item_records, marked_item_cancelled, not_marked_cancelled'+
  ' FROM hermes_history.monthly_product_activity_v1 WHERE month=$1::text'+
  ' ORDER BY not_marked_cancelled DESC, product_code ASC LIMIT 5'
 });
@@ -29,6 +34,7 @@ function validate({tenant_id,month=null,store=null,shape='total'}={}){
  if(month!==null&&!MONTHS.includes(month))throw Error('history_month_denied');
  if(store!==null&&!STORES.includes(store))throw Error('history_store_denied');
  if(shape==='products'&&(month===null||store!==null))throw Error('history_product_filter_denied');
+ if(shape==='matrix'&&(month!==null||store!==null))throw Error('history_matrix_filter_denied');
  return {month,store,shape};
 }
 function count(n){
@@ -53,6 +59,13 @@ function parseRow(r,shape){
   return {product_code,product_label,item_records,marked_item_cancelled,not_marked_cancelled};
  }
  const registered=count(r.registered),cancelled=count(r.cancelled);
+ if(shape==='matrix'){
+  if(typeof r.month!=='string'||!MONTHS.includes(r.month)||
+   typeof r.raw_store!=='string'||!STORES.includes(r.raw_store))
+   throw Error('history_matrix_dimension_denied');
+  if(cancelled>registered)throw Error('history_matrix_counts_denied');
+  return {month:r.month,raw_store:r.raw_store,registered,marked_cancelled:cancelled};
+ }
  if(cancelled>registered)throw Error('history_counts_inconsistent');
  if(shape==='total'){
   if(r.last_day!==null&&(typeof r.last_day!=='string'||
@@ -67,15 +80,17 @@ function parseRow(r,shape){
 async function readHistoricalSales(client,params,now=()=>new Date()){
  const {month,store,shape}=validate(params);
  if(typeof client?.query!=='function')throw Error('history_connection_required');
- const response=await client.query({text:SQL[shape],values:shape==='products'?[month]:[month,store],query_timeout:5000});
+ const response=await client.query({text:SQL[shape],
+  values:shape==='products'?[month]:shape==='matrix'?[]:[month,store],
+  query_timeout:5000});
  const rows=response?.rows;
- if(!Array.isArray(rows)||rows.length>(shape==='total'?1:shape==='products'?5:6)||
+ if(!Array.isArray(rows)||rows.length>(shape==='total'?1:shape==='products'?5:shape==='matrix'?36:6)||
   (shape==='total'&&rows.length!==1))throw Error('history_response_invalid');
  const parsed=rows.map(r=>parseRow(r,shape));
  if(shape!=='total'){
   const seen=new Set();
   for(const r of parsed){
-   const key=shape==='products'?r.product_code:r.label;
+   const key=shape==='products'?r.product_code:shape==='matrix'?r.month+'|'+r.raw_store:r.label;
    if(seen.has(key))throw Error('history_duplicate_dimension');
    seen.add(key);
   }

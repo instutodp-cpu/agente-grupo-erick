@@ -429,7 +429,7 @@ test('dynamic historic aggregate handles typed rows, rejects unrecognized dimens
   historicalLive.readHistoricalSales({query:async()=>({rows})},p));
  assert.match(historicalLive.SQL.total,/\$1::text/);
  assert.match(historicalLive.SQL.total,/\$2::text/);
- assert.deepEqual(Object.keys(historicalLive.SQL).sort(),['months','products','stores','total']);
+ assert.deepEqual(Object.keys(historicalLive.SQL).sort(),['matrix','months','products','stores','total']);
 });
 test('dynamic historic aggregate is fail-closed on provider failures and absent connection',async()=>{
  await assert.rejects(historicalLive.readHistoricalSales(null,{tenant_id:'grupo_erick'}));
@@ -2040,5 +2040,118 @@ test('V17 /diagnostico lojas is owner-only, no Codex or SQL and counted in FinOp
   const audit=fs.readFileSync(path.join(state,'audit.jsonl'),'utf8');
   assert.match(audit,/"intent":"business_diagnostic_store"/);
   assert.doesNotMatch(audit,/CALCADOS: 1\/10|SIRINHAEM: 1\/10/);
+ }finally{fs.rmSync(state,{recursive:true,force:true})}
+});
+
+const matrixReport=require('../src/runtime/hermes-store-month-matrix');
+function matrixFixture(){
+ const snap=historicalFixture();
+ const rows=snap.months.map((m,i)=>({
+  month:m.month,raw_store:snap.stores[i].raw_label,
+  registered:10,marked_cancelled:1
+ }));
+ const data={tenant_id:'grupo_erick',source_table:'hermes_history.daily_sales_v1',
+  mode:'online_aggregate',shape:'matrix',
+  queried_at:'2026-10-21T12:00:00.000Z',
+  filter:{month:null,raw_store:null},rows};
+ return {snap,data};
+}
+test('approved matrix SQL has bounded read-only grouping and no injection',async()=>{
+ const got=[];
+ const rows=matrixFixture().data.rows.map(x=>({
+  month:x.month,raw_store:x.raw_store,registered:String(x.registered),
+  cancelled:String(x.marked_cancelled)
+ }));
+ const result=await historicalLive.readHistoricalSales({query:async q=>{
+  got.push(q);return {rows};
+ }},{tenant_id:'grupo_erick',shape:'matrix'},
+ ()=>new Date('2026-10-22T20:00:00Z'));
+ assert.equal(got.length,1);
+ assert.deepEqual(got[0].values,[]);
+ assert.equal(got[0].query_timeout,5000);
+ assert.match(got[0].text,/FROM hermes_history[.]daily_sales_v1/);
+ assert.match(got[0].text,/LIMIT 36/);
+ assert.doesNotMatch(got[0].text,/nome_do_cliente|cadastro_de_vendas|SELECT \*/i);
+ assert.equal(result.rows.length,6);
+ const invalid=[
+  {tenant_id:'personal',shape:'matrix'},
+  {tenant_id:'grupo_erick',shape:'matrix',month:'2026-04'},
+  {tenant_id:'grupo_erick',shape:'matrix',store:'CALCADOS'},
+  {tenant_id:'grupo_erick',shape:'matrix',month:'2026-04; DROP TABLE'}
+ ];
+ for(const args of invalid)await assert.rejects(
+  historicalLive.readHistoricalSales({query:async()=>{throw Error('SQL_NOT_ALLOWED')}},args),
+  /denied/);
+ for(const invalidRows of [
+  [{...rows[0],raw_store:'INJECTED'}],
+  [rows[0],rows[0]],
+  [{...rows[0],month:'2026-07'}],
+  [{...rows[0],cancelled:'11'}],
+  Array.from({length:37},()=>rows[0])
+ ])await assert.rejects(
+  historicalLive.readHistoricalSales({query:async()=>({rows:invalidRows})},
+   {tenant_id:'grupo_erick',shape:'matrix'}));
+});
+test('matrix report verifies both marginal totals and never assigns store identity or reasons',()=>{
+ const {snap,data}=matrixFixture();
+ const msg=matrixReport.render({snapshot:snap,aggregate:data,
+  validSnapshot:core.safeHistorySnapshot,now});
+ assert.match(msg,/mês × código Softcom/);
+ assert.match(msg,/Jan 1\/10/);
+ assert.match(msg,/Total verificado: 6\/60 \(10,00%\)/);
+ assert.match(msg,/Abr → Mai/);
+ assert.match(msg,/6 totais mensais e 6 totais por código/);
+ assert.match(msg,/Sem motivo de cancelamento verificado/);
+ assert.match(msg,/unidades físicas/);
+ assert.match(msg,/Nenhuma escrita, SQL livre, modelo ou ação/);
+ assert.throws(()=>matrixReport.render({snapshot:snap,aggregate:{
+  ...data,rows:[{...data.rows[0],marked_cancelled:2},...data.rows.slice(1)]},
+  validSnapshot:core.safeHistorySnapshot,now}),/reconciliation/);
+ assert.throws(()=>matrixReport.render({snapshot:snap,aggregate:{...data,tenant_id:'personal'},
+  validSnapshot:core.safeHistorySnapshot,now}),/denied/);
+ assert.throws(()=>matrixReport.render({snapshot:{...snap,tenant_id:'personal'},aggregate:data,
+  validSnapshot:core.safeHistorySnapshot,now}),/denied/);
+ assert.throws(()=>matrixReport.render({snapshot:snap,aggregate:{
+  ...data,rows:[...data.rows,data.rows[0]]},validSnapshot:core.safeHistorySnapshot,now}),
+  /duplicate/);
+});
+test('Telegram matrix command is owner-only, one governed history read and zero Codex',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);
+ runner.saveState(state,'owner.json',{owner_id:700});
+ const {snap,data}=matrixFixture();
+ runner.saveState(state,'history-softcom.json',snap);
+ const outputs=[];let countSql=0,countLLM=0,id=0;
+ const invoke=(user,text)=>runner.pollOnce({
+  stateDir:state,clock:()=>now,liveEnabled:true,
+  agentModel:{chat:async()=>{countLLM++;throw Error('MODEL_FORBIDDEN')}},
+  api:async(method,payload)=>{
+   if(method==='getUpdates')return [update(999500+(++id),user,text)];
+   if(method==='sendMessage')outputs.push(payload.text);
+  },
+  query:async()=>{throw Error('UNAUTHORIZED_APP')},
+  readLive:async req=>{
+   countSql++;
+   assert.deepEqual(req,{tenant_id:'grupo_erick',shape:'matrix'});
+   return data;
+  }
+ });
+ try{
+  await invoke(701,'/diagnostico cruzamento');
+  assert.equal(countSql,0);assert.equal(outputs.length,0);
+  await invoke(700,'/diagnostico cruzamento');
+  assert.equal(countSql,1);assert.equal(countLLM,0);
+  assert.match(outputs[0],/Total verificado: 6\/60/);
+  assert.equal(runner.loadState(state,'history-live-budget.json').count,1);
+  assert.equal(runner.loadState(state,'agent-llm-budget.json'),null);
+  const fin=finopsLedger.snapshot(runner.loadState(state,'ai-finops-daily.json'),now);
+  assert.equal(fin.direct_history,1);assert.equal(fin.provider_calls,0);
+  const audit=fs.readFileSync(path.join(state,'audit.jsonl'),'utf8');
+  assert.match(audit,/"intent":"business_diagnostic_matrix"/);
+  assert.doesNotMatch(audit,/Total verificado:|CALCADOS|SIRINHAEM/);
+  runner.saveState(state,'history-live-budget.json',{
+   date:new Date(now).toISOString().slice(0,10),count:8});
+  await invoke(700,'/diagnostico cruzamento');
+  assert.equal(countSql,1);
+  assert.match(outputs[1],/Limite privado/);
  }finally{fs.rmSync(state,{recursive:true,force:true})}
 });
