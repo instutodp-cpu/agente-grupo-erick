@@ -227,3 +227,17 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   after an intentionally matched comparison.
 - Rollout in same PR, exact HEAD, existing bridge guardrails, preflight
   then health gates and rollback to v6.
+
+### 22/10/2026 — bounded enterprise memory context overflow fix
+- Owner follow-up reached governed_agent but received fail-closed generic
+  answer. Bot and Codex sidecar were healthy; budget showed three LLM
+  turns. No inference of unlogged provider failures is made.
+- Reproduced a deterministic context error locally with THREE authorized
+  synthetic evidence records: memory_context_oversize at MAX_CONTEXT=1500.
+  Existing code took three summaries at 410 chars each, then failed
+  instead of adapting to the budget; this occurs before LLM calls.
+- Fix: trim summaries adaptively, retaining provenance and newest-first
+  ordering; invalid tenant/source/store still fail closed. Do not delete
+  or alter underlying historical records. Never store owner message body.
+- Added three-evidence regression and rollout health gate; same PR, v8,
+  exact HEAD / CI / old-release backup and automatic rollback.
