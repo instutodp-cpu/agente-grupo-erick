@@ -8,6 +8,7 @@ const {processUpdate,ROUTES}=require('../src/runtime/hermes-telegram-private-cha
 const {readHistoricalSales}=require('../src/runtime/hermes-softcom-live-reader');
 const analyst=require('../src/runtime/hermes-analyst-templates');
 const governed=require('../src/runtime/hermes-governed-agent');
+const businessMemory=require('../src/runtime/hermes-business-evidence-memory');
 const {hermesReply}=require('../src/runtime/hermes-telegram-private-channel');
 const STATE='/var/lib/hermes-telegram';
 const TELEGRAM_ORIGIN='https://api.telegram.org';
@@ -34,7 +35,8 @@ function loadState(dir,name){
   const fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
   try{
    const st=fs.fstatSync(fd);
-   const limit=name==='history-analyst-cache.json'?16384:2048;
+   const limit=name==='history-analyst-cache.json'?16384:
+    name==='business-evidence-memory.json'?32768:2048;
    if(!st.isFile()||(st.mode&0o777)!==0o600||st.size>limit)
     throw Error('state_file_unsafe');
    return JSON.parse(fs.readFileSync(fd,'utf8'));
@@ -44,7 +46,8 @@ function loadState(dir,name){
 function saveState(dir,name,data){
  const file=path.join(dir,name),temp=path.join(dir,'.'+name+'.new');
  const serialized=JSON.stringify(data)+'\n';
- const limit=name==='history-analyst-cache.json'?16384:2048;
+ const limit=name==='history-analyst-cache.json'?16384:
+    name==='business-evidence-memory.json'?32768:2048;
  if(Buffer.byteLength(serialized,'utf8')>limit)throw Error('state_file_too_large');
  const fd=fs.openSync(temp,fs.constants.O_WRONLY|fs.constants.O_CREAT|
   fs.constants.O_EXCL|fs.constants.O_NOFOLLOW,0o600);
@@ -212,6 +215,8 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     saveState(stateDir,'agent-llm-budget.json',{date:today,turns:turns+1});
     return governed.runTurn({
      goal,model:agentModel,
+     readBusinessContext:question=>businessMemory.context(
+      loadState(stateDir,'business-evidence-memory.json'),question,clock()),
      readHistory:async plan=>{
       const record=loadState(stateDir,'history-live-budget.json');
       if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
@@ -220,7 +225,15 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
       const n=record?.date===today?record.count:0;
       if(n>=24)throw Error('agent_history_quota');
       saveState(stateDir,'history-live-budget.json',{date:today,count:n+1});
-      return readLive({shape:'analyst',tenant_id:'grupo_erick',plan});
+      const data=await readLive({shape:'analyst',tenant_id:'grupo_erick',plan});
+      // Only aggregated, source-checked evidence is remembered. Never write
+      // Telegram message bodies, model recommendations or personal data.
+      try{
+       const existing=loadState(stateDir,'business-evidence-memory.json');
+       const updated=businessMemory.observe(existing,data,plan,clock());
+       saveState(stateDir,'business-evidence-memory.json',updated);
+      }catch{} // optional memory; valid SQL result remains authoritative
+      return data;
      },
      readCommercial:async()=>{
       const data=await query('compras',ROUTES.compras);

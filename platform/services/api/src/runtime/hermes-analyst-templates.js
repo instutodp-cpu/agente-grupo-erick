@@ -85,6 +85,9 @@ function validate(p){
  if(p.template==='compare'?(!isPeriod(p.other_period)||p.other_period.length!==p.period.length||p.other_period===p.period):p.other_period!=null)throw Error('analyst_comparison_denied');
  if(p.template==='products'&&(!p.period.startsWith('2026')||p.store))throw Error('analyst_products_denied');
  if(p.template==='stores'&&p.store)throw Error('analyst_stores_denied');
+ // 2026-06 only covers eight days; do not claim June YoY equivalence.
+ if(p.template==='compare'&&[p.period,p.other_period].includes('2026-06'))
+  throw Error('analyst_partial_month_comparison_denied');
  return p;
 }
 const matchPeriod='(month=$1::text OR (length($1::text)=4 AND LEFT(month,4)=$1::text))';
@@ -94,7 +97,11 @@ const SQL=Object.freeze({
  period:'SELECT '+agg+' FROM '+SOURCE+' WHERE '+matchPeriod+' AND ($2::text IS NULL OR raw_store=$2::text)',
  compare:'SELECT CASE WHEN length($1::text)=4 THEN LEFT(month,4) ELSE month END AS label,'+agg+
    ' FROM '+SOURCE+' WHERE (month IN ($1::text,$2::text) OR (length($1::text)=4 AND LEFT(month,4) IN ($1::text,$2::text)))'+
-   ' AND ($3::text IS NULL OR raw_store=$3::text) GROUP BY 1 ORDER BY 1 LIMIT 2',
+   ' AND ($3::text IS NULL OR raw_store=$3::text)'+
+   // Year-vs-year means Jan-May 2025 vs Jan-May 2026. June 2026 is partial;
+   // use only FULL overlapping months, never a misleading annual comparison.
+   " AND (length($1::text)<>4 OR RIGHT(month,2) BETWEEN '01' AND '05')"+
+   ' GROUP BY 1 ORDER BY 1 LIMIT 2',
  stores:'SELECT raw_store AS label,'+agg+' FROM '+SOURCE+' WHERE '+matchPeriod+' GROUP BY raw_store ORDER BY raw_store LIMIT 6',
  products:'SELECT product_code,MIN(product_label) AS product_label,SUM(not_marked_cancelled)::bigint AS item_records'+
    ' FROM '+PRODUCT_SOURCE+' WHERE '+matchPeriod+' GROUP BY product_code ORDER BY item_records DESC,product_code ASC LIMIT 5'
@@ -163,8 +170,11 @@ function reply(data,requested){
   if(!a||!b)throw Error('analyst_comparison_missing');
   const x=measure(a,p.metric),y=measure(b,p.metric),delta=y-x;
   const pct=x===0?'indefinida':new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:1}).format(delta/x);
+  if(p.period.length===4)
+   lines.push('📅 Cobertura equivalente: janeiro a maio de cada ano (meses completos).');
   lines.push('Comparação — '+label(p.metric)+':',
-   '• '+p.period+': '+f(x,p.metric),'• '+p.other_period+': '+f(y,p.metric),
+   '• '+p.period+(p.period.length===4?' (jan-mai)':'')+': '+f(x,p.metric),
+   '• '+p.other_period+(p.other_period.length===4?' (jan-mai)':'')+': '+f(y,p.metric),
    '• Diferença: '+(delta>0?'+':'')+f(delta,p.metric)+' ('+pct+')');
  }else if(p.template==='stores'){
   const sorted=[...data.rows].sort((a,b)=>measure(b,p.metric)-measure(a,p.metric)||a.label.localeCompare(b.label));

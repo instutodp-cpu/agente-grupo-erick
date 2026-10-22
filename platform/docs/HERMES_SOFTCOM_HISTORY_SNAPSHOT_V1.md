@@ -176,3 +176,34 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
 - Limites do agente: 4 turnos/dia, 2 chamadas LLM/turno, até 3 ferramentas,
   24 consultas SQL históricas por dia. Sem SQL livre.
 - Memória contextual durável e JEV-Maestro continuam próximas missões.
+
+## Business Insights V1 — cobertura equivalente + evidências empresariais persistentes
+- O primeiro canário conversacional real do Codex em 22/10/2026 respondeu
+  a uma pergunta aberta usando Softcom histórico e Compras Homologação.
+  Auditoria Telegram: intent=governed_agent, answered, 1 turno contado.
+- Correção necessária: a comparação 2025 vs 2026 misturava ano inteiro
+  com 2026 parcial. O executor SQL oficial (visão agregada privada)
+  passa a restringir automaticamente comparação anual a jan-mai
+  completos nos DOIS anos. Junho/2026 parcial não é comparável a
+  junho/2025 por agregado mensal; a consulta comparativa é negada.
+- Modelo não pode contornar comparabilidade usando duas consultas
+  anuais separadas. PLAN_PROMPT e síntese reforçam esse contrato;
+  confiabilidade vem do executor, não apenas da redação do modelo.
+- Evidência real Jan-Mai (Softcom): 2025 21940 registros, 238 cancelados,
+  R$2730133.04 soma valor_pago; 2026 24148, 623, R$2956645.04.
+  Valores importados NÃO são faturamento líquido nem DRE.
+- Primeiro adaptador persistente de evidências empresariais:
+  hermes-business-evidence-memory.js em staging, owner-only,
+  tenant grupo_erick, scope enterprise. Lê apenas agregados verificados
+  em ferramentas autorizadas, armazenados em JSON 0600 / state 0700.
+  Cache com fonte, período, métrica, consulted_at, índice SHA de plano;
+  até 12 observações, retenção 14 dias, limite 32KB. Não armazena
+  corpo de mensagem Telegram, PII, decisões não aprovadas ou respostas
+  do modelo como fatos. Recuperação restrita a contexto para escolher
+  novas consultas; síntese continua exigindo evidência atual.
+- Contratos oficiais Agent Memory Registry e Context Assembly permanecem
+  SIMULATION; esse adaptador é somente o primeiro read-through real,
+  não segundo cérebro pessoal ou empresarial completo.
+- Rollout: deploy-hermes-telegram-business-memory-staging.sh
+  com HEAD exato, CI verde, preflight sem root, banco/sockets, gateway
+  memória/cobertura, backup antigo e rollback; 1 Telegram poller.

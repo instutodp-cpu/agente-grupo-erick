@@ -1045,3 +1045,90 @@ test('Codex login local Unix socket integration returns typed answer and rejects
   assert.equal(denied.status,400);
  }finally{await service.close();fs.rmSync(location,{force:true,recursive:true});}
 });
+
+// Business analyst coverage equivalence and narrow enterprise memory.
+const businessEvidence=require('../src/runtime/hermes-business-evidence-memory');
+test('year-on-year history compares only January through May of both years',async()=>{
+ const p={tenant_id:'grupo_erick',template:'compare',period:'2025',
+  other_period:'2026',metric:'money',store:null};
+ let sql=null;
+ const data=await analyst.execute({query:async query=>{
+  sql=query;
+  return {rows:[
+   {label:'2025',records:'21940',cancelled:'238',noncancelled:'21702',
+    amount:'2730133.04',last_day:'2025-05-31'},
+   {label:'2026',records:'24148',cancelled:'623',noncancelled:'23525',
+    amount:'2956645.04',last_day:'2026-05-31'}]};
+ }},p,()=>new Date('2026-10-22T19:00:00Z'));
+ assert.deepEqual(sql.values,['2025','2026',null]);
+ assert.match(sql.text,/RIGHT\(month,2\) BETWEEN '01' AND '05'/);
+ const txt=analyst.reply(data,p);
+ assert.match(txt,/janeiro a maio de cada ano/);
+ assert.match(txt,/2\.730\.133,04/);
+ assert.match(txt,/2\.956\.645,04/);
+ assert.doesNotMatch(txt,/-62,5%/);
+});
+test('June partial YoY and annual separately queried years are denied before SQL',async()=>{
+ const bad={tenant_id:'grupo_erick',template:'compare',period:'2025-06',
+  other_period:'2026-06',metric:'records',store:null};
+ assert.throws(()=>analyst.validate(bad),/partial_month/);
+ await assert.rejects(analyst.execute({query:async()=>{throw Error('query_called');}},bad),/partial_month/);
+ const year=(y)=>({tenant_id:'grupo_erick',template:'period',period:y,
+  other_period:null,metric:'money',store:null});
+ assert.throws(()=>agent.validateToolPlan({steps:[
+  {tool:'history',params:year('2025')},
+  {tool:'history',params:year('2026')}
+ ]}),/unmatched_year/);
+ assert.equal(agent.validateToolPlan({steps:[{tool:'history',params:{
+  ...bad,period:'2025',other_period:'2026'}}]}).length,1);
+});
+test('business memory persists only source-verified aggregates and is enterprise-scoped',()=>{
+ const now=Date.parse('2026-10-22T18:00:00Z');
+ const memo=businessEvidence.observe(null,agentEvidence,agentHistoryPlan,now);
+ assert.equal(memo.entries.length,1);
+ assert.equal(memo.entries[0].tenant_id,'grupo_erick');
+ assert.equal(memo.entries[0].scope,'enterprise');
+ assert.equal(memo.entries[0].source,analyst.SOURCE);
+ assert.equal(typeof memo.entries[0].key,'string');
+ assert.ok(!JSON.stringify(memo).includes('Objetivo empresarial:'));
+ assert.match(businessEvidence.context(memo,'Analise janeiro 2025 e 2026',now),/2025-01/);
+ assert.deepEqual(JSON.parse(businessEvidence.context(memo,'me diga sobre vendas 2024',now)),[]);
+ assert.deepEqual(businessEvidence.validStore(memo,now+15*86400000).entries,[]);
+ assert.throws(()=>businessEvidence.validStore({...memo,tenant_id:'personal'},now));
+ assert.throws(()=>businessEvidence.validStore({...memo,entries:[{...memo.entries[0],source:'softcom_import.clientes'}]},now));
+ assert.throws(()=>businessEvidence.normalizeEntry({...agentEvidence,source:'softcom_import.clientes'},agentHistoryPlan,now));
+});
+test('owner business memory is restored on a later agent turn without persisting Telegram messages',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);runner.saveState(state,'owner.json',{owner_id:700});
+ let step=0,reads=0,apiCalls=0;const captured=[],responses=[];
+ const clock=()=>Date.parse('2026-10-22T18:00:00Z');
+ const goal='Analise comercialmente janeiro de 2025 e janeiro de 2026 do grupo Erick';
+ const model={chat:async messages=>{
+  step++;
+  if(messages[0].content.includes('EXCLUSIVAMENTE JSON')){
+   captured.push(messages[1].content);
+   return JSON.stringify({steps:[{tool:'history',params:agentHistoryPlan}]});
+  }
+  return 'Dados mostram mais registros em janeiro de 2026; hipótese de expansão de operações, não comprovada. Ação segura: conferir cancelamentos e tipos de produtos antes de decidir.';
+ }};
+ try{
+  for(let i=0;i<2;i++)await runner.pollOnce({
+   stateDir:state,clock,agentModel:model,liveEnabled:true,
+   api:async(method,payload)=>{
+    if(method==='getUpdates'){apiCalls++;return [update(170000+apiCalls,700,goal)];}
+    if(method==='sendMessage')responses.push(payload.text);
+   },
+   readLive:async p=>{reads++;assert.equal(p.shape,'analyst');return agentEvidence;},
+   query:async()=>{throw Error('wrong_source')}
+  });
+  assert.equal(reads,2);
+  assert.equal(responses.length,2);
+  assert.match(captured[1],/Registros empresariais históricos/);
+  assert.match(captured[1],/4\.226/);
+  const saved=runner.loadState(state,'business-evidence-memory.json');
+  assert.equal(saved.entries.length,1);
+  assert.equal(fs.statSync(path.join(state,'business-evidence-memory.json')).mode&0o777,0o600);
+  assert.doesNotMatch(fs.readFileSync(path.join(state,'business-evidence-memory.json'),'utf8'),/Analise comercialmente/);
+  assert.equal(runner.loadState(state,'agent-llm-budget.json').turns,2);
+ }finally{fs.rmSync(state,{force:true,recursive:true});}
+});
