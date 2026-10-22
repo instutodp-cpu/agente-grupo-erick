@@ -347,3 +347,34 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   mais de um modelo autorizado, preços, qualidade e telemetria.
 - Sem merge automático; estágio staging-only, backups versionados,
   rollback automático, scripts com expected SHA e CI exato.
+
+## Hermes V13 — síntese verificada e cache de resposta, staging
+- Só a rota econômica de uma consulta histórica parametrizada permite cache
+  de síntese. Fluxos de múltiplas ferramentas, planejamento ambíguo, ações,
+  dados pessoais e consultas fora do escopo permanecem sem cache de resposta.
+- Toda consulta que pretenda reutilizar síntese executa novamente a leitura
+  SQL histórica homologada, consumindo a quota SQL aplicável, e valida a
+  evidência com analyst.reply. Não usa o histórico do LLM como fonte de números.
+- Chave SHA-256: pergunta literal, período/template, empresa, evidências de
+  negócio, decisões humanas confirmadas relevantes e texto versionado do
+  contrato de resposta. O campo de horário de coleta é ignorado na comparação
+  dos valores, porque não modifica os registros; mudanças de números,
+  decisões, contrato ou pergunta invalidam a chave.
+- Cache V13 é protegido por volume de staging 0700/0600, TTL 20 minutos,
+  até seis entradas, no máximo 3150 caracteres por resposta, com validação
+  estrita de esquema e bloqueios de conteúdo sensível óbvio. O cache armazena
+  apenas resposta final já validada e hashes, nunca a pergunta bruta.
+- Reserva da quota Codex ocorre imediatamente antes da primeira chamada
+  efetiva ao provedor. Cache com dados ainda coincidentes retorna zero
+  chamadas e zero turnos de modelo. Cache ausente/expirado não recebe
+  privilégio adicional: a chamada ao modelo conserva a mesma quota 4/dia.
+- A resposta reutilizada recebe aviso explícito de reaproveitamento e
+  nova validação do histórico. Eventos de auditoria registram cache=hit,
+  llm_calls=0 e planning_policy=verified_answer_cache_v1, sem texto de
+  pergunta/resposta. Não inferir custo em moeda ou tokens sem uso medido.
+- A reutilização continua impossível se a consulta histórica falhar ou
+  exceder sua própria quota. O conteúdo confirmado pelo proprietário não é
+  alterado durante leitura. Não altera merge/produção, chave JEV, quota,
+  kill switch ou provedores habilitados.
+- Limitação: é cache exato com digest de fonte, NÃO pesquisa semântica.
+  Benefício real depende da repetição de perguntas e de evidências iguais.

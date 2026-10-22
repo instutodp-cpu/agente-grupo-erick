@@ -1652,3 +1652,96 @@ test('economy telemetry stores only verified call count and routing policy, no m
   assert.equal(runner.loadState(state,'history-live-budget.json').count,1);
  }finally{fs.rmSync(state,{recursive:true,force:true})}
 });
+
+const verifiedAnswerCache=require('../src/runtime/hermes-verified-answer-cache');
+test('verified answer cache matches exact historical source and expires',()=>{
+ const t=Date.parse('2026-10-22T20:20:00Z');
+ const inputs={goal:'Analise as vendas de janeiro de 2025 e janeiro de 2026 e recomende melhorias',
+  evidence:[{source:analyst.SOURCE,summary:analyst.reply(agentEvidence,agentHistoryPlan)}],
+  decisions:[],answerPolicy:agent.ANSWER_PROMPT,plan:agentHistoryPlan,now:t};
+ const key=verifiedAnswerCache.key(inputs);
+ const answer='🧠 Hermes — análise orientada por evidências\n\n'+
+  'Registros históricos exigem conciliação e revisão antes de novas decisões.'+
+  '\nFontes verificadas: '+analyst.SOURCE+
+  '\n⚠️ Staging e somente leitura. Histórico e homologação não conciliados. Revisão humana para executar sugestões.';
+ const store=verifiedAnswerCache.remember(null,key,answer,t);
+ assert.equal(verifiedAnswerCache.lookup(store,key,t+1000).answer,answer);
+ assert.equal(verifiedAnswerCache.lookup(store,key,t+verifiedAnswerCache.TTL_MS+1),null);
+ assert.notEqual(key,verifiedAnswerCache.key({...inputs,
+  evidence:[{...inputs.evidence[0],summary:inputs.evidence[0].summary+' nova evidência'}]}));
+ assert.notEqual(key,verifiedAnswerCache.key({...inputs,decisions:[{id:'human-confirmed'}]}));
+ assert.notEqual(key,verifiedAnswerCache.key({...inputs,answerPolicy:inputs.answerPolicy+' v2'}));
+ assert.throws(()=>verifiedAnswerCache.validate({...store,tenant_id:'personal'},t));
+ assert.throws(()=>verifiedAnswerCache.validate({...store,entries:[{...store.entries[0],answer:'inválido'}]},t));
+});
+
+test('same source-confirmed answer reuses synthesis without model call or daily turn',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);
+ runner.saveState(state,'owner.json',{owner_id:700});
+ const q='Analise as vendas de janeiro de 2025 e janeiro de 2026 e recomende melhorias';
+ const t=Date.parse('2026-10-22T20:25:00Z');
+ let timestamp=t,number=0,modelCalls=0,sourceReads=0,change=0;
+ const sent=[];
+ const invoke=()=>runner.pollOnce({stateDir:state,clock:()=>timestamp,
+  liveEnabled:true,
+  agentModel:{chat:async()=>{
+   modelCalls++;
+   return 'Os dados importados exigem conciliação com o ERP. Confira uma amostra das transações antes de adotar novas regras empresariais.';
+  }},
+  readLive:async()=>{
+   sourceReads++;const data=structuredClone(agentEvidence);
+   data.rows[1].records+=change;
+   return data;
+  },
+  query:async()=>{throw Error('other_source_not_allowed')},
+  api:async(method,payload)=>{
+   if(method==='getUpdates')return [update(994000+(++number),700,q)];
+   if(method==='sendMessage')sent.push(payload.text);
+  }
+ });
+ try{
+  await invoke();
+  assert.equal(modelCalls,1);
+  assert.equal(sourceReads,1);
+  assert.equal(runner.loadState(state,'agent-llm-budget.json').turns,1);
+  const store=runner.loadState(state,'agent-answer-cache.json');
+  assert.equal(store.entries.length,1);
+  assert.equal(fs.statSync(path.join(state,'agent-answer-cache.json')).mode&0o777,0o600);
+  timestamp=t+1000;await invoke();
+  assert.equal(sourceReads,2);
+  assert.equal(modelCalls,1);
+  assert.match(sent.at(-1),/Síntese reutilizada/);
+  assert.equal(runner.loadState(state,'agent-llm-budget.json').turns,1);
+  const logs=fs.readFileSync(path.join(state,'audit.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(logs.at(-1).llm_calls,0);
+  assert.equal(logs.at(-1).cache,'hit');
+  assert.equal(logs.at(-1).planning_policy,'verified_answer_cache_v1');
+  runner.saveState(state,'agent-llm-budget.json',{date:'2026-10-22',turns:4});
+  timestamp=t+2000;await invoke();
+  assert.equal(modelCalls,1);
+  assert.equal(runner.loadState(state,'agent-llm-budget.json').turns,4);
+  change=1;timestamp=t+3000;await invoke();
+  assert.equal(modelCalls,1);
+  assert.match(sent.at(-1),/limite privado de 4 análises/);
+  assert.equal(sourceReads,4);
+  assert.equal(runner.loadState(state,'history-live-budget.json').count,4);
+  assert.doesNotMatch(fs.readFileSync(path.join(state,'audit.jsonl'),'utf8'),/Analise as vendas de janeiro/);
+ }finally{fs.rmSync(state,{recursive:true,force:true})}
+});
+
+test('fetch timestamp changes never defeat identical business evidence fingerprints',()=>{
+ const now=Date.parse('2026-10-22T20:25:00Z');
+ const summary=analyst.reply(agentEvidence,agentHistoryPlan);
+ assert.match(summary,/Consultado em:/);
+ const input={goal:'Analise as vendas de janeiro de 2025 e janeiro de 2026 e recomende melhorias',
+  evidence:[{source:analyst.SOURCE,summary}],decisions:[],
+  answerPolicy:agent.ANSWER_PROMPT,plan:agentHistoryPlan,now};
+ const baseline=verifiedAnswerCache.key(input);
+ const next=verifiedAnswerCache.key({...input,evidence:[
+  {source:analyst.SOURCE,summary:summary.replace(/Consultado em:[^\n]*/, 'Consultado em: 22/10/2026, 19:30:00')}
+ ]});
+ assert.equal(baseline,next);
+ assert.notEqual(baseline,verifiedAnswerCache.key({...input,evidence:[
+  {source:analyst.SOURCE,summary:summary.replace('4.226','4.227')}
+ ]}));
+});

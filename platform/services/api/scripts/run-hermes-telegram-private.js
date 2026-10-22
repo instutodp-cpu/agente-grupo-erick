@@ -10,6 +10,7 @@ const analyst=require('../src/runtime/hermes-analyst-templates');
 const governed=require('../src/runtime/hermes-governed-agent');
 const businessMemory=require('../src/runtime/hermes-business-evidence-memory');
 const ownerDecisions=require('../src/runtime/hermes-owner-decision-memory');
+const answerCache=require('../src/runtime/hermes-verified-answer-cache');
 const {hermesReply}=require('../src/runtime/hermes-telegram-private-channel');
 const STATE='/var/lib/hermes-telegram';
 const TELEGRAM_ORIGIN='https://api.telegram.org';
@@ -37,7 +38,7 @@ function loadState(dir,name){
   try{
    const st=fs.fstatSync(fd);
    const limit=name==='history-analyst-cache.json'?16384:
-    ['business-evidence-memory.json','owner-decisions.json'].includes(name)?32768:2048;
+    ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json'].includes(name)?32768:2048;
    if(!st.isFile()||(st.mode&0o777)!==0o600||st.size>limit)
     throw Error('state_file_unsafe');
    return JSON.parse(fs.readFileSync(fd,'utf8'));
@@ -48,7 +49,7 @@ function saveState(dir,name,data){
  const file=path.join(dir,name),temp=path.join(dir,'.'+name+'.new');
  const serialized=JSON.stringify(data)+'\n';
  const limit=name==='history-analyst-cache.json'?16384:
-    ['business-evidence-memory.json','owner-decisions.json'].includes(name)?32768:2048;
+    ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json'].includes(name)?32768:2048;
  if(Buffer.byteLength(serialized,'utf8')>limit)throw Error('state_file_too_large');
  const fd=fs.openSync(temp,fs.constants.O_WRONLY|fs.constants.O_CREAT|
   fs.constants.O_EXCL|fs.constants.O_NOFOLLOW,0o600);
@@ -219,11 +220,27 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
       !Number.isInteger(budget.turns)||budget.turns<0||budget.turns>4))
      throw Error('agent_llm_budget_invalid');
     const turns=budget?.date===today?budget.turns:0;
-    if(turns>=4)throw Error('agent_daily_quota');
-    // Reserve 2 LLM calls before any provider request, never retry after crash.
-    saveState(stateDir,'agent-llm-budget.json',{date:today,turns:turns+1});
+    // Reserve the daily turn immediately BEFORE the FIRST actual model call.
+    // A verified synthesis cache hit never calls the model or consumes a turn.
+    // One task still reserves at most one daily turn (1–2 provider requests).
+    let reserved=false;
+    const meteredModel={chat:async(...args)=>{
+     if(!reserved){
+      if(turns>=4)throw Error('agent_daily_quota');
+      saveState(stateDir,'agent-llm-budget.json',{date:today,turns:turns+1});
+      reserved=true;
+     }
+     return agentModel.chat(...args);
+    }};
     return governed.runTurn({
-     goal,model:agentModel,
+     goal,model:meteredModel,clock,
+     readCachedAnswer:key=>answerCache.lookup(
+      loadState(stateDir,'agent-answer-cache.json'),key,clock()),
+     writeCachedAnswer:(key,answer)=>{
+      const saved=loadState(stateDir,'agent-answer-cache.json');
+      const next=answerCache.remember(saved,key,answer,clock());
+      saveState(stateDir,'agent-answer-cache.json',next);
+     },
      readBusinessContext:question=>businessMemory.context(
       loadState(stateDir,'business-evidence-memory.json'),question,clock()),
      readDecisionContext:question=>ownerDecisions.context(
@@ -303,7 +320,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
    event:'outcome',update_id:item.update_id,
    outcome:result.kind,intent:result.intent||null,
    cache:result.cache||null,
-   ...(result.llm_calls===1||result.llm_calls===2?
+   ...([0,1,2].includes(result.llm_calls)?
     {llm_calls:result.llm_calls,planning_policy:result.planning_policy}: {})});
   handled++;
  }
