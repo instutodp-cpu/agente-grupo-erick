@@ -63,3 +63,22 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   presumido retornou XX000 ENOTFOUND tenant/user not found, indicando
   endereço de pooler possivelmente incorreto. Não ampliar a rede para
   host nem ativar o bot antes de verificar o endpoint real.
+
+## Agregação privada de produtos — incremento V1
+- Fonte: softcom_import.vendas_efetuadas, visão privada
+  hermes_history.monthly_product_activity_v1, sem CPF/cliente.
+- A migração já estava aplicada; validada no Supabase: 19.005 grupos
+  código de produto / mês (2026-01 a 2026-06), leitura restrita permitida,
+  anon/authenticated e tabelas brutas negadas.
+- Maio/2026: 9.291 registros de itens, 148 marcados como cancelados,
+  3.760 códigos distintos. Não confundir com vendas (cabeçalhos: 5.933).
+- Consulta delimitada /produtos 2026-05: cinco produtos com mais registros
+  de itens não marcados como cancelados; não faturamento, quantidade vendida
+  conciliada ou estoque. Ordenação estável: count desc, código asc.
+- Leitor executa exclusivamente SQL parametrizado na visão agregada; mês
+  limitado a jan-jun/2026, sem identificadores livres, sem clientes.
+- Reaproveita a mesma autorização do dono, quota histórica de 8/dia,
+  TLS validado, rollback e bloqueio de execução em produção.
+- A nova promoção usa
+  scripts/deploy-hermes-telegram-products-staging.sh com --check,
+  --deploy e --rollback, sempre com SHA exato e validação online.

@@ -429,7 +429,7 @@ test('dynamic historic aggregate handles typed rows, rejects unrecognized dimens
   historicalLive.readHistoricalSales({query:async()=>({rows})},p));
  assert.match(historicalLive.SQL.total,/\$1::text/);
  assert.match(historicalLive.SQL.total,/\$2::text/);
- assert.deepEqual(Object.keys(historicalLive.SQL).sort(),['months','stores','total']);
+ assert.deepEqual(Object.keys(historicalLive.SQL).sort(),['months','products','stores','total']);
 });
 test('dynamic historic aggregate is fail-closed on provider failures and absent connection',async()=>{
  await assert.rejects(historicalLive.readHistoricalSales(null,{tenant_id:'grupo_erick'}));
@@ -586,4 +586,88 @@ test('pooler host must come from explicit project connection config, never guess
    {...base,HERMES_HISTORY_POOLER_HOST:host},()=>{throw Error('driver loaded')} ),
    /history_pooler_host_unverified/);
  }
+});
+
+test('product commands are strictly bounded to H1 2026 and cannot inject query',()=>{
+ const accepted=[
+  ['/produtos 2026-05',{tenant_id:'grupo_erick',month:'2026-05',shape:'products'}],
+  ['produtos com mais registros em maio de 2026?',{tenant_id:'grupo_erick',month:'2026-05',shape:'products'}]
+ ];
+ for(const [command,params] of accepted){
+  assert.deepEqual(liveChannel.parseSalesCommand(command),params);
+  assert.equal(core.intentFor(command),'historico_live');
+ }
+ for(const command of ['/produtos 2026-07','/produtos 2026-05; drop table x',
+  '/produtos loja CALCADOS 2026-05','/produtos 2027-01',
+  'produtos com mais registros em julho de 2026?']){
+  assert.equal(liveChannel.parseSalesCommand(command),null);
+ }
+ assert.throws(()=>historicalLive.validate({tenant_id:'grupo_erick',shape:'products'}),/filter_denied/);
+ assert.throws(()=>historicalLive.validate({tenant_id:'grupo_erick',shape:'products',month:'2026-05',store:'CALCADOS'}),/filter_denied/);
+ assert.throws(()=>historicalLive.validate({tenant_id:'personal',shape:'products',month:'2026-05'}),/tenant_denied/);
+});
+test('monthly product query uses only aggregated view with bounded results, no raw item access',async()=>{
+ const calls=[];
+ const result=await historicalLive.readHistoricalSales({
+  query:async q=>{
+   calls.push(q);
+   return {rows:[
+    {product_code:'32452',product_label:'PRODUTO PROMOCIONAL GRUPO ERICK 1499',item_records:'167',marked_item_cancelled:'4',not_marked_cancelled:'163'},
+    {product_code:'22154',product_label:'PRODUTO PROMOCIONAL GRUPO ERICK',item_records:'121',marked_item_cancelled:'3',not_marked_cancelled:'118'}
+   ]};
+  }
+ },{tenant_id:'grupo_erick',month:'2026-05',shape:'products'},()=>new Date('2026-10-22T14:00:00Z'));
+ assert.equal(result.source_table,'hermes_history.monthly_product_activity_v1');
+ assert.equal(result.mode,'online_aggregate');
+ assert.deepEqual(calls[0].values,['2026-05']);
+ assert.match(calls[0].text,/LIMIT 5/);
+ assert.doesNotMatch(calls[0].text,/softcom_import|clientes|select \*/i);
+ const msg=liveChannel.historicalLiveReply(result,{month:'2026-05',shape:'products'});
+ assert.match(msg,/163 registros/);
+ assert.match(msg,/NÃO unidades líquidas vendidas/);
+ assert.match(msg,/monthly_product_activity_v1/);
+});
+test('product response rejects fake, duplicate, invalid labels and inconsistent totals',async()=>{
+ const row={product_code:'32452',product_label:'PRODUTO TESTE',item_records:'20',marked_item_cancelled:'1',not_marked_cancelled:'19'};
+ const valid={tenant_id:'grupo_erick',month:'2026-05',shape:'products'};
+ for(const rows of [
+  [{...row,marked_item_cancelled:'21'}],
+  [{...row,product_label:'<script>alert(1)</script>'}],
+  [{...row,product_code:'0 OR 1=1'}],
+  [row,row],
+  Array.from({length:6},(_,i)=>({...row,product_code:String(i+1)})),
+ ]){
+  await assert.rejects(historicalLive.readHistoricalSales({query:async()=>({rows})},valid));
+ }
+ const data={tenant_id:'grupo_erick',source_table:'hermes_history.monthly_product_activity_v1',
+  mode:'online_aggregate',queried_at:'2026-10-22T14:00:00Z',
+  filter:{month:'2026-05',raw_store:null},shape:'products',
+  rows:[{product_code:'32452',product_label:'PRODUTO TESTE',item_records:20,marked_item_cancelled:1,not_marked_cancelled:19}]};
+ assert.throws(()=>liveChannel.historicalLiveReply({...data,source_table:'softcom_import.vendas_efetuadas'},valid));
+ assert.throws(()=>liveChannel.historicalLiveReply({...data,rows:[{...data.rows[0],product_label:'\nINJECTED'}]},valid));
+ assert.throws(()=>liveChannel.historicalLiveReply({...data,filter:{month:'2026-04',raw_store:null}},valid));
+});
+test('product commands remain owner-only and share bounded historical read quota',async()=>{
+ const stateDir=dir();fs.chmodSync(stateDir,0o700);
+ const sent=[];let reads=0;
+ try{
+  runner.saveState(stateDir,'owner.json',{owner_id:700});
+  const api=async(method,payload)=>{
+   if(method==='getUpdates')return [update(887,700,'/produtos 2026-05')];
+   if(method==='sendMessage')sent.push(payload.text);
+  };
+  const result=await runner.pollOnce({
+   stateDir,api,liveEnabled:true,clock:()=>now,
+   query:async()=>{throw Error('unexpected standard Hermes query')},
+   readLive:async params=>{
+    reads++;assert.equal(params.shape,'products');
+    return {tenant_id:'grupo_erick',source_table:'hermes_history.monthly_product_activity_v1',
+     mode:'online_aggregate',queried_at:'2026-10-22T14:00:00Z',
+     filter:{month:'2026-05',raw_store:null},shape:'products',
+     rows:[{product_code:'32452',product_label:'PRODUTO TESTE',item_records:20,marked_item_cancelled:1,not_marked_cancelled:19}]};
+   }});
+  assert.equal(result.handled,1);
+  assert.equal(reads,1);assert.match(sent[0],/Atividade histórica de produtos/);
+  assert.deepEqual(runner.loadState(stateDir,'history-live-budget.json'),{date:new Date(now).toISOString().slice(0,10),count:1});
+ }finally{fs.rmSync(stateDir,{recursive:true,force:true})}
 });

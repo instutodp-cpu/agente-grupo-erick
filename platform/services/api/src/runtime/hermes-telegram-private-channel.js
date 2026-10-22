@@ -8,7 +8,7 @@ const ROUTES=Object.freeze({
 });
 const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
  'Comandos: /compras, /lotoia, /historico, /historico lojas, /historico meses, /status, /ajuda.\n'+
- 'Leitura dinâmica em preparação: /vendas 2026-05, /vendas lojas 2026-05, /vendas meses.\n'+
+ 'Leitura dinâmica: /vendas 2026-05, /vendas lojas 2026-05, /vendas meses e /produtos 2026-05.\n'+
  'Também aceito "resumo das compras" e "situação do LotoIA".\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
