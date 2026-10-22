@@ -253,7 +253,7 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
    }else{
     response=analyst.reply(data,plan);
     if(data.cached===true){cache='hit';response+='\n\n⏱️ Resposta reutilizada de cache validado ('+new Date(data.at).toLocaleString('pt-BR',{timeZone:'America/Recife'})+').';}
-    await writeAnalystContext({tenant_id:'grupo_erick',template:plan.template,metric:plan.metric,period:plan.period});
+    await writeAnalystContext({tenant_id:'grupo_erick',template:plan.template,metric:plan.metric,period:plan.period,other_period:plan.other_period,store:plan.store});
    }
   }catch{
    response='Não consegui validar essa análise no banco. Não vou apresentar números presumidos.';

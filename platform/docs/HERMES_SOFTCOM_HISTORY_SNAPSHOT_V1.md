@@ -114,3 +114,19 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   conferido via cmp e importado com uid 1000 antes de qualquer stop.
 - Se gate de saúde falhar, diagnóstico privado .analyst-rollback-diagnostic.log
   modo 0600 antes do rollback. Sem aumento de heap nem nova PR.
+
+### Regressão de contexto em conversa real e correção
+- E2E do proprietário em 22/10/2026: 5 perguntas de analista foram
+  atendidas com source+time; contexto após ranking anual de produtos
+  interpretou incorretamente 'E em fevereiro?' como total de vendas.
+- Correção: safeContext valida assunto (products/stores/compare/period),
+  loja e segundo período. Acompanhamento sem mudança explícita mantém
+  a dimensão anterior. Após ranking de produtos 'E em fevereiro?'
+  continua produto, após ranking de lojas mantém loja, e após comparação
+  jan/2025 vs jan/2026 muda os dois meses para fevereiro.
+- Mudar explicitamente o assunto ('E quanto vendeu em fevereiro?')
+  retorna o indicador financeiro mensal; não herda produtos.
+- Contexto privado segue sem texto de conversas, somente IDs permitidos,
+  métrica e períodos. UI de cancelamentos remove número duplicado.
+- Deployment seguro v3 aceita como backup um executor anterior congelado
+  em releases/analyst-<SHA>.js; não presume worktree mutável.

@@ -824,3 +824,64 @@ test('analyst followup in owner session retains monetary metric when month chang
   assert.equal(runner.loadState(state,'history-analyst-context.json').period,'2026-02');
  }finally{fs.rmSync(state,{recursive:true,force:true});}
 });
+
+test('follow-up topic stays products, stores, or YoY comparison unless user explicitly switches',()=>{
+ const contexts=[
+  [{tenant_id:'grupo_erick',template:'products',period:'2026',metric:'records'},'E em fevereiro?',
+   {template:'products',period:'2026-02',metric:'records',other_period:null}],
+  [{tenant_id:'grupo_erick',template:'stores',period:'2026-06',metric:'records'},'E em maio?',
+   {template:'stores',period:'2026-05',metric:'records',other_period:null}],
+  [{tenant_id:'grupo_erick',template:'compare',period:'2025-01',other_period:'2026-01',metric:'money'},'E em fevereiro?',
+   {template:'compare',period:'2025-02',other_period:'2026-02',metric:'money'}],
+  [{tenant_id:'grupo_erick',template:'period',period:'2026-01',metric:'money',store:'CALCADOS'},'E em fevereiro?',
+   {template:'period',period:'2026-02',store:'CALCADOS',metric:'money'}],
+  [{tenant_id:'grupo_erick',template:'products',period:'2026',metric:'records'},'E quanto vendeu em fevereiro?',
+   {template:'period',period:'2026-02',metric:'money'}]
+ ];
+ for(const [prior,q,expected] of contexts){
+  const plan=analyst.planQuestion(q,prior);
+  assert.ok(plan,q);for(const [k,v] of Object.entries(expected))assert.equal(plan[k],v,q+' '+k);
+  assert.deepEqual(analyst.validate(plan),plan);
+ }
+ const invalid={tenant_id:'grupo_erick',template:'compare',period:'2025-01',metric:'money'};
+ assert.equal(analyst.safeContext(invalid),null);
+ assert.equal(analyst.safeContext({...invalid,other_period:'2026-07'}),null);
+ assert.equal(analyst.safeContext({...invalid,other_period:'2026-01',store:'DROP TABLE'}),null);
+});
+test('owner-only sequential product question followed by month retains product intent and source',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);runner.saveState(state,'owner.json',{owner_id:700});
+ const questions=['Qual produto mais vendido em 2026?','E em fevereiro?'];
+ let round=0;const plans=[],sent=[];
+ try{
+  for(let i=0;i<questions.length;i++)await runner.pollOnce({
+   stateDir:state,liveEnabled:true,clock:()=>Date.parse('2026-10-22T18:00:00Z')+i*1000,
+   api:async(method,payload)=>{
+    if(method==='getUpdates')return [update(99000+(++round),700,questions[i])];
+    if(method==='sendMessage')sent.push(payload.text);
+   },query:async()=>{throw Error('wrong_connector')},
+   readLive:async payload=>{
+    assert.equal(payload.shape,'analyst');
+    const p=payload.plan;plans.push(p);
+    return {tenant_id:'grupo_erick',mode:'online_aggregate',source:analyst.PRODUCT_SOURCE,
+     at:'2026-10-22T18:00:00Z',plan:p,
+     rows:[{code:'32452',name:'PRODUTO PROMOCIONAL GRUPO ERICK',items:25}]};
+   }
+  });
+  assert.deepEqual(plans.map(p=>p.template),['products','products']);
+  assert.deepEqual(plans.map(p=>p.period),['2026','2026-02']);
+  assert.match(sent[1],/Produtos por registros/);
+  assert.doesNotMatch(sent[1],/Registros: 3\.983/);
+  assert.equal(runner.loadState(state,'history-analyst-context.json').template,'products');
+  assert.equal(runner.loadState(state,'history-live-budget.json').count,2);
+ }finally{fs.rmSync(state,{recursive:true,force:true});}
+});
+test('period totals do not duplicate the requested count when cancellations are the metric',async()=>{
+ const p=analyst.planQuestion('Quantas vendas canceladas em junho 2026?');
+ const data=await analyst.execute({query:async()=>({rows:[{
+  records:'1334',cancelled:'58',noncancelled:'1276',amount:'165352.11',last_day:'2026-06-08'
+ }]})},p);
+ const answer=analyst.reply(data,p);
+ assert.equal((answer.match(/\b58\b/g)||[]).length,1);
+ assert.match(answer,/Total de registros: 1\.334/);
+ assert.match(answer,/08\/06/);
+});

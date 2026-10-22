@@ -10,8 +10,8 @@ LEGACY_WORKTREE=/home/hermesadmin/hermes-softcom-history-v1
 BASE=/home/hermesadmin/.hermes-telegram
 STATE="$BASE/state"
 OLD=hermes-telegram-private-v1
-BACKUP=hermes-telegram-private-preanalyst-safe-v2
-IMAGE=hermes-softcom-analyst-safe:v2
+BACKUP=hermes-telegram-private-preanalyst-safe-v3
+IMAGE=hermes-softcom-analyst-safe:v3
 PASS="$BASE/secret/softcom-history-db-password"
 CA=/home/hermesadmin/supabase-staging-root-ca.pem
 BOT="$BASE/secret/token"
@@ -66,7 +66,9 @@ fi
 [[ "$(docker inspect "$OLD" --format '{{.State.Health.Status}}')" == healthy ]] || deny bot_unhealthy
 [[ "$(count_pollers)" == 1 ]] || deny duplicate_pollers
 [[ "$(docker inspect hermes-read-pilot-v7 --format '{{.State.Health.Status}}')" == healthy ]] || deny read_pilot
-[[ "$(docker inspect "$OLD" --format '{{range .Mounts}}{{if eq .Destination "/app/scripts/run-hermes-telegram-private.js"}}{{.Source}}{{end}}{{end}}')" == "$LEGACY_WORKTREE/platform/services/api/scripts/run-hermes-telegram-private.js" ]] || deny unexpected_bot_mounts
+ACTIVE_SCRIPT="$(docker inspect "$OLD" --format '{{range .Mounts}}{{if eq .Destination "/app/scripts/run-hermes-telegram-private.js"}}{{.Source}}{{end}}{{end}}')"
+[[ "$ACTIVE_SCRIPT" =~ ^/home/hermesadmin/\.hermes-telegram/releases/analyst-[0-9a-f]{40}\.js$ ]] || deny unexpected_bot_mounts
+[[ -f "$ACTIVE_SCRIPT" && "$(stat -c '%a' "$ACTIVE_SCRIPT")" == 600 ]] || deny unsafe_active_runner
 ! docker container inspect "$BACKUP" >/dev/null 2>&1 || deny existing_backup
 echo PRECHECK_DATABASE_ONLY
 docker run --rm --network bridge --read-only --user 1000:1000 \

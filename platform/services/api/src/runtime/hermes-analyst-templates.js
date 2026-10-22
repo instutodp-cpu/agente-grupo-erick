@@ -23,7 +23,16 @@ function periodsOf(text){
  return out;
 }
 function safeContext(x){
- return x&&x.tenant_id===TENANT&&['period','compare','stores','products'].includes(x.template)&&isPeriod(x.period)&&['records','cancelled','money'].includes(x.metric)?x:null;
+ if(!x||x.tenant_id!==TENANT||!['period','compare','stores','products'].includes(x.template)||
+  !isPeriod(x.period)||!['records','cancelled','money'].includes(x.metric)||
+  x.store!=null&&!STORES.includes(x.store))return null;
+ if(x.template==='compare'&&(!isPeriod(x.other_period)||x.other_period.length!==x.period.length||
+   x.other_period===x.period))return null;
+ if(x.template!=='compare'&&x.other_period!=null)return null;
+ if(x.template==='products'&&(!x.period.startsWith('2026')||x.store))return null;
+ if(x.template==='stores'&&x.store)return null;
+ return {tenant_id:TENANT,template:x.template,period:x.period,other_period:x.other_period||null,
+  metric:x.metric,store:x.store||null};
 }
 function planQuestion(text,context=null){
  if(typeof text!=='string'||text.length>600||text.trim().length<2)return null;
@@ -48,9 +57,21 @@ function planQuestion(text,context=null){
  if(compare&&periods.length===1&&periods[0].startsWith('2026-'))periods=['2025-'+periods[0].slice(5),periods[0]];
  const product=/\b(produto|produtos|mercadoria|mercadorias)\b/.test(q);
  const storeWord=/\b(loja|lojas)\b/.test(q);
- const store=STORES.find(s=>q.includes(normalize(s)))||null;
+ const explicitBusinessMetric=/\b(venda|vendas|vendeu|vendemos|vendido|vendidos|faturamento|faturou|valor|receita|canceladas|cancelados|registros|quantas)\b/.test(q);
+ // A dimensionless follow-up inherits the previous subject, not merely its metric.
+ const inheritTopic=Boolean(follow&&prior&&!product&&!storeWord&&!explicitBusinessMetric&&
+  !/^(compare|comparando)\b/.test(q));
+ if(inheritTopic&&prior.template==='compare'&&periods.length===1&&
+   periods[0].length===7&&prior.period.length===7&&prior.other_period?.length===7){
+  const mm=periods[0].slice(4);
+  periods=[prior.period.slice(0,4)+mm,prior.other_period.slice(0,4)+mm];
+ }
+ const explicitStore=STORES.find(s=>q.includes(normalize(s)))||null;
+ const store=explicitStore||(inheritTopic&&prior.template==='period'?prior.store:null);
  const storeRanking=storeWord&&!store&&/\b(qual|quais|mais|maior|ranking|por|cada|melhor|pior)\b/.test(q);
- const template=product?'products':storeRanking?'stores':periods.length===2||compare?'compare':'period';
+ const template=product?'products':storeRanking?'stores':
+  inheritTopic&&['products','stores','compare'].includes(prior.template)?prior.template:
+  periods.length===2||compare?'compare':'period';
  if(template==='compare'&&(periods.length!==2||periods[0].length!==periods[1].length||periods[0]===periods[1]))return null;
  if(template==='products'&&(!periods[0].startsWith('2026')||periods.length!==1||store))return null;
  if(template!=='compare'&&periods.length!==1)return null;
@@ -153,8 +174,9 @@ function reply(data,requested){
  }else{
   const r=data.rows[0];if(!r)throw Error('analyst_total_missing');
   lines.push('Período: '+p.period+(p.store?' | loja '+p.store:''),
-   '• '+label(p.metric)+': '+f(measure(r,p.metric),p.metric),
-   '• Registros: '+nf.format(r.records),'• Marcados cancelados: '+nf.format(r.cancelled));
+   '• '+label(p.metric)+': '+f(measure(r,p.metric),p.metric));
+  if(p.metric!=='records')lines.push('• Total de registros: '+nf.format(r.records));
+  if(p.metric!=='cancelled')lines.push('• Marcados como cancelados: '+nf.format(r.cancelled));
  }
  if(p.metric==='money'&&p.template!=='products')
   lines.push('⚠️ valor_pago é um campo importado do Softcom; não é faturamento líquido, caixa recebido ou DRE conciliada.');
