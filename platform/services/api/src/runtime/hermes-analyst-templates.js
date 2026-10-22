@@ -176,6 +176,24 @@ function reply(data,requested){
    '• '+p.period+(p.period.length===4?' (jan-mai)':'')+': '+f(x,p.metric),
    '• '+p.other_period+(p.other_period.length===4?' (jan-mai)':'')+': '+f(y,p.metric),
    '• Diferença: '+(delta>0?'+':'')+f(delta,p.metric)+' ('+pct+')');
+  if(p.metric==='cancelled'){
+   // The verified aggregate always provides both the numerator and the base.
+   // Never claim that a cancellation rate cannot be calculated when both exist.
+   const rate=r=>r.records===0?null:r.cancelled/r.records;
+   const aRate=rate(a),bRate=rate(b);
+   const formatRate=r=>r===null?'indefinida (sem registros)':
+    new Intl.NumberFormat('pt-BR',{style:'percent',minimumFractionDigits:2,maximumFractionDigits:2}).format(r);
+   lines.push('• Base dos registros: '+p.period+' '+nf.format(a.records)+' registros; '+
+    p.other_period+' '+nf.format(b.records)+' registros.',
+    '• Taxa de registros marcados como cancelados: '+p.period+' '+formatRate(aRate)+
+    '; '+p.other_period+' '+formatRate(bRate)+'.');
+   if(aRate!==null&&bRate!==null){
+    const points=(bRate-aRate)*100;
+    const formatted=new Intl.NumberFormat('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}).format(points);
+    lines.push('• Variação da taxa: '+(points>0?'+':'')+formatted+' pontos percentuais.');
+   }
+   lines.push('⚠️ Taxa sobre cabeçalhos importados marcados como cancelados; não mede perda financeira.');
+  }
  }else if(p.template==='stores'){
   const sorted=[...data.rows].sort((a,b)=>measure(b,p.metric)-measure(a,p.metric)||a.label.localeCompare(b.label));
   lines.push('Ranking das lojas por '+label(p.metric)+' — '+p.period+':');

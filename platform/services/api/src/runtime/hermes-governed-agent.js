@@ -61,6 +61,7 @@ const ANSWER_PROMPT=[
  'O valor_pago Softcom é soma importada, NÃO faturamento líquido.',
  'NUNCA afirme queda anual 2025/2026 comparando 2025 inteiro com 2026 parcial. Para anuais use jan-mai dos dois anos, explicitando cobertura.',
  'Compras Homologação e histórico Softcom NÃO estão conciliados e têm datas diferentes.',
+ 'Quando evidências de cancelamentos incluírem total de registros e quantidade cancelada, use a taxa fornecida e sua variação em pontos percentuais. Não diga que os totais faltam. Não conclua perdas financeiras.',
  'Explique padrões e hipóteses como hipóteses; apresente riscos e até 3 próximos passos reversíveis.',
  'Pode sugerir, mas NUNCA executar, aprovar, pagar, publicar, alterar ou contatar terceiros.',
  'Responda em português em até 1.700 caracteres, sem URLs.'

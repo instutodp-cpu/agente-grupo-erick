@@ -1070,6 +1070,27 @@ test('year-on-year history compares only January through May of both years',asyn
  assert.match(txt,/2\.956\.645,04/);
  assert.doesNotMatch(txt,/-62,5%/);
 });
+test('annual cancelled comparisons expose verified denominators, rates and pp delta to the LLM',async()=>{
+ const p={tenant_id:'grupo_erick',template:'compare',period:'2025',
+  other_period:'2026',metric:'cancelled',store:null};
+ const data=await analyst.execute({query:async()=>({rows:[
+  {label:'2025',records:'21940',cancelled:'238',noncancelled:'21702',
+   amount:'2730133.04',last_day:'2025-05-31'},
+  {label:'2026',records:'24148',cancelled:'623',noncancelled:'23525',
+   amount:'2956645.04',last_day:'2026-05-31'}]})},
+  p,()=>new Date('2026-10-22T20:00:00Z'));
+ const txt=analyst.reply(data,p);
+ assert.match(txt,/21\.940 registros/);
+ assert.match(txt,/24\.148 registros/);
+ assert.match(txt,/1,08%/);
+ assert.match(txt,/2,58%/);
+ assert.match(txt,/\+1,50 pontos percentuais/);
+ assert.match(txt,/não mede perda financeira/);
+ const withoutBase={...data,rows:data.rows.map(r=>({...r,records:0,cancelled:0}))};
+ const empty=analyst.reply(withoutBase,p);
+ assert.match(empty,/indefinida \(sem registros\)/);
+ assert.doesNotMatch(empty,/Variação da taxa/);
+});
 test('June partial YoY and annual separately queried years are denied before SQL',async()=>{
  const bad={tenant_id:'grupo_erick',template:'compare',period:'2025-06',
   other_period:'2026-06',metric:'records',store:null};
