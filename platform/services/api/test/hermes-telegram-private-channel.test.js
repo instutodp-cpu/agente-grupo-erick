@@ -376,3 +376,64 @@ test('poller reads protected historical snapshot via existing state path',async(
   assert.doesNotMatch(log,/CALCADOS|nome_do_cliente|secret/i);
  }finally{fs.rmSync(d,{recursive:true,force:true});}
 });
+
+const historicalLive=require('../src/runtime/hermes-softcom-live-reader');
+test('dynamic historic aggregate supports month/store filters, fixed SQL and live attribution',async()=>{
+ const calls=[];
+ const client={query:async q=>{
+  calls.push(q);
+  return {rows:[{registered:'5933',cancelled:'267',last_day:'2026-05-31'}]};
+ }};
+ const result=await historicalLive.readHistoricalSales(client,{
+  tenant_id:'grupo_erick',month:'2026-05',store:'CALCADOS',shape:'total'
+ },()=>new Date('2026-10-21T23:00:00.000Z'));
+ assert.equal(result.mode,'online_aggregate');
+ assert.equal(result.source_table,'hermes_history.daily_sales_v1');
+ assert.equal(result.rows[0].registered,5933);
+ assert.equal(result.rows[0].marked_cancelled,267);
+ assert.equal(calls.length,1);
+ assert.match(calls[0].text,/hermes_history\.daily_sales_v1/);
+ assert.doesNotMatch(calls[0].text,/cadastro_clientes|nome_do_cliente|select \*/i);
+ assert.deepEqual(calls[0].values,['2026-05','CALCADOS']);
+ assert.equal(calls[0].query_timeout,5000);
+});
+test('dynamic historic aggregate never issues SQL for unsupported tenant, months, or injection',async()=>{
+ let calls=0;
+ const client={query:async()=>{calls++;return {rows:[]}}};
+ const invalid=[
+  {tenant_id:'personal',shape:'total'},
+  {tenant_id:'grupo_erick',month:'2026-07'},
+  {tenant_id:'grupo_erick',month:'2026-05;DROP TABLE'},
+  {tenant_id:'grupo_erick',store:'CALCADOS OR 1=1'},
+  {tenant_id:'grupo_erick',shape:'sql'},
+  {tenant_id:'grupo_erick',schema:'softcom_import',shape:'raw'}
+ ];
+ for(const p of invalid)await assert.rejects(
+  historicalLive.readHistoricalSales(client,p),/denied/);
+ assert.equal(calls,0);
+});
+test('dynamic historic aggregate handles typed rows, rejects unrecognized dimensions and bad counts',async()=>{
+ const p={tenant_id:'grupo_erick',shape:'months'};
+ const good={query:async()=>({rows:[
+  {label:'2026-01',registered:'4902',cancelled:'126'},
+  {label:'2026-05',registered:'5933',cancelled:'267'}]})};
+ const result=await historicalLive.readHistoricalSales(good,p);
+ assert.equal(result.rows.length,2);
+ for(const rows of [
+  [{label:'2026-07',registered:'1',cancelled:'0'}],
+  [{label:'2026-01',registered:'1',cancelled:'2'}],
+  [{label:'2026-01',registered:'0',cancelled:'0'},{label:'2026-01',registered:'0',cancelled:'0'}],
+  [{label:'2026-01',registered:'NaN',cancelled:'0'}],
+  Array.from({length:7},(_,i)=>({label:'2026-01',registered:String(i),cancelled:'0'}))
+ ])await assert.rejects(
+  historicalLive.readHistoricalSales({query:async()=>({rows})},p));
+ assert.match(historicalLive.SQL.total,/\$1::text/);
+ assert.match(historicalLive.SQL.total,/\$2::text/);
+ assert.deepEqual(Object.keys(historicalLive.SQL).sort(),['months','stores','total']);
+});
+test('dynamic historic aggregate is fail-closed on provider failures and absent connection',async()=>{
+ await assert.rejects(historicalLive.readHistoricalSales(null,{tenant_id:'grupo_erick'}));
+ await assert.rejects(historicalLive.readHistoricalSales(
+  {query:async()=>{throw Error('network_down')}},{tenant_id:'grupo_erick'}),/network_down/);
+ assert.throws(()=>historicalLive.validate({tenant_id:'other'}));
+});
