@@ -1000,11 +1000,72 @@ test('runner reserves daily agent budget before model calls and never stores tex
   assert.equal(history,4);
   assert.equal(commercial,4);
   assert.equal(messages.length,5);
-  assert.match(messages[4],/não pôde ser concluída/);
+  assert.match(messages[4],/limite privado de 4 análises com Codex/);
   assert.deepEqual(runner.loadState(state,'agent-llm-budget.json'),{date:'2026-10-22',turns:4});
   const files=fs.readdirSync(state).filter(x=>x.endsWith('.json'));
   for(const name of files)assert.doesNotMatch(fs.readFileSync(path.join(state,name),'utf8'),/Analise janeiro 2025/);
  }finally{fs.rmSync(state,{recursive:true,force:true})}
+});
+
+test('matched cancellation rate advice uses verified read without consuming LLM quota',async()=>{
+ const text='Compare as taxas de cancelamento de janeiro a maio de 2025 e 2026 do Grupo Erick. Informe os totais de registros, cancelados, percentuais e variação em pontos percentuais. Explique os riscos e recomende três ações prioritárias, sem confundir cancelamentos com perdas financeiras.';
+ assert.equal(core.cancellationRateRequest(text),true);
+ for(const q of [
+  'Analise os riscos de cancelamentos 2025 e 2026 sem taxas',
+  'Compare taxa de cancelamentos de janeiro a junho de 2025 e 2026',
+  'Compare taxa de cancelamentos de janeiro a maio de 2025 e 2027',
+  'Compare taxa de cancelamentos de janeiro a maio de 2025 e 2026 com CPF',
+  '/historico',
+ ])assert.equal(core.cancellationRateRequest(q),false,q);
+ const state=dir();fs.chmodSync(state,0o700);
+ runner.saveState(state,'owner.json',{owner_id:700});
+ runner.saveState(state,'agent-llm-budget.json',{date:'2026-10-22',turns:4});
+ const responses=[],history=[];
+ const clock=()=>Date.parse('2026-10-22T20:30:00Z');
+ const fixture={tenant_id:'grupo_erick',mode:'online_aggregate',
+  source:analyst.SOURCE,at:new Date(clock()).toISOString(),
+  plan:{tenant_id:'grupo_erick',template:'compare',period:'2025',other_period:'2026',metric:'cancelled',store:null},
+  rows:[
+   {label:'2025',records:21940,cancelled:238,amount:2730133.04,last_day:'2025-05-31'},
+   {label:'2026',records:24148,cancelled:623,amount:2956645.04,last_day:'2026-05-31'}]};
+ try{
+  await runner.pollOnce({
+   stateDir:state,clock,agentModel:{chat:async()=>{throw Error('LLM_MUST_NOT_RUN')}},
+   liveEnabled:true,query:async()=>{throw Error('OTHER_DOMAIN_DENIED')},
+   readLive:async arg=>{history.push(arg);return fixture},
+   api:async(method,payload)=>{
+    if(method==='getUpdates')return [update(330001,700,text)];
+    if(method==='sendMessage')responses.push(payload.text);
+   }
+  });
+  assert.equal(history.length,1);
+  assert.deepEqual(history[0].plan,fixture.plan);
+  assert.equal(responses.length,1);
+  for(const expected of ['21.940 registros','24.148 registros','1,08%','2,58%',
+   '+1,50 pontos percentuais','Orientações padronizadas']){
+   assert.ok(responses[0].includes(expected),expected);
+  }
+  assert.deepEqual(runner.loadState(state,'agent-llm-budget.json'),{date:'2026-10-22',turns:4});
+  assert.equal(runner.loadState(state,'history-live-budget.json').count,1);
+  const events=fs.readFileSync(path.join(state,'audit.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  assert.equal(events.at(-1).intent,'business_cancel_rate');
+  assert.equal(fs.statSync(path.join(state,'history-live-budget.json')).mode&0o777,0o600);
+  assert.doesNotMatch(fs.readFileSync(path.join(state,'audit.jsonl'),'utf8'),/Compare as taxas/);
+  await core.processUpdate({update:update(330002,701,text),ownerId:700,
+   query:async()=>{},send:async()=>{throw Error('sent_to_nonowner')},
+   readAnalyst:async()=>{throw Error('nonowner_query')}});
+ }finally{fs.rmSync(state,{recursive:true,force:true})}
+});
+test('cancellation rate guard preserves the history quota and fails closed',async()=>{
+ const text='Compare as taxas de cancelamento de janeiro a maio de 2025 e 2026 e recomende ações';
+ const out=[];
+ const base={update:update(340001,700,text),ownerId:700,
+  query:async()=>{},send:async(_,msg)=>out.push(msg),
+  agentEnabled:true,readAgent:async()=>{throw Error('LLM_DENIED')}};
+ await core.processUpdate({...base,readAnalyst:async()=>({denied_status:'history_budget_exhausted'})});
+ assert.match(out.pop(),/Limite diário de consultas históricas/);
+ await core.processUpdate({...base,readAnalyst:async()=>{throw Error('SQL_FAILED')}});
+ assert.match(out.pop(),/não pôde ser validada/);
 });
 
 const codexBridge=require('../src/runtime/hermes-codex-login-bridge');

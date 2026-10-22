@@ -241,3 +241,22 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   or alter underlying historical records. Never store owner message body.
 - Added three-evidence regression and rollout health gate; same PR, v8,
   exact HEAD / CI / old-release backup and automatic rollback.
+
+### 22/10/2026 — rate-analysis quota incident and deterministic fallback
+- Staging owner query at 20:20:18Z got a generic safety answer at 20:20:19Z.
+  Agent daily budget already stood at 4/4 verified prior turns. No evidence
+  of model or database failure in that request; agent_daily_quota triggered
+  before model invocation but was swallowed by the generic Telegram handler.
+- Preserve the 4-turn LLM limit; do not reset daily budget, fabricate an
+  answer, retry Codex or silently grant more model calls.
+- Owner-only, exact January–May 2025/2026 cancellation-rate requests use
+  the existing parametrized annual matched-period comparison (cancelled)
+  without running the model. The historical read quota is enforced and source,
+  query time, denominators, rates and pp delta remain visible. Advice text is
+  explicitly predefined and non-causal (no financial loss extrapolation).
+- All other advisory prompts get an explicit UTC daily-model-quota explanation
+  if blocked by that reason. Other failures keep fail-closed generic response.
+- Specific regression: owner gate, planner bypass, unchanged model budget,
+  historical budget accounted, quota exhaustion, malformed queries, source
+  formatting and safety. Rollback-safe v9a staging script uses a unique backup
+  name, keeping v9 and v8 backups intact; promotion still CI-gated.

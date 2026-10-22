@@ -49,6 +49,23 @@ function advisoryRequest(text){
  if(q.startsWith('/'))return false;
  return /\b(?:analise|analisar|avaliar|avaliacao|diagnostico|identifique|identificar|investigue|investigar|prioridade|prioridades|priorize|priorizar|problema|problemas|risco|riscos|insight|insights|melhoria|melhorias|recomende|recomendar|sugira|sugerir|sugestao|sugestoes|evidencia|evidencias|explique|explicar|considerando|proximos passos)\b/.test(q);
 }
+// Fixed, source-verified historic comparison, not a governed LLM turn.
+// Strict grammar prevents unrelated advisory questions being silently demoted.
+function cancellationRateRequest(text){
+ if(typeof text!=='string'||text.length>600)return false;
+ const q=analyst.normalize(text);
+ if(q.startsWith('/')||!/\b(?:taxas?|percentuais?)\b/.test(q)||
+  !/\bcancelament(?:o|os)\b|\bcancelad(?:os|as)\b/.test(q)||
+  !/\b(?:janeiro a maio|jan-mai|jan a maio)\b/.test(q))return false;
+ const years=[...q.matchAll(/\b20\d{2}\b/g)].map(m=>m[0]);
+ if(years.length!==2||!years.includes('2025')||!years.includes('2026'))return false;
+ if(/\b(?:fevereiro|marco|abril|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/.test(q))return false;
+ // Hard-denied subjects never fall into an automatic historical lookup.
+ if(/\b(?:cpf|cnpj|senha|token|pix|transferencia|pagar|apagar|sql|clientes)\b/.test(q))return false;
+ return true;
+}
+const CANCEL_RATE_PLAN=Object.freeze({tenant_id:'grupo_erick',template:'compare',
+ period:'2025',other_period:'2026',metric:'cancelled',store:null});
 function privateMessage(update){
  const m=update?.message;
  if(!Number.isSafeInteger(update?.update_id)||update.update_id<0||
@@ -246,6 +263,35 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
   return {kind:'paired'};
  }
  if(msg.userId!==ownerId)return {kind:'unauthorized'};
+ // Explicit matched-year cancellation rates are a deterministic read path.
+ // This is not a backdoor to LLM quota: no model call, no write, one bounded
+ // historical template governed by the existing history budget and owner gate.
+ if(cancellationRateRequest(msg.text)){
+  let response,cache='miss';
+  try{
+   const data=await readAnalyst(CANCEL_RATE_PLAN);
+   if(data?.denied_status==='history_budget_exhausted'){
+    response='Limite diário de consultas históricas atingido. Não consultei dados novos nem estimei taxas.';
+   }else{
+    response=analyst.reply(data,CANCEL_RATE_PLAN);
+    if(data.cached===true){
+     cache='hit';
+     response+='\n\n⏱️ Consulta validada reutilizada do cache, com data da fonte acima.';
+    }
+    if(advisoryRequest(msg.text)){
+     response+='\n\nOrientações padronizadas (hipóteses, não causas comprovadas):'+
+      '\n1. Auditar uma amostra de cancelamentos por mês, loja e motivo.'+
+      '\n2. Conferir lançamentos, estornos e duplicidades com os registros oficiais.'+
+      '\n3. Conciliar valores com ERP e recebimentos antes de avaliar perdas e tomar decisões.'+
+      '\n⚠️ A taxa de cancelamento não mede prejuízo, receita perdida ou liquidez.';
+    }
+   }
+  }catch{
+   response='A comparação histórica não pôde ser validada. Não apresentarei taxas presumidas.';
+  }
+  await send(msg.userId,response);
+  return {kind:'answered',intent:'business_cancel_rate',cache,source:'softcom_analyst'};
+ }
  // Owner-only advisory requests go to the governed LLM so it can retrieve
  // business evidence and produce recommendations with fresh verified tools.
  // Direct numeric questions and slash commands retain fixed, cheaper routes.
@@ -266,8 +312,10 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
       !result.answer.startsWith('🧠 Hermes — análise orientada por evidências'))
     throw Error('agent_output_invalid');
    response=result.answer;
-  }catch{
-   response='Esta análise não pôde ser concluída com fontes verificáveis e ferramentas autorizadas. Não executei nenhuma ação.';
+  }catch(error){
+   response=error?.message==='agent_daily_quota'?
+    'O limite privado de 4 análises com Codex por dia (UTC) foi atingido. Não fiz nova consulta nem executei ações. Consultas históricas numéricas autorizadas continuam disponíveis dentro da quota própria.':
+    'Esta análise não pôde ser concluída com fontes verificáveis e ferramentas autorizadas. Não executei nenhuma ação.';
   }
   await send(msg.userId,response);
   return {kind:'answered',intent:'governed_agent',source:'governed_read_only'};
@@ -342,4 +390,4 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  await send(msg.userId,response);
  return {kind:'answered',intent,cache:cacheStatus};
 }
-module.exports={ROUTES,HELP,intentFor,advisoryRequest,privateMessage,pairValid,hermesReply,verifiedCache,cachedReply,safeHistorySnapshot,historicalReply,processUpdate};
+module.exports={ROUTES,HELP,intentFor,advisoryRequest,privateMessage,pairValid,hermesReply,verifiedCache,cachedReply,safeHistorySnapshot,historicalReply,cancellationRateRequest,processUpdate};
