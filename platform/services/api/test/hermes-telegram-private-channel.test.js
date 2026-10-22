@@ -1826,3 +1826,101 @@ test('finops real provider invocation telemetry records success and a cached rep
   assert.doesNotMatch(JSON.stringify(s),/Analise as vendas|Comparação histórica|994901/);
  }finally{fs.rmSync(state,{recursive:true,force:true})}
 });
+
+test('FinOps V15 counts deterministic routes and migrates historical V14 aggregate safely',()=>{
+ const now=Date.parse('2026-10-22T22:30:00Z');
+ const event=(route,hit=false)=>({kind:'direct_outcome',route,ok:true,duration_ms:0,cache_hit:hit});
+ let data=finopsLedger.bump(null,event('direct_history'),now);
+ data=finopsLedger.bump(data,event('direct_history',true),now);
+ data=finopsLedger.bump(data,event('direct_domain',true),now);
+ data=finopsLedger.bump(data,event('direct_decision'),now);
+ data=finopsLedger.bump(data,event('direct_information'),now);
+ const s=finopsLedger.snapshot(data,now);
+ assert.equal(s.direct_requests,5);
+ assert.equal(s.direct_history,2);
+ assert.equal(s.direct_domain,1);
+ assert.equal(s.direct_decision,1);
+ assert.equal(s.direct_information,1);
+ assert.equal(s.direct_cache_hits,2);
+ assert.equal(s.provider_calls,0);
+ assert.equal(s.tokens_in,null);
+ assert.match(finopsLedger.response(data,now),/Respostas por rotas diretas \(0 LLM\): 5/);
+ assert.match(finopsLedger.response(data,now),/Cache nas rotas diretas: 2/);
+ assert.throws(()=>finopsLedger.validate({...data,tenant_id:'personal'}));
+ assert.throws(()=>finopsLedger.validate({...data,days:[{...s,direct_requests:4}]}));
+ assert.throws(()=>finopsLedger.bump(data,{...event('direct_decision'),cache_hit:true,ok:false},now));
+ const old=finopsLedger.bump(null,{kind:'provider_call',route:'other',
+  ok:true,duration_ms:330,cache_hit:false},now);
+ const legacy={...old,schema:1,days:old.days.map(day=>Object.fromEntries(
+  Object.entries(day).filter(([key])=>!key.startsWith('direct_'))))};
+ const upgraded=finopsLedger.validate(legacy);
+ assert.equal(upgraded.schema,2);
+ assert.equal(upgraded.days[0].provider_calls,1);
+ assert.equal(upgraded.days[0].duration_ms,330);
+ assert.equal(upgraded.days[0].direct_requests,0);
+ const later=finopsLedger.bump(legacy,event('direct_history'),now);
+ assert.equal(finopsLedger.snapshot(later,now).provider_calls,1);
+ assert.equal(finopsLedger.snapshot(later,now).direct_history,1);
+});
+
+test('V15 no-Codex end-to-end: decisions, help and economy show real direct counters',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);
+ runner.saveState(state,'owner.json',{owner_id:700});
+ let calls=0,requests=0;const replies=[];
+ const time=Date.parse('2026-10-22T22:35:00Z');
+ const send=async text=>runner.pollOnce({stateDir:state,clock:()=>time,
+  liveEnabled:true,
+  api:async(method,payload)=>{
+   if(method==='getUpdates')return [update(997000+(++requests),700,text)];
+   if(method==='sendMessage')replies.push(payload.text);
+  },
+  query:async()=>{calls++;throw Error('external_query_not_allowed')},
+  readLive:async()=>{calls++;throw Error('live_query_not_allowed')}
+ });
+ try{
+  await send('/decisoes');
+  await send('/ajuda');
+  await send('/economia');
+  assert.equal(calls,0);
+  assert.equal(runner.loadState(state,'agent-llm-budget.json'),null);
+  assert.match(replies[2],/Respostas por rotas diretas \(0 LLM\): 2/);
+  assert.match(replies[2],/Decisões: 1/);
+  assert.match(replies[2],/Comandos informativos: 1/);
+  assert.match(replies[2],/Chamadas reais ao modelo: 0/);
+  const raw=fs.readFileSync(path.join(state,'ai-finops-daily.json'),'utf8');
+  assert.doesNotMatch(raw,/\/(economia|decisoes|ajuda)|99700/);
+  assert.equal(fs.statSync(path.join(state,'ai-finops-daily.json')).mode&0o777,0o600);
+  assert.equal(finopsLedger.snapshot(runner.loadState(state,'ai-finops-daily.json'),time).direct_requests,2);
+ }finally{fs.rmSync(state,{recursive:true,force:true})}
+});
+
+test('V15 historical SQL cache produces direct FinOps metrics with zero Codex',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);
+ runner.saveState(state,'owner.json',{owner_id:700});
+ const time=Date.parse('2026-10-22T22:35:00Z');
+ const question='Compare quantas vendas tivemos em janeiro de 2025 e janeiro de 2026';
+ let requests=0,sql=0;const answers=[];
+ const run=()=>runner.pollOnce({stateDir:state,clock:()=>time,liveEnabled:true,
+  api:async(method,payload)=>{
+   if(method==='getUpdates')return [update(998000+(++requests),700,question)];
+   if(method==='sendMessage')answers.push(payload.text);
+  },
+  readLive:async()=>{sql++;return agentEvidence},
+  query:async()=>{throw Error('unauthorized_integration')}
+ });
+ try{
+  await run();await run();
+  assert.equal(sql,1);
+  assert.equal(answers.length,2);
+  assert.match(answers[0],/Comparação/);
+  assert.match(answers[1],/Resposta reutilizada de cache validado/);
+  const metrics=finopsLedger.snapshot(runner.loadState(state,'ai-finops-daily.json'),time);
+  assert.equal(metrics.direct_requests,2);
+  assert.equal(metrics.direct_history,2);
+  assert.equal(metrics.direct_cache_hits,1);
+  assert.equal(metrics.provider_calls,0);
+  assert.equal(metrics.tokens_in,null);
+  assert.equal(runner.loadState(state,'agent-llm-budget.json'),null);
+  assert.equal(runner.loadState(state,'history-live-budget.json').count,1);
+ }finally{fs.rmSync(state,{recursive:true,force:true})}
+});

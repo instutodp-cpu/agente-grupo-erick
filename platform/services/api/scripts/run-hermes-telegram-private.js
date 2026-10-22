@@ -335,6 +335,27 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     saveState(stateDir,'owner.json',{owner_id:id,bound_at:clock()});
    }
   });
+  // Every answered, owner-authenticated deterministic route is observed,
+  // independently of Codex quota. /economia itself is never counted.
+  // Counts mean bot responses, not proof of valid database contents.
+  if(result.kind==='answered'&&result.intent!=='governed_agent'&&
+     result.intent!=='inference_finops'){
+   const kind=result.intent;
+   const route=['business_cancel_rate','business_analyst','historico_live',
+    'historico','historico_lojas','historico_meses'].includes(kind)?
+     'direct_history':
+     ['compras','lotoia'].includes(kind)?'direct_domain':
+     kind==='owner_decision'?'direct_decision':
+     ['help','status'].includes(kind)?'direct_information':null;
+   if(route){
+    try{
+     const old=loadState(stateDir,'ai-finops-daily.json');
+     saveState(stateDir,'ai-finops-daily.json',finops.bump(old,{
+      kind:'direct_outcome',route,ok:true,duration_ms:0,
+      cache_hit:result.cache==='hit'},clock()));
+    }catch{} // optional telemetry never changes the owner reply
+   }
+  }
   if(result.intent==='governed_agent'){
    try{
     const old=loadState(stateDir,'ai-finops-daily.json');

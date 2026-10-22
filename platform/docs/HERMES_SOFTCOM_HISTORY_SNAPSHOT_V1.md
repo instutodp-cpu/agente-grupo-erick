@@ -412,3 +412,31 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
 - Implantação isolada no mesmo PR do segundo cérebro: expected SHA,
   CI completo, rollback V13 preservado, um poller, staging-only,
   fail-closed e sem merge.
+
+## Hermes V15 — contabilizar rotas determinísticas sem gastar Codex
+- Correção de lacuna da V14: o relatório `/economia` antes
+  contabilizava apenas o fluxo governado; consultas diretas
+  históricas, Compras/LotoIA, memória owner-only e comandos de
+  ajuda/status podiam produzir respostas sem aparecer no painel.
+- A V15 acrescenta contadores separados de **respostas diretas**
+  (histórico, dois apps homologados, decisões humanas e comandos
+  informativos) e de acertos verificados de cache determinístico.
+  Não inclui o próprio `/economia` na contagem. Uma resposta
+  contabilizada NÃO garante que a origem retornou dados válidos:
+  também pode ter sido uma resposta de limite/erro; não exibir
+  isso como economia financeira ou sucesso empresarial.
+- Sem criar LLM, alterar quotas, capturar conteúdos das mensagens
+  ou persistir identificadores pessoais. Continua permitido ao
+  proprietário consultar `/economia` com zero chamadas.
+- O esquema de métricas migra de V14/schema=1 para schema=2,
+  preservando os agregados coletados e iniciando contadores diretos
+  em zero. Validação fail-closed contra tenant incorreto, forma
+  inesperada, overflow ou somas incompatíveis. Arquivo 0600;
+  staging e histórico agregado de até sete dias.
+- Homologação E2E sintética: `/decisoes`, `/ajuda`, `/economia`
+  sem Codex e sem SQL; duas perguntas idênticas de histórico
+  resultam em uma única consulta SQL, um cache-hit e zero turnos
+  do Codex. O teste de integração preserva o limite de 4 turnos.
+- Rollback versionado V14; mesmas pré-condições de SHA exato,
+  CI obrigatório, único poller, leitura empresarial, kill switch
+  e autorização humana para merge e eventuais operações reais.
