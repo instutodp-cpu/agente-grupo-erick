@@ -1745,3 +1745,84 @@ test('fetch timestamp changes never defeat identical business evidence fingerpri
   {source:analyst.SOURCE,summary:summary.replace('4.226','4.227')}
  ]}));
 });
+
+const finopsLedger=require('../src/runtime/hermes-inference-finops');
+test('finops ledger keeps bounded source-free counters and unavailable usage explicit',()=>{
+ const t=Date.parse('2026-10-22T20:30:00Z');
+ let store=finopsLedger.bump(null,{kind:'provider_call',route:'other',
+  ok:true,duration_ms:431,cache_hit:false},t);
+ store=finopsLedger.bump(store,{kind:'outcome',route:'static_verified_history_v1',
+  ok:true,duration_ms:0,cache_hit:false},t);
+ store=finopsLedger.bump(store,{kind:'outcome',route:'verified_answer_cache_v1',
+  ok:true,duration_ms:0,cache_hit:true},t);
+ const result=finopsLedger.snapshot(store,t);
+ assert.equal(result.provider_calls,1);
+ assert.equal(result.provider_ok,1);
+ assert.equal(result.provider_fail,0);
+ assert.equal(result.duration_ms,431);
+ assert.equal(result.requests,2);
+ assert.equal(result.zero_model,1);
+ assert.equal(result.cache_hits,1);
+ assert.equal(result.static_route,1);
+ assert.equal(result.tokens_in,null);
+ assert.equal(result.cost_usd,null);
+ assert.match(finopsLedger.response(store,t),/Tokens\/custo: indisponíveis/);
+ assert.match(finopsLedger.response(store,t),/431 ms/);
+ assert.doesNotMatch(JSON.stringify(store),/senha|prompt|comercial|Bearer/i);
+ assert.throws(()=>finopsLedger.validate({...store,tenant_id:'personal'}));
+ assert.throws(()=>finopsLedger.validate({...store,days:[{...result,cost_usd:0}]}));
+ assert.throws(()=>finopsLedger.bump(store,{kind:'provider_call',
+  route:'other',ok:true,duration_ms:999999,cache_hit:false},t));
+});
+test('private finops command is owner-only and needs no LLM or business tools',async()=>{
+ const sent=[];let finopsReads=0;
+ const base={ownerId:700,update:update(999901,700,'/economia'),
+  query:async()=>{throw Error('query_not_allowed')},
+  readAgent:async()=>{throw Error('model_not_allowed')},
+  readFinops:async()=>{finopsReads++;return null},
+  send:async(_,value)=>sent.push(value)};
+ const ok=await core.processUpdate(base);
+ assert.equal(ok.intent,'inference_finops');
+ assert.equal(finopsReads,1);
+ assert.match(sent[0],/Economia de IA/);
+ assert.match(sent[0],/Tokens\/custo: indisponíveis/);
+ assert.equal((await core.processUpdate({...base,update:update(999902,701,'/economia')})).kind,'unauthorized');
+ assert.equal(finopsReads,1);
+ assert.equal(sent.length,1);
+});
+
+test('finops real provider invocation telemetry records success and a cached repeat',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);
+ runner.saveState(state,'owner.json',{owner_id:700});
+ let requests=0,modelCalls=0,sqlReads=0;
+ const goal='Analise as vendas de janeiro de 2025 e janeiro de 2026 e recomende melhorias';
+ const time=Date.parse('2026-10-22T20:30:00Z');
+ const issue=()=>runner.pollOnce({
+  stateDir:state,clock:()=>time,liveEnabled:true,
+  agentModel:{chat:async()=>{modelCalls++;
+   return 'Comparação histórica tem limites; auditar a amostra e conciliar antes de fazer compromissos.';}},
+  api:async(method,payload)=>{
+   if(method==='getUpdates')return [update(994901+(++requests),700,goal)];
+   if(method==='sendMessage')return true;
+  },
+  readLive:async()=>{sqlReads++;return agentEvidence},
+  query:async()=>{throw Error('outside_allowed_scope')}
+ });
+ try{
+  await issue();
+  await issue();
+  assert.equal(modelCalls,1);
+  assert.equal(sqlReads,2);
+  const s=finopsLedger.snapshot(runner.loadState(state,'ai-finops-daily.json'),time);
+  assert.equal(s.provider_calls,1);
+  assert.equal(s.provider_ok,1);
+  assert.equal(s.requests,2);
+  assert.equal(s.cache_hits,1);
+  assert.equal(s.static_route,1);
+  assert.equal(s.tokens_in,null);
+  assert.equal(s.model_id,'unreported');
+  assert.equal(fs.statSync(path.join(state,'ai-finops-daily.json')).mode&0o777,0o600);
+  assert.equal(runner.loadState(state,'agent-llm-budget.json').turns,1);
+  assert.doesNotMatch(JSON.stringify(s),/Analise as vendas|Comparação histórica|994901/);
+ }finally{fs.rmSync(state,{recursive:true,force:true})}
+});

@@ -11,6 +11,7 @@ const governed=require('../src/runtime/hermes-governed-agent');
 const businessMemory=require('../src/runtime/hermes-business-evidence-memory');
 const ownerDecisions=require('../src/runtime/hermes-owner-decision-memory');
 const answerCache=require('../src/runtime/hermes-verified-answer-cache');
+const finops=require('../src/runtime/hermes-inference-finops');
 const {hermesReply}=require('../src/runtime/hermes-telegram-private-channel');
 const STATE='/var/lib/hermes-telegram';
 const TELEGRAM_ORIGIN='https://api.telegram.org';
@@ -38,7 +39,8 @@ function loadState(dir,name){
   try{
    const st=fs.fstatSync(fd);
    const limit=name==='history-analyst-cache.json'?16384:
-    ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json'].includes(name)?32768:2048;
+    ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json'].includes(name)?32768:
+    name==='ai-finops-daily.json'?4096:2048;
    if(!st.isFile()||(st.mode&0o777)!==0o600||st.size>limit)
     throw Error('state_file_unsafe');
    return JSON.parse(fs.readFileSync(fd,'utf8'));
@@ -49,7 +51,8 @@ function saveState(dir,name,data){
  const file=path.join(dir,name),temp=path.join(dir,'.'+name+'.new');
  const serialized=JSON.stringify(data)+'\n';
  const limit=name==='history-analyst-cache.json'?16384:
-    ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json'].includes(name)?32768:2048;
+    ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json'].includes(name)?32768:
+    name==='ai-finops-daily.json'?4096:2048;
  if(Buffer.byteLength(serialized,'utf8')>limit)throw Error('state_file_too_large');
  const fd=fs.openSync(temp,fs.constants.O_WRONLY|fs.constants.O_CREAT|
   fs.constants.O_EXCL|fs.constants.O_NOFOLLOW,0o600);
@@ -185,6 +188,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
   const result=await processUpdate({
    update:item,ownerId:owner?.owner_id??null,pairing,
    clock,query,
+   readFinops:()=>finops.validate(loadState(stateDir,'ai-finops-daily.json')),
    readDecisions:()=>{
     const data=loadState(stateDir,'owner-decisions.json');
     return ownerDecisions.validateStore(data,clock());
@@ -230,7 +234,22 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
       saveState(stateDir,'agent-llm-budget.json',{date:today,turns:turns+1});
       reserved=true;
      }
-     return agentModel.chat(...args);
+     const start=Date.now();
+     let ok=false;
+     try{
+      const output=await agentModel.chat(...args);
+      ok=true;
+      return output;
+     }finally{
+      // Model-call observation is bounded metadata only. Never log payloads.
+      const elapsed=Math.max(0,Math.min(90000,Date.now()-start));
+      try{
+       const old=loadState(stateDir,'ai-finops-daily.json');
+       saveState(stateDir,'ai-finops-daily.json',finops.bump(old,{
+        kind:'provider_call',route:'other',ok,duration_ms:elapsed,
+        cache_hit:false},clock()));
+      }catch{} // telemetry is not an authorization bypass or a billing ledger
+     }
     }};
     return governed.runTurn({
      goal,model:meteredModel,clock,
@@ -316,6 +335,17 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     saveState(stateDir,'owner.json',{owner_id:id,bound_at:clock()});
    }
   });
+  if(result.intent==='governed_agent'){
+   try{
+    const old=loadState(stateDir,'ai-finops-daily.json');
+    const policy=finops.ROUTES.includes(result.planning_policy)?
+     result.planning_policy:'other';
+    saveState(stateDir,'ai-finops-daily.json',finops.bump(old,{
+     kind:'outcome',route:policy,ok:result.llm_calls!==undefined,
+     duration_ms:0,cache_hit:result.cache==='hit'&&result.llm_calls===0
+    },clock()));
+   }catch{} // do not rewrite successful Telegram replies on telemetry failure
+  }
   audit(stateDir,{at:new Date(clock()).toISOString(),
    event:'outcome',update_id:item.update_id,
    outcome:result.kind,intent:result.intent||null,

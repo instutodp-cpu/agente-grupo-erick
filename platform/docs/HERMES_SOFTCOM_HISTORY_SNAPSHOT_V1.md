@@ -378,3 +378,37 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   kill switch ou provedores habilitados.
 - Limitação: é cache exato com digest de fonte, NÃO pesquisa semântica.
   Benefício real depende da repetição de perguntas e de evidências iguais.
+
+## Economia de inferência V14 — FinOps real, sem tokens inventados
+- A execução real em staging usa **Codex Login por socket local**; o
+  bridge atual devolve texto, não devolve contagem de tokens, custo
+  faturado ou identificador do modelo subjacente. Por isso a V14
+  **não calcula custo/tokens** a partir do tamanho da resposta.
+- O novo registro empresarial `ai-finops-daily.json`, privado no volume
+  de staging (0700/0600), acumula até sete dias de métricas agregadas:
+  quantidade de chamadas reais ao modelo, sucesso/falha, latência,
+  solicitações ao fluxo de análise, rotas de planejamento fixo/modelo,
+  cache de síntese comprovado e uso de zero chamadas ao modelo.
+  Nenhum texto de mensagens, respostas, dados pessoais, tokens ou chave
+  pode entrar nessa estrutura. Dados anteriores à ativação não são
+  inventados nem reconstruídos.
+- O comando owner-only `/economia` lê essas métricas localmente sem
+  fazer chamada ao Codex, Supabase, TypeSafe JEV ou outras ferramentas.
+  Se o registro estiver inválido, apresenta métricas indisponíveis.
+- A medição ocorre ao redor de cada chamada real de `model.chat`,
+  inclusive em falhas. As respostas reutilizadas de cache não
+  aumentam o contador de chamadas. A quota existente continua sendo
+  reservada imediatamente antes da chamada ao provedor.
+- A coleta é **observabilidade, não fonte de faturamento**. Sem
+  telemetria de usage do provedor, tokens, gasto em USD/BRL e modelo
+  exato permanecem marcados como indisponíveis. Uma falha opcional
+  de registro não autoriza modelo extra, mutação ou bypass da quota.
+- Roteamento modelo-ideal: o Hermes já tem modos zero LLM, síntese
+  simples e planejador governado. Não habilitar novos modelos,
+  fallback externo, financiamento cruzado, nem trocar o provedor
+  autenticado sem contratos, chaves, preços, quality gates e
+  autorização humana específicos. O plugin JEV do ChatGPT não
+  fornece automaticamente credencial à VPS.
+- Implantação isolada no mesmo PR do segundo cérebro: expected SHA,
+  CI completo, rollback V13 preservado, um poller, staging-only,
+  fail-closed e sem merge.

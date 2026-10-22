@@ -5,6 +5,7 @@ const {parseSalesCommand,historicalLiveReply}=require('./hermes-softcom-live-cha
 const analyst=require('./hermes-analyst-templates');
 const governed=require('./hermes-governed-agent');
 const ownerDecisions=require('./hermes-owner-decision-memory');
+const finops=require('./hermes-inference-finops');
 const ROUTES=Object.freeze({
  compras:'/internal/commercial-read-pilot/brief',
  lotoia:'/internal/lotoia-read-pilot/health',status:'/health'
@@ -16,6 +17,7 @@ const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
  'Comandos antigos: /vendas 2026-05, /produtos 2026-05.\n'+
  'Também aceito "resumo das compras" e "situação do LotoIA".\n'+
  'Memória de decisões: /decisao (propor, confirmar, cancelar) e /decisoes.\n'+
+ 'Métricas privadas de IA: /economia.\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const num=new Intl.NumberFormat('pt-BR');
@@ -244,7 +246,8 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  readLive=async()=>null,
  readAnalystContext=async()=>null,writeAnalystContext=async()=>{},
  readAnalyst=async()=>null,readAgent=async()=>null,agentEnabled=false,
- readDecisions=async()=>null,writeDecisions=async()=>{}}){
+ readDecisions=async()=>null,writeDecisions=async()=>{},
+ readFinops=async()=>null}){
  const msg=privateMessage(update);
  if(!msg)return {kind:'ignored'};
  if(typeof send!=='function'||typeof query!=='function')
@@ -266,6 +269,13 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
   return {kind:'paired'};
  }
  if(msg.userId!==ownerId)return {kind:'unauthorized'};
+ if(msg.text==='/economia'){
+  let answer;
+  try{answer=finops.response(await readFinops(),clock());}
+  catch{answer='Métricas de IA indisponíveis ou inconsistentes; não serão estimadas.';}
+  await send(msg.userId,answer);
+  return {kind:'answered',intent:'inference_finops',source:'local_aggregate'};
+ }
  // The owner explicitly proposes then confirms a structured human decision.
  // Never promote model advice automatically, and never grant execution rights.
  if(ownerDecisions.isCommand(msg.text)){
