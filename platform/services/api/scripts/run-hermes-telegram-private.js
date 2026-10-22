@@ -113,6 +113,10 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
     environment.HERMES_EXECUTION_ENABLED!=='false'||
     environment.HERMES_EXECUTION_KILL_SWITCH!=='true')
   throw Error('history_live_stage_denied');
+ const host=environment.HERMES_HISTORY_POOLER_HOST;
+ // The shared session-pooler cluster index is project-specific: never guess it.
+ if(typeof host!=='string'||!/^aws-[0-9]+-sa-east-1\.pooler\.supabase\.com$/.test(host))
+  throw Error('history_pooler_host_unverified');
  const password=readSecret(environment.HERMES_HISTORY_PASSWORD_FILE);
  const ca=readSecret(environment.HERMES_HISTORY_CA_FILE);
  if(!ca.startsWith('-----BEGIN CERTIFICATE-----')||
@@ -124,8 +128,8 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
  if(typeof driver?.Client!=='function')throw Error('history_db_driver_missing');
  return async params=>{
   const client=new driver.Client({
-   host:'db.yxmdrrwqxwzsdgcgskrm.supabase.co',
-   port:5432,database:'postgres',user:'hermes_history_login',
+   host,port:5432,database:'postgres',
+   user:'hermes_history_login.yxmdrrwqxwzsdgcgskrm',
    password,ssl:{rejectUnauthorized:true,ca},
    application_name:'hermes-history-staging-v1',
    connectionTimeoutMillis:4000,query_timeout:5000,

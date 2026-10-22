@@ -545,8 +545,8 @@ test('live PostgreSQL connector validates protected TLS CA and minimum-privilege
  class Client{
   constructor(cfg){
    checked=true;
-   assert.equal(cfg.user,'hermes_history_login');
-   assert.equal(cfg.host,'db.yxmdrrwqxwzsdgcgskrm.supabase.co');
+   assert.equal(cfg.user,'hermes_history_login.yxmdrrwqxwzsdgcgskrm');
+   assert.equal(cfg.host,'aws-7-sa-east-1.pooler.supabase.com');
    assert.equal(cfg.database,'postgres');
    assert.equal(cfg.ssl.rejectUnauthorized,true);
    assert.match(cfg.ssl.ca,/BEGIN CERTIFICATE/);
@@ -560,7 +560,8 @@ test('live PostgreSQL connector validates protected TLS CA and minimum-privilege
  const env={HERMES_HISTORY_LIVE_ENABLED:'true',
   HERMES_DEPLOYMENT_STAGE:'staging',
   HERMES_EXECUTION_ENABLED:'false',HERMES_EXECUTION_KILL_SWITCH:'true',
-  HERMES_HISTORY_PASSWORD_FILE:pf,HERMES_HISTORY_CA_FILE:ca};
+  HERMES_HISTORY_PASSWORD_FILE:pf,HERMES_HISTORY_CA_FILE:ca,
+  HERMES_HISTORY_POOLER_HOST:'aws-7-sa-east-1.pooler.supabase.com'};
  try{
   const run=runner.createLiveQuery(env,()=>({Client}));
   const result=await run({tenant_id:'grupo_erick',month:'2026-05'});
@@ -570,4 +571,19 @@ test('live PostgreSQL connector validates protected TLS CA and minimum-privilege
   fs.chmodSync(ca,0o644);
   assert.throws(()=>runner.createLiveQuery(env,()=>({Client})),/protected_secret_invalid/);
  }finally{fs.rmSync(tmp,{recursive:true,force:true})}
+});
+
+test('pooler host must come from explicit project connection config, never guessed',()=>{
+ const base={HERMES_HISTORY_LIVE_ENABLED:'true',
+  HERMES_DEPLOYMENT_STAGE:'staging',
+  HERMES_EXECUTION_ENABLED:'false',HERMES_EXECUTION_KILL_SWITCH:'true'};
+ const invalid=[undefined,'','db.yxmdrrwqxwzsdgcgskrm.supabase.co',
+  'https://aws-0-sa-east-1.pooler.supabase.com',
+  'aws-0-us-east-1.pooler.supabase.com',
+  'localhost','aws-0-sa-east-1.pooler.supabase.com;rm'];
+ for(const host of invalid){
+  assert.throws(()=>runner.createLiveQuery(
+   {...base,HERMES_HISTORY_POOLER_HOST:host},()=>{throw Error('driver loaded')} ),
+   /history_pooler_host_unverified/);
+ }
 });

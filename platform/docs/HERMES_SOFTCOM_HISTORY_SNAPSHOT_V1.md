@@ -52,3 +52,14 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
 - Snapshot anterior /historico deve continuar funcionando; nenhuma operação
   de escrita/cliente individual ou SQL arbitrário permitido pelo Telegram.
 \n- A leitura TLS exige CA Supabase em arquivo protegido HERMES_HISTORY_CA_FILE (0600), com rejectUnauthorized verdadeiro; certificado CA já conferido contra o endpoint e host específico (TLS 1.3, Verification OK). Para montar a imagem preparada, montar somente o script de entrada na pasta /app/scripts, nunca todo /app, preservando o driver pg da imagem.\n
+- O endereço IPv4 do shared session pooler não pode ser calculado pelo
+  nome da região. Antes de ativar, obter o hostname exato em Supabase >
+  Project Connect > Session pooler e configurar a variável privada
+  HERMES_HISTORY_POOLER_HOST na VPS; nunca deduzir aws-0, aws-1 etc.
+- Pooler IPv4 usa username hermes_history_login.[PROJECT_REF], porta 5432;
+  não é idêntico à conexão PostgreSQL direta, que requer IPv6.
+- Login direto via IPv6 foi autenticado e confirmou 25.482 registros, mas
+  o bridge Docker não tem rota IPv6. Primeiro teste com endereço de pooler
+  presumido retornou XX000 ENOTFOUND tenant/user not found, indicando
+  endereço de pooler possivelmente incorreto. Não ampliar a rede para
+  host nem ativar o bot antes de verificar o endpoint real.
