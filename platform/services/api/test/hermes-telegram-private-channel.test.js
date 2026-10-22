@@ -535,3 +535,39 @@ test('no live database connector is loaded without explicit stage-safe flag',asy
  },()=>{loaded=true}),/stage_denied/);
  assert.equal(loaded,false);
 });
+
+test('live PostgreSQL connector validates protected TLS CA and minimum-privilege user',async()=>{
+ const tmp=dir();fs.chmodSync(tmp,0o700);
+ const pf=path.join(tmp,'db-password'),ca=path.join(tmp,'root.pem');
+ fs.writeFileSync(pf,'x'.repeat(64),{mode:0o600});
+ fs.writeFileSync(ca,'-----BEGIN CERTIFICATE-----\\nTEST_ONLY\\n-----END CERTIFICATE-----',{mode:0o600});
+ let checked=false;
+ class Client{
+  constructor(cfg){
+   checked=true;
+   assert.equal(cfg.user,'hermes_history_login');
+   assert.equal(cfg.host,'db.yxmdrrwqxwzsdgcgskrm.supabase.co');
+   assert.equal(cfg.database,'postgres');
+   assert.equal(cfg.ssl.rejectUnauthorized,true);
+   assert.match(cfg.ssl.ca,/BEGIN CERTIFICATE/);
+   assert.equal(cfg.connectionTimeoutMillis,4000);
+   assert.equal(cfg.statement_timeout,5000);
+  }
+  async connect(){}
+  async query(){return {rows:[{registered:'10',cancelled:'1',last_day:'2026-05-09'}]}}
+  async end(){}
+ }
+ const env={HERMES_HISTORY_LIVE_ENABLED:'true',
+  HERMES_DEPLOYMENT_STAGE:'staging',
+  HERMES_EXECUTION_ENABLED:'false',HERMES_EXECUTION_KILL_SWITCH:'true',
+  HERMES_HISTORY_PASSWORD_FILE:pf,HERMES_HISTORY_CA_FILE:ca};
+ try{
+  const run=runner.createLiveQuery(env,()=>({Client}));
+  const result=await run({tenant_id:'grupo_erick',month:'2026-05'});
+  assert.equal(checked,true);
+  assert.equal(result.mode,'online_aggregate');
+  assert.equal(result.rows[0].registered,10);
+  fs.chmodSync(ca,0o644);
+  assert.throws(()=>runner.createLiveQuery(env,()=>({Client})),/protected_secret_invalid/);
+ }finally{fs.rmSync(tmp,{recursive:true,force:true})}
+});

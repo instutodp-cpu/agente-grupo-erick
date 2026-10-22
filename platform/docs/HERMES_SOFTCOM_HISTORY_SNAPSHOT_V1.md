@@ -51,3 +51,4 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   Verificação do proprietário ocorre antes da tentativa de leitura.
 - Snapshot anterior /historico deve continuar funcionando; nenhuma operação
   de escrita/cliente individual ou SQL arbitrário permitido pelo Telegram.
+\n- A leitura TLS exige CA Supabase em arquivo protegido HERMES_HISTORY_CA_FILE (0600), com rejectUnauthorized verdadeiro; certificado CA já conferido contra o endpoint e host específico (TLS 1.3, Verification OK). Para montar a imagem preparada, montar somente o script de entrada na pasta /app/scripts, nunca todo /app, preservando o driver pg da imagem.\n

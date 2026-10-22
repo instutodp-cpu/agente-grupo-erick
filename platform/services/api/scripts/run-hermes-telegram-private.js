@@ -114,6 +114,10 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
     environment.HERMES_EXECUTION_KILL_SWITCH!=='true')
   throw Error('history_live_stage_denied');
  const password=readSecret(environment.HERMES_HISTORY_PASSWORD_FILE);
+ const ca=readSecret(environment.HERMES_HISTORY_CA_FILE);
+ if(!ca.startsWith('-----BEGIN CERTIFICATE-----')||
+    !ca.endsWith('-----END CERTIFICATE-----'))
+  throw Error('history_tls_ca_invalid');
  if(password.length<50||password.length>150)
   throw Error('history_password_invalid');
  const driver=driverLoader();
@@ -122,7 +126,7 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
   const client=new driver.Client({
    host:'db.yxmdrrwqxwzsdgcgskrm.supabase.co',
    port:5432,database:'postgres',user:'hermes_history_login',
-   password,ssl:{rejectUnauthorized:true},
+   password,ssl:{rejectUnauthorized:true,ca},
    application_name:'hermes-history-staging-v1',
    connectionTimeoutMillis:4000,query_timeout:5000,
    statement_timeout:5000,options:'-c default_transaction_read_only=on'
