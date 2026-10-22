@@ -4,6 +4,7 @@ const {createHash,timingSafeEqual}=require('node:crypto');
 const {parseSalesCommand,historicalLiveReply}=require('./hermes-softcom-live-channel');
 const analyst=require('./hermes-analyst-templates');
 const governed=require('./hermes-governed-agent');
+const ownerDecisions=require('./hermes-owner-decision-memory');
 const ROUTES=Object.freeze({
  compras:'/internal/commercial-read-pilot/brief',
  lotoia:'/internal/lotoia-read-pilot/health',status:'/health'
@@ -14,6 +15,7 @@ const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
  'Consultas usam indicadores históricos auditáveis, não faturamento conciliado.\n'+
  'Comandos antigos: /vendas 2026-05, /produtos 2026-05.\n'+
  'Também aceito "resumo das compras" e "situação do LotoIA".\n'+
+ 'Memória de decisões: /decisao (propor, confirmar, cancelar) e /decisoes.\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const num=new Intl.NumberFormat('pt-BR');
@@ -241,7 +243,8 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  readCache=async()=>null,writeCache=async()=>{},readHistory=async()=>null,
  readLive=async()=>null,
  readAnalystContext=async()=>null,writeAnalystContext=async()=>{},
- readAnalyst=async()=>null,readAgent=async()=>null,agentEnabled=false}){
+ readAnalyst=async()=>null,readAgent=async()=>null,agentEnabled=false,
+ readDecisions=async()=>null,writeDecisions=async()=>{}}){
  const msg=privateMessage(update);
  if(!msg)return {kind:'ignored'};
  if(typeof send!=='function'||typeof query!=='function')
@@ -263,6 +266,20 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
   return {kind:'paired'};
  }
  if(msg.userId!==ownerId)return {kind:'unauthorized'};
+ // The owner explicitly proposes then confirms a structured human decision.
+ // Never promote model advice automatically, and never grant execution rights.
+ if(ownerDecisions.isCommand(msg.text)){
+  let reply;
+  try{
+   const data=ownerDecisions.handle(msg.text,await readDecisions(),clock());
+   if(data.changed)await writeDecisions(data.store);
+   reply=data.reply;
+  }catch{
+   reply='Não consegui validar ou registrar a memória de decisão. Nada foi confirmado.';
+  }
+  await send(msg.userId,reply);
+  return {kind:'answered',intent:'owner_decision',source:'human_confirmation_only'};
+ }
  // Explicit matched-year cancellation rates are a deterministic read path.
  // This is not a backdoor to LLM quota: no model call, no write, one bounded
  // historical template governed by the existing history budget and owner gate.

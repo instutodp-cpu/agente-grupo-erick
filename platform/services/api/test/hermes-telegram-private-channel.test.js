@@ -1313,3 +1313,106 @@ test('three verified long enterprise observations fit bounded context instead of
  assert.equal(JSON.parse(businessEvidence.context(store,'compare 2024',now)).length,0);
  assert.throws(()=>businessEvidence.context({...store,tenant_id:'personal'},'2025',now));
 });
+
+// Human-confirmed private enterprise decisions are separate from Agent Memory Registry.
+// They must never be inferred from model output or from ordinary Telegram messages.
+const decisionMemory=require('../src/runtime/hermes-owner-decision-memory');
+test('enterprise decision memory requires explicit human proposal and second confirmation',()=>{
+ const stamp=Date.parse('2026-10-22T21:00:00Z');
+ const proposal='/decisao propor compras | Revisar títulos em aberto semanalmente | Evitar agir sobre valores não conciliados';
+ const first=decisionMemory.handle(proposal,null,stamp,()=> '0123456789ab');
+ assert.equal(first.changed,true);
+ assert.equal(first.store.entries.length,0);
+ assert.match(first.reply,/AINDA NÃO registrada/);
+ assert.match(first.reply,/confirmar 0123456789ab/);
+ assert.equal(first.store.pending.area,'compras');
+ assert.equal(first.store.scope,'enterprise');
+ const list=decisionMemory.handle('/decisoes',first.store,stamp);
+ assert.match(list.reply,/Nenhuma decisão/);
+ const confirmed=decisionMemory.handle('/decisao confirmar 0123456789ab',first.store,stamp+1000);
+ assert.equal(confirmed.store.entries.length,1);
+ assert.equal(confirmed.store.pending,null);
+ assert.equal(confirmed.store.entries[0].source,'owner_confirmed_telegram');
+ assert.match(confirmed.reply,/não autoriza nem executa/);
+ const retried=decisionMemory.handle('/decisao confirmar 0123456789ab',confirmed.store,stamp+2000);
+ assert.equal(retried.changed,false);
+ assert.equal(retried.store.entries.length,1);
+ assert.match(retried.reply,/já registrada/);
+ const detail=decisionMemory.handle('/decisao ver 0123456789ab',confirmed.store,stamp+3000);
+ assert.match(detail.reply,/Evitar agir sobre valores não conciliados/);
+ assert.match(decisionMemory.handle('/decisoes',confirmed.store,stamp+3000).reply,/Revisar títulos/);
+ assert.throws(()=>decisionMemory.validateStore({...confirmed.store,scope:'personal'},stamp));
+ assert.throws(()=>decisionMemory.validateStore({...confirmed.store,entries:[{...confirmed.store.entries[0],
+  source:'model_suggestion'}]},stamp));
+});
+test('decision proposals are bounded, expire, and reject identifiers and unsafe content',()=>{
+ const stamp=Date.parse('2026-10-22T21:00:00Z');
+ for(const x of [
+  '/decisao propor compras | Pagar imediatamente fornecedor X | Porque o modelo recomendou',
+  '/decisao propor compras | Revisar CPF 12345678901 do cliente | Porque ele informou',
+  '/decisao propor compras | Enviar o cadastro por WhatsApp | Envie para teste@exemplo.com',
+  '/decisao propor compras | Revisar a situação de contas | Visite https://exemplo.com',
+  '/decisao propor compras | Revisar a situação de contas | Incluir token da integração',
+ ])assert.throws(()=>decisionMemory.handle(x,null,stamp),/decision_text_denied/);
+ assert.match(decisionMemory.handle('/decisao propor financeiro | Revisar caixa conciliado | Conferir evidências antes de agir',
+  null,stamp,()=> 'abcdef012345').reply,/AINDA NÃO registrada/);
+ const proposed=decisionMemory.handle('/decisao propor financeiro | Revisar caixa conciliado | Conferir evidências antes de agir',
+  null,stamp,()=> 'abcdef012345').store;
+ const late=decisionMemory.handle('/decisao confirmar abcdef012345',proposed,stamp+11*60*1000);
+ assert.match(late.reply,/proposta expirada/);
+ assert.equal(late.store.pending,null);
+ assert.equal(late.store.entries.length,0);
+ assert.equal(late.changed,true);
+ assert.match(decisionMemory.handle('/decisao cancelar',proposed,stamp+100).reply,/descartada/);
+ assert.equal(decisionMemory.isCommand('/decisao propor compras | Decisão | Motivo'),true);
+ assert.equal(decisionMemory.isCommand('Hermes, recomende decisões'),false);
+});
+test('owner-only decision memory is durable, idempotent and does not consume model or historical quotas',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);
+ runner.saveState(state,'owner.json',{owner_id:700});
+ runner.saveState(state,'agent-llm-budget.json',{date:'2026-10-22',turns:4});
+ runner.saveState(state,'history-live-budget.json',{date:'2026-10-22',count:16});
+ const timestamp=Date.parse('2026-10-22T21:00:00Z');
+ const p='/decisao propor financeiro | Conferir caixa por loja mensalmente | Comparar lançamentos e recebimentos';
+ const answers=[],calls=[];
+ const issue=async (id,user,text)=>runner.pollOnce({
+  stateDir:state,clock:()=>timestamp+id*1000,
+  liveEnabled:true,agentModel:{chat:async()=>{throw Error('LLM_NEVER_ALLOWED')}},
+  query:async()=>{throw Error('OTHER_SYSTEM_DENIED')},
+  readLive:async()=>{throw Error('SUPABASE_NOT_USED')},
+  api:async(method,payload)=>{
+   calls.push(method);
+   if(method==='getUpdates')return [update(400000+id,user,text)];
+   if(method==='sendMessage')answers.push(payload.text);
+  }
+ });
+ try{
+  await issue(1,701,p); // unauthorized: must neither reply nor persist
+  assert.equal(answers.length,0);
+  assert.equal(fs.existsSync(path.join(state,'owner-decisions.json')),false);
+  await issue(2,700,p);
+  assert.match(answers.at(-1),/AINDA NÃO registrada/);
+  const saved=runner.loadState(state,'owner-decisions.json');
+  assert.equal(saved.entries.length,0);
+  assert.equal(saved.pending.area,'financeiro');
+  assert.equal(fs.statSync(path.join(state,'owner-decisions.json')).mode&0o777,0o600);
+  const code=saved.pending.id;
+  await issue(3,700,'/decisao confirmar '+code);
+  assert.match(answers.at(-1),/registrada por confirmação humana/);
+  await issue(4,700,'/decisao confirmar '+code);
+  assert.match(answers.at(-1),/já registrada/);
+  await issue(5,700,'/decisoes');
+  assert.match(answers.at(-1),/Conferir caixa por loja mensalmente/);
+  const done=runner.loadState(state,'owner-decisions.json');
+  assert.equal(done.entries.length,1);
+  assert.equal(done.pending,null);
+  assert.deepEqual(runner.loadState(state,'agent-llm-budget.json'),{date:'2026-10-22',turns:4});
+  assert.deepEqual(runner.loadState(state,'history-live-budget.json'),{date:'2026-10-22',count:16});
+  const log=fs.readFileSync(path.join(state,'audit.jsonl'),'utf8');
+  assert.doesNotMatch(log,/Conferir caixa por loja mensalmente/);
+  assert.doesNotMatch(log,/Comparar lançamentos e recebimentos/);
+  assert.match(log,/"intent":"owner_decision"/);
+  assert.equal(calls.filter(x=>x==='sendMessage').length,4);
+  assert.equal(calls.filter(x=>x==='getUpdates').length,5);
+ }finally{fs.rmSync(state,{force:true,recursive:true})}
+});

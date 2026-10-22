@@ -9,6 +9,7 @@ const {readHistoricalSales}=require('../src/runtime/hermes-softcom-live-reader')
 const analyst=require('../src/runtime/hermes-analyst-templates');
 const governed=require('../src/runtime/hermes-governed-agent');
 const businessMemory=require('../src/runtime/hermes-business-evidence-memory');
+const ownerDecisions=require('../src/runtime/hermes-owner-decision-memory');
 const {hermesReply}=require('../src/runtime/hermes-telegram-private-channel');
 const STATE='/var/lib/hermes-telegram';
 const TELEGRAM_ORIGIN='https://api.telegram.org';
@@ -36,7 +37,7 @@ function loadState(dir,name){
   try{
    const st=fs.fstatSync(fd);
    const limit=name==='history-analyst-cache.json'?16384:
-    name==='business-evidence-memory.json'?32768:2048;
+    ['business-evidence-memory.json','owner-decisions.json'].includes(name)?32768:2048;
    if(!st.isFile()||(st.mode&0o777)!==0o600||st.size>limit)
     throw Error('state_file_unsafe');
    return JSON.parse(fs.readFileSync(fd,'utf8'));
@@ -47,7 +48,7 @@ function saveState(dir,name,data){
  const file=path.join(dir,name),temp=path.join(dir,'.'+name+'.new');
  const serialized=JSON.stringify(data)+'\n';
  const limit=name==='history-analyst-cache.json'?16384:
-    name==='business-evidence-memory.json'?32768:2048;
+    ['business-evidence-memory.json','owner-decisions.json'].includes(name)?32768:2048;
  if(Buffer.byteLength(serialized,'utf8')>limit)throw Error('state_file_too_large');
  const fd=fs.openSync(temp,fs.constants.O_WRONLY|fs.constants.O_CREAT|
   fs.constants.O_EXCL|fs.constants.O_NOFOLLOW,0o600);
@@ -183,6 +184,14 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
   const result=await processUpdate({
    update:item,ownerId:owner?.owner_id??null,pairing,
    clock,query,
+   readDecisions:()=>{
+    const data=loadState(stateDir,'owner-decisions.json');
+    return ownerDecisions.validateStore(data,clock());
+   },
+   writeDecisions:store=>{
+    ownerDecisions.validateStore(store,clock());
+    saveState(stateDir,'owner-decisions.json',store);
+   },
    readHistory:()=>loadState(stateDir,'history-softcom.json'),
    readLive:async params=>{
     if(!liveEnabled)throw Error('history_live_disabled');

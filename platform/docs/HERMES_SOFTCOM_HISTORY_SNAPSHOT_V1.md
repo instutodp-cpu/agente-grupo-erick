@@ -260,3 +260,30 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   historical budget accounted, quota exhaustion, malformed queries, source
   formatting and safety. Rollback-safe v9a staging script uses a unique backup
   name, keeping v9 and v8 backups intact; promotion still CI-gated.
+
+## Segundo cérebro — memória de decisões humanas V1 (staging)
+- Incremento privado de decisões explícitas no Telegram do proprietário.
+  NÃO ativa o Agent Memory Registry oficial (ainda em SIMULATION), nem memória
+  automática de conversas gerais.
+- Comandos: /decisao, /decisao propor AREA | DECISAO | JUSTIFICATIVA,
+  /decisao confirmar CODIGO, /decisao cancelar, /decisoes e
+  /decisao ver CODIGO. Áreas: financeiro, compras, comercial, operacoes,
+  marketing e rh.
+- Só após confirmação separada é criado registro owner_confirmed_telegram
+  com ID, área, decisão, justificativa, momento da proposta e confirmação.
+  Proposta privada expira em dez minutos.
+- Campos estruturados e explicitamente enviados pelo proprietário ficam
+  no arquivo owner-decisions.json do volume protegido (0700/0600).
+  Textos brutos de mensagens não entram em auditoria, Git nem nos prompts
+  Codex. Proposta também é preservada temporariamente no volume privado.
+- Rejeita links, e-mails, identificadores longos, tokens, instruções de
+  pagamento/transferência/execução. Máximos: decisão 170 caracteres,
+  justificativa 220, até 40 decisões confirmadas sem descarte automático.
+- Esse registro NÃO autoriza nem realiza pagamento, compra, crédito,
+  publicação, deploy, merge ou qualquer execução. Nem o LLM nem outras
+  conversas podem inserir registros automaticamente.
+- Owner privado verificado antes de ler ou salvar. Idempotência da confirmação,
+  falha fechada em arquivo inválido, cota SQL/LLM preservada.
+- Rollout: CI completo, HEAD exato, backup/rollback v10, um poller.
+  Ainda não há busca semântica, responsabilidades por equipe, integração
+  WhatsApp/Instagram nem reconciliação de decisões no ERP.
