@@ -64,12 +64,22 @@ function context(store,goal,now=Date.now()){
  const years=[...normalized.matchAll(/\b20[0-9]{2}\b/g)].map(x=>x[0]);
  const pool=current.entries.filter(e=>!years.length||
   years.some(y=>e.period.startsWith(y)||e.other_period?.startsWith(y)));
- const facts=pool.slice(0,3).map(e=>({
-  scope:e.scope,source:e.source,queried_at:e.at,period:e.period,
-  other_period:e.other_period,summary:e.summary.slice(0,410)
- }));
- const result=JSON.stringify(facts);
- if(result.length>MAX_CONTEXT)throw Error('memory_context_oversize');
- return result;
+ // The store can legitimately contain several long verified observations.
+ // Assemble a bounded read-context instead of rejecting a valid memory.
+ // Preserve provenance and keep the newest relevant facts first.
+ const facts=[];
+ for(const e of pool.slice(0,3)){
+  const base={scope:e.scope,source:e.source,queried_at:e.at,period:e.period,
+   other_period:e.other_period};
+  let summary=e.summary.slice(0,340);
+  let proposed={...base,summary};
+  while(summary.length>0&&JSON.stringify([...facts,proposed]).length>MAX_CONTEXT){
+   summary=summary.slice(0,Math.max(0,summary.length-24));
+   proposed={...base,summary};
+  }
+  if(summary.length<48||JSON.stringify([...facts,proposed]).length>MAX_CONTEXT)break;
+  facts.push(proposed);
+ }
+ return JSON.stringify(facts);
 }
 module.exports={KIND,TENANT,MAX_ENTRIES,SCHEMA,normalizeEntry,validEntry,validStore,observe,context};
