@@ -1924,3 +1924,61 @@ test('V15 historical SQL cache produces direct FinOps metrics with zero Codex',a
   assert.equal(runner.loadState(state,'history-live-budget.json').count,1);
  }finally{fs.rmSync(state,{recursive:true,force:true})}
 });
+
+const diagnostic=require('../src/runtime/hermes-owner-diagnostic');
+test('deterministic diagnostic uses verified snapshot and only confirmed human decision',()=>{
+ const s=historicalFixture();
+ s.months[4].marked_cancelled=3;s.months[3].marked_cancelled=0;
+ s.stores[0].marked_cancelled=2;s.marked_cancelled=7;
+ const proposed=decisionMemory.handle('/decisao propor financeiro | Conciliar fontes antes de novos compromissos | Revisar lançamentos históricos e valores no ERP',
+ null,now-3000,()=>'cc00aa22bb44').store;
+ const confirmed=decisionMemory.handle('/decisao confirmar cc00aa22bb44',proposed,now-2000).store;
+ const render=raw=>diagnostic.build({snapshot:s,decisions:raw,now,validSnapshot:core.safeHistorySnapshot});
+ const report=render(confirmed);
+ assert.match(report,/diagnóstico histórico \(sem IA\)/);
+ assert.match(report,/Registros: 60/);
+ assert.match(report,/Marcados cancelados: 7 \(11,67%\)/);
+ assert.match(report,/2026-05: 3\/10 \(30,00%\)/);
+ assert.match(report,/Maior taxa entre meses completos: 2026-05/);
+ assert.match(report,/junho parcial/);
+ assert.match(report,/cc00aa22bb44/);
+ assert.match(report,/Conciliar fontes antes de novos compromissos/);
+ assert.match(report,/não executadas/);
+ assert.match(report,/não comprova perda financeira/);
+ assert.doesNotMatch(render(proposed),/cc00aa22bb44/);
+ assert.throws(()=>diagnostic.build({snapshot:{...s,tenant_id:'personal'},decisions:confirmed,now,validSnapshot:core.safeHistorySnapshot}));
+ assert.throws(()=>diagnostic.build({snapshot:s,decisions:{...confirmed,tenant_id:'personal'},now,validSnapshot:core.safeHistorySnapshot}));
+ assert.throws(()=>diagnostic.build({snapshot:{...s,registered:61},decisions:confirmed,now,validSnapshot:core.safeHistorySnapshot}));
+});
+test('private /diagnostico uses no model, no SQL and FinOps counts response',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);
+ runner.saveState(state,'owner.json',{owner_id:700});
+ runner.saveState(state,'history-softcom.json',historicalFixture());
+ const sent=[];let calls=0,seq=0;
+ const invoke=(user,text)=>runner.pollOnce({stateDir:state,clock:()=>now,liveEnabled:true,
+  api:async(method,payload)=>{
+   if(method==='getUpdates')return [update(998800+(++seq),user,text)];
+   if(method==='sendMessage')sent.push(payload.text);
+  },
+  query:async()=>{calls++;throw Error('unexpected_external_query')},
+  readLive:async()=>{calls++;throw Error('unexpected_sql')},
+  agentModel:{chat:async()=>{calls++;throw Error('unexpected_model')}}
+ });
+ try{
+  await invoke(701,'/diagnostico');
+  assert.equal(sent.length,0);
+  await invoke(700,'/diagnostico');
+  assert.equal(calls,0);
+  assert.match(sent[0],/Marcados cancelados: 6 \(10,00%\)/);
+  assert.match(sent[0],/Decisão humana financeira confirmada: nenhuma registrada/);
+  assert.equal(runner.loadState(state,'agent-llm-budget.json'),null);
+  assert.equal(runner.loadState(state,'history-live-budget.json'),null);
+  const m=finopsLedger.snapshot(runner.loadState(state,'ai-finops-daily.json'),now);
+  assert.equal(m.direct_requests,1);
+  assert.equal(m.direct_history,1);
+  assert.equal(m.provider_calls,0);
+  const audit=fs.readFileSync(path.join(state,'audit.jsonl'),'utf8');
+  assert.match(audit,/"intent":"business_diagnostic"/);
+  assert.doesNotMatch(audit,/Marcados cancelados: 6|10,00%/);
+ }finally{fs.rmSync(state,{recursive:true,force:true})}
+});

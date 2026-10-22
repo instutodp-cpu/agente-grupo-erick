@@ -6,6 +6,7 @@ const analyst=require('./hermes-analyst-templates');
 const governed=require('./hermes-governed-agent');
 const ownerDecisions=require('./hermes-owner-decision-memory');
 const finops=require('./hermes-inference-finops');
+const diagnostic=require('./hermes-owner-diagnostic');
 const ROUTES=Object.freeze({
  compras:'/internal/commercial-read-pilot/brief',
  lotoia:'/internal/lotoia-read-pilot/health',status:'/health'
@@ -17,7 +18,7 @@ const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
  'Comandos antigos: /vendas 2026-05, /produtos 2026-05.\n'+
  'Também aceito "resumo das compras" e "situação do LotoIA".\n'+
  'Memória de decisões: /decisao (propor, confirmar, cancelar) e /decisoes.\n'+
- 'Métricas privadas de IA: /economia.\n'+
+ 'Métricas privadas de IA: /economia. Diagnóstico histórico: /diagnostico.\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const num=new Intl.NumberFormat('pt-BR');
@@ -275,6 +276,18 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
   catch{answer='Métricas de IA indisponíveis ou inconsistentes; não serão estimadas.';}
   await send(msg.userId,answer);
   return {kind:'answered',intent:'inference_finops',source:'local_aggregate'};
+ }
+ // A bounded, static financial diagnostic from approved saved sources only.
+ // No LLM, no database read, no implicit execution authority.
+ if(msg.text==='/diagnostico'){
+  let answer;
+  try{answer=diagnostic.build({
+   snapshot:await readHistory(),decisions:await readDecisions(),
+   now:clock(),validSnapshot:safeHistorySnapshot
+  });}
+  catch{answer='Diagnóstico indisponível: não consegui validar o histórico e a memória financeira. Nenhum indicador foi presumido.';}
+  await send(msg.userId,answer);
+  return {kind:'answered',intent:'business_diagnostic',source:'verified_snapshot_and_confirmed_decisions'};
  }
  // The owner explicitly proposes then confirms a structured human decision.
  // Never promote model advice automatically, and never grant execution rights.

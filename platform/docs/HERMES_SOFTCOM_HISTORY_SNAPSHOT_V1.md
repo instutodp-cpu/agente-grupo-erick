@@ -440,3 +440,25 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
 - Rollback versionado V14; mesmas pré-condições de SHA exato,
   CI obrigatório, único poller, leitura empresarial, kill switch
   e autorização humana para merge e eventuais operações reais.
+
+## Hermes V16 — diagnóstico financeiro determinístico do proprietário
+- Comando `/diagnostico` atendido somente ao proprietário autenticado.
+  Retorna indicadores derivados de snapshot privado previamente extraído
+  e validado: total, cancelados, taxa de registros marcados cancelados,
+  taxas mensais, extremos apenas entre meses completos (jan–mai/2026),
+  diferença em pontos percentuais e última decisão financeira
+  **confirmada por humano**, quando existente.
+- Sem Codex/JEV, sem SQL adicional, sem requisição externa, sem
+  consumo das quotas Codex e histórico online. A resposta informa
+  extração, corte em 8 jun/2026, junho parcial, julho ausente e
+  que o snapshot não é conciliação, faturamento ou prejuízo.
+- Falha fechada se o snapshot não passar em `safeHistorySnapshot`,
+  se a fonte/tenant divergir, se os totais não coincidirem ou se
+  a memória de decisões humanas estiver inválida. Nenhum dado é
+  inferido, nenhuma proposta pendente é promovida a decisão e
+  nenhuma ação empresarial é autorizada ou executada.
+- Auditoria registra apenas intent `business_diagnostic`;
+  FinOps agrega uma resposta histórica direta sem LLM. Nenhum
+  conteúdo do diagnóstico é salvo em logs ou no novo cache.
+- Implantação staging-only via script de SHA exato, CI obrigatório,
+  validação sintética isolada, backup V15 para rollback e um poller.
