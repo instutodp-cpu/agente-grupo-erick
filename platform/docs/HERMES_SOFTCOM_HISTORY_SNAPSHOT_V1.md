@@ -130,3 +130,30 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   métrica e períodos. UI de cancelamentos remove número duplicado.
 - Deployment seguro v3 aceita como backup um executor anterior congelado
   em releases/analyst-<SHA>.js; não presume worktree mutável.
+
+## Missão agent-first: planejador LLM governado, ainda não ativado
+- src/runtime/hermes-governed-agent.js, integrado ao mesmo Telegram poller
+  no intent desconhecido, somente com HERMES_AGENT_LLM_ENABLED=true.
+- Por pedido: até 2 chamadas ao LLM (plano + síntese), máximo 3
+  chamadas a ferramentas de leitura; histórico Softcom e resumo validado
+  do app Compras Homologação. Os resultados verificados são passados
+  como evidência, nunca como instruções executáveis.
+- Nenhum SQL livre, Git, pagamento, publicação, WhatsApp, shell ou
+  permissão de merge. Apenas owner privado, tenant grupo_erick, staging,
+  kill switch obrigatório, readonly no Postgres.
+- Modelos allowlist OpenAI gpt-4.1-mini/gpt-4.1, chave carregada
+  exclusivamente do HERMES_AGENT_KEY_FILE modo 0600. A assinatura
+  ChatGPT Plus não é uma credencial OpenAI API.
+- Orçamento de 4 pedidos/dia e 2 chamadas LLM/pedido, 3 ferramentas/pedido,
+  quota de 24 leituras analíticas/dia. Auditoria sem corpos de mensagens.
+- Não afirma que Model Selection, Context Assembly ou JEV já
+  deixaram modo de simulação. Conectar esses contratos existentes
+  continua necessário; plugin JEV ChatGPT não é serviço da VPS.
+- Testes offline de input livre, tools allowlist, evidências cruzadas
+  de Softcom e Compras, synth, tenant/owner, quota e fail closed.
+- Script deploy-hermes-telegram-agent-staging.sh usa SHA exato,
+  preflight e rollback para backup preagent-safe-v4. REQUER
+  arquivo privado ~/.hermes-telegram/secret/openai-agent-key 0600
+  de hermesadmin. Sem credencial, NENHUMA promoção ao bot ativo.
+- Chamada paga a modelo depende de autorização explícita do proprietário
+  por instalação segura de sua própria credencial na VPS.

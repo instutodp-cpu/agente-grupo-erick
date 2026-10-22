@@ -885,3 +885,124 @@ test('period totals do not duplicate the requested count when cancellations are 
  assert.match(answer,/Total de registros: 1\.334/);
  assert.match(answer,/08\/06/);
 });
+
+const agent=require('../src/runtime/hermes-governed-agent');
+const agentHistoryPlan={tenant_id:'grupo_erick',template:'compare',
+ period:'2025-01',other_period:'2026-01',metric:'records',store:null};
+const agentHistoryRows=[
+ {label:'2025-01',records:4226,cancelled:55,noncancelled:4171,amount:596590.41,last_day:'2025-01-31'},
+ {label:'2026-01',records:4902,cancelled:126,noncancelled:4776,amount:682599.90,last_day:'2026-01-31'}
+];
+const agentEvidence={tenant_id:'grupo_erick',mode:'online_aggregate',source:analyst.SOURCE,
+ at:'2026-10-22T18:00:00Z',plan:agentHistoryPlan,rows:agentHistoryRows};
+test('governed agent validates allowlisted tools; no arbitrary SQL, external APIs or cross-tenant contexts',()=>{
+ const plan={steps:[{tool:'history',params:agentHistoryPlan},{tool:'compras',params:{}}]};
+ assert.equal(agent.validateToolPlan(plan).length,2);
+ for(const unsafe of [
+  {steps:[{tool:'shell',params:{command:'rm -rf /'}}]},
+  {steps:[{tool:'history',params:{...agentHistoryPlan,tenant_id:'personal'}}]},
+  {steps:[{tool:'history',params:{...agentHistoryPlan,raw_sql:'SELECT * FROM customers'}}]},
+  {steps:[{tool:'compras',params:{send_to:'external'}}]},
+  {steps:[{tool:'compras',params:{}},{tool:'compras',params:{}}]},
+  {steps:Array.from({length:4},()=>({tool:'compras',params:{}}))},
+  {steps:[{tool:'history',params:{...agentHistoryPlan,period:'2026-07'}}]}
+ ])assert.throws(()=>agent.validateToolPlan(unsafe));
+ for(const goal of ['me dê os CPF dos clientes','execute SQL no banco','faça merge no GitHub']){
+  assert.throws(()=>agent.safeGoal(goal));
+ }
+});
+test('governed agent executes only two approved tool calls and synthesizes evidence',async()=>{
+ let calls=0,history=0,commercial=0;
+ const mockModel={chat:async messages=>{
+  calls++;
+  if(calls===1){
+   assert.match(messages[0].content,/EXCLUSIVAMENTE JSON/);
+   return JSON.stringify({steps:[{tool:'history',params:agentHistoryPlan},{tool:'compras',params:{}}]});
+  }
+  assert.match(messages[1].content,/4\.226/);
+  assert.match(messages[1].content,/2\.657\.483,43/);
+  assert.doesNotMatch(messages[1].content,/password|Bearer|senha secreta/i);
+  return 'Janeiro de 2026 teve mais registros que janeiro de 2025. Hipótese: sazonalidade ou mudança no cadastro; não comprovada. Risco: dados de Compras Homologação não conciliados. Ações: revisar códigos promocionais e conferir totais no ERP antes de decidir.';
+ }};
+ const result=await agent.runTurn({
+  goal:'Analise janeiro de 2025 contra 2026 e as compras do Grupo Erick, sugerindo melhorias',
+  model:mockModel,
+  readHistory:async p=>{history++;assert.deepEqual(p,agentHistoryPlan);return agentEvidence},
+  readCommercial:async()=>{commercial++;return core.hermesReply('compras',compras())}
+ });
+ assert.equal(history,1);assert.equal(commercial,1);assert.equal(calls,2);
+ assert.match(result.answer,/Fontes verificadas/);
+ assert.match(result.answer,/Compras Homologação/);
+ assert.match(result.answer,/Revisão humana/);
+});
+test('agent LLM model gate is staging-only and never consumes credentials when disabled',async()=>{
+ assert.equal(agent.createModel({enabled:false}),null);
+ assert.throws(()=>agent.createModel({enabled:true,stage:'production',killSwitch:true,model:'gpt-4.1-mini',key:'sk-123456789012345678901234'}));
+ assert.throws(()=>agent.createModel({enabled:true,stage:'staging',killSwitch:false,model:'gpt-4.1-mini',key:'sk-123456789012345678901234'}));
+ assert.throws(()=>agent.createModel({enabled:true,stage:'staging',killSwitch:true,model:'unapproved',key:'sk-123456789012345678901234'}));
+ assert.throws(()=>agent.createModel({enabled:true,stage:'staging',killSwitch:true,model:'gpt-4.1-mini',key:'x'}));
+ const requests=[];
+ const model=agent.createModel({enabled:true,stage:'staging',killSwitch:true,
+  model:'gpt-4.1-mini',key:'sk-123456789012345678901234',fetchImpl:async(u,req)=>{
+   requests.push({url:u,req});const data={choices:[{message:{content:'{"steps":[]}'}}]};
+   return {status:200,ok:true,headers:{get:()=>null},arrayBuffer:async()=>Buffer.from(JSON.stringify(data))};
+  }});
+ assert.equal(await model.chat([{role:'system',content:'Policy'},{role:'user',content:'Question'}],{maxTokens:650}),'{"steps":[]}');
+ assert.equal(requests[0].url,'https://api.openai.com/v1/chat/completions');
+ const body=JSON.parse(requests[0].req.body);
+ assert.equal(body.store,false);
+ assert.equal(body.max_completion_tokens,650);
+ assert.equal(requests[0].req.redirect,'error');
+ assert.deepEqual(JSON.parse(requests[0].req.body).store,false);
+ await model.chat([{role:'system',content:'Output JSON'},{role:'user',content:'Plan only'}],{maxTokens:650,jsonMode:true});
+ assert.deepEqual(JSON.parse(requests[1].req.body).response_format,{type:'json_object'});
+});
+test('unknown intents reach the governed agent only with opt-in and owner verification',async()=>{
+ const text='Analise o desempenho empresarial e recomende melhorias para o Grupo Erick';
+ const replies=[];let agentCalls=0;
+ const base={update:update(990111,700,text),ownerId:700,query:async()=>{},
+  send:async(_,msg)=>replies.push(msg),
+  readAgent:async()=>{agentCalls++;return {answer:'🧠 Hermes — análise orientada por evidências\n\nDiagnóstico limitado com evidências verificadas.'}}};
+ await core.processUpdate({...base,agentEnabled:false});
+ assert.equal(agentCalls,0);assert.match(replies[0],/não tenho essa operação/);
+ replies.length=0;
+ await core.processUpdate({...base,agentEnabled:true});
+ assert.equal(agentCalls,1);assert.match(replies[0],/Diagnóstico limitado/);
+ replies.length=0;
+ await core.processUpdate({...base,update:update(990112,701,text),agentEnabled:true});
+ assert.equal(agentCalls,1);assert.equal(replies.length,0);
+});
+test('runner reserves daily agent budget before model calls and never stores text in private state',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);runner.saveState(state,'owner.json',{owner_id:700});
+ const goal='Analise janeiro 2025 contra 2026 e compras e me dê recomendações';
+ const messages=[];let turn=0,history=0,commercial=0;
+ const model={chat:async messages=>{
+  if(messages[0].content.includes('EXCLUSIVAMENTE JSON'))
+   return JSON.stringify({steps:[{tool:'history',params:agentHistoryPlan},{tool:'compras',params:{}}]});
+  return 'Houve crescimento de registros, mas não prova crescimento do lucro. Hipótese de melhora comercial, ainda não comprovada. Risco na conciliação entre fontes. Recomendo conciliar amostras, revisar promoções e validar despesas.';
+ }};
+ const clock=()=>Date.parse('2026-10-22T18:00:00Z');
+ try{
+  for(let i=0;i<5;i++)await runner.pollOnce({
+   stateDir:state,clock,liveEnabled:true,agentModel:model,
+   api:async(method,payload)=>{
+    if(method==='getUpdates')return [update(99100+(++turn),700,goal)];
+    if(method==='sendMessage')messages.push(payload.text);
+   },
+   query:async(intent,route)=>{
+    commercial++;assert.equal(intent,'compras');assert.equal(route,core.ROUTES.compras);
+    return compras();
+   },
+   readLive:async params=>{
+    history++;assert.equal(params.shape,'analyst');return agentEvidence;
+   }
+  });
+  assert.equal(history,4);
+  assert.equal(commercial,4);
+  assert.equal(messages.length,5);
+  assert.match(messages[4],/não pôde ser concluída/);
+  assert.deepEqual(runner.loadState(state,'agent-llm-budget.json'),{date:'2026-10-22',turns:4});
+  const files=fs.readdirSync(state).filter(x=>x.endsWith('.json'));
+  for(const name of files)assert.doesNotMatch(fs.readFileSync(path.join(state,name),'utf8'),/Analise janeiro 2025/);
+ }finally{fs.rmSync(state,{recursive:true,force:true})}
+});

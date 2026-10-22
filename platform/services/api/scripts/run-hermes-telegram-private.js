@@ -7,6 +7,8 @@ const {TextDecoder}=require('node:util');
 const {processUpdate,ROUTES}=require('../src/runtime/hermes-telegram-private-channel');
 const {readHistoricalSales}=require('../src/runtime/hermes-softcom-live-reader');
 const analyst=require('../src/runtime/hermes-analyst-templates');
+const governed=require('../src/runtime/hermes-governed-agent');
+const {hermesReply}=require('../src/runtime/hermes-telegram-private-channel');
 const STATE='/var/lib/hermes-telegram';
 const TELEGRAM_ORIGIN='https://api.telegram.org';
 const HERMES_ORIGIN='https://hermes-staging.grupoerick.tech';
@@ -149,7 +151,8 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
  };
 }
 async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
- readLive=async()=>{throw Error('history_live_disabled')},liveEnabled=false}){
+ readLive=async()=>{throw Error('history_live_disabled')},liveEnabled=false,
+ agentModel=null}){
  checkStateDirectory(stateDir);
  const offsetRecord=loadState(stateDir,'offset.json');
  const offset=offsetRecord?.offset??0;
@@ -195,6 +198,37 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     return readLive(params);
    },
 
+   agentEnabled:agentModel!==null,
+   readAgent:async goal=>{
+    if(!agentModel||!liveEnabled)throw Error('agent_not_enabled');
+    const today=new Date(clock()).toISOString().slice(0,10);
+    const budget=loadState(stateDir,'agent-llm-budget.json');
+    if(budget&&(!/^20\d{2}-\d{2}-\d{2}$/.test(budget.date)||
+      !Number.isInteger(budget.turns)||budget.turns<0||budget.turns>4))
+     throw Error('agent_llm_budget_invalid');
+    const turns=budget?.date===today?budget.turns:0;
+    if(turns>=4)throw Error('agent_daily_quota');
+    // Reserve 2 LLM calls before any provider request, never retry after crash.
+    saveState(stateDir,'agent-llm-budget.json',{date:today,turns:turns+1});
+    return governed.runTurn({
+     goal,model:agentModel,
+     readHistory:async plan=>{
+      const record=loadState(stateDir,'history-live-budget.json');
+      if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
+        !Number.isInteger(record.count)||record.count<0||record.count>24))
+       throw Error('agent_history_budget_invalid');
+      const n=record?.date===today?record.count:0;
+      if(n>=24)throw Error('agent_history_quota');
+      saveState(stateDir,'history-live-budget.json',{date:today,count:n+1});
+      return readLive({shape:'analyst',tenant_id:'grupo_erick',plan});
+     },
+     readCommercial:async()=>{
+      const data=await query('compras',ROUTES.compras);
+      if(data?.denied_status)throw Error('agent_commercial_unavailable');
+      return hermesReply('compras',data);
+     }
+    });
+   },
    readAnalystContext:()=>loadState(stateDir,'history-analyst-context.json'),
    writeAnalystContext:ctx=>saveState(stateDir,'history-analyst-context.json',ctx),
    readAnalyst:async plan=>{
@@ -264,6 +298,15 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  const api=telegramClient(botToken,fetchImpl);
  const query=hermesClient(machineToken,fetchImpl);
  const readLive=createLiveQuery(environment);
+ const agentModel=governed.createModel({
+  enabled:environment.HERMES_AGENT_LLM_ENABLED==='true',
+  stage:environment.HERMES_DEPLOYMENT_STAGE,
+  killSwitch:environment.HERMES_EXECUTION_KILL_SWITCH==='true',
+  model:environment.HERMES_AGENT_MODEL,
+  key:environment.HERMES_AGENT_LLM_ENABLED==='true'?
+   readSecret(environment.HERMES_AGENT_KEY_FILE):null,
+  fetchImpl
+ });
  const identity=await api('getMe',{});
  if(identity?.is_bot!==true||!Number.isSafeInteger(identity?.id)||
     String(identity?.username||'').toLowerCase()!=='grupoerick_bot')
@@ -272,7 +315,7 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  if(hook?.url)throw Error('telegram_webhook_conflict');
  audit(dir,{at:new Date(clock()).toISOString(),event:'gateway_started',
   stage:'staging',writes_enabled:false});
- for(;;)await pollOnce({stateDir:dir,api,query,clock,readLive,
+ for(;;)await pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,
   liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true'});
 }
 if(require.main===module){

@@ -3,6 +3,7 @@
 const {createHash,timingSafeEqual}=require('node:crypto');
 const {parseSalesCommand,historicalLiveReply}=require('./hermes-softcom-live-channel');
 const analyst=require('./hermes-analyst-templates');
+const governed=require('./hermes-governed-agent');
 const ROUTES=Object.freeze({
  compras:'/internal/commercial-read-pilot/brief',
  lotoia:'/internal/lotoia-read-pilot/health',status:'/health'
@@ -214,7 +215,7 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  readCache=async()=>null,writeCache=async()=>{},readHistory=async()=>null,
  readLive=async()=>null,
  readAnalystContext=async()=>null,writeAnalystContext=async()=>{},
- readAnalyst=async()=>null}){
+ readAnalyst=async()=>null,readAgent=async()=>null,agentEnabled=false}){
  const msg=privateMessage(update);
  if(!msg)return {kind:'ignored'};
  if(typeof send!=='function'||typeof query!=='function')
@@ -241,8 +242,22 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  const intent=plan?'business_analyst':intentFor(msg.text);
  if(intent==='help'){await send(msg.userId,HELP);return {kind:'answered',intent};}
  if(intent==='unknown'){
-  await send(msg.userId,'Ainda não tenho essa operação liberada.\n\n'+HELP);
-  return {kind:'unsupported',intent};
+  if(!agentEnabled){
+   await send(msg.userId,'Ainda não tenho essa operação liberada.\n\n'+HELP);
+   return {kind:'unsupported',intent};
+  }
+  let response;
+  try{
+   const result=await readAgent(msg.text);
+   if(typeof result?.answer!=='string'||result.answer.length>3150||
+      !result.answer.startsWith('🧠 Hermes — análise orientada por evidências'))
+    throw Error('agent_output_invalid');
+   response=result.answer;
+  }catch{
+   response='Esta análise não pôde ser concluída com fontes verificáveis e ferramentas autorizadas. Não executei nenhuma ação.';
+  }
+  await send(msg.userId,response);
+  return {kind:'answered',intent:'governed_agent',source:'governed_read_only'};
  }
  if(intent==='business_analyst'){
   let response,cache='miss';
