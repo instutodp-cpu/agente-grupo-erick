@@ -302,7 +302,9 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
   audit(stateDir,{at:new Date(clock()).toISOString(),
    event:'outcome',update_id:item.update_id,
    outcome:result.kind,intent:result.intent||null,
-   cache:result.cache||null});
+   cache:result.cache||null,
+   ...(result.llm_calls===1||result.llm_calls===2?
+    {llm_calls:result.llm_calls,planning_policy:result.planning_policy}: {})});
   handled++;
  }
  return {handled,next_offset:current};

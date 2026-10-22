@@ -309,3 +309,41 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   flags falsas falham fechado. Sem alterações ao owner-decisions.json.
 - CI e HEAD governam promoção; script V11 preserva backup separado V10
   e mantém rollback, um poller, conexões read-only e kill switch.
+
+## Hermes Economia de Inferência V12 — regras e cache antes de LLM
+- Fluxo já disponível antes da V12: consultas históricas via SQL
+  parametrizado, cache analítico com verificação e TTL de 6h,
+  comandos e memória de decisões owner-only sem LLM, limite Codex 4
+  turnos/dia UTC com claim antes da chamada, Supabase limite próprio.
+- Otimização V12: para perguntas analíticas com período explícito,
+  um único indicador histórico, linguagem inequívoca e escopo
+  permitido, o Hermes reutiliza o planner de SQL já homologado.
+  O modelo generativo permanece somente para interpretar os dados
+  depois de ferramenta com evidência fresca/validada.
+- Fluxo antes: 1 chamada Codex para planejar + 1 para sintetizar.
+  Fluxo otimizado para rotas aceitas: zero chamada de planejamento,
+  1 chamada de síntese. Não altera cotas, operação autorizada, modelo
+  de assinatura nem taxação desconhecida do Codex login.
+- Escopo deliberado: metrics records/money/cancelled; periods
+  2025/2026; planning via analyst.planQuestion + analyst.validate
+  + governed.validateToolPlan; compras adicionadas apenas se
+  explícitas. Múltiplas métricas, critérios ambíguos, temas não
+  habilitados e operações sensíveis ainda exigem planejador
+  governado ou negam acesso. Sem semantic cache de respostas geradas.
+- Auditoria sem texto/PII registra apenas número de chamadas
+  de modelo comprovadas quando há sucesso: llm_calls (1 ou 2)
+  e planning_policy (static_verified_history_v1 ou
+  governed_model_planner). Nunca inventar poupança de tokens:
+  sem metadados de usage do provedor não há custo real medido.
+- TypeSafe JEV foi validado via plugin do ChatGPT em ambiente
+  separado para escolha estruturada de estratégia, mas a chave
+  desse plugin NÃO é implicitamente acessível à VPS. Não ativar
+  chamadas JEV na execução do Hermes sem credenciais e orçamento
+  próprios e comparação de custo marginal com as regras locais.
+- Referências de design: LiteLLM router/proxy (quotas, fallback,
+  cache, multi-model), RouteLLM (rota custo/qualidade), TypeSafe
+  System One (noul/choice/score), prompt caching de prefixos.
+  Avaliar gateways multiprovedores somente quando existir
+  mais de um modelo autorizado, preços, qualidade e telemetria.
+- Sem merge automático; estágio staging-only, backups versionados,
+  rollback automático, scripts com expected SHA e CI exato.

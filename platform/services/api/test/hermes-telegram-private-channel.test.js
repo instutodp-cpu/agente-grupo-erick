@@ -1547,3 +1547,108 @@ test('staging runner injects only confirmed owner decisions into answer, not int
   assert.doesNotMatch(audit,/Conciliar títulos|abcdef010203|Reconciliar o histórico/);
  }finally{fs.rmSync(state,{recursive:true,force:true})}
 });
+
+// Inference economy: explicit, unambiguous business questions do not spend
+// a second model call to rediscover a SQL template we already validate.
+const economy=require('../src/runtime/hermes-inference-economy-router');
+test('economy router only preplans strictly verified, explicit single-metric history',()=>{
+ const ok=[
+  ['Analise as vendas de janeiro de 2025 e janeiro de 2026 e recomende melhorias','records','compare',1],
+  ['Compare a receita de 2025 e 2026 e explique os riscos','money','compare',1],
+  ['Analise as vendas em janeiro de 2026 e sugira ações','records','period',1],
+  ['Explique as vendas de 2025 e 2026 e as compras','records','compare',2]
+ ];
+ for(const [q,metric,template,length] of ok){
+  const found=economy.route(q);
+  assert.equal(found.steps.length,length,q);
+  assert.equal(found.steps[0].tool,'history');
+  assert.equal(found.steps[0].params.metric,metric);
+  assert.equal(found.steps[0].params.template,template);
+  assert.equal(found.estimated_planner_calls_avoided,1);
+  assert.deepEqual(agent.validateToolPlan({steps:found.steps}).map(x=>x.tool),
+   length===1?['history']:['history','compras']);
+ }
+ for(const q of [
+  'Analise as vendas e cancelamentos de 2025 e 2026',
+  'Analise os custos, a margem e o lucro em 2026',
+  'Analise vendas do último mês',
+  'Analise os riscos financeiros e a decisão do proprietário',
+  'O que posso fazer para vender mais?',
+  'Consulte os CPF dos clientes e avalie vendas em janeiro de 2026',
+  'Faça um PIX e analise vendas de 2026',
+  'Analise o Instagram e as vendas de 2026',
+  'Analise estoque e vendas de 2026',
+  'Quais lojas mais venderam em 2026?',
+  'Analise as vendas e compare junho de 2025 com junho de 2026',
+  '/compras',
+ ])assert.equal(economy.route(q),null,q);
+ assert.equal(economy.route('x'.repeat(601)),null);
+});
+test('simple verified advisory saves one Codex planner call, retains validated SQL and final evidence',async()=>{
+ const q='Analise as vendas de janeiro de 2025 e janeiro de 2026 e recomende melhorias';
+ const requested=[],chat=[];
+ const model={chat:async messages=>{
+  chat.push(messages);
+  assert.equal(chat.length,1,'planner model must not run');
+  assert.match(messages[0].content,/analista empresarial/);
+  assert.match(messages[1].content,/4[.]226/);
+  return 'Registros importados são evidências históricas, não faturamento conciliado. Há diferença entre períodos; confirme uma amostra por loja e concilie antes de decidir.';
+ }};
+ const r=await agent.runTurn({goal:q,model,
+  readBusinessContext:()=> '[]',readDecisionContext:()=> '[]',
+  readHistory:async p=>{requested.push(p);return agentEvidence;},
+  readCommercial:async()=>{throw Error('commercial not requested')}
+ });
+ assert.equal(r.planning_policy,'static_verified_history_v1');
+ assert.equal(r.llm_calls,1);
+ assert.equal(chat.length,1);
+ assert.deepEqual(requested,[agentHistoryPlan]);
+ assert.match(r.answer,/Fontes verificadas/);
+ assert.deepEqual(r.tools,['history']);
+});
+test('ambiguous advice preserves two governed model calls, quotas and stage gates',async()=>{
+ const q='Analise riscos financeiros, compras e vendas sem período definido';
+ const modelCalls=[];
+ const r=await agent.runTurn({goal:q,model:{chat:async messages=>{
+  modelCalls.push(messages);
+  return modelCalls.length===1?
+   JSON.stringify({steps:[{tool:'history',params:agentHistoryPlan}]}):
+   'O histórico de registros é uma evidência parcial. Recomendação: verificar documentos e conciliar fontes antes de decidir.';
+ }},readHistory:async()=>agentEvidence,readCommercial:async()=>{throw Error('not required')}});
+ assert.equal(modelCalls.length,2);
+ assert.equal(r.llm_calls,2);
+ assert.equal(r.planning_policy,'governed_model_planner');
+});
+test('economy telemetry stores only verified call count and routing policy, no message or credentials',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);runner.saveState(state,'owner.json',{owner_id:700});
+ const question='Analise as vendas de janeiro de 2025 e janeiro de 2026 e recomende melhorias';
+ const replies=[];let calls=0,reads=0;
+ const clock=()=>Date.parse('2026-10-22T20:30:00Z');
+ try{
+  const result=await runner.pollOnce({
+   stateDir:state,clock,liveEnabled:true,
+   agentModel:{chat:async()=>{
+    calls++;
+    if(calls!==1)throw Error('unexpected_planner_call');
+    return 'Registros históricos foram validados, mas não são faturamento. É prudente conciliar amostras e confirmar desvios.';
+   }},
+   api:async(method,payload)=>{
+    if(method==='getUpdates')return [update(996001,700,question)];
+    if(method==='sendMessage')replies.push(payload.text);
+   },
+   query:async()=>{throw Error('other source not allowed')},
+   readLive:async()=>{reads++;return agentEvidence}
+  });
+  assert.equal(result.handled,1);
+  assert.equal(reads,1);assert.equal(calls,1);
+  assert.match(replies[0],/análise orientada/);
+  const events=fs.readFileSync(path.join(state,'audit.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+  const event=events.at(-1);
+  assert.equal(event.intent,'governed_agent');
+  assert.equal(event.llm_calls,1);
+  assert.equal(event.planning_policy,'static_verified_history_v1');
+  assert.doesNotMatch(JSON.stringify(events),/Analise as vendas|Registros históricos foram/);
+  assert.equal(runner.loadState(state,'agent-llm-budget.json').turns,1);
+  assert.equal(runner.loadState(state,'history-live-budget.json').count,1);
+ }finally{fs.rmSync(state,{recursive:true,force:true})}
+});

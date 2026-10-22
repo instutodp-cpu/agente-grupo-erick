@@ -322,20 +322,24 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
    await send(msg.userId,'Ainda não tenho essa operação liberada.\n\n'+HELP);
    return {kind:'unsupported',intent};
   }
-  let response;
+  let response,modelAccounting=null;
   try{
    const result=await readAgent(msg.text);
    if(typeof result?.answer!=='string'||result.answer.length>3150||
       !result.answer.startsWith('🧠 Hermes — análise orientada por evidências'))
     throw Error('agent_output_invalid');
    response=result.answer;
+   if((result.llm_calls===1||result.llm_calls===2)&&
+    ['static_verified_history_v1','governed_model_planner'].includes(result.planning_policy))
+    modelAccounting={llm_calls:result.llm_calls,planning_policy:result.planning_policy};
   }catch(error){
    response=error?.message==='agent_daily_quota'?
     'O limite privado de 4 análises com Codex por dia (UTC) foi atingido. Não fiz nova consulta nem executei ações. Consultas históricas numéricas autorizadas continuam disponíveis dentro da quota própria.':
     'Esta análise não pôde ser concluída com fontes verificáveis e ferramentas autorizadas. Não executei nenhuma ação.';
   }
   await send(msg.userId,response);
-  return {kind:'answered',intent:'governed_agent',source:'governed_read_only'};
+  return {kind:'answered',intent:'governed_agent',source:'governed_read_only',
+   ...(modelAccounting||{})};
  }
  if(intent==='business_analyst'){
   let response,cache='miss';
