@@ -1211,3 +1211,23 @@ test('two-message enterprise conversation remembers grounded evidence and routes
   assert.doesNotMatch(body,/Considerando a análise|Identifique os principais riscos/);
  }finally{fs.rmSync(state,{recursive:true,force:true});}
 });
+
+
+test('three verified long enterprise observations fit bounded context instead of denying agent',()=>{
+ const now=Date.parse('2026-10-22T20:30:00Z');
+ const prototype=businessEvidence.normalizeEntry(agentEvidence,agentHistoryPlan,now);
+ const entries=[0,1,2].map((i)=>({
+  ...prototype,
+  key:String(i).padStart(24,'0'),
+  summary:'📊 Hermes — comparação de registros e valores historicos. '+
+   ('Observação agregada verificada com proveniência, sem dados pessoais. ').repeat(13)
+ }));
+ const store={schema:businessEvidence.SCHEMA,tenant_id:'grupo_erick',scope:'enterprise',entries};
+ const previous=businessEvidence.context(store,'Quais problemas de 2025 e 2026 merecem prioridade?',now);
+ const found=JSON.parse(previous);
+ assert.ok(previous.length<=1500);
+ assert.equal(found.length,3);
+ assert.ok(found.every(x=>x.source===analyst.SOURCE&&x.scope==='enterprise'&&x.summary.length>=48));
+ assert.equal(JSON.parse(businessEvidence.context(store,'compare 2024',now)).length,0);
+ assert.throws(()=>businessEvidence.context({...store,tenant_id:'personal'},'2025',now));
+});
