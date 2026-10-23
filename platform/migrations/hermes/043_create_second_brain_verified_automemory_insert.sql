@@ -36,7 +36,7 @@ CREATE TABLE hermes_brain.automemory_admissions (
 );
 ALTER TABLE hermes_brain.automemory_admissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hermes_brain.automemory_admissions FORCE ROW LEVEL SECURITY;
-REVOKE ALL ON hermes_brain.automemory_admissions FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON hermes_brain.automemory_admissions FROM PUBLIC,anon,authenticated;
 GRANT SELECT ON hermes_brain.automemory_admissions TO authenticated;
 CREATE POLICY brain_owner_admission_lookup ON hermes_brain.automemory_admissions
  FOR SELECT TO authenticated USING (
