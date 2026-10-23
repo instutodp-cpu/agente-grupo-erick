@@ -168,3 +168,49 @@ contratada. Nunca confiar só em `WHERE tenant_id` feito pela IA.
 existente enquanto coerente com seu escopo. Evitar versões de 1 comando.
 Sem segredos em código, sem merge pela IA, sem produção, sem ativação
 de cliente externo sem aprovação humana e sem critérios demonstrados.
+
+## Primeiro incremento de persistência — esquema testado, NÃO implantado
+
+A PR inclui `038_create_second_brain_multi_tenant_read_model.sql`,
+modelo relacional com **tenants**, **memberships**, **sources** e
+**memory_items**, chaves que incluem `tenant_id`, source digest/version,
+classificação, domínio, empresa/loja, owner, origem aprovada, validade e
+índice GIN full-text. A política RLS exige `auth.uid()` + membership
+ativa, tenant ativo, fonte verificada, item aprovado/não expirado,
+domínio/classificação/visibilidade autorizados, company/store exatos.
+`FORCE ROW LEVEL SECURITY` em todas as quatro tabelas. A função
+`auth.uid()` é a original do Supabase no futuro banco canônico;
+a simulação local utiliza um **stub que nunca será implantado**.
+
+O papel `authenticated` recebe somente `SELECT`: não há privilégios
+de INSERT/UPDATE/DELETE, não há políticas para `anon`, não há função
+`SECURITY DEFINER` nem views que possam contornar RLS. A ingestão e
+curadoria deverão ter processo administrativo **separado**, com prova
+de tenant/source/idempotência e aprovação humana antes de conceder
+qualquer capacidade de escrita. Memória não concede execução real.
+
+A porta `hermes-brain-postgres-search.js` faz busca textual limitada
+(1–10 itens), parametrizada, com fonte e versão. **Recusa** `postgres`,
+`service_role`, `anon` e qualquer `auth.uid()` inconsistente. Ela
+NÃO cria sessões ou claims: um ingress confiável deverá verificar
+JWT/expiração/membership e fornecer sessão autenticada restrita à RLS.
+Sem este ingress, não ligar o adaptador ao Telegram ou cliente externo.
+
+Evidência de teste: `bash platform/services/api/scripts/test-hermes-brain-rls-sandbox.sh`
+sobe PostgreSQL 16 **temporário**, com `--network none`, sem portas
+publicadas; aplica migração e fixtures sintéticas; verifica que cliente
+A não lê cliente B, usuário B não lê A, memórias pendentes, fontes
+revogadas, expiradas e registros fora de company-scope não aparecem.
+O papel `authenticated` não pode modificar registros e `anon` não
+pode ler. O script remove a instância após concluir. Testes de
+contrato da porta complementam o RLS real.
+
+**Bloqueio restante:** o conector Supabase desta sessão acessa apenas
+`softcom-grupo-erick`; este projeto é a **fonte empresarial**, NÃO o
+destino do cérebro multi-tenant. A migração NÃO foi aplicada lá nem no
+Postgres operacional da VPS. Para passar à fase de uso real, verificar
+a identidade/propriedade do projeto Supabase canônico Hermes,
+concluir credencial JWT/role sem bypass, executar a migração em staging
+dele e provar ingestão mínima/consulta/gravação após reboot com
+revogação/retention e auditoria. Apenas depois ativar canais,
+espaço pessoal ou empresas externas.
