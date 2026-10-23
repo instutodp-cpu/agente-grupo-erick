@@ -9,9 +9,10 @@ ACTION="$1"; SHA="$2"
 REPO=/home/hermesadmin/hermes-telegram-pr563
 BASE=/home/hermesadmin/.hermes-telegram
 STATE="$BASE/state"
+ROUTER_KEY="$BASE/secret/openrouter-api-key"
 OLD=hermes-telegram-private-v1
-BACKUP=hermes-telegram-private-pre-automemory-v4
-IMAGE=hermes-telegram-automemory:staging-v4
+BACKUP=hermes-telegram-private-pre-openrouter-v5
+IMAGE=hermes-telegram-openrouter:staging-v5
 RELEASE="$BASE/releases/auto-memory-$SHA.js"
 denied(){ echo "AUTOMEMORY_DENIED: $1" >&2; exit 1; }
 [[ "$(git -C "$REPO" status --porcelain)" == '' ]] || denied dirty_tree
@@ -30,6 +31,12 @@ CODEX="$(mount_source /run/hermes-codex)"
 PASS="$(mount_source /run/hermes-history-password)"
 CA="$(mount_source /run/hermes-history-ca)"
 [[ "$(mount_source /var/lib/hermes-telegram)" == "$STATE" ]] || denied state_mount_changed
+if [[ "$ACTION" == --deploy ]];then
+ [[ -f "$ROUTER_KEY" && ! -L "$ROUTER_KEY" ]] || denied openrouter_key_missing
+ [[ "$(stat -c '%a' "$ROUTER_KEY")" == 600 ]] || denied openrouter_key_mode
+ [[ "$(stat -c '%U' "$ROUTER_KEY")" == hermesadmin ]] || denied openrouter_key_owner
+ [[ "$(stat -c '%a' "$BASE/secret")" == 700 ]] || denied openrouter_secret_directory
+fi
 for P in "$BOT" "$MACHINE" "$CODEX" "$PASS" "$CA"; do
  [[ "$P" == /home/hermesadmin/* && -e "$P" ]] || denied unsafe_mount
 done
@@ -52,9 +59,10 @@ docker run --rm --network none --read-only --user 1000:1000 --cap-drop ALL \
 const a=require("/app/src/runtime/hermes-automemory-curator");
 const fallback=require("/app/src/runtime/hermes-codex-fallback");
 const core=require("/app/src/runtime/hermes-telegram-private-channel");
+const router=require("/app/src/runtime/hermes-openrouter-secondary");
 if(typeof a.curate!=="function"||typeof a.render!=="function"||
  typeof a.context!=="function"||typeof fallback.compose!=="function"||
- typeof core.processUpdate!=="function")process.exit(2);
+ typeof core.processUpdate!=="function"||typeof router.makeOpenRouter!=="function")process.exit(2);
 console.log("AUTOMEMORY_IMAGE_OK")'
 exec 9>"$BASE/.automemory-deploy.lock"
 flock -n 9 || denied overlapping_release
@@ -92,6 +100,7 @@ docker run -d --name "$OLD" --restart unless-stopped \
  -v "$PASS:/run/hermes-history-password:ro" \
  -v "$CA:/run/hermes-history-ca:ro" \
  -v "$STATE:/var/lib/hermes-telegram:rw" \
+ -v "$ROUTER_KEY:/run/hermes-openrouter-key:ro" \
  -e HERMES_TELEGRAM_ENABLED=true -e HERMES_DEPLOYMENT_STAGE=staging \
  -e HERMES_EXECUTION_ENABLED=false -e HERMES_EXECUTION_KILL_SWITCH=true \
  -e HERMES_MISSION_INGRESS_ENABLED=false \
@@ -105,6 +114,8 @@ docker run -d --name "$OLD" --restart unless-stopped \
  -e HERMES_HISTORY_CA_FILE=/run/hermes-history-ca \
  -e HERMES_HISTORY_POOLER_HOST=aws-1-sa-east-1.pooler.supabase.com \
  -e HERMES_AUTOMEMORY_ENABLED=true \
+ -e HERMES_OPENROUTER_ENABLED=true \
+ -e HERMES_OPENROUTER_KEY_FILE=/run/hermes-openrouter-key \
  --entrypoint node "$IMAGE" scripts/run-hermes-telegram-private.js >/dev/null
 for I in $(seq 1 25);do
  [[ "$(docker inspect "$OLD" --format '{{.State.Running}}')" == true ]] || denied stopped
