@@ -2155,3 +2155,105 @@ test('Telegram matrix command is owner-only, one governed history read and zero 
   assert.match(outputs[1],/Limite privado/);
  }finally{fs.rmSync(state,{recursive:true,force:true})}
 });
+
+const alertsReport=require('../src/runtime/hermes-operational-alerts');
+function alertFixture(){
+ const {snap,data}=matrixFixture();
+ const stores=snap.stores.map(x=>x.raw_label),months=snap.months.map(x=>x.month);
+ const rows=months.flatMap(month=>stores.map((code,i)=>{
+  let registered=200,marked_cancelled=2;
+  if(month==='2026-04'){
+   if(i===5){registered=5;marked_cancelled=0;}
+  }
+  if(month==='2026-05'){
+   const r=[250,220,210,205,4,210],c=[20,17,22,15,1,15];
+   registered=r[i];marked_cancelled=c[i];
+  }
+  if(i===5&&['2026-01','2026-02','2026-03'].includes(month)){
+   registered=0;marked_cancelled=0;
+  }
+  return {month,raw_store:code,registered,marked_cancelled};
+ })).filter(x=>x.registered>0);
+ const sum=(subset,field)=>subset.reduce((v,x)=>v+x[field],0);
+ for(const m of snap.months){
+  const subset=rows.filter(x=>x.month===m.month);
+  m.registered=sum(subset,'registered');
+  m.marked_cancelled=sum(subset,'marked_cancelled');
+ }
+ for(const s of snap.stores){
+  const subset=rows.filter(x=>x.raw_store===s.raw_label);
+  s.registered=sum(subset,'registered');
+  s.marked_cancelled=sum(subset,'marked_cancelled');
+ }
+ snap.registered=sum(rows,'registered');
+ snap.marked_cancelled=sum(rows,'marked_cancelled');
+ data.rows=rows;
+ assert.equal(core.safeHistorySnapshot(snap,now),true);
+ return {snap,data};
+}
+test('V19 alerts differentiate comparable rate rises from data coverage changes',()=>{
+ const {snap,data}=alertFixture();
+ const result=alertsReport.render({snapshot:snap,aggregate:data,
+  validSnapshot:core.safeHistorySnapshot,now});
+ assert.match(result,/alertas históricos fundamentados/);
+ for(const code of ['CALCADOS','SIRINHAEM','MAGAZINE','SPORTS-\\(DESATIVADO\\)'])
+  assert.match(result,new RegExp(code));
+ assert.match(result,/CALCADOS: abr 2\/200 \(1,00%\) → mai 20\/250 \(8,00%\); \+7,00 p\.p\./);
+ assert.match(result,/ERICK SPORTS: abr 200 → mai 4 registros; taxa não comparável/);
+ assert.match(result,/VARIEDADES: abr 5 → mai 210 registros; taxa não comparável/);
+ assert.match(result,/≥100 registros em cada mês/);
+ assert.match(result,/não é fraude, prejuízo, causa/);
+ assert.doesNotMatch(result,/CPF|pagamento autorizado/);
+ assert.throws(()=>alertsReport.render({snapshot:snap,aggregate:{
+  ...data,rows:[{...data.rows[0],registered:999},...data.rows.slice(1)]},
+  validSnapshot:core.safeHistorySnapshot,now}),/reconciliation/);
+ assert.throws(()=>alertsReport.render({snapshot:snap,aggregate:{...data,tenant_id:'other'},
+  validSnapshot:core.safeHistorySnapshot,now}),/denied/);
+});
+test('V19 alerts show confirmed owner financial decision only, without executing',()=>{
+ const {snap,data}=alertFixture();
+ const proposed=decisionMemory.handle(
+  '/decisao propor financeiro | Exigir conciliacao antes de assumir compromissos | Analisar as fontes empresariais oficiais primeiro',
+  null,now-4000,()=> 'abcdef123456').store;
+ const confirmed=decisionMemory.handle('/decisao confirmar abcdef123456',proposed,now-3000).store;
+ const args={snapshot:snap,aggregate:data,validSnapshot:core.safeHistorySnapshot,now};
+ assert.doesNotMatch(alertsReport.render({...args,decisions:proposed}),/abcdef123456/);
+ assert.match(alertsReport.render({...args,decisions:confirmed}),/abcdef123456/);
+ assert.throws(()=>alertsReport.render({...args,decisions:{...confirmed,tenant_id:'personal'}}));
+});
+test('V19 Telegram /alertas historicos is owner-only, uses one read and zero LLM',async()=>{
+ const dirPath=dir();fs.chmodSync(dirPath,0o700);
+ runner.saveState(dirPath,'owner.json',{owner_id:700});
+ const {snap,data}=alertFixture();
+ runner.saveState(dirPath,'history-softcom.json',snap);
+ let id=0,reads=0,calls=0;
+ const sent=[];
+ const run=(user)=>runner.pollOnce({stateDir:dirPath,clock:()=>now,liveEnabled:true,
+  agentModel:{chat:async()=>{calls++;throw Error('LLM_NOT_ALLOWED')}},
+  query:async()=>{throw Error('BUSINESS_TOOL_NOT_ALLOWED')},
+  api:async(method,payload)=>{
+   if(method==='getUpdates')return [update(999900+(++id),user,'/alertas historicos')];
+   if(method==='sendMessage')sent.push(payload.text);
+  },
+  readLive:async req=>{
+   reads++;assert.deepEqual(req,{tenant_id:'grupo_erick',shape:'matrix'});return data;
+  }
+ });
+ try{
+  await run(701);assert.equal(reads,0);assert.equal(sent.length,0);
+  await run(700);assert.equal(reads,1);assert.equal(calls,0);
+  assert.match(sent[0],/alertas históricos fundamentados/);
+  assert.equal(runner.loadState(dirPath,'agent-llm-budget.json'),null);
+  assert.equal(runner.loadState(dirPath,'history-live-budget.json').count,1);
+  const fin=finopsLedger.snapshot(runner.loadState(dirPath,'ai-finops-daily.json'),now);
+  assert.equal(fin.direct_history,1);assert.equal(fin.provider_calls,0);
+  const audit=fs.readFileSync(path.join(dirPath,'audit.jsonl'),'utf8');
+  assert.match(audit,/"intent":"business_history_alerts"/);
+  assert.doesNotMatch(audit,/alertas históricos fundamentados|CALCADOS: abr/);
+  runner.saveState(dirPath,'history-live-budget.json',{
+   date:new Date(now).toISOString().slice(0,10),count:8});
+  await run(700);
+  assert.equal(reads,1);
+  assert.match(sent[1],/Limite privado/);
+ }finally{fs.rmSync(dirPath,{recursive:true,force:true})}
+});

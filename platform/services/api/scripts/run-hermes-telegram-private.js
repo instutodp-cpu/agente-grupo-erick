@@ -342,7 +342,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
      result.intent!=='inference_finops'){
    const kind=result.intent;
    const route=['business_cancel_rate','business_analyst','historico_live',
-    'historico','historico_lojas','historico_meses','business_diagnostic','business_diagnostic_store','business_diagnostic_matrix'].includes(kind)?
+    'historico','historico_lojas','historico_meses','business_diagnostic','business_diagnostic_store','business_diagnostic_matrix','business_history_alerts'].includes(kind)?
      'direct_history':
      ['compras','lotoia'].includes(kind)?'direct_domain':
      kind==='owner_decision'?'direct_decision':

@@ -521,3 +521,30 @@ Status: **piloto em staging, snapshot privado datado; NÃO é uma conexão ao vi
   de dimensões, SQL parametrizado/fixo e consumos de quota.
   Promoção staging V18 condicionada a HEAD/CI e rollback V17,
   um poller, sem merge automático nem mutações empresariais.
+
+## Hermes V19 — alertas operacionais determinísticos (sem Codex/JEV)
+- O comando proprietário `/alertas historicos` reutiliza a operação
+  read-only homologada `matrix` da view `hermes_history.daily_sales_v1`.
+  Não requer API Linx, escrita no ERP, nova credencial, nem autorização
+  de pagamento; mantém a quota de leituras históricas e uma só consulta.
+- Antes de classificar qualquer sinal, reconcilia as seis somas mensais
+  e seis somas por código com o snapshot empresarial conhecido. Se
+  houver divergência, falha fechado e não apresenta indicadores.
+- Duas classificações **descritivas**, exclusivamente abril→maio/2026:
+  (a) variação de taxa quando ambos os meses têm no mínimo 100
+  registros, diferença de cancelamento >= 2 pontos percentuais e
+  crescimento >=10 registros marcados cancelados;
+  (b) alteração de cobertura quando um mês tem menos de 20 registros
+  e o outro possui >=100. Mudanças de cobertura nunca são apresentadas
+  como taxa comparável. Limiares explícitos, conservadores e versionados.
+- A V19 não infere causas, fraude, prejuízo financeiro, estorno,
+  irregularidade de funcionário ou unidade física. A decisão humana
+  financeira confirmada aparece como contexto, sem conferir ao
+  Hermes autoridade de execução.
+- Somente ao proprietário vinculado, saída limitada a 3150 caracteres,
+  sem informações pessoais, sem cache de conteúdo, sem texto em
+  auditoria/FinOps; classificado como resposta histórica direta.
+- QA sintético: exemplos com quatro taxas comparáveis e dois casos de
+  troca brusca de cobertura; falha de reconciliação, tenant divergente,
+  decisão proposta versus confirmada, bloqueio de usuário externo,
+  quota SQL e zero LLM. Staging com V18 preservada para rollback.

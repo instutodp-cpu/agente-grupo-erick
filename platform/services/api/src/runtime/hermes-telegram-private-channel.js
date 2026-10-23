@@ -8,6 +8,7 @@ const ownerDecisions=require('./hermes-owner-decision-memory');
 const finops=require('./hermes-inference-finops');
 const diagnostic=require('./hermes-owner-diagnostic');
 const matrix=require('./hermes-store-month-matrix');
+const alerts=require('./hermes-operational-alerts');
 const ROUTES=Object.freeze({
  compras:'/internal/commercial-read-pilot/brief',
  lotoia:'/internal/lotoia-read-pilot/health',status:'/health'
@@ -19,7 +20,7 @@ const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
  'Comandos antigos: /vendas 2026-05, /produtos 2026-05.\n'+
  'Também aceito "resumo das compras" e "situação do LotoIA".\n'+
  'Memória de decisões: /decisao (propor, confirmar, cancelar) e /decisoes.\n'+
- 'Métricas privadas de IA: /economia. Diagnóstico: /diagnostico, /diagnostico lojas, /diagnostico cruzamento.\n'+
+ 'Métricas privadas de IA: /economia. Diagnóstico: /diagnostico, /diagnostico lojas, /diagnostico cruzamento. Alertas: /alertas historicos.\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const num=new Intl.NumberFormat('pt-BR');
@@ -280,6 +281,24 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  }
  // A bounded, static financial diagnostic from approved saved sources only.
  // No LLM, no database read, no implicit execution authority.
+ if(msg.text==='/alertas historicos'){
+  let answer;
+  try{
+   const raw=await readLive({tenant_id:'grupo_erick',shape:'matrix'});
+   if(raw?.denied_status==='history_budget_exhausted'){
+    answer='Limite privado de consultas históricas atingido; alertas não gerados nem estimados.';
+   }else{
+    answer=alerts.render({
+     snapshot:await readHistory(),aggregate:raw,decisions:await readDecisions(),
+     now:clock(),validSnapshot:safeHistorySnapshot
+    });
+   }
+  }catch{
+   answer='Alertas indisponíveis: evidências ou decisões não passaram na validação. Nenhum indicador foi presumido.';
+  }
+  await send(msg.userId,answer);
+  return {kind:'answered',intent:'business_history_alerts',source:'approved_history_aggregate'};
+ }
  if(msg.text==='/diagnostico cruzamento'){
   let answer;
   try{
