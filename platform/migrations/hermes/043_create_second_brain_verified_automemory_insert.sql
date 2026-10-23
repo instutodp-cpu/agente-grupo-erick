@@ -1,6 +1,7 @@
 -- HERMES Brain pilot AutoMemory: bounded RLS admission for verified enterprise sources.
--- STAGING CANDIDATE; DO NOT APPLY until an independently JWT-verified
--- authenticated ingress and a private-schema boundary are demonstrated.
+-- STAGING PREPARATION ONLY: may install private attestations after source
+-- verification and isolated tests. This migration grants NO INSERT privileges.
+-- Do not apply activation 045 until real Supabase Auth JWT ingress is verified.
 -- This is NOT a user-facing direct write API and creates no new tenant.
 -- Approved memory text is authenticated APP data, not executive authority.
 BEGIN;
