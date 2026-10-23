@@ -27,5 +27,5 @@ test('retention and isolated store enforced',()=>{
 });
 test('sensitive content is discarded and never kept in memory',()=>{
  const data=entry();data.entries[0].decision='A senha do sistema financeiro foi alterada';
- assert.equal(a.curate({ownerDecisions:data,now,policy}).items.length,0);
+ assert.throws(()=>a.curate({ownerDecisions:data,now,policy}),/decision_text_denied/);
 });
