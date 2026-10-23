@@ -8,6 +8,8 @@
   const sessionArea = document.getElementById('sessionArea');
   const accessPending = document.getElementById('accessPending');
   const noteSection = document.getElementById('noteSection');
+  const publishSection = document.getElementById('publishSection');
+  const publishStatus = document.getElementById('publishStatus');
   const who = document.getElementById('who');
   const results = document.getElementById('results');
   const redirect = 'https://hermes-staging.grupoerick.tech/brain/';
@@ -32,6 +34,7 @@
     workspace.hidden = true;
     sessionArea.hidden = true;
     accessPending.hidden = true;
+    publishSection.hidden = true;
     try {
       const sessionResponse = await client.auth.getSession();
       if (sessionResponse.error) throw sessionResponse.error;
@@ -62,6 +65,7 @@
         return;
       }
       workspace.hidden = false;
+      publishSection.hidden = false;
       const known = new Set(['projetos', 'compras', 'financeiro']);
       const granted = new Set(Array.isArray(access.allowed_domains) ? access.allowed_domains : []);
       const domainSelect = document.getElementById('domain');
@@ -96,6 +100,7 @@
   document.getElementById('logout').addEventListener('click', async function () {
     try { await client.auth.signOut({ scope: 'local' }); } catch (_) {}
     workspace.hidden = true;
+    publishSection.hidden = true;
     sessionArea.hidden = true;
     accessPending.hidden = true;
     loginArea.hidden = false;
@@ -156,6 +161,43 @@
       message('Proposta registrada como PENDENTE para revisão humana. Nenhuma aprovação ou execução foi realizada.');
     } catch (error) { message(friendly(error)); }
     finally { button.disabled = false; }
+  });
+  document.getElementById('publishAttested').addEventListener('click', async function (event) {
+    const button = event.currentTarget;
+    button.disabled = true;
+    publishStatus.textContent = 'Validando os quatro itens e a sessão autorizada…';
+    try {
+      const identity = await client.auth.getUser();
+      if (identity.error || !identity.data.user) throw identity.error || Error('session_invalid');
+      const admission = await client.rpc('hermes_brain_access_status', {p_tenant_id: tenant});
+      if (admission.error || !Array.isArray(admission.data) ||
+          admission.data.length !== 1 || admission.data[0].authorized !== true) {
+        throw Error('membership_denied');
+      }
+      const staged = await client.rpc('hermes_brain_get_attested_automemory', {p_tenant_id: tenant});
+      if (staged.error) throw staged.error;
+      const items = staged.data;
+      if (!Array.isArray(items) || items.length !== 4 ||
+          !items.every(item => typeof item.content === 'string' &&
+            item.content.length >= 12 && item.content.length <= 420)) {
+        throw Error('verified_bundle_invalid');
+      }
+      const outcome = await client.rpc('hermes_brain_publish_automemory',
+        {p_tenant_id: tenant,p_items: items});
+      if (outcome.error) throw outcome.error;
+      const receipt = outcome.data;
+      if (!receipt || receipt.status !== 'committed' ||
+          receipt.tenant_id !== tenant ||
+          Number(receipt.inserted) + Number(receipt.duplicates) !== 4) {
+        throw Error('unverified_publication_receipt');
+      }
+      publishStatus.textContent =
+        'Publicação confirmada pelo banco: ' + receipt.inserted +
+        ' nova(s), ' + receipt.duplicates + ' já existente(s). Apenas memórias; nenhuma ação financeira.';
+      message('Publicação autenticada de quatro memórias verificada pelo PostgreSQL.');
+    } catch (error) {
+      publishStatus.textContent = friendly(error);
+    } finally { button.disabled = false; }
   });
   void refreshIdentity();
 })();
