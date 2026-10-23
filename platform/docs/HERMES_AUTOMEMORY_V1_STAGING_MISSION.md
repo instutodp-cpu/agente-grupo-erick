@@ -87,3 +87,10 @@ ser o fluxo principal do AutoMemory.
 - Automatic memory selection after source consent remains the product
   requirement; migration 042's manual-per-item-review path stays unapplied.
 - The dry run MUST NOT be interpreted as successful central persistence.
+
+## Transação autenticada de publicação (incremento staging)
+- O port `publish` usa o contrato já existente `withAuthenticatedTransaction`: a conexão RLS deve estar autenticada pelo JWT Supabase, com `auth.uid()` conferido e `current_user=authenticated`.
+- O mesmo BEGIN valida o membership ativo, todos os domínios permitidos e as fontes verificadas; revalida a fonte no INSERT idempotente e exige recibo ou rollback. Nenhum `SET ROLE`, service_role nem autenticação do Telegram por equivalência numérica.
+- No estado real o `authenticated` tem apenas SELECT em memory_items, os domínios são apenas `projetos` e não há fontes verificadas: a publicação continua bloqueada, como exigido. NÃO conceder INSERT amplo por conveniência.
+- O port só pode ficar operacional após uma concessão específica de fontes/domínios, autenticação do proprietário e política RLS de escrita com proteção tenant, owner, source, classificação e escopo. Não usar o estado de testes simulados para alegar sincronização concluída.
+- Memória estruturada de fonte previamente aprovada pode ser curada sem aprovação individual; ações de negócio continuam bloqueadas.
