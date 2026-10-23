@@ -46,11 +46,9 @@ CREATE POLICY brain_owner_admission_lookup ON hermes_brain.automemory_admissions
  AND t.status='active' AND m.status='active' AND m.user_id=(SELECT auth.uid()))
 );
 
-GRANT INSERT (
- tenant_id, source_id, source_item_digest, source_version, owner_user_id,
- domain, classification, visibility, company_id, store_id,
- title, content, expires_at, status
-) ON hermes_brain.memory_items TO authenticated;
+-- Staged admission only. Keep INSERT revoked until authenticated ingress
+-- passes a real JWT/RLS test; 045 enables the narrow column grant later.
+REVOKE INSERT, UPDATE, DELETE ON hermes_brain.memory_items FROM authenticated;
 
 CREATE POLICY brain_owner_verified_automemory_insert
 ON hermes_brain.memory_items
@@ -103,7 +101,7 @@ WITH CHECK (
 REVOKE UPDATE, DELETE ON hermes_brain.memory_items FROM authenticated;
 DO $check$
 BEGIN
- IF NOT pg_catalog.has_column_privilege('authenticated','hermes_brain.memory_items','content','INSERT')
+ IF pg_catalog.has_column_privilege('authenticated','hermes_brain.memory_items','content','INSERT')
    OR pg_catalog.has_column_privilege('authenticated','hermes_brain.memory_items','memory_id','INSERT')
    OR pg_catalog.has_table_privilege('authenticated','hermes_brain.memory_items','UPDATE')
    OR pg_catalog.has_table_privilege('authenticated','hermes_brain.memory_items','DELETE')
