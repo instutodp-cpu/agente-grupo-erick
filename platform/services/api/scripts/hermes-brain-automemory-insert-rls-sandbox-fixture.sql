@@ -15,6 +15,14 @@ VALUES
  ('grupo_erick','90000000-0000-4000-8000-000000000003','supabase_history',
   'sha256:'||repeat('7',64),'revoked',now());
 
+INSERT INTO hermes_brain.automemory_admissions
+ (tenant_id,source_id,source_item_digest,source_version,owner_user_id,content_digest,expires_at)
+VALUES
+ ('grupo_erick','90000000-0000-4000-8000-000000000001',
+ 'sha256:'||repeat('1',64),'v1','11111111-1111-4111-8111-111111111111',
+ 'sha256:'||encode(sha256(convert_to('Valor agregado de teste, sem dado real.','UTF8')),'hex'),
+ date_trunc('minute',now())+interval '7 days');
+
 DO $priv$
 BEGIN
  IF NOT has_column_privilege('authenticated','hermes_brain.memory_items','content','INSERT')
@@ -37,7 +45,7 @@ VALUES
   'sha256:'||repeat('1',64),'v1','11111111-1111-4111-8111-111111111111',
   'comercial','internal','owner_only',NULL,NULL,
   'Histórico verificado — comercial','Valor agregado de teste, sem dado real.',
-  now()+interval '7 days','approved');
+  date_trunc('minute',now())+interval '7 days','approved');
 
 DO $tests$
 DECLARE denied boolean;
@@ -55,7 +63,7 @@ BEGIN
   VALUES ('client::alpha','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
    'sha256:'||repeat('2',64),'v1','11111111-1111-4111-8111-111111111111',
    'comercial','internal','owner_only','Histórico verificado — comercial',
-   'Cross-tenant injection must fail',now()+interval '7 days','approved');
+   'Cross-tenant injection must fail',date_trunc('minute',now())+interval '7 days','approved');
  EXCEPTION WHEN insufficient_privilege THEN denied:=true;
  END;
  IF NOT denied THEN RAISE EXCEPTION 'CROSS_TENANT_INSERT_SUCCEEDED'; END IF;
@@ -68,7 +76,7 @@ BEGIN
   VALUES ('grupo_erick','90000000-0000-4000-8000-000000000001',
    'sha256:'||repeat('3',64),'v1','22222222-2222-4222-8222-222222222222',
    'comercial','internal','owner_only','Histórico verificado — comercial',
-   'Wrong owner injection must fail',now()+interval '7 days','approved');
+   'Wrong owner injection must fail',date_trunc('minute',now())+interval '7 days','approved');
  EXCEPTION WHEN insufficient_privilege THEN denied:=true;
  END;
  IF NOT denied THEN RAISE EXCEPTION 'OWNER_SPOOF_INSERT_SUCCEEDED'; END IF;
@@ -81,7 +89,7 @@ BEGIN
   VALUES ('grupo_erick','90000000-0000-4000-8000-000000000003',
    'sha256:'||repeat('4',64),'v1','11111111-1111-4111-8111-111111111111',
    'comercial','internal','owner_only','Histórico verificado — comercial',
-   'Revoked source injection must fail',now()+interval '7 days','approved');
+   'Revoked source injection must fail',date_trunc('minute',now())+interval '7 days','approved');
  EXCEPTION WHEN insufficient_privilege THEN denied:=true;
  END;
  IF NOT denied THEN RAISE EXCEPTION 'REVOKED_SOURCE_INSERT_SUCCEEDED'; END IF;
@@ -94,7 +102,7 @@ BEGIN
   VALUES ('grupo_erick','90000000-0000-4000-8000-000000000001',
    'sha256:'||repeat('5',64),'v1','11111111-1111-4111-8111-111111111111',
    'comercial','confidential','tenant_shared','Histórico verificado — comercial',
-   'Broad share injection must fail',now()+interval '7 days','approved');
+   'Broad share injection must fail',date_trunc('minute',now())+interval '7 days','approved');
  EXCEPTION WHEN insufficient_privilege THEN denied:=true;
  END;
  IF NOT denied THEN RAISE EXCEPTION 'BROAD_MEMORY_INSERT_SUCCEEDED'; END IF;
@@ -123,7 +131,7 @@ BEGIN
   '11111111-1111-4111-8111-111111111111'::uuid,
   'comercial','internal','owner_only',NULL,NULL,
   'Histórico verificado — comercial','Valor agregado de teste, sem dado real.',
-  now()+interval '7 days','approved'
+  date_trunc('minute',now())+interval '7 days','approved'
  FROM hermes_brain.sources s
  WHERE s.tenant_id='grupo_erick' AND s.source_id='90000000-0000-4000-8000-000000000001'
    AND s.status='verified'
@@ -152,7 +160,7 @@ BEGIN
  VALUES ('grupo_erick','90000000-0000-4000-8000-000000000001',
   'sha256:'||repeat('f',64),'v2','11111111-1111-4111-8111-111111111111',
   'comercial','internal','owner_only','Histórico verificado — comercial',
-  'Revoked membership must fail',now()+interval '7 days','approved');
+  'Revoked membership must fail',date_trunc('minute',now())+interval '7 days','approved');
  EXCEPTION WHEN insufficient_privilege THEN denied:=true;
  END;
  IF NOT denied THEN RAISE EXCEPTION 'REVOKED_MEMBERSHIP_INSERT_SUCCEEDED'; END IF;
