@@ -881,7 +881,7 @@ test('period totals do not duplicate the requested count when cancellations are 
   records:'1334',cancelled:'58',noncancelled:'1276',amount:'165352.11',last_day:'2026-06-08'
  }]})},p);
  const answer=analyst.reply(data,p);
- assert.equal((answer.match(/\b58\b/g)||[]).length,1);
+ assert.equal((answer.match(/^• registros marcados como cancelados: 58$/gm)||[]).length,1);
  assert.match(answer,/Total de registros: 1\.334/);
  assert.match(answer,/08\/06/);
 });
