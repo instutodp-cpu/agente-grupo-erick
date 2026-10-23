@@ -177,7 +177,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
  if(autoMemoryEnabled){
   const today=new Date(clock()).toISOString().slice(0,10);
   const cursor=loadState(stateDir,'auto-memory-day.json');
-  if(cursor?.day!==today){
+  if(cursor?.day!==today||cursor?.policy_version!==2){
    const next=autoMemory.curate({
     ownerDecisions:loadState(stateDir,'owner-decisions.json'),
     businessEvidence:loadState(stateDir,'business-evidence-memory.json'),
@@ -185,7 +185,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     policy:{enabled:true,tenant_id:'grupo_erick',decisions:true,aggregates:true}
    });
    saveState(stateDir,'auto-memory.json',next);
-   saveState(stateDir,'auto-memory-day.json',{day:today});
+   saveState(stateDir,'auto-memory-day.json',{day:today,policy_version:2});
    audit(stateDir,{event:'auto_memory_daily',at:new Date(clock()).toISOString(),
     count:next.items.length});
   }
