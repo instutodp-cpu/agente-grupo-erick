@@ -214,3 +214,56 @@ concluir credencial JWT/role sem bypass, executar a migração em staging
 dele e provar ingestão mínima/consulta/gravação após reboot com
 revogação/retention e auditoria. Apenas depois ativar canais,
 espaço pessoal ou empresas externas.
+
+## Vinte e três de outubro — Inbox autenticado e condição de ativação
+
+Projeto canônico provisionado e verificado via Supabase plugin:
+`hermes-brain` (`asceucchdnuoaqgdjbtg`, `sa-east-1`, PostgreSQL 17).
+A migração de leitura `038_create_second_brain_multi_tenant_read_model`
+foi aplicada e o security advisor ficou sem alertas; schema
+`hermes_brain` não consta de esquemas públicos. O projeto Softcom
+permanece isolado como fonte histórica.
+
+Próximo incremento: `039_create_second_brain_inbox_candidates.sql`.
+A tabela `inbox_candidates` aceita apenas INSERT de **propostas pendentes**
+originadas de sessão Supabase `authenticated`, com `auth.uid()` igual ao
+`actor_user_id`, membership ativa, tenant ativo e domínio/classificação/
+empresa/loja permitidos. O usuário lê apenas suas próprias propostas.
+Sem UPDATE ou DELETE concedidos a usuários comuns, sem criação automática
+de memórias aprovadas, sem transmissão a outros domínios. Revisão,
+aprovação e promoção exigem um fluxo humano/admin separado (não entregue).
+Uma proposta pode conter informações sensíveis; ingress deverá validar
+origem, minimização, consentimento e conteúdo, além de limites por canal
+antes de ativar envio por usuários/clientes.
+
+`hermes-brain-authenticated-transaction.js` exige um cliente de banco
+**fixado em uma mesma conexão PostgreSQL** e uma transação para validar
+`current_user = authenticated` + `auth.uid()` antes de leitura ou
+proposta. Isso NÃO valida JWT sozinho. Um ingress confiável precisa
+autenticar a sessão do Supabase Auth e prover conexão devidamente
+restrita; nunca usar service_role/postgres ou tokens de cliente
+arbitrários. Uma conexão pg.Pool com query() para alternar sessões não
+cumpre o contrato. A proposta usa SQL fixo parametrizado; resultado
+metadata-only, `approved:false`, `executed:false`.
+
+Homologação em PostgreSQL temporário com rede desabilitada:
+`test-hermes-brain-rls-sandbox.sh` aplica 038 e 039, testa cliente A vs
+cliente B, empresa fora de scope, dono falso, domínio proibido, tentativa
+de autoclassificar proposta como aprovada, ausência de elevação de
+autoridade e acesso anônimo negado.
+
+**Bloqueio comprovado para uso real no Telegram:** no momento da
+inspeção do projeto `hermes-brain`, `auth.users` estava vazio (0).
+O vínculo Telegram de proprietário não é um token Supabase Auth e não
+autoriza fabricar um UUID/JWT nem inserir membership em nome de alguém.
+É necessário o primeiro login Supabase Auth válido, vínculo explícito e
+auditoria do par canal↔usuário antes de habilitar `/lembrar` ou `/buscar`
+pelo Telegram. Nenhum dado pessoal/empresarial é importado sem isso.
+
+Ordem: 1) aplicar e validar 039; 2) ativar tenant piloto inicialmente
+`provisioning`, sem membros/credenciais; 3) convidar usuário via Supabase
+Auth e verificar login; 4) aprovar vínculo de canal e membership;
+5) homologar proposta e posterior revisão/autoridade humana;
+6) só então conectar busca no único poller staging do Telegram.
+A V19 permanece saudável e intocada até completar autorização e
+verificação E2E com fonte auditável. Sem merge, sem production rollout.

@@ -31,4 +31,12 @@ docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q \
  -f /tmp/migration.sql
 docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q \
  -f /tmp/fixture.sql | grep 'RLS_CROSS_TENANT_APPROVAL_SOURCE_TTL_SCOPE_AND_WRITE_GATE_OK'
+docker cp "$ROOT/platform/migrations/hermes/039_create_second_brain_inbox_candidates.sql" \
+ "$CONTAINER":/tmp/inbox-migration.sql
+docker cp "$ROOT/platform/services/api/scripts/hermes-brain-inbox-rls-sandbox-fixture.sql" \
+ "$CONTAINER":/tmp/inbox-fixture.sql
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q \
+ -f /tmp/inbox-migration.sql
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q \
+ -f /tmp/inbox-fixture.sql | grep 'BRAIN_INBOX_MEMBER_WRITE_PENDING_CROSS_TENANT_REJECTION_OK'
 echo BRAIN_EPHEMERAL_POSTGRES_RLS_TEST_OK
