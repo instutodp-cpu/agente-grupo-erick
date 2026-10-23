@@ -53,6 +53,8 @@ cp -p "$CADDYFILE" "$BACKUP"
 install -d -m 0755 "$DOCROOT" "$DOCROOT/brain"
 install -m 0644 "$SOURCE_DIR/index.html" "$DOCROOT/brain/index.html"
 install -m 0644 "$SOURCE_DIR/app.js" "$DOCROOT/brain/app.js"
+# Arm rollback before changing the privileged configuration file.
+CHANGED=1
 python3 - "$CADDYFILE" <<'PY'
 from pathlib import Path
 import sys
@@ -76,7 +78,6 @@ new = '''\t\t@hermes_brain_static {
 assert s.count(needle) == 1
 path.write_text(s.replace(needle, new + needle))
 PY
-CHANGED=1
 caddy validate --adapter caddyfile --config "$CADDYFILE"
 systemctl reload caddy
 test "$(curl -fsS --max-time 10 -o /dev/null -w '%{http_code}' "https://$SITE/health")" == '200' || die 'Health route regression'
