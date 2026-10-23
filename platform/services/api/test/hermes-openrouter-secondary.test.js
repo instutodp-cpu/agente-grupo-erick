@@ -35,7 +35,7 @@ test('OpenRouter cost tier, strict price, ZDR and data policy are enforced',asyn
  assert.equal(a.max_tokens,650);
  assert.equal(b.model,'google/gemini-2.5-flash');
  assert.ok(!('plugins' in b));
- assert.throws(()=>task.chat(msg,{maxTokens:650}),/task_cap/);
+ await assert.rejects(()=>task.chat(msg,{maxTokens:650}),/task_cap/);
  assert.equal(requests[0].headers.Authorization,'Bearer '+validKey);
 });
 test('Codex fallback only for allowed provider errors, not authorization/validation',()=>{
