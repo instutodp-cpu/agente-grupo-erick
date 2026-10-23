@@ -31,10 +31,13 @@
       <button type="submit">Enviar link de acesso</button>
     </form>
   </section>
-  <section id="workspace" hidden>
+  <section id="sessionArea" hidden>
     <p id="who" class="muted"></p>
-    <p><strong>Espaço: Grupo Erick</strong> (somente se a associação estiver autorizada no banco).</p>
     <button id="logout" type="button">Encerrar sessão</button>
+  </section>
+  <p id="accessPending" hidden role="status">Identidade confirmada, mas este espaço ainda não está habilitado para sua conta. A associação ao Grupo Erick exige provisionamento e autorização administrativa; nenhuma memória foi liberada.</p>
+  <section id="workspace" hidden>
+    <p><strong>Espaço autorizado: Grupo Erick</strong></p>
     <h2>Buscar memórias aprovadas</h2>
     <form id="searchForm">
       <label for="query">Termos de busca</label>
@@ -42,6 +45,7 @@
       <button type="submit">Buscar</button>
     </form>
     <div id="results" aria-live="polite"></div>
+    <div id="noteSection" hidden>
     <h2>Propor memória para revisão</h2>
     <form id="noteForm">
       <label for="domain">Domínio autorizado</label>
@@ -53,6 +57,7 @@
       <button type="submit">Enviar proposta</button>
     </form>
     <p class="muted">A proposta ficará pendente de revisão; não há aprovação automática nem permissões de execução.</p>
+    </div>
   </section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.83.0/dist/umd/supabase.min.js" integrity="sha384-DfTBUIGOZfdRqbGMsYWEFqIOMS+FhBjK3jrRQtRx0rTBCRhdXCKcsyzrTdqgJnze" crossorigin="anonymous" referrerpolicy="no-referrer"></script>

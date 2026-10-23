@@ -41,3 +41,10 @@ handle @hermes_brain_static {
 - Testar `node --test platform/services/api/test/hermes-brain-web-staging.test.js`.
 - Registrar HTTP 200 em /brain/, /brain/app.js; 404 em caminhos fora da allowlist.
 - Rastrear CI da PR, verificar HEAD antes de alteração da VPS; rollback = restaurar Caddyfile e remover apenas o handle estático.
+
+## Contrato de admissão do tenant — pós-login (041)
+- O portal autentica com `getUser()`, mas NÃO mostra busca/proposta até receber `authorized=true` do RPC `hermes_brain_access_status` sob o JWT autenticado. Falha de RPC mantém o portal fechado.
+- O RPC roda como `SECURITY INVOKER` e retorna autorização e domínios **somente da própria associação**, sob PostgreSQL RLS. Não aceita `user_id`, e `anon` não pode invocar.
+- `grupo_erick` continua em `provisioning` e `memberships` vazio; isso é esperado até a etapa administrativa explícita. A implantação 041 NÃO cria membros, NÃO ativa tenants e NÃO aprova memória.
+- A etapa administrativa seguinte precisa confirmar propriedade do workspace por canal independente, conferir o UID UUID de `auth.users` do usuário confirmado, obter aprovação expressa de concessão e registrar a mudança auditável com escopo mínimo (`projetos`, `internal`, `owner_only`; sem empresa/loja genéricas). Somente depois testar `active`, revogação e isolamento A/B antes de liberar outros domínios.
+- Alterar a página estática em staging somente após CI verde e aplicar 041. Para a atualização dos arquivos públicos, manter hashes verificados e privilégio controlado de instalação; recarregar o navegador requer novo login porque a sessão é em memória.

@@ -5,6 +5,9 @@
   const status = document.getElementById('status');
   const loginArea = document.getElementById('loginArea');
   const workspace = document.getElementById('workspace');
+  const sessionArea = document.getElementById('sessionArea');
+  const accessPending = document.getElementById('accessPending');
+  const noteSection = document.getElementById('noteSection');
   const who = document.getElementById('who');
   const results = document.getElementById('results');
   const redirect = 'https://hermes-staging.grupoerick.tech/brain/';
@@ -25,12 +28,15 @@
     auth: { flowType: 'implicit', detectSessionInUrl: true, persistSession: false, autoRefreshToken: true }
   });
   async function refreshIdentity() {
+    // Default deny: authentication never unlocks a tenant by itself.
+    workspace.hidden = true;
+    sessionArea.hidden = true;
+    accessPending.hidden = true;
     try {
       const sessionResponse = await client.auth.getSession();
       if (sessionResponse.error) throw sessionResponse.error;
       if (!sessionResponse.data.session) {
         loginArea.hidden = false;
-        workspace.hidden = true;
         message('Entre com o e-mail já confirmado no Hermes Brain.');
         return;
       }
@@ -38,12 +44,38 @@
       if (identity.error || !identity.data.user) throw identity.error || Error('user_unverified');
       who.textContent = 'Identidade autenticada: ' + (identity.data.user.email || 'usuário confirmado');
       loginArea.hidden = true;
-      workspace.hidden = false;
-      message('Sessão autenticada. Consulta e proposta ainda dependem de associação ativa ao tenant e das políticas RLS.');
+      sessionArea.hidden = false;
     } catch (_) {
       loginArea.hidden = false;
-      workspace.hidden = true;
       message('Não foi possível validar a sessão. Solicite um novo link, sem criar outra conta.');
+      return;
+    }
+    try {
+      // The server checks the verified JWT + the active tenant membership through RLS.
+      const admission = await client.rpc('hermes_brain_access_status', {p_tenant_id: tenant});
+      if (admission.error) throw admission.error;
+      if (!Array.isArray(admission.data) || admission.data.length !== 1) throw Error('invalid_access_status');
+      const access = admission.data[0];
+      if (access.authorized !== true) {
+        accessPending.hidden = false;
+        message('Sessão autenticada. Acesso empresarial pendente; nenhuma operação habilitada.');
+        return;
+      }
+      workspace.hidden = false;
+      const known = new Set(['projetos', 'compras', 'financeiro']);
+      const granted = new Set(Array.isArray(access.allowed_domains) ? access.allowed_domains : []);
+      const domainSelect = document.getElementById('domain');
+      for (const option of domainSelect.options) {
+        option.disabled = !known.has(option.value) || !granted.has(option.value);
+      }
+      const firstAllowed = [...domainSelect.options].find(option => !option.disabled);
+      noteSection.hidden = access.can_propose_internal !== true || !firstAllowed;
+      if (firstAllowed) domainSelect.value = firstAllowed.value;
+      message('Sessão autenticada e associação ativa confirmada pelo PostgreSQL RLS.');
+    } catch (_) {
+      workspace.hidden = true;
+      accessPending.hidden = false;
+      message('Não foi possível confirmar as permissões do espaço. Acesso bloqueado por segurança.');
     }
   }
   document.getElementById('loginForm').addEventListener('submit', async function (event) {
@@ -64,6 +96,8 @@
   document.getElementById('logout').addEventListener('click', async function () {
     try { await client.auth.signOut({ scope: 'local' }); } catch (_) {}
     workspace.hidden = true;
+    sessionArea.hidden = true;
+    accessPending.hidden = true;
     loginArea.hidden = false;
     results.replaceChildren();
     message('Sessão encerrada neste navegador.');

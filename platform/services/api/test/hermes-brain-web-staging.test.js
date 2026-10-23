@@ -16,6 +16,12 @@ test('login uses an existing user and never grants administrative access', () =>
   assert.match(js,/persistSession: false/);
   assert.match(js,/client\.auth\.getUser\(\)/);
   assert.match(js,/client\.rpc\('hermes_brain_search'/);
+  assert.match(js,/client\.rpc\('hermes_brain_access_status'/);
+  assert.match(js,/access\.authorized !== true/);
+  assert.match(js,/workspace\.hidden = true/);
+  assert.match(html,/id="accessPending" hidden/);
+  assert.match(html,/id="workspace" hidden/);
+  assert.match(js,/access\.can_propose_internal !== true/);
   assert.match(js,/client\.rpc\('hermes_brain_submit_note'/);
   assert.doesNotMatch(html+js,/sb_secret_|service_role|SECURITY DEFINER|approve.memory|localStorage|sessionStorage|innerHTML/i);
 });
