@@ -59,4 +59,8 @@ docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q \
  -f /tmp/automemory-insert-fixture.sql | grep 'BRAIN_VERIFIED_OWNER_RLS_INSERT_AND_REJECTION_OK'
 docker cp "$ROOT/platform/services/api/scripts/hermes-brain-automemory-rpc-rls-sandbox-fixture.sql" "$CONTAINER":/tmp/automemory-rpc-fixture.sql
 docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/automemory-rpc-fixture.sql | grep 'BRAIN_AUTHENTICATED_INVOCATION_REPLAY_AND_TENANT_DENIAL_OK'
+docker cp "$ROOT/platform/migrations/hermes/046_stage_attested_automemory_for_owner_jwt_publication.sql" "$CONTAINER":/tmp/brain-payload.sql
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/brain-payload.sql
+docker cp "$ROOT/platform/services/api/scripts/hermes-brain-staged-publication-rls-sandbox-fixture.sql" "$CONTAINER":/tmp/brain-staged-roundtrip.sql
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/brain-staged-roundtrip.sql | grep 'BRAIN_OWNER_STAGED_FOUR_PUBLICATION_AND_REPLAY_OK'
 echo BRAIN_EPHEMERAL_POSTGRES_RLS_TEST_OK
