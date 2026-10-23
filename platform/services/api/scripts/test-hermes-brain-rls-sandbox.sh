@@ -51,4 +51,6 @@ docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q \
  -f /tmp/automemory-publish-rpc.sql
 docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q \
  -f /tmp/automemory-insert-fixture.sql | grep 'BRAIN_VERIFIED_OWNER_RLS_INSERT_AND_REJECTION_OK'
+docker cp "$ROOT/platform/services/api/scripts/hermes-brain-automemory-rpc-rls-sandbox-fixture.sql" "$CONTAINER":/tmp/automemory-rpc-fixture.sql
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/automemory-rpc-fixture.sql | grep 'BRAIN_AUTHENTICATED_INVOCATION_REPLAY_AND_TENANT_DENIAL_OK'
 echo BRAIN_EPHEMERAL_POSTGRES_RLS_TEST_OK
