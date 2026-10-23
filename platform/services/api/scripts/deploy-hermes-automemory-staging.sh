@@ -11,8 +11,8 @@ BASE=/home/hermesadmin/.hermes-telegram
 STATE="$BASE/state"
 ROUTER_KEY="$BASE/secret/openrouter-api-key"
 OLD=hermes-telegram-private-v1
-BACKUP=hermes-telegram-private-pre-openrouter-v5
-IMAGE=hermes-telegram-openrouter:staging-v5
+BACKUP=hermes-telegram-private-pre-router-metrics-v6
+IMAGE=hermes-telegram-openrouter:staging-v6
 RELEASE="$BASE/releases/auto-memory-$SHA.js"
 denied(){ echo "AUTOMEMORY_DENIED: $1" >&2; exit 1; }
 [[ "$(git -C "$REPO" status --porcelain)" == '' ]] || denied dirty_tree
