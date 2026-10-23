@@ -70,7 +70,9 @@ function prepare({store,principal,membership,verifiedSources,now=Date.now()}={})
 // never a role claim, Telegram ID, model output or service_role credential.
 const MEMBERSHIP_SQL="SELECT tenant_id,user_id::text AS user_id,status,allowed_domains,allowed_classifications,allowed_visibilities FROM hermes_brain.memberships WHERE tenant_id=$1 AND user_id=(SELECT auth.uid()) AND status='active' LIMIT 2";
 const SOURCES_SQL="SELECT tenant_id,source_id::text AS source_id,provider,reference_digest,status FROM hermes_brain.sources WHERE tenant_id=$1 AND status='verified' AND reference_digest=ANY($2::text[]) LIMIT 40";
-const PRIVILEGE_SQL="SELECT has_table_privilege(current_user,'hermes_brain.memory_items','INSERT') AS allowed";
+// Column-scoped INSERT prevents authenticated sessions from overriding generated
+// IDs/timestamps; a blanket table grant must NOT pass admission.
+const PRIVILEGE_SQL="SELECT (SELECT bool_and(has_column_privilege(current_user,'hermes_brain.memory_items',col,'INSERT')) FROM unnest(ARRAY['tenant_id','source_id','source_item_digest','source_version','owner_user_id','domain','classification','visibility','company_id','store_id','title','content','expires_at','status']) AS c(col)) AND NOT has_column_privilege(current_user,'hermes_brain.memory_items','memory_id','INSERT') AS allowed";
 const INSERT_SQL="INSERT INTO hermes_brain.memory_items (tenant_id,source_id,source_item_digest,source_version,owner_user_id,domain,classification,visibility,company_id,store_id,title,content,expires_at,status) SELECT $1,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12,$13::timestamptz,'approved' FROM hermes_brain.sources s WHERE s.tenant_id=$1 AND s.source_id=$2::uuid AND s.status='verified' AND s.reference_digest=$14 AND $13::timestamptz>now() ON CONFLICT (tenant_id,source_id,source_item_digest,source_version) DO NOTHING RETURNING memory_id";
 
 async function publish({pool,user_id,store,now=Date.now()}={}){
