@@ -37,6 +37,32 @@ BEGIN
     OR (v_item->>'source_item_digest') !~ '^sha256:[a-f0-9]{64}$'
     THEN RAISE EXCEPTION 'automemory_item_contract_invalid' USING ERRCODE='22023';
   END IF;
+  -- Verify the attested item BEFORE attempting an insert or treating a conflict
+  -- as a duplicate. An existing digest cannot validate tampered replay text.
+  IF NOT EXISTS (
+   SELECT 1 FROM hermes_brain.automemory_admissions a
+   JOIN hermes_brain.sources s ON s.tenant_id=a.tenant_id
+    AND s.source_id=a.source_id AND s.status='verified'
+   WHERE a.tenant_id='grupo_erick'
+     AND a.owner_user_id=v_uid AND a.status='admitted'
+     AND a.source_id=(v_item->>'source_id')::uuid
+     AND a.source_item_digest=v_item->>'source_item_digest'
+     AND a.source_version=v_item->>'source_version'
+     AND a.expires_at=(v_item->>'expires_at')::timestamptz
+     AND a.expires_at>now()
+     AND a.content_digest='sha256:'||pg_catalog.encode(
+       pg_catalog.sha256(pg_catalog.convert_to(v_item->>'content','UTF8')),'hex')
+     AND (
+       (s.provider='telegram_owner_confirmed'
+          AND v_item->>'domain'='financeiro'
+          AND v_item->>'title'='Decisão confirmada — financeiro')
+       OR (s.provider='supabase_history'
+          AND v_item->>'domain'='comercial'
+          AND v_item->>'title'='Histórico verificado — comercial')
+     )
+  ) THEN
+    RAISE EXCEPTION 'automemory_item_not_attested' USING ERRCODE='42501';
+  END IF;
   v_id:=NULL;
   INSERT INTO hermes_brain.memory_items (
    tenant_id,source_id,source_item_digest,source_version,owner_user_id,
