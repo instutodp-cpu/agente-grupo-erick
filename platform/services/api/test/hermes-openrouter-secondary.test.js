@@ -95,3 +95,35 @@ test('Codex remains first; a provider failure switches once to OpenRouter',async
   assert.equal(runner.loadState(dir,'agent-openrouter-budget.json').count,secondaryCalls);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('FinOps counts both the failed Codex attempt and successful secondary; no prompt leaks in route audit',async()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'hermes-finops-router-'));
+ fs.chmodSync(dir,0o700);
+ const goal='Analise nossos riscos financeiros e compromissos da empresa';
+ const update={update_id:42,message:{chat:{id:777,type:'private'},from:{id:777,is_bot:false},message_id:1,text:goal}};
+ runner.saveState(dir,'owner.json',{owner_id:777});
+ let primary=0,secondaryCalls=0;
+ const router={forTask:()=>({chat:async(_,options)=>{
+  secondaryCalls++;
+  return options.jsonMode?JSON.stringify({steps:[{tool:'compras',params:{}}]}):
+   'Sem conciliação comprovada, a decisão deve aguardar confirmação das fontes.';}})};
+ try{
+  await runner.pollOnce({stateDir:dir,clock:()=>now,autoMemoryEnabled:false,
+   api:async method=>method==='getUpdates'?[update]:[],
+   query:async()=>({ok:true}),liveEnabled:true,
+   agentModel:{chat:async()=>{primary++;throw Error('codex_login_quota_exhausted')}},
+   secondaryProvider:router,readLive:async()=>{throw Error('unexpected_read')}});
+  assert.equal(primary,1);
+  assert.equal(secondaryCalls,1);
+  const day=runner.loadState(dir,'ai-finops-daily.json').days.find(x=>x.date==='2026-10-23');
+  assert.equal(day.provider_calls,2);
+  assert.equal(day.provider_ok,1);
+  assert.equal(day.provider_fail,1);
+  const events=fs.readFileSync(path.join(dir,'audit.jsonl'),'utf8').split('\n')
+   .filter(Boolean).map(line=>JSON.parse(line)).filter(x=>x.event==='model_provider_call');
+  assert.deepEqual(events.map(x=>[x.provider,x.result]),[
+   ['codex_login','failure'],['openrouter_auto','success']]);
+  assert(!events.some(x=>('prompt' in x)||('response' in x)||('key' in x)||('error' in x)));
+  assert.equal(runner.loadState(dir,'agent-openrouter-budget.json').count,1);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

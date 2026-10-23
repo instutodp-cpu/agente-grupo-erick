@@ -41,3 +41,16 @@ Never put API key into repo, GitHub issue, chat, Telegram or log.
 Deploy script must preserve exact expected Git SHA, CI green, previous
 poller backup, single poller, no new privileged mounts, staging flags
 and rollback; enabled only when key exists and permission verified.
+
+## Evidência e métricas do roteamento (V5.1)
+- Cada chamada física gera um evento `model_provider_call` com `provider`
+  (`codex_login` ou `openrouter_auto`), sucesso/falha e duração limitada.
+  Não inclui pergunta, completions, nome de pessoa, chave, identificador de usuário,
+  resposta, erro bruto, custo inventado ou conteúdo confidencial.
+- Uma tentativa Codex que falha, seguida de OpenRouter bem-sucedido, representa
+  **duas chamadas** no FinOps. O contador OpenRouter continua separado e é
+  reservado antes de cada chamada HTTP. O cache não gera chamadas.
+- Os contadores agregados não informam custo real: é necessária resposta de
+  uso/faturamento autorizada para exibir valores em USD.
+- A homologação definitiva do Telegram exige uma mensagem real do proprietário;
+  testes locais e chamadas sintéticas não a substituem.

@@ -102,7 +102,8 @@ function response(raw,now=Date.now()){
   'Chamadas reais ao modelo: '+s.provider_calls+
   ' (sucesso '+s.provider_ok+', falha '+s.provider_fail+')\n'+
   'Latência média por chamada: '+(avg===null?'sem amostras':avg+' ms')+'\n'+
-  'Provedor: Codex Login (modelo exato não informado)\n'+
+  'Provedores: Codex Login (primário) e OpenRouter Auto (secundário quando habilitado).\n'+
+  'Rota por chamada: evento seguro model_provider_call no registro de auditoria.\n'+
   'Tokens/custo: indisponíveis no bridge atual — não estimados.\n'+
   'Contabilização iniciada com V14; métricas anteriores não reconstruídas.\n'+
   'Somente métricas agregadas. Sem dados pessoais.';

@@ -260,47 +260,54 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     // The fallback cannot grant tool permissions or reset a budget.
     let reservedPrimary=false,useSecondary=turns>=4;
     let callsThisTask=0;
-    const meteredModel={chat:async(...args)=>{
-     if(callsThisTask>=2)throw Error('agent_turn_calls_denied');
-     callsThisTask++;
+    // Count each actual provider request separately. A Codex failure followed
+    // by OpenRouter success is TWO calls, not one successful call.
+    const callProvider=async(provider,invoke)=>{
      const start=Date.now();
      let ok=false;
      try{
-      if(!useSecondary){
-       if(!reservedPrimary){
-        saveState(stateDir,'agent-llm-budget.json',{date:today,turns:turns+1});
-        reservedPrimary=true;
-       }
-       try{
-        const output=await agentModel.chat(...args);
-        ok=true;
-        return output;
-       }catch(error){
-        if(!secondary||!openRouter.isFallbackEligible(error))throw error;
-        useSecondary=true;
-       }
-      }
-      if(!secondary)throw Error('agent_daily_quota');
-      const previous=loadState(stateDir,'agent-openrouter-budget.json');
-      if(previous&&(!/^20\d{2}-\d{2}-\d{2}$/.test(previous.date)||
-       !Number.isInteger(previous.count)||previous.count<0||previous.count>8))
-       throw Error('openrouter_budget_invalid');
-      const used=previous?.date===today?previous.count:0;
-      if(used>=8)throw Error('openrouter_daily_quota');
-      saveState(stateDir,'agent-openrouter-budget.json',{date:today,count:used+1});
-      const output=await secondary.chat(...args);
+      const answer=await invoke();
       ok=true;
-      return output;
+      return answer;
      }finally{
-      // Separate budget: at most 8 OpenRouter requests/day; no payload logging.
-      const elapsed=Math.max(0,Math.min(90000,Date.now()-start));
+      const durationMs=Math.max(0,Math.min(90000,Date.now()-start));
       try{
        const old=loadState(stateDir,'ai-finops-daily.json');
        saveState(stateDir,'ai-finops-daily.json',finops.bump(old,{
-        kind:'provider_call',route:'other',ok,duration_ms:elapsed,
+        kind:'provider_call',route:'other',ok,duration_ms:durationMs,
         cache_hit:false},clock()));
       }catch{}
+      try{
+       audit(stateDir,{at:new Date(clock()).toISOString(),
+        event:'model_provider_call',provider,result:ok?'success':'failure',
+        duration_ms:durationMs});
+      }catch{}
      }
+    };
+    const meteredModel={chat:async(...args)=>{
+     if(callsThisTask>=2)throw Error('agent_turn_calls_denied');
+     callsThisTask++;
+     if(!useSecondary){
+      if(!reservedPrimary){
+       saveState(stateDir,'agent-llm-budget.json',{date:today,turns:turns+1});
+       reservedPrimary=true;
+      }
+      try{
+       return await callProvider('codex_login',()=>agentModel.chat(...args));
+      }catch(error){
+       if(!secondary||!openRouter.isFallbackEligible(error))throw error;
+       useSecondary=true;
+      }
+     }
+     if(!secondary)throw Error('agent_daily_quota');
+     const previous=loadState(stateDir,'agent-openrouter-budget.json');
+     if(previous&&(!/^20\d{2}-\d{2}-\d{2}$/.test(previous.date)||
+      !Number.isInteger(previous.count)||previous.count<0||previous.count>8))
+      throw Error('openrouter_budget_invalid');
+     const used=previous?.date===today?previous.count:0;
+     if(used>=8)throw Error('openrouter_daily_quota');
+     saveState(stateDir,'agent-openrouter-budget.json',{date:today,count:used+1});
+     return callProvider('openrouter_auto',()=>secondary.chat(...args));
     }};
     return governed.runTurn({
      goal,model:meteredModel,clock,
