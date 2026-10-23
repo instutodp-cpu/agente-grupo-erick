@@ -250,7 +250,7 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  readAnalystContext=async()=>null,writeAnalystContext=async()=>{},
  readAnalyst=async()=>null,readAgent=async()=>null,agentEnabled=false,
  readDecisions=async()=>null,writeDecisions=async()=>{},
- readFinops=async()=>null}){
+ readFinops=async()=>null,readAutocurated=async()=>null}){
  const msg=privateMessage(update);
  if(!msg)return {kind:'ignored'};
  if(typeof send!=='function'||typeof query!=='function')
@@ -272,6 +272,17 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
   return {kind:'paired'};
  }
  if(msg.userId!==ownerId)return {kind:'unauthorized'};
+ if(msg.text==='/memorias'){
+  let reply;
+  try{
+   reply=await readAutocurated();
+   if(typeof reply!=='string'||reply.length>1700||
+      !/^(🧠 Memórias automáticas|🧠 Hermes AutoMemory|Memória automática indisponível)/.test(reply))
+    throw Error('autocurated_response_invalid');
+  }catch{reply='Memórias automáticas indisponíveis; nenhuma informação foi liberada.';}
+  await send(msg.userId,reply);
+  return {kind:'answered',intent:'auto_memory',source:'trusted_structured'};
+ }
  if(msg.text==='/economia'){
   let answer;
   try{answer=finops.response(await readFinops(),clock());}

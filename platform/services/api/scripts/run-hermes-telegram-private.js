@@ -9,6 +9,7 @@ const {readHistoricalSales}=require('../src/runtime/hermes-softcom-live-reader')
 const analyst=require('../src/runtime/hermes-analyst-templates');
 const governed=require('../src/runtime/hermes-governed-agent');
 const businessMemory=require('../src/runtime/hermes-business-evidence-memory');
+const autoMemory=require('../src/runtime/hermes-automemory-curator');
 const ownerDecisions=require('../src/runtime/hermes-owner-decision-memory');
 const answerCache=require('../src/runtime/hermes-verified-answer-cache');
 const finops=require('../src/runtime/hermes-inference-finops');
@@ -39,7 +40,7 @@ function loadState(dir,name){
   try{
    const st=fs.fstatSync(fd);
    const limit=name==='history-analyst-cache.json'?16384:
-    ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json'].includes(name)?32768:
+    ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json','auto-memory.json'].includes(name)?32768:
     name==='ai-finops-daily.json'?4096:2048;
    if(!st.isFile()||(st.mode&0o777)!==0o600||st.size>limit)
     throw Error('state_file_unsafe');
@@ -51,7 +52,7 @@ function saveState(dir,name,data){
  const file=path.join(dir,name),temp=path.join(dir,'.'+name+'.new');
  const serialized=JSON.stringify(data)+'\n';
  const limit=name==='history-analyst-cache.json'?16384:
-    ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json'].includes(name)?32768:
+    ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json','auto-memory.json'].includes(name)?32768:
     name==='ai-finops-daily.json'?4096:2048;
  if(Buffer.byteLength(serialized,'utf8')>limit)throw Error('state_file_too_large');
  const fd=fs.openSync(temp,fs.constants.O_WRONLY|fs.constants.O_CREAT|
@@ -160,7 +161,7 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
 }
 async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
  readLive=async()=>{throw Error('history_live_disabled')},liveEnabled=false,
- agentModel=null}){
+ agentModel=null,autoMemoryEnabled=false}){
  checkStateDirectory(stateDir);
  const offsetRecord=loadState(stateDir,'offset.json');
  const offset=offsetRecord?.offset??0;
@@ -172,6 +173,23 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
  // Authenticated polling heartbeat: genuine Telegram API response, not an HTTP
  // port healthcheck inherited from the unrelated Hermes API image.
  saveState(stateDir,'heartbeat.json',{at:clock()});
+ // Daily curation: no raw Telegram text ever enters AutoMemory.
+ if(autoMemoryEnabled){
+  const today=new Date(clock()).toISOString().slice(0,10);
+  const cursor=loadState(stateDir,'auto-memory-day.json');
+  if(cursor?.day!==today){
+   const next=autoMemory.curate({
+    ownerDecisions:loadState(stateDir,'owner-decisions.json'),
+    businessEvidence:loadState(stateDir,'business-evidence-memory.json'),
+    previous:loadState(stateDir,'auto-memory.json'),now:clock(),
+    policy:{enabled:true,tenant_id:'grupo_erick',decisions:true,aggregates:true}
+   });
+   saveState(stateDir,'auto-memory.json',next);
+   saveState(stateDir,'auto-memory-day.json',{day:today});
+   audit(stateDir,{event:'auto_memory_daily',at:new Date(clock()).toISOString(),
+    count:next.items.length});
+  }
+ }
  let current=offset,handled=0;
  for(const item of updates){
   if(!Number.isSafeInteger(item?.update_id)||item.update_id<current)
@@ -189,6 +207,9 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
    update:item,ownerId:owner?.owner_id??null,pairing,
    clock,query,
    readFinops:()=>finops.validate(loadState(stateDir,'ai-finops-daily.json')),
+   readAutocurated:()=>autoMemoryEnabled?
+    autoMemory.render(loadState(stateDir,'auto-memory.json'),clock()):
+    'Memória automática indisponível: piloto ainda não ativado.',
    readDecisions:()=>{
     const data=loadState(stateDir,'owner-decisions.json');
     return ownerDecisions.validateStore(data,clock());
@@ -415,7 +436,8 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  audit(dir,{at:new Date(clock()).toISOString(),event:'gateway_started',
   stage:'staging',writes_enabled:false});
  for(;;)await pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,
-  liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true'});
+  liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true',
+  autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true'});
 }
 if(require.main===module){
  runForever().catch(()=>{console.error('hermes_telegram_channel_stopped_fail_closed');
