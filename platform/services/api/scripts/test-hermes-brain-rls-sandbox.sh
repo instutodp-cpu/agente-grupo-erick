@@ -39,4 +39,12 @@ docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q \
  -f /tmp/inbox-migration.sql
 docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q \
  -f /tmp/inbox-fixture.sql | grep 'BRAIN_INBOX_MEMBER_WRITE_PENDING_CROSS_TENANT_REJECTION_OK'
+docker cp "$ROOT/platform/migrations/hermes/043_create_second_brain_verified_automemory_insert.sql" \
+ "$CONTAINER":/tmp/automemory-insert-migration.sql
+docker cp "$ROOT/platform/services/api/scripts/hermes-brain-automemory-insert-rls-sandbox-fixture.sql" \
+ "$CONTAINER":/tmp/automemory-insert-fixture.sql
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q \
+ -f /tmp/automemory-insert-migration.sql
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q \
+ -f /tmp/automemory-insert-fixture.sql | grep 'BRAIN_VERIFIED_OWNER_RLS_INSERT_AND_REJECTION_OK'
 echo BRAIN_EPHEMERAL_POSTGRES_RLS_TEST_OK
