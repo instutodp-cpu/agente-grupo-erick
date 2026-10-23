@@ -101,4 +101,38 @@ function render(store,now=Date.now()){
  lines.push('Evidências históricas não substituem a fonte atual.');
  return lines.join('\n');
 }
-module.exports={curate,check,render};
+
+// Owner-only, bounded, tenant-scoped retrieval into the governed analyst.
+// These are hints from already-validated structured sources, NOT permissions,
+// verified current figures, or instructions to the LLM.
+function context(store,goal,now=Date.now()){
+ if(typeof goal!=='string'||goal.length<8||goal.length>600||!Number.isSafeInteger(now))
+  throw Error('autocurated_context_request_denied');
+ const pool=check(store,now).items.filter(m=>Date.parse(m.expires_at)>now);
+ const q=goal.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+ const broad=/\b(decisao|decisoes|memoria|lembr|prioridade|estrategia|empresa|grupo erick|analise|riscos)\b/.test(q);
+ const domains={
+  financeiro:/financ|concilia|linx|softcom|saldo|compromiss|pagamento|caixa|duplicata/,
+  comercial:/comerc|vend|registro|venda|fatur|cancelad|historico|compar|receita/,
+  compras:/compr|fornecedor|pedido|estoque|vencimento/,
+  operacoes:/operac|processo|loja|equipe|atendimento|rotina/,
+  marketing:/market|campanh|instagram|anuncio/,
+  rh:/\brh\b|funcionar|colaborador|treinamento/
+ };
+ const results=[];
+ for(const m of pool){
+  if(!broad&&!domains[m.domain]?.test(q))continue;
+  if(!((m.kind==='confirmed_decision'&&/^owner_confirmed_telegram:[a-f0-9]{12}$/.test(m.source))||
+   (m.kind==='verified_aggregate'&&
+    ['hermes_history.monthly_commercial_2025_2026_v1','hermes_history.monthly_product_activity_v1'].includes(m.source))))continue;
+  const item={kind:m.kind,tenant_id:m.tenant_id,visibility:m.visibility,
+   domain:m.domain,source:m.source,at:m.at,expires_at:m.expires_at,
+   summary:m.text};
+  if(JSON.stringify([...results,item]).length>1100)continue;
+  results.push(item);
+  if(results.length===2)break;
+ }
+ return JSON.stringify(results);
+}
+
+module.exports={curate,check,render,context};

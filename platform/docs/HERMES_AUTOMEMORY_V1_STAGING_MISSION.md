@@ -50,3 +50,15 @@ concessão explícita de domínios correspondentes, RLS e teste autenticado.
 Não aumentar as permissões automaticamente e não utilizar o acesso
 privilegiado como atalho. A migração 042 de aprovação manual não deve
 ser o fluxo principal do AutoMemory.
+
+## AutoMemory no contexto do Hermes
+- O `runTurn` do analista governado agora lê, por callback interno do
+  poller já pareado, até duas memórias consolidadas relevantes ao objetivo.
+- O contexto exige tenant `grupo_erick`, owner-only, fontes conhecidas,
+  validade, tamanho limitado e rejeição de credenciais. Memória antiga não
+  substitui leitura empresarial atual, decisão confirmada não autoriza ação.
+- O cache de síntese é desativado quando contexto curado relevante participa
+  do prompt, evitando respostas antigas com fingerprint que não representa a
+  nova memória. Não há nova chamada de ferramenta nem LLM na curadoria diária.
+- O código na PR precisa de CI e publicação separada para ser operacional.
+  Não confundir testes simulados com uma resposta real recebida pelo Telegram.

@@ -285,6 +285,8 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
       loadState(stateDir,'business-evidence-memory.json'),question,clock()),
      readDecisionContext:question=>ownerDecisions.context(
       loadState(stateDir,'owner-decisions.json'),question,clock()),
+     readAutoMemoryContext:question=>autoMemoryEnabled?
+      autoMemory.context(loadState(stateDir,'auto-memory.json'),question,clock()):'[]',
      readHistory:async plan=>{
       const record=loadState(stateDir,'history-live-budget.json');
       if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
