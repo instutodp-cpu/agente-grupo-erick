@@ -17,7 +17,7 @@ test('login uses an existing user and never grants administrative access', () =>
   assert.match(js,/client\.auth\.getUser\(\)/);
   assert.match(js,/client\.rpc\('hermes_brain_search'/);
   assert.match(js,/client\.rpc\('hermes_brain_submit_note'/);
-  assert.doesNotMatch(html+js,/service.role|service_role|SECURITY DEFINER|approve.memory|localStorage|sessionStorage|innerHTML/i);
+  assert.doesNotMatch(html+js,/sb_secret_|service_role|SECURITY DEFINER|approve.memory|localStorage|sessionStorage|innerHTML/i);
 });
 test('CSP, pinned third-party script and text rendering are required', () => {
   assert.match(html,/Content-Security-Policy/);
