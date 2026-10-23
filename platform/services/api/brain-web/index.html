@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; connect-src https://asceucchdnuoaqgdjbtg.supabase.co; img-src 'self' data:; form-action 'self'; base-uri 'none'; object-src 'none'">
+  <title>Hermes Brain — staging</title>
+  <style>
+    :root{color-scheme:dark;font:16px system-ui,-apple-system,sans-serif;background:#0d1117;color:#e6edf3}
+    body{margin:0;padding:2rem 1rem} main{max-width:700px;margin:0 auto}
+    h1{font-size:1.7rem} h2{font-size:1.15rem;margin-top:1.8rem}
+    .muted{color:#9aa9bb}.tag{display:inline-block;border:1px solid #667185;border-radius:99px;padding:.15rem .6rem;font-size:.8rem}
+    label{display:block;margin:.7rem 0 .3rem}input,select,textarea{display:block;box-sizing:border-box;width:100%;font:inherit;color:inherit;background:#161b22;border:1px solid #647084;border-radius:8px;padding:.65rem}
+    textarea{min-height:105px}button{font:inherit;border:1px solid #7b88aa;background:#1f355b;color:white;border-radius:8px;padding:.6rem 1rem;margin:.8rem .4rem .4rem 0;cursor:pointer}
+    button:disabled{opacity:.5;cursor:wait}section{border-top:1px solid #30363d;margin-top:1.4rem}article{padding:.75rem 0;border-bottom:1px solid #30363d;white-space:pre-wrap;overflow-wrap:anywhere}
+    #status{padding:.75rem;border:1px solid #52606f;border-radius:8px;white-space:pre-wrap}
+  </style>
+</head>
+<body>
+<main>
+  <div class="tag">STAGING • Acesso restrito</div>
+  <h1>Hermes Brain</h1>
+  <p class="muted">Segundo cérebro: autenticação pela sua conta Supabase. Uma sessão válida não concede acesso a empresas automaticamente. Memórias propostas não são aprovadas pelo aplicativo.</p>
+  <p id="status" role="status" aria-live="polite">Preparando autenticação…</p>
+  <section id="loginArea">
+    <h2>Entrar</h2>
+    <form id="loginForm">
+      <label for="email">E-mail da conta já cadastrada</label>
+      <input id="email" name="email" type="email" autocomplete="email" maxlength="254" required>
+      <button type="submit">Enviar link de acesso</button>
+    </form>
+  </section>
+  <section id="workspace" hidden>
+    <p id="who" class="muted"></p>
+    <p><strong>Espaço: Grupo Erick</strong> (somente se a associação estiver autorizada no banco).</p>
+    <button id="logout" type="button">Encerrar sessão</button>
+    <h2>Buscar memórias aprovadas</h2>
+    <form id="searchForm">
+      <label for="query">Termos de busca</label>
+      <input id="query" name="query" minlength="2" maxlength="160" required>
+      <button type="submit">Buscar</button>
+    </form>
+    <div id="results" aria-live="polite"></div>
+    <h2>Propor memória para revisão</h2>
+    <form id="noteForm">
+      <label for="domain">Domínio autorizado</label>
+      <select id="domain" name="domain"><option value="projetos">Projetos</option><option value="compras">Compras</option><option value="financeiro">Financeiro</option></select>
+      <label for="title">Título</label>
+      <input id="title" name="title" maxlength="160" required>
+      <label for="body">Nota (máx. 4.000 caracteres)</label>
+      <textarea id="body" name="body" maxlength="4000" required></textarea>
+      <button type="submit">Enviar proposta</button>
+    </form>
+    <p class="muted">A proposta ficará pendente de revisão; não há aprovação automática nem permissões de execução.</p>
+  </section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.83.0/dist/umd/supabase.min.js" integrity="sha384-DfTBUIGOZfdRqbGMsYWEFqIOMS+FhBjK3jrRQtRx0rTBCRhdXCKcsyzrTdqgJnze" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script defer src="/brain/app.js" data-supabase-url="https://asceucchdnuoaqgdjbtg.supabase.co" data-publishable-key="sb_publishable_-1diuGVkHwFXfNM-gB25rA_wsxEUy7J"></script>
+</body>
+</html>
