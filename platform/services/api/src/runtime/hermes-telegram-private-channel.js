@@ -9,6 +9,7 @@ const finops=require('./hermes-inference-finops');
 const diagnostic=require('./hermes-owner-diagnostic');
 const matrix=require('./hermes-store-month-matrix');
 const alerts=require('./hermes-operational-alerts');
+const fallback=require('./hermes-codex-fallback');
 const ROUTES=Object.freeze({
  compras:'/internal/commercial-read-pilot/brief',
  lotoia:'/internal/lotoia-read-pilot/health',status:'/health'
@@ -250,7 +251,7 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  readAnalystContext=async()=>null,writeAnalystContext=async()=>{},
  readAnalyst=async()=>null,readAgent=async()=>null,agentEnabled=false,
  readDecisions=async()=>null,writeDecisions=async()=>{},
- readFinops=async()=>null,readAutocurated=async()=>null}){
+ readFinops=async()=>null,readAutocurated=async()=>null,readGovernedFallback=async()=>null}){
  const msg=privateMessage(update);
  if(!msg)return {kind:'ignored'};
  if(typeof send!=='function'||typeof query!=='function')
@@ -401,7 +402,7 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
    await send(msg.userId,'Ainda não tenho essa operação liberada.\n\n'+HELP);
    return {kind:'unsupported',intent};
   }
-  let response,modelAccounting=null,cache='miss';
+  let response,modelAccounting=null,cache='miss',failureCode=null;
   try{
    const result=await readAgent(msg.text);
    if(typeof result?.answer!=='string'||result.answer.length>3150||
@@ -413,12 +414,26 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
     modelAccounting={llm_calls:result.llm_calls,planning_policy:result.planning_policy};
    if(result.cache==='hit'&&result.llm_calls===0)cache='hit';
   }catch(error){
-   response=error?.message==='agent_daily_quota'?
-    'O limite privado de 4 análises com Codex por dia (UTC) foi atingido. Não fiz nova consulta nem executei ações. Consultas históricas numéricas autorizadas continuam disponíveis dentro da quota própria.':
-    'Esta análise não pôde ser concluída com fontes verificáveis e ferramentas autorizadas. Não executei nenhuma ação.';
+   const code=typeof error?.message==='string'?error.message:'unknown';
+   if(fallback.permitted(code)){
+    try{
+     response=await readGovernedFallback(msg.text,code);
+     if(typeof response!=='string'||response.length>1800||
+      !response.startsWith('🧠 Hermes — leitura histórica disponível'))
+      throw Error('fallback_response_denied');
+     failureCode=code;
+    }catch{
+     response='A análise com IA não pôde ser concluída e não foi possível validar memórias para uma leitura alternativa. Nenhuma ação foi executada.';
+     failureCode=code;
+    }
+   }else{
+    response='Esta análise não pôde ser concluída com fontes verificáveis e ferramentas autorizadas. Não executei nenhuma ação.';
+    failureCode='validation_denied';
+   }
   }
   await send(msg.userId,response);
   return {kind:'answered',intent:'governed_agent',source:'governed_read_only',cache,
+   ...(failureCode?{failure_code:failureCode}:{}),
    ...(modelAccounting||{})};
  }
  if(intent==='business_analyst'){

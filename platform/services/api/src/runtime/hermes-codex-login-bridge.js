@@ -27,6 +27,27 @@ function encodePrompt(messages,jsonMode){
   '\n\nResponda somente no texto final. Não use ferramentas, shell, arquivos ou rede adicional.'+
   (jsonMode?'\nObrigatório: resposta em objeto JSON válido, sem markdown.':'');
 }
+// Inspect bounded provider diagnostics in memory only; do not log or return stderr.
+function classifyFailure(code,diagnostics=''){
+ const body=String(diagnostics).slice(-12000).toLowerCase();
+ if(code==='codex_bridge_timeout')return 'timeout';
+ if(code==='codex_bridge_spawn_error')return 'bridge_unreachable';
+ if(code==='codex_bridge_non_json'||code==='codex_bridge_response_invalid')return 'invalid_response';
+ if(/(?:usage limit|quota exceeded|insufficient.quota|limit reached|credits exhausted)/.test(body))
+  return 'quota_exhausted';
+ if(/(?:too many requests|rate limit|http (?:429)|status (?:429))/.test(body))
+  return 'rate_limited';
+ if(/(?:unauthorized|invalid.grant|authentication required|session expired|http 401)/.test(body))
+  return 'auth_expired';
+ return 'provider_unavailable';
+}
+const CODES=new Set(['quota_exhausted','rate_limited','auth_expired','timeout',
+ 'invalid_response','bridge_unreachable','bridge_busy','provider_unavailable']);
+function errorCode(error){
+ const code=error?.message;
+ return typeof code==='string'&&code.startsWith('codex_bridge_')&&CODES.has(code.slice(13))?
+  code.slice(13):'provider_unavailable';
+}
 function runCodex({messages,maxTokens,jsonMode,bin=CLI,home=process.env.CODEX_HOME,
  cwd='/tmp',spawnImpl=spawn}){
  validateMessages(messages,maxTokens,jsonMode);
@@ -38,7 +59,7 @@ function runCodex({messages,maxTokens,jsonMode,bin=CLI,home=process.env.CODEX_HO
     cwd,env:{HOME:path.dirname(home),CODEX_HOME:home,PATH:'/usr/local/bin:/usr/bin:/bin'},
     stdio:['pipe','pipe','pipe'],shell:false
    });
-  let stdout='',stderrBytes=0,done=false;
+  let stdout='',stderrBytes=0,diagnostics='',done=false;
   const finish=(error,value)=>{
    if(done)return;done=true;clearTimeout(timer);
    if(error)reject(error);else resolve(value);
@@ -52,10 +73,11 @@ function runCodex({messages,maxTokens,jsonMode,bin=CLI,home=process.env.CODEX_HO
   // Codex diagnostics may echo prompts or user data; do not persist or emit.
   child.stderr.on('data',buf=>{
    stderrBytes+=buf.length;
+   if(diagnostics.length<12000)diagnostics+=buf.toString('utf8').slice(0,12000-diagnostics.length);
    if(stderrBytes>40000){child.kill('SIGKILL');finish(Error('codex_bridge_diagnostics_oversize'));}
   });
   child.on('close',code=>{
-   if(code!==0)return finish(Error('codex_bridge_model_unavailable'));
+   if(code!==0)return finish(Error('codex_bridge_'+classifyFailure('model_exit',diagnostics)));
    const answer=stdout.trim();
    if(!answer||answer.length>6500)return finish(Error('codex_bridge_response_invalid'));
    if(jsonMode){try{JSON.parse(answer);}catch{return finish(Error('codex_bridge_non_json'));}}
@@ -94,7 +116,7 @@ function createBridgeServer({socketPath=SOCKET,run=runCodex}={}){
    if(busy)return reply(429,{error:'busy'});
    busy=true;
    try{reply(200,{text:await run(payload)});}
-   catch{reply(503,{error:'provider_unavailable'});}
+   catch(error){reply(503,{error:errorCode(error)});}
    finally{busy=false;}
   });
  });
@@ -131,7 +153,13 @@ function createCodexModel({enabled,stage,killSwitch,socketPath=SOCKET,httpImpl=h
      else buf+=c.toString('utf8');
     });
     res.on('end',()=>{
-     if(res.statusCode!==200)return reject(Error('codex_login_provider_unavailable'));
+     if(res.statusCode!==200){
+      let kind=res.statusCode===429?'bridge_busy':'provider_unavailable';
+      try{const error=JSON.parse(buf).error;
+       if(typeof error==='string'&&CODES.has(error))kind=error;
+      }catch{}
+      return reject(Error('codex_login_'+kind));
+     }
      try{const x=JSON.parse(buf);
       if(typeof x.text!=='string'||x.text.length>6500)throw Error('invalid');
       resolve(x.text);
@@ -156,4 +184,4 @@ function startBridge(){
  process.once('SIGTERM',stop);process.once('SIGINT',stop);
 }
 if(require.main===module)startBridge();
-module.exports={SOCKET,CLI,validateMessages,encodePrompt,runCodex,createBridgeServer,createCodexModel};
+module.exports={SOCKET,CLI,validateMessages,encodePrompt,classifyFailure,errorCode,runCodex,createBridgeServer,createCodexModel};

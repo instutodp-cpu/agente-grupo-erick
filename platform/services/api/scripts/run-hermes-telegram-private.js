@@ -10,6 +10,7 @@ const analyst=require('../src/runtime/hermes-analyst-templates');
 const governed=require('../src/runtime/hermes-governed-agent');
 const businessMemory=require('../src/runtime/hermes-business-evidence-memory');
 const autoMemory=require('../src/runtime/hermes-automemory-curator');
+const codexFallback=require('../src/runtime/hermes-codex-fallback');
 const ownerDecisions=require('../src/runtime/hermes-owner-decision-memory');
 const answerCache=require('../src/runtime/hermes-verified-answer-cache');
 const finops=require('../src/runtime/hermes-inference-finops');
@@ -237,6 +238,11 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
    },
 
    agentEnabled:agentModel!==null,
+   readGovernedFallback:async (question,code)=>{
+    if(!autoMemoryEnabled||!codexFallback.permitted(code))throw Error('fallback_disabled');
+    return codexFallback.compose({
+     store:loadState(stateDir,'auto-memory.json'),question,code,now:clock()});
+   },
    readAgent:async goal=>{
     if(!agentModel||!liveEnabled)throw Error('agent_not_enabled');
     const today=new Date(clock()).toISOString().slice(0,10);
@@ -394,6 +400,9 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
    event:'outcome',update_id:item.update_id,
    outcome:result.kind,intent:result.intent||null,
    cache:result.cache||null,
+   ...(typeof result.failure_code==='string'&&
+    (codexFallback.permitted(result.failure_code)||result.failure_code==='validation_denied')?
+    {failure_code:result.failure_code}:{}),
    ...([0,1,2].includes(result.llm_calls)?
     {llm_calls:result.llm_calls,planning_policy:result.planning_policy}: {})});
   handled++;
