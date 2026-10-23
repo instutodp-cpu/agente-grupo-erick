@@ -423,7 +423,9 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
       throw Error('fallback_response_denied');
      failureCode=code;
     }catch{
-     response='A análise com IA não pôde ser concluída e não foi possível validar memórias para uma leitura alternativa. Nenhuma ação foi executada.';
+     response=code==='agent_daily_quota'?
+      'O limite privado de 4 análises com Codex por dia (UTC) foi atingido. Nenhuma nova chamada foi feita. As consultas históricas numéricas continuam sujeitas à quota própria.':
+      'A análise com IA não pôde ser concluída e não foi possível validar memórias para uma leitura alternativa. Nenhuma ação foi executada.';
      failureCode=code;
     }
    }else{
