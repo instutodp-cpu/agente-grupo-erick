@@ -15,6 +15,10 @@ BEGIN
   RAISE EXCEPTION 'hermes_brain_rls_required';
  END IF;
 END $guard$;
+-- A verified source alone does not attest the content of a memory.
+-- In this pilot, restrict writes to four externally authenticated item digests
+-- and content hashes. The item is not authoritative without its attestation.
+-- Activation must wait for a proven Supabase Auth user JWT, not a Telegram ID.
 -- Only the fixed structured-curator fields may be inserted. No user can
 -- set server-generated memory_id, created_at, updated_at or mutate rows.
 GRANT INSERT (
