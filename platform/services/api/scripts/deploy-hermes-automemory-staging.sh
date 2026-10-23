@@ -10,8 +10,8 @@ REPO=/home/hermesadmin/hermes-telegram-pr563
 BASE=/home/hermesadmin/.hermes-telegram
 STATE="$BASE/state"
 OLD=hermes-telegram-private-v1
-BACKUP=hermes-telegram-private-pre-automemory-v2
-IMAGE=hermes-telegram-automemory:staging-v2
+BACKUP=hermes-telegram-private-pre-automemory-v3
+IMAGE=hermes-telegram-automemory:staging-v3
 RELEASE="$BASE/releases/auto-memory-$SHA.js"
 denied(){ echo "AUTOMEMORY_DENIED: $1" >&2; exit 1; }
 [[ "$(git -C "$REPO" status --porcelain)" == '' ]] || denied dirty_tree
@@ -50,7 +50,7 @@ docker build --pull=false -q -t "$IMAGE" -f "$WORK/platform/services/api/Dockerf
 docker run --rm --network none --read-only --user 1000:1000 --cap-drop ALL \
  --security-opt no-new-privileges --entrypoint node "$IMAGE" -e '
 const a=require("/app/src/runtime/hermes-automemory-curator");
-if(typeof a.curate!=="function"||typeof a.render!=="function")process.exit(2);
+if(typeof a.curate!=="function"||typeof a.render!=="function"||typeof a.context!=="function")process.exit(2);
 console.log("AUTOMEMORY_IMAGE_OK")'
 exec 9>"$BASE/.automemory-deploy.lock"
 flock -n 9 || denied overlapping_release
