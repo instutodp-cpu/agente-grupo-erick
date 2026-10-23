@@ -93,6 +93,21 @@ BEGIN
  EXCEPTION WHEN insufficient_privilege THEN denied:=true;
  END;
  IF NOT denied THEN RAISE EXCEPTION 'REVOKED_SOURCE_INSERT_SUCCEEDED'; END IF;
+ -- An existing verified source cannot authorize fabricated memory content.
+ denied:=false;
+ BEGIN
+  INSERT INTO hermes_brain.memory_items
+   (tenant_id,source_id,source_item_digest,source_version,owner_user_id,
+    domain,classification,visibility,title,content,expires_at,status)
+  VALUES ('grupo_erick','90000000-0000-4000-8000-000000000001',
+   'sha256:'||repeat('a',64),'fake-v1','11111111-1111-4111-8111-111111111111',
+   'comercial','internal','owner_only','Histórico verificado — comercial',
+   'Text not independently attested must fail',
+   date_trunc('minute',now())+interval '7 days','approved');
+ EXCEPTION WHEN insufficient_privilege THEN denied:=true;
+ END;
+ IF NOT denied THEN RAISE EXCEPTION 'UNATTESTED_CONTENT_INSERT_SUCCEEDED'; END IF;
+ 
  -- Wrong visibility and classification must fail.
  denied:=false;
  BEGIN
