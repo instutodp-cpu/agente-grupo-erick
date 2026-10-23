@@ -90,7 +90,7 @@ function makeOpenRouter({enabled,stage,killSwitch,key,fetchImpl=globalThis.fetch
    if(jsonMode){try{JSON.parse(answer)}catch{throw Error('openrouter_response_invalid')}}
    // Pin real model for planning + synthesis within this ONE task if reported.
    if(!pinnedModel&&typeof data.model==='string'&&
-      /^[a-z0-9][a-z0-9_.-]{1,60}\\/[a-z0-9_.:-]{1,70}$/i.test(data.model)&&
+      /^[a-z0-9][a-z0-9_.-]{1,60}\/[a-z0-9_.:-]{1,70}$/i.test(data.model)&&
       data.model!==MODEL)pinnedModel=data.model;
    return answer;
   }});
