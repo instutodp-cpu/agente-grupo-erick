@@ -5,7 +5,10 @@ const memory=require('./hermes-automemory-curator');
 const ALLOWED=new Set(['codex_login_quota_exhausted','codex_login_rate_limited',
  'codex_login_auth_expired','codex_login_timeout','codex_login_invalid_response',
  'codex_login_bridge_unreachable','codex_login_bridge_busy',
- 'codex_login_provider_unavailable','agent_daily_quota']);
+ 'codex_login_provider_unavailable','agent_daily_quota',
+ 'openrouter_secondary_unavailable','openrouter_budget_or_rate_limit',
+ 'openrouter_daily_quota','openrouter_response_invalid',
+ 'openrouter_output_oversize']);
 function permitted(code){return ALLOWED.has(code);}
 function compose({store,question,code,now=Date.now()}={}){
  if(!permitted(code))throw Error('fallback_reason_denied');

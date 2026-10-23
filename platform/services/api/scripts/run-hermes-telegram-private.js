@@ -11,6 +11,7 @@ const governed=require('../src/runtime/hermes-governed-agent');
 const businessMemory=require('../src/runtime/hermes-business-evidence-memory');
 const autoMemory=require('../src/runtime/hermes-automemory-curator');
 const codexFallback=require('../src/runtime/hermes-codex-fallback');
+const openRouter=require('../src/runtime/hermes-openrouter-secondary');
 const ownerDecisions=require('../src/runtime/hermes-owner-decision-memory');
 const answerCache=require('../src/runtime/hermes-verified-answer-cache');
 const finops=require('../src/runtime/hermes-inference-finops');
@@ -162,7 +163,7 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
 }
 async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
  readLive=async()=>{throw Error('history_live_disabled')},liveEnabled=false,
- agentModel=null,autoMemoryEnabled=false}){
+ agentModel=null,autoMemoryEnabled=false,secondaryProvider=null}){
  checkStateDirectory(stateDir);
  const offsetRecord=loadState(stateDir,'offset.json');
  const offset=offsetRecord?.offset??0;
@@ -254,28 +255,51 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     // Reserve the daily turn immediately BEFORE the FIRST actual model call.
     // A verified synthesis cache hit never calls the model or consumes a turn.
     // One task still reserves at most one daily turn (1–2 provider requests).
-    let reserved=false;
+    const secondary=secondaryProvider?.forTask(goal)||null;
+    // Stay on OpenRouter after first Codex fail within this question.
+    // The fallback cannot grant tool permissions or reset a budget.
+    let reservedPrimary=false,useSecondary=turns>=4;
+    let callsThisTask=0;
     const meteredModel={chat:async(...args)=>{
-     if(!reserved){
-      if(turns>=4)throw Error('agent_daily_quota');
-      saveState(stateDir,'agent-llm-budget.json',{date:today,turns:turns+1});
-      reserved=true;
-     }
+     if(callsThisTask>=2)throw Error('agent_turn_calls_denied');
+     callsThisTask++;
      const start=Date.now();
      let ok=false;
      try{
-      const output=await agentModel.chat(...args);
+      if(!useSecondary){
+       if(!reservedPrimary){
+        saveState(stateDir,'agent-llm-budget.json',{date:today,turns:turns+1});
+        reservedPrimary=true;
+       }
+       try{
+        const output=await agentModel.chat(...args);
+        ok=true;
+        return output;
+       }catch(error){
+        if(!secondary||!openRouter.isFallbackEligible(error))throw error;
+        useSecondary=true;
+       }
+      }
+      if(!secondary)throw Error('agent_daily_quota');
+      const previous=loadState(stateDir,'agent-openrouter-budget.json');
+      if(previous&&(!/^20\d{2}-\d{2}-\d{2}$/.test(previous.date)||
+       !Number.isInteger(previous.count)||previous.count<0||previous.count>8))
+       throw Error('openrouter_budget_invalid');
+      const used=previous?.date===today?previous.count:0;
+      if(used>=8)throw Error('openrouter_daily_quota');
+      saveState(stateDir,'agent-openrouter-budget.json',{date:today,count:used+1});
+      const output=await secondary.chat(...args);
       ok=true;
       return output;
      }finally{
-      // Model-call observation is bounded metadata only. Never log payloads.
+      // Separate budget: at most 8 OpenRouter requests/day; no payload logging.
       const elapsed=Math.max(0,Math.min(90000,Date.now()-start));
       try{
        const old=loadState(stateDir,'ai-finops-daily.json');
        saveState(stateDir,'ai-finops-daily.json',finops.bump(old,{
         kind:'provider_call',route:'other',ok,duration_ms:elapsed,
         cache_hit:false},clock()));
-      }catch{} // telemetry is not an authorization bypass or a billing ledger
+      }catch{}
      }
     }};
     return governed.runTurn({
@@ -438,6 +462,16 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
    key:loginEnabled?readSecret(environment.HERMES_AGENT_KEY_FILE):null,
    fetchImpl
   });
+ // Disabled until a secret file is installed and mounted on the VPS.
+ // Even with the key, Codex Login remains the first provider.
+ const secondaryProvider=openRouter.makeOpenRouter({
+  enabled:environment.HERMES_OPENROUTER_ENABLED==='true',
+  stage:environment.HERMES_DEPLOYMENT_STAGE,
+  killSwitch:environment.HERMES_EXECUTION_KILL_SWITCH==='true',
+  key:environment.HERMES_OPENROUTER_ENABLED==='true'?
+   readSecret(environment.HERMES_OPENROUTER_KEY_FILE):null,
+  fetchImpl
+ });
  const identity=await api('getMe',{});
  if(identity?.is_bot!==true||!Number.isSafeInteger(identity?.id)||
     String(identity?.username||'').toLowerCase()!=='grupoerick_bot')
@@ -446,7 +480,7 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  if(hook?.url)throw Error('telegram_webhook_conflict');
  audit(dir,{at:new Date(clock()).toISOString(),event:'gateway_started',
   stage:'staging',writes_enabled:false});
- for(;;)await pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,
+ for(;;)await pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,secondaryProvider,
   liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true',
   autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true'});
 }
