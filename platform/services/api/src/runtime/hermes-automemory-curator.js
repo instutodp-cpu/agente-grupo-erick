@@ -30,6 +30,23 @@ function check(store,now=Date.now()){
  }
  return store;
 }
+function compactVerifiedEvidence(summary){
+ const lines=summary.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+ const heading=lines.find(x=>/^(Comparação — |Ranking das lojas por |Produtos por |Período: )/.test(x));
+ const measured=lines.filter(x=>x.startsWith('• '));
+ if(!heading||!measured.length)throw Error('memory_metrics_missing');
+ const result=[heading],limit=410;
+ if(lines.some(x=>x.startsWith('📅 Cobertura equivalente:')))
+  result.push('Cobertura: jan–mai completos em ambos os anos.');
+ for(const line of measured){
+  if(line.length>300||forbidden.test(line))continue;
+  if(result.join(' | ').length+3+line.length>limit)continue;
+  result.push(line);
+ }
+ if(result.length < (result[1]?.startsWith('Cobertura:')?3:2))
+  throw Error('memory_metrics_omitted');
+ return result.join(' | ');
+}
 function curate({ownerDecisions,businessEvidence,previous=null,now=Date.now(),policy}={}){
  if(!Number.isSafeInteger(now)||!policy||policy.enabled!==true||
    policy.tenant_id!==TENANT||typeof policy.decisions!=='boolean'||
@@ -52,7 +69,8 @@ function curate({ownerDecisions,businessEvidence,previous=null,now=Date.now(),po
   for(const e of evidence.validStore(businessEvidence,now).entries){
    const at=Date.parse(e.at);
    if(at>now||now-at>=14*DAY)continue;
-   const text=e.summary.slice(0,410);
+   let text;
+   try{text=compactVerifiedEvidence(e.summary)}catch{continue}
    if(text.length<12||forbidden.test(text))continue;
    entries.push({id:digest(TENANT+':verified:'+e.key+':'+e.at),tenant_id:TENANT,
     kind:'verified_aggregate',retention:'short',visibility:'owner_only',
@@ -76,8 +94,8 @@ function render(store,now=Date.now()){
   'Fontes permitidas. Memória não é autorização para executar.'];
  for(const m of active.slice(0,4)){
   const line='• '+(m.retention==='durable'?'Decisão':'Histórico')+
-   ' ['+m.domain+'] '+m.at.slice(0,10)+': '+m.text.slice(0,235).replace(/[\r\n]+/g,' ');
-  if((lines.join('\n')+'\n'+line).length>1400)break;
+   ' ['+m.domain+'] '+m.at.slice(0,10)+': '+m.text.replace(/[\r\n]+/g,' ');
+  if((lines.join('\n')+'\n'+line).length>1360)continue;
   lines.push(line);
  }
  lines.push('Evidências históricas não substituem a fonte atual.');
