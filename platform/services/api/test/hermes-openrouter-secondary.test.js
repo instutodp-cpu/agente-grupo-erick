@@ -69,3 +69,29 @@ test('four-turn Codex pilot quota activates only explicitly enabled secondary pr
   assert.equal(runner.loadState(dir,'agent-openrouter-budget.json').count,secondaryCalls);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('Codex remains first; a provider failure switches once to OpenRouter',async()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'hermes-router-primary-'));
+ fs.chmodSync(dir,0o700);
+ const goal='Analise os riscos financeiros e a conciliação de valores';
+ const update={update_id:22,message:{chat:{id:777,type:'private'},from:{id:777,is_bot:false},
+  message_id:2,text:goal}};
+ runner.saveState(dir,'owner.json',{owner_id:777});
+ let primaryCalls=0,secondaryCalls=0;
+ const router={forTask:()=>({chat:async(_,opt)=>{
+  secondaryCalls++;
+  return opt.jsonMode?JSON.stringify({steps:[{tool:'compras',params:{}}]}):
+   'Recomendo não assumir novos compromissos sem conciliação.';}})};
+ try{
+  await runner.pollOnce({stateDir:dir,
+   api:async method=>method==='getUpdates'?[update]:[],
+   query:async()=>({ok:true}),clock:()=>now,liveEnabled:true,
+   agentModel:{chat:async()=>{primaryCalls++;throw Error('codex_login_quota_exhausted')}},
+   secondaryProvider:router,readLive:async()=>{throw Error('no live calls')},
+   autoMemoryEnabled:false});
+  assert.equal(primaryCalls,1);
+  assert.ok(secondaryCalls>=1);
+  assert.equal(runner.loadState(dir,'agent-llm-budget.json').turns,1);
+  assert.equal(runner.loadState(dir,'agent-openrouter-budget.json').count,secondaryCalls);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
