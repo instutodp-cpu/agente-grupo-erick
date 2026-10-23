@@ -38,5 +38,5 @@ test('review stays auditable, reject does not create a memory, expiry is bounded
  assert.match(migration,/INTERVAL '30 days'/);
  assert.match(migration,/INSERT INTO hermes_brain\.review_events/);
  assert.match(migration,/THEN 'promoted' ELSE 'rejected'/);
- assert.match(migration,/status='approved'/);
+ assert.match(migration,/'approved',now\(\)\+INTERVAL '30 days'/);
 });
