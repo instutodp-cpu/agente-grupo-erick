@@ -62,3 +62,28 @@ ser o fluxo principal do AutoMemory.
   nova memória. Não há nova chamada de ferramenta nem LLM na curadoria diária.
 - O código na PR precisa de CI e publicação separada para ser operacional.
   Não confundir testes simulados com uma resposta real recebida pelo Telegram.
+
+
+## Supabase central publication admission / dry run (v1)
+
+- The authenticated read model is already present: \`hermes_brain.tenants\`,
+  \`memberships\`, \`sources\`, \`memory_items\` and \`public.hermes_brain_search\`.
+  Do not recreate these tables or replace RLS with a service-role shortcut.
+- \`hermes-brain-automemory-publication.js\` maps curated structured records
+  to bounded, idempotent **uncommitted** candidate rows for existing
+  \`memory_items\`, rejecting stale items, foreign tenants, missing Supabase
+  principal, inactive membership, missing domains, absent source verification
+  and visibility/classification mismatches. No real DB write or HTTP calls.
+- Identities are NOT interchangeable: Telegram owner ID is NOT Supabase
+  \`auth.uid()\`. A trusted authenticated session or gateway must provide
+  that user claim, and RLS is independently authoritative at the DB boundary.
+- Current Supabase membership only allows \`projetos\`, while the curated
+  memories are \`financeiro\` / \`comercial\`. Additionally, \`sources\` and
+  \`memory_items\` are empty and \`authenticated\` has SELECT-only privileges.
+  All these are **real blockers**, not approval-per-memory requirements.
+- Next operation: one-time authorized domain/source grant and authenticated
+  identity binding; then implement transactional source-verification/admission
+  with limited privileges and per-tenant RLS, idempotency and revoke tests.
+- Automatic memory selection after source consent remains the product
+  requirement; migration 042's manual-per-item-review path stays unapplied.
+- The dry run MUST NOT be interpreted as successful central persistence.
