@@ -112,5 +112,50 @@ BEGIN
  END;
  IF NOT denied THEN RAISE EXCEPTION 'UNBOUNDED_RETENTION_SUCCEEDED'; END IF;
 END $tests$;
+-- Replay of the same exact publication idempotency tuple must not insert.
+DO $idempotent$
+DECLARE v uuid;
+BEGIN
+ INSERT INTO hermes_brain.memory_items
+  (tenant_id,source_id,source_item_digest,source_version,owner_user_id,
+   domain,classification,visibility,company_id,store_id,title,content,expires_at,status)
+ SELECT 'grupo_erick',s.source_id,'sha256:'||repeat('1',64),'v1',
+  '11111111-1111-4111-8111-111111111111'::uuid,
+  'comercial','internal','owner_only',NULL,NULL,
+  'Histórico verificado — comercial','Valor agregado de teste, sem dado real.',
+  now()+interval '7 days','approved'
+ FROM hermes_brain.sources s
+ WHERE s.tenant_id='grupo_erick' AND s.source_id='90000000-0000-4000-8000-000000000001'
+   AND s.status='verified'
+ ON CONFLICT (tenant_id,source_id,source_item_digest,source_version)
+ DO NOTHING RETURNING memory_id INTO v;
+ IF v IS NOT NULL THEN RAISE EXCEPTION 'AUTOMEMORY_IDEMPOTENCY_FAILED'; END IF;
+END $idempotent$;
+
+-- A revoked membership immediately hides even a once-approved memory.
+RESET ROLE;
+UPDATE hermes_brain.memberships SET status='revoked'
+WHERE tenant_id='grupo_erick'
+  AND user_id='11111111-1111-4111-8111-111111111111';
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',false);
+DO $revoked$
+DECLARE denied boolean:=false;
+BEGIN
+ IF (SELECT count(*) FROM hermes_brain.memory_items WHERE tenant_id='grupo_erick')<>0 THEN
+  RAISE EXCEPTION 'REVOKED_MEMBERSHIP_LEAK';
+ END IF;
+ BEGIN
+ INSERT INTO hermes_brain.memory_items
+  (tenant_id,source_id,source_item_digest,source_version,owner_user_id,
+   domain,classification,visibility,title,content,expires_at,status)
+ VALUES ('grupo_erick','90000000-0000-4000-8000-000000000001',
+  'sha256:'||repeat('f',64),'v2','11111111-1111-4111-8111-111111111111',
+  'comercial','internal','owner_only','Histórico verificado — comercial',
+  'Revoked membership must fail',now()+interval '7 days','approved');
+ EXCEPTION WHEN insufficient_privilege THEN denied:=true;
+ END;
+ IF NOT denied THEN RAISE EXCEPTION 'REVOKED_MEMBERSHIP_INSERT_SUCCEEDED'; END IF;
+END $revoked$;
 RESET ROLE;
 SELECT 'BRAIN_VERIFIED_OWNER_RLS_INSERT_AND_REJECTION_OK' AS result;
