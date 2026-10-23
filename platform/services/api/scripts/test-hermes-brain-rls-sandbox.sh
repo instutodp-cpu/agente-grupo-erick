@@ -49,6 +49,12 @@ docker cp "$ROOT/platform/migrations/hermes/044_create_second_brain_authenticate
  "$CONTAINER":/tmp/automemory-publish-rpc.sql
 docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q \
  -f /tmp/automemory-publish-rpc.sql
+# 043 and 044 must remain fail-closed before separately approved activation 045.
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -c "DO \$guard\$ BEGIN IF has_column_privilege('authenticated','hermes_brain.memory_items','content','INSERT') THEN RAISE EXCEPTION 'PREMATURE_WRITE_GRANT'; END IF; END \$guard\$;"
+docker cp "$ROOT/platform/services/api/scripts/hermes-brain-automemory-four-attestations-sandbox-seed.sql" "$CONTAINER":/tmp/brain-four-seed.sql
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/brain-four-seed.sql
+docker cp "$ROOT/platform/migrations/hermes/045_activate_second_brain_verified_automemory_insert.sql" "$CONTAINER":/tmp/brain-activate.sql
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/brain-activate.sql
 docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q \
  -f /tmp/automemory-insert-fixture.sql | grep 'BRAIN_VERIFIED_OWNER_RLS_INSERT_AND_REJECTION_OK'
 docker cp "$ROOT/platform/services/api/scripts/hermes-brain-automemory-rpc-rls-sandbox-fixture.sql" "$CONTAINER":/tmp/automemory-rpc-fixture.sql
