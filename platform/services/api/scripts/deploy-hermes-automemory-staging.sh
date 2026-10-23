@@ -111,6 +111,19 @@ for I in $(seq 1 25);do
 done
 [[ "$(docker inspect "$OLD" --format '{{.State.Health.Status}}')" == healthy ]] || denied health_timeout
 [[ "$(docker ps --format '{{.Names}}' | grep -c '^hermes-telegram-private-' || :)" == 1 ]] || denied duplicate_poller
+# A healthy heartbeat may be left over from the old process. The new poller
+# completes getUpdates (up to 12s) BEFORE its first daily curation.
+# Require actual persisted state rather than a stale inherited heartbeat.
+READY=0
+for I in $(seq 1 16);do
+ if docker exec "$OLD" node -e '
+const f=require("fs"),a=require("/app/src/runtime/hermes-automemory-curator");
+const state=a.check(JSON.parse(f.readFileSync("/var/lib/hermes-telegram/auto-memory.json","utf8")));
+if(state.items.length>40||!state.date||state.date!==new Date().toISOString().slice(0,10))process.exit(2);
+' >/dev/null 2>&1;then READY=1;break;fi
+ sleep 3
+done
+[[ "$READY" == 1 ]] || denied first_curation_timeout
 docker exec "$OLD" node -e '
 const f=require("fs"),a=require("/app/src/runtime/hermes-automemory-curator");
 const state=a.check(JSON.parse(f.readFileSync("/var/lib/hermes-telegram/auto-memory.json","utf8")));
