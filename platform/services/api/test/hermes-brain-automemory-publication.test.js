@@ -62,3 +62,82 @@ test('cannot publish expired, tampered, cross-tenant or unverified local memorie
  const changed={...store,items:[{...store.items[0],source:'unknown_public_internet'}]};
  assert.throws(()=>invoke({store:changed}),/brain_source_not_authorized/);
 });
+
+
+function db({role='authenticated',actor=uid,domains=['financeiro'],sources=verifiedSources,
+ grant=false,writeRows=[{memory_id:'9bcc0653-b82e-4c5f-85a2-908e1fb4ecc6'}],fail=false}={}){
+ const calls=[];let released=false;
+ const pool={connect:async()=>({
+  query:async(sql,params)=>{
+   calls.push({sql,params});
+   if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return {rows:[]};
+   if(sql.startsWith('SELECT (SELECT auth.uid())'))return {rows:[{user_id:actor,db_role:role}]};
+   if(sql===adapter.MEMBERSHIP_SQL)return {rows:[{...membership,allowed_domains:domains}]};
+   if(sql===adapter.SOURCES_SQL)return {rows:sources};
+   if(sql===adapter.PRIVILEGE_SQL)return {rows:[{allowed:grant}]};
+   if(sql===adapter.INSERT_SQL){
+    if(fail)throw Error('rls_denied');
+    return {rows:writeRows};
+   }
+   throw Error('unexpected_query');
+  },release:()=>{released=true}
+ })};
+ return {pool,calls,get released(){return released}};
+}
+test('publisher remains blocked with the current projetos-only membership',async()=>{
+ const x=db({domains:['projetos'],grant:true});
+ const r=await adapter.publish({pool:x.pool,user_id:uid,store,now});
+ assert.equal(r.reason,'membership_domain_scope_denied');
+ assert.equal(x.calls.length,4);
+ assert.equal(x.calls.at(-1).sql,'COMMIT');
+ assert(x.released);
+});
+test('no memory write without independently authorized INSERT role',async()=>{
+ const x=db();
+ const r=await adapter.publish({pool:x.pool,user_id:uid,store,now});
+ assert.equal(r.reason,'memory_write_role_denied');
+ assert(!x.calls.some(q=>q.sql===adapter.INSERT_SQL));
+ assert(x.released);
+});
+test('verified principal is required; privileged role and forged identity rejected',async()=>{
+ for(const opts of [{role:'service_role'},{role:'postgres'},
+  {actor:'b0cec593-8309-42f6-885f-d69daed6a478'}]){
+  const x=db(opts);
+  await assert.rejects(adapter.publish({pool:x.pool,user_id:uid,store,now}),/rls_principal_denied/);
+  assert.deepEqual(x.calls.map(c=>c.sql),[
+   'BEGIN','SELECT (SELECT auth.uid())::text AS user_id, current_user AS db_role','ROLLBACK']);
+  assert(x.released);
+ }
+});
+test('source revocation blocks all writes',async()=>{
+ const x=db({sources:[{...verifiedSources[0],status:'revoked'}],grant:true});
+ const r=await adapter.publish({pool:x.pool,user_id:uid,store,now});
+ assert.equal(r.reason,'source_verification_required');
+ assert(!x.calls.some(c=>c.sql===adapter.INSERT_SQL));
+ assert(x.released);
+});
+test('future RLS-authorized publication is idempotent, scoped, and parameterized',async()=>{
+ for(const [writeRows,inserted] of [
+  [[{memory_id:'9bcc0653-b82e-4c5f-85a2-908e1fb4ecc6'}],1],[[],0]]){
+  const x=db({grant:true,writeRows});
+  const r=await adapter.publish({pool:x.pool,user_id:uid,store,now});
+  assert.equal(r.status,'committed');
+  assert.equal(r.inserted,inserted);
+  assert.equal(r.duplicates,1-inserted);
+  const op=x.calls.find(c=>c.sql===adapter.INSERT_SQL);
+  assert.equal(op.params[0],'grupo_erick');
+  assert.equal(op.params[4],uid);
+  assert.equal(op.params[5],'financeiro');
+  assert.equal(op.params[7],'owner_only');
+  assert.equal(op.params[13],verifiedSources[0].reference_digest);
+  assert(!/SET ROLE|service_role|request.jwt.claim.sub/i.test(op.sql));
+  assert.equal(x.calls.at(-1).sql,'COMMIT');
+  assert(x.released);
+ }
+});
+test('failed write transaction rolls back and cannot claim memory persistence',async()=>{
+ const x=db({grant:true,fail:true});
+ await assert.rejects(adapter.publish({pool:x.pool,user_id:uid,store,now}),/rls_denied/);
+ assert.equal(x.calls.at(-1).sql,'ROLLBACK');
+ assert(x.released);
+});
