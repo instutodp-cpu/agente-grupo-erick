@@ -10,8 +10,8 @@ REPO=/home/hermesadmin/hermes-telegram-pr563
 BASE=/home/hermesadmin/.hermes-telegram
 STATE="$BASE/state"
 OLD=hermes-telegram-private-v1
-BACKUP=hermes-telegram-private-pre-automemory-v1
-IMAGE=hermes-telegram-automemory:staging-v1
+BACKUP=hermes-telegram-private-pre-automemory-v2
+IMAGE=hermes-telegram-automemory:staging-v2
 RELEASE="$BASE/releases/auto-memory-$SHA.js"
 denied(){ echo "AUTOMEMORY_DENIED: $1" >&2; exit 1; }
 [[ "$(git -C "$REPO" status --porcelain)" == '' ]] || denied dirty_tree
@@ -119,7 +119,8 @@ for I in $(seq 1 16);do
  if docker exec "$OLD" node -e '
 const f=require("fs"),a=require("/app/src/runtime/hermes-automemory-curator");
 const state=a.check(JSON.parse(f.readFileSync("/var/lib/hermes-telegram/auto-memory.json","utf8")));
-if(state.items.length>40||!state.date||state.date!==new Date().toISOString().slice(0,10))process.exit(2);
+const stamp=JSON.parse(f.readFileSync("/var/lib/hermes-telegram/auto-memory-day.json","utf8"));
+if(state.items.length>40||!state.date||state.date!==new Date().toISOString().slice(0,10)||stamp.day!==state.date||stamp.policy_version!==2)process.exit(2);
 ' >/dev/null 2>&1;then READY=1;break;fi
  sleep 3
 done
