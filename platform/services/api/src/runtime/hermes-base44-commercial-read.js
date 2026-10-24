@@ -93,10 +93,18 @@ function shapeCommercialData(json){
    r.tracked_titles>1e6||
    fields.slice(1).reduce((n,k)=>n+r[k],0)>r.tracked_titles)
    throw Error('commercial_work_contract_invalid');
+  const metrics=['missing_named_responsible','work_deadlines_overdue',
+   'work_due_next_7','work_without_deadline','with_evidence_reference'];
+  const hasMetrics=metrics.some(k=>Object.hasOwn(r,k));
+  if(hasMetrics&&(metrics.some(k=>!count(r[k])||r[k]>r.tracked_titles)||
+   r.work_deadlines_overdue+r.work_due_next_7+
+    r.work_without_deadline>r.tracked_titles))
+   throw Error('commercial_work_metrics_invalid');
   shaped.reconciliation_work=Object.freeze({
    source:'ReconciliationWorkEvent',as_of:r.as_of,
    erp_linx_conciliated:false,payment_recorded:false,
-   ...Object.fromEntries(fields.map(k=>[k,r[k]]))
+   ...Object.fromEntries(fields.map(k=>[k,r[k]])),
+   ...(hasMetrics?Object.fromEntries(metrics.map(k=>[k,r[k]])):{})
   });
  }
  // Source-attested full-company aggregate; no title, supplier or PII.
