@@ -65,6 +65,10 @@ docker cp "$ROOT/platform/services/api/scripts/hermes-brain-staged-publication-r
 docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/brain-staged-roundtrip.sql | grep 'BRAIN_OWNER_STAGED_FOUR_PUBLICATION_AND_REPLAY_OK'
 docker cp "$ROOT/platform/migrations/hermes/047_create_telegram_brain_reader_no_login.sql" "$CONTAINER":/tmp/brain-telegram-reader.sql
 docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/brain-telegram-reader.sql
+docker cp "$ROOT/platform/migrations/hermes/048_create_telegram_brain_login_disabled.sql" "$CONTAINER":/tmp/brain-telegram-login.sql
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/brain-telegram-login.sql
+docker cp "$ROOT/platform/services/api/scripts/hermes-brain-telegram-login-rls-fixture.sql" "$CONTAINER":/tmp/brain-telegram-login-fixture.sql
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/brain-telegram-login-fixture.sql | grep 'BRAIN_DISABLED_LOGIN_EXPLICIT_ROLE_SWITCH_OK'
 docker cp "$ROOT/platform/services/api/scripts/hermes-brain-telegram-machine-role-rls-fixture.sql" "$CONTAINER":/tmp/brain-telegram-reader-fixture.sql
 docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/brain-telegram-reader-fixture.sql | grep 'BRAIN_MACHINE_ROLE_SCOPED_AND_REVOCATION_OK'
 echo BRAIN_EPHEMERAL_POSTGRES_RLS_TEST_OK
