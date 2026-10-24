@@ -3,8 +3,13 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const {retrieve,SEARCH}=require('../src/runtime/hermes-brain-postgres-search');
 const USER='11111111-1111-4111-8111-111111111111';
-const item={memory_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',title:'Projeto aprovado',content:'Memória com fonte',
- domain:'projetos',provider:'documentos',source_version:'v1'};
+const FIXED_NOW=Date.parse('2026-10-24T12:00:00.000Z');
+const item={tenant_id:'client::alpha',memory_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+ title:'Projeto aprovado',content:'Memória com fonte',domain:'projetos',
+ classification:'internal',visibility:'owner_only',provider:'documentos',
+ source_version:'v1',memory_status:'approved',source_status:'verified',
+ expires_at:'2026-12-24T12:00:00.000Z',updated_at:'2026-10-22T12:00:00.000Z',
+ source_updated_at:'2026-10-22T12:00:00.000Z'};
 function db({role='authenticated',actor=USER,rows=[item]}={}){
  const calls=[];
  let released=false;
@@ -21,7 +26,7 @@ function db({role='authenticated',actor=USER,rows=[item]}={}){
 }
 test('bounded full-text retrieval requires verified RLS role and parameterized SQL',async()=>{
  const adapter=db();
- const r=await retrieve({pool:adapter,tenant_id:'client::alpha',user_id:USER,search:'memória',limit:3});
+ const r=await retrieve({pool:adapter,tenant_id:'client::alpha',user_id:USER,clock:()=>FIXED_NOW,search:'memória',limit:3});
  assert.equal(r.items.length,1);
  assert.equal(r.items[0].title,'Projeto aprovado');
  assert.equal(r.read_only,true);
@@ -32,10 +37,49 @@ test('bounded full-text retrieval requires verified RLS role and parameterized S
  assert.match(SEARCH,/LIMIT \$3/);
  assert.doesNotMatch(SEARCH,/\b(?:INSERT|UPDATE|DELETE)\b|service_role|SET ROLE/i);
 });
+test('source verification, approval and TTL enforced by SQL and result contract',async()=>{
+ assert.match(SEARCH,/m[.]status='approved'/);
+ assert.match(SEARCH,/m[.]expires_at>now\(\)/);
+ assert.match(SEARCH,/s[.]status='verified'/);
+ assert.match(SEARCH,/m[.]tenant_id=\$1/);
+ assert.match(SEARCH,/s[.]tenant_id=m[.]tenant_id/);
+ const arg={tenant_id:'client::alpha',user_id:USER,search:'projeto',clock:()=>FIXED_NOW};
+ for(const variant of [
+  {tenant_id:'client::other'},
+  {tenant_id:'grupo_erick'},
+  {memory_status:'proposed'},
+  {memory_status:'revoked'},
+  {source_status:'revoked'},
+  {source_status:'unverified'},
+  {expires_at:'2026-10-24T11:59:59.000Z'},
+  {expires_at:'2026-10-24T12:00:00.000Z'},
+  {expires_at:'not-a-date'},
+  {source_updated_at:'bad-timestamp'},
+  {classification:'secret'},
+  {visibility:'unrestricted'},
+  {title:'x'.repeat(241)},
+  {content:'x'.repeat(20001)}
+ ]){
+  const pool=db({rows:[{...item,...variant}]});
+  await assert.rejects(retrieve({pool,...arg}),/brain_memory_result_invalid/);
+  assert.equal(pool.calls.at(-1).sql,'ROLLBACK');
+  assert.equal(pool.released,true);
+ }
+ const good=db({rows:[item]});
+ const retrieved=await retrieve({pool:good,...arg});
+ assert.equal(retrieved.items[0].source_status,'verified');
+ assert.equal(retrieved.items[0].tenant_id,'client::alpha');
+ assert.equal(retrieved.read_only,true);
+});
+test('invalid or untrusted retrieval clock cannot bypass expiration',async()=>{
+ const a={tenant_id:'client::alpha',user_id:USER,search:'projeto'};
+ await assert.rejects(retrieve({...a,pool:db(),clock:()=>NaN}),/brain_search_clock_denied/);
+ await assert.rejects(retrieve({...a,pool:db(),clock:'2026-10-24'}),/brain_search_clock_denied/);
+});
 test('privileged roles cannot query through Hermes retrieval port',async()=>{
  for(const role of ['postgres','service_role','anon','brain_admin']){
   const x=db({role});
-  await assert.rejects(retrieve({pool:x,tenant_id:'client::alpha',user_id:USER,search:'projeto'}),/rls_principal_denied/);
+  await assert.rejects(retrieve({pool:x,tenant_id:'client::alpha',user_id:USER,clock:()=>FIXED_NOW,search:'projeto'}),/rls_principal_denied/);
   assert.deepEqual(x.calls.map(c=>c.sql).slice(0,2),['BEGIN READ ONLY','SELECT (SELECT auth.uid())::text AS user_id, current_user AS db_role']);
   assert.equal(x.calls.at(-1).sql,'ROLLBACK');
   assert.equal(x.released,true);
@@ -44,7 +88,7 @@ test('privileged roles cannot query through Hermes retrieval port',async()=>{
 test('mismatched verified identity or missing actor fail before content retrieval',async()=>{
  for(const actor of [null,'22222222-2222-4222-8222-222222222222']){
   const x=db({actor});
-  await assert.rejects(retrieve({pool:x,tenant_id:'grupo_erick',user_id:USER,search:'projeto'}),/rls_principal_denied/);
+  await assert.rejects(retrieve({pool:x,tenant_id:'grupo_erick',user_id:USER,clock:()=>FIXED_NOW,search:'projeto'}),/rls_principal_denied/);
   assert.deepEqual(x.calls.map(c=>c.sql).slice(0,2),['BEGIN READ ONLY','SELECT (SELECT auth.uid())::text AS user_id, current_user AS db_role']);
   assert.equal(x.calls.at(-1).sql,'ROLLBACK');
   assert.equal(x.released,true);
@@ -53,24 +97,24 @@ test('mismatched verified identity or missing actor fail before content retrieva
 test('SQL injection strings remain values, not query source; unsafe scopes fail closed',async()=>{
  const phrase="project'; DROP TABLE hermes_brain.memory_items;--";
  const x=db();
- await retrieve({pool:x,tenant_id:'client::alpha',user_id:USER,search:phrase});
+ await retrieve({pool:x,tenant_id:'client::alpha',user_id:USER,clock:()=>FIXED_NOW,search:phrase});
  assert.equal(x.calls[2].sql,SEARCH);
  assert.equal(x.calls[2].params[1],phrase);
  for(const invalid of [
-  {tenant_id:'client::alpha; DROP SCHEMA',user_id:USER,search:'projeto'},
-  {tenant_id:'personal::',user_id:USER,search:'projeto'},
-  {tenant_id:'grupo_erick',user_id:'admin',search:'projeto'},
-  {tenant_id:'grupo_erick',user_id:USER,search:''},
-  {tenant_id:'grupo_erick',user_id:USER,search:'\nmalicioso'},
-  {tenant_id:'grupo_erick',user_id:USER,search:'projeto',limit:100}]) {
+  {tenant_id:'client::alpha; DROP SCHEMA',user_id:USER,clock:()=>FIXED_NOW,search:'projeto'},
+  {tenant_id:'personal::',user_id:USER,clock:()=>FIXED_NOW,search:'projeto'},
+  {tenant_id:'grupo_erick',user_id:'admin',clock:()=>FIXED_NOW,search:'projeto'},
+  {tenant_id:'grupo_erick',user_id:USER,clock:()=>FIXED_NOW,search:''},
+  {tenant_id:'grupo_erick',user_id:USER,clock:()=>FIXED_NOW,search:'\nmalicioso'},
+  {tenant_id:'grupo_erick',user_id:USER,clock:()=>FIXED_NOW,search:'projeto',limit:100}]) {
   const bad=db();await assert.rejects(retrieve({pool:bad,...invalid}),/contract_denied/);
   assert.equal(bad.calls.length,0);
  }
 });
 test('empty results and oversized provider responses handled deterministically',async()=>{
- const empty=await retrieve({pool:db({rows:[]}),tenant_id:'grupo_erick',user_id:USER,search:'projeto'});
+ const empty=await retrieve({pool:db({rows:[]}),tenant_id:'grupo_erick',user_id:USER,clock:()=>FIXED_NOW,search:'projeto'});
  assert.deepEqual(empty.items,[]);
- await assert.rejects(retrieve({pool:db({rows:[item,item]}),tenant_id:'grupo_erick',user_id:USER,search:'projeto',limit:1}),/query_result_denied/);
+ await assert.rejects(retrieve({pool:db({rows:[item,item]}),tenant_id:'grupo_erick',user_id:USER,clock:()=>FIXED_NOW,search:'projeto',limit:1}),/query_result_denied/);
 });
 
 test('Postgres memory schema forces RLS for every tenant-owned table',()=>{
