@@ -13,10 +13,11 @@ const fallback=require('./hermes-codex-fallback');
 const brainReader=require('./hermes-brain-telegram-reader');
 const ROUTES=Object.freeze({
  compras:'/internal/commercial-read-pilot/brief',
+ prioridades:'/internal/commercial-read-pilot/brief',
  lotoia:'/internal/lotoia-read-pilot/health',status:'/health'
 });
 const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
- 'Comandos: /compras, /pendencias, /lotoia, /historico, /historico lojas, /historico meses, /status, /ajuda.\n'+ 
+ 'Comandos: /compras, /pendencias, /prioridades, /lotoia, /historico, /historico lojas, /historico meses, /status, /ajuda.\n'+ 
  'Pergunte naturalmente: vendeu quanto em janeiro 2026; compare janeiro 2025 e 2026; cancelamentos em junho; qual loja vendeu mais.\n'+
  'Consultas usam indicadores históricos auditáveis, não faturamento conciliado.\n'+
  'Comandos antigos: /vendas 2026-05, /produtos 2026-05.\n'+
@@ -40,6 +41,7 @@ function intentFor(text){
     t==='resumo historico de vendas')return 'historico';
  if(parseSalesCommand(text))return 'historico_live';
  if(analyst.planQuestion(text))return 'business_analyst';
+ if(/^\/prioridades(?:@\w+)?$/.test(t))return 'prioridades';
  if(/^\/(?:compras|pendencias)(?:@\w+)?$/.test(t)||
   (/\b(compras|duplicatas)\b/.test(t)&&
    /\b(resumo|saldo|venciment\w*|pendenc\w*|total|quanto|qual|quais|mostre|mostra|situacao|relatorio)\b/.test(t)))
@@ -179,7 +181,7 @@ function hermesReply(intent,x){
   x.write_performed!==false||x.production_used!==false||
   !/^[a-f0-9-]{36}$/.test(x.trace_id||''))throw Error('unverified_hermes_read');
  const trace=x.trace_id.slice(0,8);
- if(intent==='compras'){
+ if(intent==='compras'||intent==='prioridades'){
   const b=x.brief;
   if(b?.source!=='Compras homologacao'||b.company!=='Grupo Erick'||
    b.source_state!=='homologacao'||b.erp_linx_conciliated!==false||
@@ -207,6 +209,37 @@ function hermesReply(intent,x){
    'Enviados à revisão: '+num.format(work.review_submitted),
    '⚠️ Essas etapas NÃO comprovam conciliação no Linx nem pagamento.'
   ]:['Acompanhamento documental: fonte indisponível nesta versão.'];
+  if(intent==='prioridades'){
+   const p=b.reconciliation_priority;
+   if(!p||p.source!=='Duplicate'||p.as_of!==b.as_of||
+     p.method!=='days_overdue_and_value_v1'||
+     p.erp_linx_conciliated!==false||
+     p.includes_only_open_balance!==true||
+     !safeCount(p.overdue_without_work)||p.overdue_without_work>over.count||
+     ['overdue_30plus','overdue_1to29','due_next7'].some(k=>
+      !p[k]||!safeCount(p[k].count)||!safeMoney(p[k].balance_brl))||
+     p.overdue_30plus.count+p.overdue_1to29.count!==over.count||
+     Math.abs(p.overdue_30plus.balance_brl+p.overdue_1to29.balance_brl-
+       over.balance_brl)>0.001||
+     p.due_next7.count>upcoming.count||
+     p.due_next7.balance_brl>upcoming.balance_brl+0.001)
+    throw Error('wrong_priority_source_or_totals');
+   return [
+    '📋 Hermes — fila financeira por vencimento (Grupo Erick)',
+    'Fonte: Compras Homologação · '+b.as_of,
+    '1. Atraso ≥30 dias: '+num.format(p.overdue_30plus.count)+
+      ' títulos · '+brl.format(p.overdue_30plus.balance_brl),
+    '2. Atraso 1–29 dias: '+num.format(p.overdue_1to29.count)+
+      ' títulos · '+brl.format(p.overdue_1to29.balance_brl),
+    '3. Vencem nos próximos 7 dias: '+num.format(p.due_next7.count)+
+      ' títulos · '+brl.format(p.due_next7.balance_brl),
+    'Vencidos SEM acompanhamento documental: '+
+      num.format(p.overdue_without_work),
+    'Ordem sugerida: atraso e depois maior saldo. Conferir fornecedor e título no app.',
+    '⚠️ Marcação contábil não prova dívida exigível, pagamento ou conciliação com Linx.',
+    'Somente leitura. Rastreio: '+trace
+   ].join('\n');
+  }
   return ['📦 Compras — Grupo Erick (homologação)',
    'Referência: '+b.as_of,
    'Compras dos últimos 30 dias: '+brl.format(purchases.net_brl)+
