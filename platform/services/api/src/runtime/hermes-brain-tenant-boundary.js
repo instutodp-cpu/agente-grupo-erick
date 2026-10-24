@@ -60,6 +60,20 @@ function authorizeRead({identity,workspace,item,now=Date.now()}={}){
  if(item.store_id!==null&&item.store_id!==undefined&&
   (!id(item.store_id)||!member.store_ids.includes(item.store_id)))
   return code('STORE_BOUNDARY_DENIED');
+ // Two independent allowlists do not prove that a store belongs to a company.
+ // For a multi-company membership, require a trusted pair from AuthN.
+ // A single-company membership cannot pair a store with an alternate company.
+ if(item.company_id!=null&&item.store_id!=null&&member.company_ids.length>1){
+  const pairs=member.store_company_bindings;
+  if(!Array.isArray(pairs)||pairs.length>100||pairs.length===0||
+   pairs.some(p=>!p||!id(p.company_id)||!id(p.store_id)||
+    !member.company_ids.includes(p.company_id)||
+    !member.store_ids.includes(p.store_id))||
+   new Set(pairs.map(p=>p.company_id+'::'+p.store_id)).size!==pairs.length||
+   pairs.filter(p=>p.company_id===item.company_id&&
+    p.store_id===item.store_id).length!==1)
+   return code('STORE_COMPANY_BINDING_DENIED');
+ }
  // A scoped company/store must not be bypassed through broad tenant sharing.
  return Object.freeze({allowed:true,reason:'VERIFIED_SCOPE_ALLOWED',
   executed:false,tenant_id:workspace.tenant_id,memory_id:item.id});
