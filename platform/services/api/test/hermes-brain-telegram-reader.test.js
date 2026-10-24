@@ -7,7 +7,7 @@ const {processUpdate}=require('../src/runtime/hermes-telegram-private-channel');
 const base={HERMES_BRAIN_LIVE_ENABLED:'true',HERMES_DEPLOYMENT_STAGE:'staging',
  HERMES_EXECUTION_ENABLED:'false',HERMES_EXECUTION_KILL_SWITCH:'true',
  HERMES_MISSION_INGRESS_ENABLED:'false',
- HERMES_BRAIN_DIRECT_HOST:'db.asceucchdnuoaqgdjbtg.supabase.co',
+ HERMES_BRAIN_POOLER_HOST:'aws-1-sa-east-1.pooler.supabase.com',
  HERMES_BRAIN_PASSWORD_FILE:'/secure/pw',
  HERMES_BRAIN_CA_FILE:'/secure/ca'};
 function secret(p){
@@ -29,7 +29,7 @@ test('reader disabled without credentials and fails closed',async()=>{
 });
 test('refuses production, wrong pooler, wrong stage, missing certificate',()=>{
  assert.throws(()=>reader.createReader({...base,HERMES_DEPLOYMENT_STAGE:'production'},{readSecret:secret}),/stage_denied/);
- assert.throws(()=>reader.createReader({...base,HERMES_BRAIN_DIRECT_HOST:'evil.example.org'},{readSecret:secret}),/host_denied/);
+ assert.throws(()=>reader.createReader({...base,HERMES_BRAIN_POOLER_HOST:'evil.example.org'},{readSecret:secret}),/host_denied/);
  assert.throws(()=>reader.createReader({...base,HERMES_EXECUTION_ENABLED:'true'},{readSecret:secret}),/stage_denied/);
  assert.throws(()=>reader.createReader({...base,HERMES_BRAIN_CA_FILE:'/bad'},{readSecret:secret}),/tls_invalid/);
 });
@@ -56,6 +56,7 @@ test('queries are parameterized, bounded, isolated and TLS-verified',async()=>{
  assert.ok(query.sql.includes('m.tenant_id=$1'));
  assert.ok(query.sql.includes('a.status=\'admitted\''));
  assert.equal(all[0].config.user,reader.USER);
+ assert.equal(all[0].config.host,base.HERMES_BRAIN_POOLER_HOST);
  assert.equal(all[0].config.ssl.rejectUnauthorized,true);
  assert.equal(all[0].config.options,'-c default_transaction_read_only=on');
  assert.equal(all.at(-1).ended,true);
