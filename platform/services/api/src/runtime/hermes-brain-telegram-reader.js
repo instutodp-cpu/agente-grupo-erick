@@ -4,7 +4,9 @@
 // Never accept raw SQL, service-role keys, elevated identity or arbitrary tenant ids.
 const {createHash}=require('node:crypto');
 const PROJECT='asceucchdnuoaqgdjbtg';
-const USER='hermes_telegram_brain_reader.'+PROJECT;
+const USER='hermes_telegram_brain_login';
+const ROLE='hermes_telegram_brain_reader';
+const DIRECT_HOST='db.'+PROJECT+'.supabase.co';
 const QUERY=`SELECT m.tenant_id,m.title,m.content,m.domain,m.expires_at,
  m.source_item_digest,m.source_version,s.provider,a.content_digest
  FROM hermes_brain.memory_items m
@@ -34,10 +36,8 @@ function createReader(env,{readSecret,loadDriver=()=>require('pg')}={}){
   env.HERMES_EXECUTION_ENABLED!=='false'||
   env.HERMES_EXECUTION_KILL_SWITCH!=='true'||
   env.HERMES_MISSION_INGRESS_ENABLED!=='false')throw Error('brain_telegram_stage_denied');
- const host=env.HERMES_BRAIN_POOLER_HOST;
- if(typeof host!=='string'||
-  !/^aws-[0-9]+-sa-east-1\.pooler\.supabase\.com$/.test(host))
-  throw Error('brain_telegram_pooler_host_denied');
+ const host=env.HERMES_BRAIN_DIRECT_HOST;
+ if(host!==DIRECT_HOST)throw Error('brain_telegram_direct_host_denied');
  if(typeof readSecret!=='function')throw Error('brain_secret_reader_required');
  const password=readSecret(env.HERMES_BRAIN_PASSWORD_FILE);
  if(password.length<40||password.length>180)throw Error('brain_machine_password_invalid');
@@ -56,6 +56,11 @@ function createReader(env,{readSecret,loadDriver=()=>require('pg')}={}){
   });
   try{
    await client.connect();
+   await client.query('BEGIN READ ONLY');
+   await client.query('SET LOCAL ROLE hermes_telegram_brain_reader');
+   const identity=await client.query('SELECT current_user AS active_role');
+   if(identity?.rows?.length!==1||identity.rows[0].active_role!==ROLE)
+     throw Error('brain_machine_set_role_denied');
    const response=await client.query(QUERY,['grupo_erick',term,3]);
    const rows=response?.rows;
    if(!Array.isArray(rows)||rows.length>3)throw Error('brain_result_contract_denied');
@@ -71,7 +76,11 @@ function createReader(env,{readSecret,loadDriver=()=>require('pg')}={}){
        !(Date.parse(row.expires_at)>now))
        throw Error('brain_result_provenance_denied');
    }
+   await client.query('COMMIT');
    return rows;
+  }catch(error){
+   await client.query('ROLLBACK').catch(()=>{});
+   throw error;
   }finally{await client.end().catch(()=>{});}
  }});
 }
@@ -91,4 +100,4 @@ function render(rows){
  if(reply.length>3200)throw Error('brain_reply_too_large');
  return reply;
 }
-module.exports={createReader,safeTerm,render,QUERY,PROJECT,USER};
+module.exports={createReader,safeTerm,render,QUERY,PROJECT,USER,ROLE,DIRECT_HOST};
