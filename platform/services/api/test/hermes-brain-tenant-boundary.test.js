@@ -90,6 +90,36 @@ test('draft, revoked, stale, unverified or incomplete facts never enter retrieva
   mGroup,mGroup,mClient,mPersonal
  ]}).reason,'MEMBERSHIP_DENIED');
 });
+test('multi-company store identifiers require a verified company-store pair',()=>{
+ const base=item('client::tenantA','external_client');
+ const work=workspace('client::tenantA','external_client');
+ const multiple={...mClient,company_ids:['company1','company2'],
+  store_ids:['store1','store2']};
+ const scoped={...base,visibility:'scoped',company_id:'company2',store_id:'store1'};
+ const identityFor=x=>({...identity,memberships:[mGroup,x,mPersonal]});
+ // Independent membership allowlists alone permit an impossible combination.
+ assert.equal(run(work,scoped,identityFor(multiple)).reason,'STORE_COMPANY_BINDING_DENIED');
+ const bindings=[{company_id:'company1',store_id:'store1'},
+  {company_id:'company2',store_id:'store2'}];
+ assert.equal(run(work,scoped,identityFor({...multiple,store_company_bindings:bindings})).reason,
+  'STORE_COMPANY_BINDING_DENIED');
+ const approved={...scoped,store_id:'store2'};
+ const allowed=run(work,approved,identityFor({...multiple,store_company_bindings:bindings}));
+ assert.equal(allowed.allowed,true);
+ assert.equal(allowed.executed,false);
+ for(const wrong of [
+  [{company_id:'company2',store_id:'store2'},{company_id:'company2',store_id:'store2'}],
+  [{company_id:'company4',store_id:'store2'}],
+  [{company_id:'company2',store_id:'store4'}],
+  [{company_id:null,store_id:'store2'}],
+  'company2/store2',[],
+  Array.from({length:101},()=>({company_id:'company2',store_id:'store2'}))
+ ]){
+  const r=run(work,approved,identityFor({...multiple,store_company_bindings:wrong}));
+  assert.equal(r.allowed,false);
+  assert.equal(r.reason,'STORE_COMPANY_BINDING_DENIED');
+ }
+});
 test('permission decision is metadata-only, no secret or content included',()=>{
  const w=workspace('grupo_erick','grupo_erick');
  const r=run(w,{...item('grupo_erick','grupo_erick'),content:'private note'});
