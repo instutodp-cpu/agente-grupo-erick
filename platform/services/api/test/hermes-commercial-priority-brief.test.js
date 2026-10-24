@@ -126,3 +126,19 @@ test('new route has same identity, persisted budget and non-sensitive audit',asy
  }finally{await new Promise(resolve=>server.close(resolve));
   fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+
+test('work progress propagates as context only, preserving payment and ERP restrictions',()=>{
+ const s=fixture();
+ s.reconciliation_work={source:'ReconciliationWorkEvent',as_of:s.as_of,
+  erp_linx_conciliated:false,payment_recorded:false,
+  tracked_titles:2,waiting_documents:1,in_review:0,
+  discrepancy_found:0,review_submitted:1};
+ const result=createHermesCommercialPriorityBrief(s,{clock:()=>NOW});
+ assert.equal(result.reconciliation_work.tracked_titles,2);
+ assert.equal(result.reconciliation_work.review_submitted,1);
+ assert.equal(result.payment_authorized,false);
+ const forged=fixture();
+ forged.reconciliation_work={...s.reconciliation_work,payment_recorded:true};
+ assert.throws(()=>createHermesCommercialPriorityBrief(forged,{clock:()=>NOW}),/commercial_work_context_invalid/);
+});
