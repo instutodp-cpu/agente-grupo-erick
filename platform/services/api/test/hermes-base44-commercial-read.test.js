@@ -178,3 +178,43 @@ test('commercial gate is off by default and shares staging kill switch',async()=
  assert.equal(provider,0);
  }finally{tok.close();}
 });
+
+
+test('official work progress is scoped, never a payment or ERP settlement',async()=>{
+ const s=commercial();
+ s.reconciliation_work={source:'ReconciliationWorkEvent',as_of:s.as_of,
+  erp_linx_conciliated:false,payment_recorded:false,
+  tracked_titles:8,waiting_documents:2,in_review:3,
+  discrepancy_found:1,review_submitted:2};
+ const tok=protectedKey();
+ try{
+  const result=await readBase44CommercialSummary({
+   environment:env(tok.file),fetchImpl:async()=>resp(s)
+  });
+  assert.deepEqual(result.reconciliation_work,s.reconciliation_work);
+  assert.equal(result.reconciliation_work.payment_recorded,false);
+  for(const bad of [
+   {...s.reconciliation_work,payment_recorded:true},
+   {...s.reconciliation_work,erp_linx_conciliated:true},
+   {...s.reconciliation_work,tracked_titles:2},
+   {...s.reconciliation_work,as_of:'2024-01-01'},
+   {...s.reconciliation_work,source:'Outro Cliente'},
+   {...s.reconciliation_work,waiting_documents:-1}
+  ]){
+   await assert.rejects(readBase44CommercialSummary({
+    environment:env(tok.file),fetchImpl:async()=>resp({
+     ...s,reconciliation_work:bad})
+   }),/commercial_work_contract_invalid/);
+  }
+ }finally{tok.close();}
+});
+test('missing work schema remains unavailable, never fabricated zero progress',async()=>{
+ const tok=protectedKey();
+ try{
+  const s=commercial();
+  const data=await readBase44CommercialSummary({
+   environment:env(tok.file),fetchImpl:async()=>resp(s)
+  });
+  assert.equal(Object.hasOwn(data,'reconciliation_work'),false);
+ }finally{tok.close();}
+});
