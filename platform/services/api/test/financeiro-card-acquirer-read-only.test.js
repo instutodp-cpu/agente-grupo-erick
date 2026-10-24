@@ -24,6 +24,7 @@ test('amount differences and complete-source absence yield review cases with opa
   const result = run(pair([record('tx1', 10000), record('tx2', 5000)], [record('tx1', 9900), record('tx3', 1200)]));
   assert.deepEqual(result.summary, { matched: 0, amount_mismatch: 1, missing_at_pos: 1, missing_at_acquirer: 1, coverage_unconfirmed: 0 });
   assert.equal(result.reports[0].issue_references.length, 3);
+  assert.deepEqual(result.reports[0].issue_references.map(x => x.issue_ref), ['case_001', 'case_002', 'case_003']);
   assert.ok(!JSON.stringify(result).includes('tx1'));
   assert.ok(!JSON.stringify(result).includes('estab_01'));
 });

@@ -2,7 +2,6 @@
 
 // Pure, fail-closed reconciliation of already-authorized, normalized sources.
 // No provider calls, credentials, customer/card data, payments or bookkeeping.
-const { createHash } = require('node:crypto');
 
 const ID = /^[a-zA-Z0-9:_-]{1,80}$/;
 const DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -21,7 +20,6 @@ function id(s) { return typeof s === 'string' && ID.test(s); }
 function iso(s, now) { return typeof s === 'string' && DATETIME.test(s) && !Number.isNaN(Date.parse(s)) && new Date(s).toISOString() === s && Date.parse(s) <= now; }
 function date(s) { return typeof s === 'string' && DATE.test(s) && !Number.isNaN(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s; }
 function cents(n) { return Number.isSafeInteger(n) && n >= 0 && n <= 1e12; }
-function digest(s) { return createHash('sha256').update(s).digest('hex').slice(0, 20); }
 function key(row, provider) {
   return [provider, row.store_id, row.merchant_id, row.transaction_ref, row.installment].join('\0');
 }
@@ -95,9 +93,9 @@ function compareCardAcquirerSources({ authorized_scope, batches, now = new Date(
       else status = p === undefined ? 'missing_at_pos' : 'missing_at_acquirer';
       summary[status]++;
       totals[status]++;
-      // Hash the scoped internal key; never return raw transaction/merchant references.
+      // Per-report case ordinals; no raw transaction or merchant references leave this boundary.
       if (status !== 'matched' && issueRefs.length < 10)
-        issueRefs.push({ issue_ref: digest([authorized_scope.tenant_id, authorized_scope.company_id, k].join('\0')), status });
+        issueRefs.push({ issue_ref: 'case_' + String(issueRefs.length + 1).padStart(3, '0'), status });
     }
     reports.push({ provider_id: group.provider_id, period: group.period,
       sources: [{ kind: 'pos', source_ref: pos.source_ref, observed_at: pos.observed_at, complete: pos.complete },

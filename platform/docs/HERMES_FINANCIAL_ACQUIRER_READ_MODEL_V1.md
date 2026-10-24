@@ -10,7 +10,7 @@
 - Rejeita registros de outro tenant, empresa ou loja, duplicidades, fontes sem par, períodos incompatíveis, campos desconhecidos incluindo dados de cartão/portador, valores não inteiros e lotes excessivos.
 - Compara BRL em centavos **por parcela**. A equivalência de identificadores entre sistemas só pode ser estabelecida por um adaptador homologado com evidência; não por coincidência de valor e data.
 - Para fontes incompletas, indica cobertura não confirmada. Não afirma divergência por ausência de dados quando a cobertura não é comprovada.
-- Devolve contagens por provedor e período, metadados de origem e no máximo dez referências opacas de divergência por relatório; não expõe identificadores transacionais originais nem detalhes dos portadores.
+- Devolve contagens por provedor e período, metadados de origem e no máximo dez referências opacas **locais àquele relatório** (case_001 etc.), não estáveis entre execuções; não expõe identificadores transacionais originais nem detalhes dos portadores.
 - Sem rede, API, OAuth, banco, alterações financeiras ou recebimento. Retorno declara explicitamente ausência de execução, pagamentos, conciliação Linx ou liquidação bancária.
 
 ## Próximos gates de uso real
