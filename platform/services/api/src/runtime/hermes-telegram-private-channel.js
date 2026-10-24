@@ -221,6 +221,7 @@ function hermesReply(intent,x){
    'Em conferência: '+num.format(work.in_review),
    'Divergência registrada: '+num.format(work.discrepancy_found),
    'Enviados à revisão: '+num.format(work.review_submitted),
+   ...detail,
    '⚠️ Essas etapas NÃO comprovam conciliação no Linx nem pagamento.'
   ]:['Acompanhamento documental: fonte indisponível nesta versão.'];
   if(intent==='prioridades'){
