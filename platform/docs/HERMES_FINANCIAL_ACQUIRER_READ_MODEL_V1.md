@@ -26,3 +26,14 @@
 **Não confundir com integração ativa Senff/Rede nem conciliação contábil/bancária.** Nenhuma credencial ou dado financeiro real foi usado neste incremento.
 
 Teste: node --test test/financeiro-card-acquirer-read-only.test.js.
+
+## Incremento V2 — vínculo de fontes por tenant, empresa e estabelecimento (mock-only)
+
+- O gate `src/core/financeiro-card-source-admission.js` consome uma lista de **conexões previamente registradas e autorizadas pelo Maestro**, uma por tipo `pos` e `acquirer` para cada provedor, com `connection_id`, `connector_id`, `tenant_id`, `company_id`, `provider_id`, `store_merchants`, `config_version`, expiração e permissão de consulta.
+- Estado admitido **somente `mock_only` em `staging`**. Registros "ativos" falsos, contas de outra empresa, conexões revogadas/expiradas, lojas de outra empresa, combinações loja-estabelecimento não habilitadas e dados com campos extra são bloqueados. Não são criadas contas nem credenciais.
+- O gate recebe *snapshots normalizados* fornecidos pelo adaptador confiável. Cada snapshot deve estar vinculado a uma conexão; a identidade de empresa, provedor e canal é verificada. Mapeamentos loja↔estabelecimento devem coincidir nos dois lados e não podem ser inferidos apenas de listas independentes.
+- O indicador `complete` não é aceito dos snapshots: somente é **derivado** de evidência de paginação integral, cursor esgotado, consistência da captura e correspondência exata com contagem de origem. O adaptador deverá comprovar essas evidências; **metadados fabricados não constituem prova**. Capturas incompletas não produzem afirmação de transação ausente, apenas `partial_evidence`.
+- Capturas devem ter `observed_at` válido, sem data futura e com idade de até 24 horas; o intervalo econômico consultado pode ser histórico. O núcleo existente verifica identidade, período, parcelas e centavos, mantendo `executed:false`.
+- Pré-condição de produção ainda ausente: ingress Maestro com identidade/membership efetivamente autenticados, configuração de conector sob guarda e fonte externa homologada. Nada neste gate concede autorização ao autor do prompt ou verifica a veracidade do provedor.
+
+Teste: `node --test test/financeiro-card-source-admission.test.js`. Nenhum acesso à API da Senff/Rede foi realizado.
