@@ -142,3 +142,24 @@ test('work progress propagates as context only, preserving payment and ERP restr
  forged.reconciliation_work={...s.reconciliation_work,payment_recorded:true};
  assert.throws(()=>createHermesCommercialPriorityBrief(forged,{clock:()=>NOW}),/commercial_work_context_invalid/);
 });
+
+
+test('aged payable priorities preserve verified totals and no financial action',()=>{
+ const s=fixture();
+ s.reconciliation_priority={
+  source:'Duplicate',as_of:s.as_of,method:'days_overdue_and_value_v1',
+  erp_linx_conciliated:false,includes_only_open_balance:true,
+  overdue_without_work:471,
+  overdue_30plus:{count:300,balance_brl:700000},
+  overdue_1to29:{count:171,balance_brl:498243.1},
+  due_next7:{count:20,balance_brl:30000}
+ };
+ const b=createHermesCommercialPriorityBrief(s,{clock:()=>NOW});
+ assert.deepEqual(b.reconciliation_priority,s.reconciliation_priority);
+ assert.equal(b.payment_authorized,false);
+ assert.equal(b.external_write_performed,false);
+ assert.equal(b.erp_linx_conciliated,false);
+ const forged=fixture();
+ forged.reconciliation_priority={...s.reconciliation_priority,overdue_without_work:472};
+ assert.throws(()=>createHermesCommercialPriorityBrief(forged,{clock:()=>NOW}),/priority_proof_inconsistent/);
+});
