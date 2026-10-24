@@ -7,7 +7,7 @@ const {processUpdate}=require('../src/runtime/hermes-telegram-private-channel');
 const base={HERMES_BRAIN_LIVE_ENABLED:'true',HERMES_DEPLOYMENT_STAGE:'staging',
  HERMES_EXECUTION_ENABLED:'false',HERMES_EXECUTION_KILL_SWITCH:'true',
  HERMES_MISSION_INGRESS_ENABLED:'false',
- HERMES_BRAIN_POOLER_HOST:'aws-0-sa-east-1.pooler.supabase.com',
+ HERMES_BRAIN_DIRECT_HOST:'db.asceucchdnuoaqgdjbtg.supabase.co',
  HERMES_BRAIN_PASSWORD_FILE:'/secure/pw',
  HERMES_BRAIN_CA_FILE:'/secure/ca'};
 function secret(p){
@@ -29,7 +29,7 @@ test('reader disabled without credentials and fails closed',async()=>{
 });
 test('refuses production, wrong pooler, wrong stage, missing certificate',()=>{
  assert.throws(()=>reader.createReader({...base,HERMES_DEPLOYMENT_STAGE:'production'},{readSecret:secret}),/stage_denied/);
- assert.throws(()=>reader.createReader({...base,HERMES_BRAIN_POOLER_HOST:'evil.example.org'},{readSecret:secret}),/host_denied/);
+ assert.throws(()=>reader.createReader({...base,HERMES_BRAIN_DIRECT_HOST:'evil.example.org'},{readSecret:secret}),/host_denied/);
  assert.throws(()=>reader.createReader({...base,HERMES_EXECUTION_ENABLED:'true'},{readSecret:secret}),/stage_denied/);
  assert.throws(()=>reader.createReader({...base,HERMES_BRAIN_CA_FILE:'/bad'},{readSecret:secret}),/tls_invalid/);
 });
@@ -38,13 +38,20 @@ test('queries are parameterized, bounded, isolated and TLS-verified',async()=>{
  class Client{
   constructor(config){all.push({config});}
   async connect(){all.push({connected:true});}
-  async query(sql,args){all.push({sql,args});return {rows:[validRow()]};}
+  async query(sql,args){all.push({sql,args});
+   if(sql==='SELECT current_user AS active_role')return {rows:[{active_role:reader.ROLE}]};
+   if(sql===reader.QUERY)return {rows:[validRow()]};
+   return {rows:[]};
+  }
   async end(){all.push({ended:true});}
  }
  const live=reader.createReader(base,{readSecret:secret,loadDriver:()=>({Client})});
  const rows=await live.query('conciliação');
  assert.equal(rows.length,1);
- const query=all.find(e=>e.sql);
+ const query=all.find(e=>e.sql===reader.QUERY);
+ assert.ok(all.some(e=>e.sql==='BEGIN READ ONLY'));
+ assert.ok(all.some(e=>e.sql==='SET LOCAL ROLE hermes_telegram_brain_reader'));
+ assert.ok(all.some(e=>e.sql==='COMMIT'));
  assert.deepEqual(query.args,['grupo_erick','conciliação',3]);
  assert.ok(query.sql.includes('m.tenant_id=$1'));
  assert.ok(query.sql.includes('a.status=\'admitted\''));
@@ -56,13 +63,21 @@ test('queries are parameterized, bounded, isolated and TLS-verified',async()=>{
 });
 test('rejects tampered data and closes client',async()=>{
  let closed=false;
- class Client{async connect(){}async query(){const m=validRow();m.content='adulterado';return {rows:[m]};}async end(){closed=true;}}
+ class Client{async connect(){}async query(sql){
+  if(sql==='SELECT current_user AS active_role')return {rows:[{active_role:reader.ROLE}]};
+  if(sql===reader.QUERY){const m=validRow();m.content='adulterado';return {rows:[m]};}
+  return {rows:[]};
+ }async end(){closed=true;}}
  const live=reader.createReader(base,{readSecret:secret,loadDriver:()=>({Client})});
  await assert.rejects(live.query('conciliação'),/provenance_denied/);
  assert.equal(closed,true);
 });
 test('no cross tenant, expired, long or control-character search allowed',async()=>{
- class Client{async connect(){}async query(){return {rows:[{...validRow(),tenant_id:'client::different'}]};}async end(){}}
+ class Client{async connect(){}async query(sql){
+  if(sql==='SELECT current_user AS active_role')return {rows:[{active_role:reader.ROLE}]};
+  if(sql===reader.QUERY)return {rows:[{...validRow(),tenant_id:'client::different'}]};
+  return {rows:[]};
+ }async end(){}}
  const live=reader.createReader(base,{readSecret:secret,loadDriver:()=>({Client})});
  await assert.rejects(live.query('conciliação'),/provenance_denied/);
  for(const q of ['a','x'.repeat(101),'olá\nSELECT'])await assert.rejects(live.query(q),/query_invalid/);
