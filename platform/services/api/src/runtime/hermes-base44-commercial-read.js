@@ -81,6 +81,24 @@ function shapeCommercialData(json){
   const field=key==='purchases_last_30_days'?'net_brl':'balance_brl';
   shaped[key]={count:item.count,[field]:item[field]};
  }
+ // Optional for historic official-contract versions. When present require
+ // all fields, verified scope and counters; absence is NOT zero progress.
+ if(Object.hasOwn(json,'reconciliation_work')){
+  const r=json.reconciliation_work;
+  const fields=['tracked_titles','waiting_documents','in_review',
+   'discrepancy_found','review_submitted'];
+  if(!r||r.source!=='ReconciliationWorkEvent'||
+   r.as_of!==json.as_of||r.erp_linx_conciliated!==false||
+   r.payment_recorded!==false||fields.some(k=>!count(r[k]))||
+   r.tracked_titles>1e6||
+   fields.slice(1).reduce((n,k)=>n+r[k],0)>r.tracked_titles)
+   throw Error('commercial_work_contract_invalid');
+  shaped.reconciliation_work=Object.freeze({
+   source:'ReconciliationWorkEvent',as_of:r.as_of,
+   erp_linx_conciliated:false,payment_recorded:false,
+   ...Object.fromEntries(fields.map(k=>[k,r[k]]))
+  });
+ }
  return Object.freeze(shaped);
 }
 async function readBase44CommercialSummary({
