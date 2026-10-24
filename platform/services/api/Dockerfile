@@ -10,6 +10,10 @@ RUN npm ci --omit=dev --no-audit --no-fund
 COPY src ./src
 COPY scripts/hermes-maintainer-staging-readiness-probe.js ./scripts/hermes-maintainer-staging-readiness-probe.js
 
+# Git checkouts created under umask 077 can yield root-owned 0600 JS in the image.
+# Runtime uses uid 1000, so image source MUST be readable without root privileges.
+RUN chmod -R a+rX /app/src /app/scripts
+
 ENV NODE_ENV=production
 EXPOSE 8080
 

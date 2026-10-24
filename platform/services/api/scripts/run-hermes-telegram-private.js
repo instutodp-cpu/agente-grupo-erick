@@ -5,6 +5,18 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {TextDecoder}=require('node:util');
 const {processUpdate,ROUTES}=require('../src/runtime/hermes-telegram-private-channel');
+const {readHistoricalSales}=require('../src/runtime/hermes-softcom-live-reader');
+const analyst=require('../src/runtime/hermes-analyst-templates');
+const governed=require('../src/runtime/hermes-governed-agent');
+const businessMemory=require('../src/runtime/hermes-business-evidence-memory');
+const autoMemory=require('../src/runtime/hermes-automemory-curator');
+const brainReader=require('../src/runtime/hermes-brain-telegram-reader');
+const codexFallback=require('../src/runtime/hermes-codex-fallback');
+const openRouter=require('../src/runtime/hermes-openrouter-secondary');
+const ownerDecisions=require('../src/runtime/hermes-owner-decision-memory');
+const answerCache=require('../src/runtime/hermes-verified-answer-cache');
+const finops=require('../src/runtime/hermes-inference-finops');
+const {hermesReply}=require('../src/runtime/hermes-telegram-private-channel');
 const STATE='/var/lib/hermes-telegram';
 const TELEGRAM_ORIGIN='https://api.telegram.org';
 const HERMES_ORIGIN='https://hermes-staging.grupoerick.tech';
@@ -30,7 +42,10 @@ function loadState(dir,name){
   const fd=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW);
   try{
    const st=fs.fstatSync(fd);
-   if(!st.isFile()||(st.mode&0o777)!==0o600||st.size>2048)
+   const limit=name==='history-analyst-cache.json'?16384:
+    ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json','auto-memory.json'].includes(name)?32768:
+    name==='ai-finops-daily.json'?4096:2048;
+   if(!st.isFile()||(st.mode&0o777)!==0o600||st.size>limit)
     throw Error('state_file_unsafe');
    return JSON.parse(fs.readFileSync(fd,'utf8'));
   }finally{fs.closeSync(fd);}
@@ -38,10 +53,15 @@ function loadState(dir,name){
 }
 function saveState(dir,name,data){
  const file=path.join(dir,name),temp=path.join(dir,'.'+name+'.new');
+ const serialized=JSON.stringify(data)+'\n';
+ const limit=name==='history-analyst-cache.json'?16384:
+    ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json','auto-memory.json'].includes(name)?32768:
+    name==='ai-finops-daily.json'?4096:2048;
+ if(Buffer.byteLength(serialized,'utf8')>limit)throw Error('state_file_too_large');
  const fd=fs.openSync(temp,fs.constants.O_WRONLY|fs.constants.O_CREAT|
   fs.constants.O_EXCL|fs.constants.O_NOFOLLOW,0o600);
  try{
-  fs.writeFileSync(fd,JSON.stringify(data)+'\n');fs.fsyncSync(fd);
+  fs.writeFileSync(fd,serialized);fs.fsyncSync(fd);
  }finally{fs.closeSync(fd);}
  fs.renameSync(temp,file);
  const parent=fs.openSync(dir,fs.constants.O_RDONLY);
@@ -105,7 +125,47 @@ function hermesClient(machineToken,fetchImpl=globalThis.fetch){
   return smallJSON(r,16384);
  };
 }
-async function pollOnce({stateDir,api,query,clock=()=>Date.now()}){
+function createLiveQuery(environment,driverLoader=()=>require('pg')){
+ if(environment.HERMES_HISTORY_LIVE_ENABLED!=='true')
+  return async()=>{throw Error('history_live_disabled')};
+ if(environment.HERMES_DEPLOYMENT_STAGE!=='staging'||
+    environment.HERMES_EXECUTION_ENABLED!=='false'||
+    environment.HERMES_EXECUTION_KILL_SWITCH!=='true')
+  throw Error('history_live_stage_denied');
+ const host=environment.HERMES_HISTORY_POOLER_HOST;
+ // The shared session-pooler cluster index is project-specific: never guess it.
+ if(typeof host!=='string'||!/^aws-[0-9]+-sa-east-1\.pooler\.supabase\.com$/.test(host))
+  throw Error('history_pooler_host_unverified');
+ const password=readSecret(environment.HERMES_HISTORY_PASSWORD_FILE);
+ const ca=readSecret(environment.HERMES_HISTORY_CA_FILE);
+ if(!ca.startsWith('-----BEGIN CERTIFICATE-----')||
+    !ca.endsWith('-----END CERTIFICATE-----'))
+  throw Error('history_tls_ca_invalid');
+ if(password.length<50||password.length>150)
+  throw Error('history_password_invalid');
+ const driver=driverLoader();
+ if(typeof driver?.Client!=='function')throw Error('history_db_driver_missing');
+ return async params=>{
+  const client=new driver.Client({
+   host,port:5432,database:'postgres',
+   user:'hermes_history_login.yxmdrrwqxwzsdgcgskrm',
+   password,ssl:{rejectUnauthorized:true,ca},
+   application_name:'hermes-history-staging-v1',
+   connectionTimeoutMillis:4000,query_timeout:5000,
+   statement_timeout:5000,options:'-c default_transaction_read_only=on'
+  });
+  try{
+   await client.connect();
+   return params?.shape==='analyst'?
+    await analyst.execute(client,params.plan):
+    await readHistoricalSales(client,params);
+  }finally{await client.end().catch(()=>{});}
+ };
+}
+async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
+ readLive=async()=>{throw Error('history_live_disabled')},liveEnabled=false,
+ agentModel=null,autoMemoryEnabled=false,secondaryProvider=null,
+ brainLive=brainReader.createReader({HERMES_BRAIN_LIVE_ENABLED:'false'})}){
  checkStateDirectory(stateDir);
  const offsetRecord=loadState(stateDir,'offset.json');
  const offset=offsetRecord?.offset??0;
@@ -117,6 +177,35 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now()}){
  // Authenticated polling heartbeat: genuine Telegram API response, not an HTTP
  // port healthcheck inherited from the unrelated Hermes API image.
  saveState(stateDir,'heartbeat.json',{at:clock()});
+ // Daily curation: no raw Telegram text ever enters AutoMemory.
+ if(autoMemoryEnabled){
+  const today=new Date(clock()).toISOString().slice(0,10);
+  const cursor=loadState(stateDir,'auto-memory-day.json');
+  if(cursor?.day!==today||cursor?.policy_version!==2){
+   const next=autoMemory.curate({
+    ownerDecisions:loadState(stateDir,'owner-decisions.json'),
+    businessEvidence:loadState(stateDir,'business-evidence-memory.json'),
+    previous:loadState(stateDir,'auto-memory.json'),now:clock(),
+    policy:{enabled:true,tenant_id:'grupo_erick',decisions:true,aggregates:true}
+   });
+   saveState(stateDir,'auto-memory.json',next);
+   saveState(stateDir,'auto-memory-day.json',{day:today,policy_version:2});
+   audit(stateDir,{event:'auto_memory_daily',at:new Date(clock()).toISOString(),
+    count:next.items.length});
+  }
+ }
+ const queryBrainLimited=async term=>{
+  if(!brainLive.enabled)throw Error('brain_live_disabled');
+  const today=new Date(clock()).toISOString().slice(0,10);
+  const record=loadState(stateDir,'brain-read-budget.json');
+  if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
+    !Number.isInteger(record.count)||record.count<0||record.count>12))
+    throw Error('brain_read_budget_corrupt');
+  const used=record?.date===today?record.count:0;
+  if(used>=12)throw Error('brain_read_budget_exhausted');
+  saveState(stateDir,'brain-read-budget.json',{date:today,count:used+1});
+  return brainLive.query(term);
+ };
  let current=offset,handled=0;
  for(const item of updates){
   if(!Number.isSafeInteger(item?.update_id)||item.update_id<current)
@@ -133,6 +222,202 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now()}){
   const result=await processUpdate({
    update:item,ownerId:owner?.owner_id??null,pairing,
    clock,query,
+   readFinops:()=>finops.validate(loadState(stateDir,'ai-finops-daily.json')),
+   readBrain:queryBrainLimited,
+   readAutocurated:()=>autoMemoryEnabled?
+    autoMemory.render(loadState(stateDir,'auto-memory.json'),clock()):
+    'Memória automática indisponível: piloto ainda não ativado.',
+   readDecisions:()=>{
+    const data=loadState(stateDir,'owner-decisions.json');
+    return ownerDecisions.validateStore(data,clock());
+   },
+   writeDecisions:store=>{
+    ownerDecisions.validateStore(store,clock());
+    saveState(stateDir,'owner-decisions.json',store);
+   },
+   readHistory:()=>loadState(stateDir,'history-softcom.json'),
+   readLive:async params=>{
+    if(!liveEnabled)throw Error('history_live_disabled');
+    if(typeof params!=='object'||params?.tenant_id!=='grupo_erick')
+     throw Error('history_live_params_denied');
+    const today=new Date(clock()).toISOString().slice(0,10);
+    const record=loadState(stateDir,'history-live-budget.json');
+    if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
+      !Number.isInteger(record.count)||record.count<0||
+      record.count>24))throw Error('history_live_budget_invalid');
+    const count=record?.date===today?record.count:0;
+    const cap=params?.shape==='analyst'?24:8;
+    if(count>=cap)return {denied_status:'history_budget_exhausted'};
+    // Claim before hitting network; never retry reads due to failed writes/crashes.
+    saveState(stateDir,'history-live-budget.json',{date:today,count:count+1});
+    return readLive(params);
+   },
+
+   agentEnabled:agentModel!==null,
+   readGovernedFallback:async (question,code)=>{
+    if(!autoMemoryEnabled||!codexFallback.permitted(code))throw Error('fallback_disabled');
+    return codexFallback.compose({
+     store:loadState(stateDir,'auto-memory.json'),question,code,now:clock()});
+   },
+   readAgent:async goal=>{
+    if(!agentModel||!liveEnabled)throw Error('agent_not_enabled');
+    const today=new Date(clock()).toISOString().slice(0,10);
+    const budget=loadState(stateDir,'agent-llm-budget.json');
+    if(budget&&(!/^20\d{2}-\d{2}-\d{2}$/.test(budget.date)||
+      !Number.isInteger(budget.turns)||budget.turns<0||budget.turns>4))
+     throw Error('agent_llm_budget_invalid');
+    const turns=budget?.date===today?budget.turns:0;
+    // Reserve the daily turn immediately BEFORE the FIRST actual model call.
+    // A verified synthesis cache hit never calls the model or consumes a turn.
+    // One task still reserves at most one daily turn (1–2 provider requests).
+    const secondary=secondaryProvider?.forTask(goal)||null;
+    // Stay on OpenRouter after first Codex fail within this question.
+    // The fallback cannot grant tool permissions or reset a budget.
+    let reservedPrimary=false,useSecondary=turns>=4;
+    let callsThisTask=0;
+    // Count each actual provider request separately. A Codex failure followed
+    // by OpenRouter success is TWO calls, not one successful call.
+    const callProvider=async(provider,invoke)=>{
+     const start=Date.now();
+     let ok=false;
+     try{
+      const answer=await invoke();
+      ok=true;
+      return answer;
+     }finally{
+      const durationMs=Math.max(0,Math.min(90000,Date.now()-start));
+      try{
+       const old=loadState(stateDir,'ai-finops-daily.json');
+       saveState(stateDir,'ai-finops-daily.json',finops.bump(old,{
+        kind:'provider_call',route:'other',ok,duration_ms:durationMs,
+        cache_hit:false},clock()));
+      }catch{}
+      try{
+       audit(stateDir,{at:new Date(clock()).toISOString(),
+        event:'model_provider_call',provider,result:ok?'success':'failure',
+        duration_ms:durationMs});
+      }catch{}
+     }
+    };
+    const meteredModel={chat:async(...args)=>{
+     if(callsThisTask>=2)throw Error('agent_turn_calls_denied');
+     callsThisTask++;
+     if(!useSecondary){
+      if(!reservedPrimary){
+       saveState(stateDir,'agent-llm-budget.json',{date:today,turns:turns+1});
+       reservedPrimary=true;
+      }
+      try{
+       return await callProvider('codex_login',()=>agentModel.chat(...args));
+      }catch(error){
+       if(!secondary||!openRouter.isFallbackEligible(error))throw error;
+       useSecondary=true;
+      }
+     }
+     if(!secondary)throw Error('agent_daily_quota');
+     const previous=loadState(stateDir,'agent-openrouter-budget.json');
+     if(previous&&(!/^20\d{2}-\d{2}-\d{2}$/.test(previous.date)||
+      !Number.isInteger(previous.count)||previous.count<0||previous.count>8))
+      throw Error('openrouter_budget_invalid');
+     const used=previous?.date===today?previous.count:0;
+     if(used>=8)throw Error('openrouter_daily_quota');
+     saveState(stateDir,'agent-openrouter-budget.json',{date:today,count:used+1});
+     return callProvider('openrouter_auto',()=>secondary.chat(...args));
+    }};
+    return governed.runTurn({
+     goal,model:meteredModel,clock,
+     readCachedAnswer:key=>answerCache.lookup(
+      loadState(stateDir,'agent-answer-cache.json'),key,clock()),
+     writeCachedAnswer:(key,answer)=>{
+      const saved=loadState(stateDir,'agent-answer-cache.json');
+      const next=answerCache.remember(saved,key,answer,clock());
+      saveState(stateDir,'agent-answer-cache.json',next);
+     },
+     readBusinessContext:question=>businessMemory.context(
+      loadState(stateDir,'business-evidence-memory.json'),question,clock()),
+     readDecisionContext:question=>ownerDecisions.context(
+      loadState(stateDir,'owner-decisions.json'),question,clock()),
+     readAutoMemoryContext:question=>autoMemoryEnabled?
+      autoMemory.context(loadState(stateDir,'auto-memory.json'),question,clock()):'[]',
+     readCentralBrainContext:async question=>{
+      if(!brainLive.enabled)return []; // legacy non-brain staging pilot remains operable
+      const terms=brainReader.relevantTerms(question);
+      if(terms.length===0)return [];
+      const results=[];
+      for(const term of terms){
+       const rows=await queryBrainLimited(term);
+       for(const item of rows){
+        if(results.some(x=>x.title===item.title&&x.content===item.content))continue;
+        results.push({kind:'approved_context_only',tenant_id:'grupo_erick',
+         domain:item.domain,provider:item.provider,title:item.title,
+         content:item.content,expires_at:new Date(item.expires_at).toISOString()});
+        if(results.length===2)break;
+       }
+       if(results.length===2)break;
+      }
+      return results;
+     },
+
+     readHistory:async plan=>{
+      const record=loadState(stateDir,'history-live-budget.json');
+      if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
+        !Number.isInteger(record.count)||record.count<0||record.count>24))
+       throw Error('agent_history_budget_invalid');
+      const n=record?.date===today?record.count:0;
+      if(n>=24)throw Error('agent_history_quota');
+      saveState(stateDir,'history-live-budget.json',{date:today,count:n+1});
+      const data=await readLive({shape:'analyst',tenant_id:'grupo_erick',plan});
+      // Only aggregated, source-checked evidence is remembered. Never write
+      // Telegram message bodies, model recommendations or personal data.
+      try{
+       const existing=loadState(stateDir,'business-evidence-memory.json');
+       const updated=businessMemory.observe(existing,data,plan,clock());
+       saveState(stateDir,'business-evidence-memory.json',updated);
+      }catch{} // optional memory; valid SQL result remains authoritative
+      return data;
+     },
+     readCommercial:async()=>{
+      const data=await query('compras',ROUTES.compras);
+      if(data?.denied_status)throw Error('agent_commercial_unavailable');
+      return hermesReply('compras',data);
+     }
+    });
+   },
+   readAnalystContext:()=>loadState(stateDir,'history-analyst-context.json'),
+   writeAnalystContext:ctx=>saveState(stateDir,'history-analyst-context.json',ctx),
+   readAnalyst:async plan=>{
+    if(!liveEnabled)throw Error('history_live_disabled');
+    analyst.validate(plan);
+    const hash=require('node:crypto').createHash('sha256').update(JSON.stringify(plan)).digest('hex').slice(0,24);
+    const saved=loadState(stateDir,'history-analyst-cache.json');
+    if(saved&&(!Array.isArray(saved.entries)||saved.entries.length>30))throw Error('analyst_cache_invalid');
+    const hit=saved?.entries?.find(x=>x.key===hash);
+    if(hit&&Number.isSafeInteger(hit.at)&&clock()-hit.at>=0&&clock()-hit.at<=6*3600000){
+     analyst.reply(hit.data,plan);
+     return {...hit.data,cached:true};
+    }
+    const data=await (async()=>{
+     const today=new Date(clock()).toISOString().slice(0,10);
+     const budget=loadState(stateDir,'history-live-budget.json');
+     if(budget&&(!/^20\d{2}-\d{2}-\d{2}$/.test(budget.date)||
+       !Number.isInteger(budget.count)||budget.count<0||budget.count>24))throw Error('history_live_budget_invalid');
+     const count=budget?.date===today?budget.count:0;
+     if(count>=24)return {denied_status:'history_budget_exhausted'};
+     saveState(stateDir,'history-live-budget.json',{date:today,count:count+1});
+     return readLive({shape:'analyst',tenant_id:'grupo_erick',plan});
+    })();
+    if(data.denied_status)return data;
+    analyst.reply(data,plan);
+    const entries=(saved?.entries||[]).filter(x=>x.key!==hash&&Number.isSafeInteger(x.at)&&clock()-x.at<=6*3600000).slice(-19);
+    entries.push({key:hash,at:clock(),data});
+    while(entries.length>1&&Buffer.byteLength(JSON.stringify({entries}),'utf8')>15000)
+     entries.shift();
+    if(Buffer.byteLength(JSON.stringify({entries}),'utf8')<=15000){
+     try{saveState(stateDir,'history-analyst-cache.json',{entries});}
+     catch{} // cache is optional; never invalidate a verified answer
+    }
+    return data;
+   },
    readCache:intent=>loadState(stateDir,'cache-'+intent+'.json'),
    writeCache:(intent,record)=>saveState(stateDir,'cache-'+intent+'.json',record),
    send:(chatId,text)=>api('sendMessage',{chat_id:chatId,text,
@@ -144,10 +429,47 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now()}){
     saveState(stateDir,'owner.json',{owner_id:id,bound_at:clock()});
    }
   });
+  // Every answered, owner-authenticated deterministic route is observed,
+  // independently of Codex quota. /economia itself is never counted.
+  // Counts mean bot responses, not proof of valid database contents.
+  if(result.kind==='answered'&&result.intent!=='governed_agent'&&
+     result.intent!=='inference_finops'){
+   const kind=result.intent;
+   const route=['business_cancel_rate','business_analyst','historico_live',
+    'historico','historico_lojas','historico_meses','business_diagnostic','business_diagnostic_store','business_diagnostic_matrix','business_history_alerts'].includes(kind)?
+     'direct_history':
+     ['compras','lotoia'].includes(kind)?'direct_domain':
+     kind==='owner_decision'?'direct_decision':
+     ['help','status'].includes(kind)?'direct_information':null;
+   if(route){
+    try{
+     const old=loadState(stateDir,'ai-finops-daily.json');
+     saveState(stateDir,'ai-finops-daily.json',finops.bump(old,{
+      kind:'direct_outcome',route,ok:true,duration_ms:0,
+      cache_hit:result.cache==='hit'},clock()));
+    }catch{} // optional telemetry never changes the owner reply
+   }
+  }
+  if(result.intent==='governed_agent'){
+   try{
+    const old=loadState(stateDir,'ai-finops-daily.json');
+    const policy=finops.ROUTES.includes(result.planning_policy)?
+     result.planning_policy:'other';
+    saveState(stateDir,'ai-finops-daily.json',finops.bump(old,{
+     kind:'outcome',route:policy,ok:result.llm_calls!==undefined,
+     duration_ms:0,cache_hit:result.cache==='hit'&&result.llm_calls===0
+    },clock()));
+   }catch{} // do not rewrite successful Telegram replies on telemetry failure
+  }
   audit(stateDir,{at:new Date(clock()).toISOString(),
    event:'outcome',update_id:item.update_id,
    outcome:result.kind,intent:result.intent||null,
-   cache:result.cache||null});
+   cache:result.cache||null,
+   ...(typeof result.failure_code==='string'&&
+    (codexFallback.permitted(result.failure_code)||result.failure_code==='validation_denied')?
+    {failure_code:result.failure_code}:{}),
+   ...([0,1,2].includes(result.llm_calls)?
+    {llm_calls:result.llm_calls,planning_policy:result.planning_policy}: {})});
   handled++;
  }
  return {handled,next_offset:current};
@@ -166,6 +488,32 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  const machineToken=readSecret(environment.HERMES_TELEGRAM_MACHINE_IDENTITY_FILE);
  const api=telegramClient(botToken,fetchImpl);
  const query=hermesClient(machineToken,fetchImpl);
+ const readLive=createLiveQuery(environment);
+ const brainLive=brainReader.createReader(environment,{readSecret});
+ const loginEnabled=environment.HERMES_AGENT_LLM_ENABLED==='true';
+ const agentModel=environment.HERMES_AGENT_PROVIDER==='codex-login'?
+  require('../src/runtime/hermes-codex-login-bridge').createCodexModel({
+   enabled:loginEnabled,stage:environment.HERMES_DEPLOYMENT_STAGE,
+   killSwitch:environment.HERMES_EXECUTION_KILL_SWITCH==='true',
+   socketPath:environment.HERMES_CODEX_SOCKET
+  }):
+  governed.createModel({
+   enabled:loginEnabled,stage:environment.HERMES_DEPLOYMENT_STAGE,
+   killSwitch:environment.HERMES_EXECUTION_KILL_SWITCH==='true',
+   model:environment.HERMES_AGENT_MODEL,
+   key:loginEnabled?readSecret(environment.HERMES_AGENT_KEY_FILE):null,
+   fetchImpl
+  });
+ // Disabled until a secret file is installed and mounted on the VPS.
+ // Even with the key, Codex Login remains the first provider.
+ const secondaryProvider=openRouter.makeOpenRouter({
+  enabled:environment.HERMES_OPENROUTER_ENABLED==='true',
+  stage:environment.HERMES_DEPLOYMENT_STAGE,
+  killSwitch:environment.HERMES_EXECUTION_KILL_SWITCH==='true',
+  key:environment.HERMES_OPENROUTER_ENABLED==='true'?
+   readSecret(environment.HERMES_OPENROUTER_KEY_FILE):null,
+  fetchImpl
+ });
  const identity=await api('getMe',{});
  if(identity?.is_bot!==true||!Number.isSafeInteger(identity?.id)||
     String(identity?.username||'').toLowerCase()!=='grupoerick_bot')
@@ -174,11 +522,13 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  if(hook?.url)throw Error('telegram_webhook_conflict');
  audit(dir,{at:new Date(clock()).toISOString(),event:'gateway_started',
   stage:'staging',writes_enabled:false});
- for(;;)await pollOnce({stateDir:dir,api,query,clock});
+ for(;;)await pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,secondaryProvider,
+  liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true',brainLive,
+  autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true'});
 }
 if(require.main===module){
  runForever().catch(()=>{console.error('hermes_telegram_channel_stopped_fail_closed');
   process.exitCode=1;});
 }
 module.exports={checkStateDirectory,readSecret,loadState,saveState,audit,
- smallJSON,telegramClient,hermesClient,pollOnce,runForever};
+ smallJSON,telegramClient,hermesClient,createLiveQuery,pollOnce,runForever};
