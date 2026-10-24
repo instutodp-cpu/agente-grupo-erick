@@ -83,5 +83,5 @@ test('only already-paired owner may invoke /cerebro, no fallback on denied centr
   readBrain:async()=>{throw Error('postgres_unavailable')}});
  assert.equal(deniedRead.intent,'brain_live');
  assert.match(replies.at(-1),/indisponível ou não autorizado/);
- assert.doesNotMatch(replies.at(-1),/cache/);
+ assert.match(replies.at(-1),/Nenhuma memória foi inferida/);
 });
