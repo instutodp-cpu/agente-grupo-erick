@@ -350,7 +350,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
         if(results.some(x=>x.title===item.title&&x.content===item.content))continue;
         results.push({kind:'approved_context_only',tenant_id:'grupo_erick',
          domain:item.domain,provider:item.provider,title:item.title,
-         content:item.content,expires_at:item.expires_at});
+         content:item.content,expires_at:new Date(item.expires_at).toISOString()});
         if(results.length===2)break;
        }
        if(results.length===2)break;
