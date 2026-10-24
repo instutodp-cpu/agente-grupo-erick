@@ -51,6 +51,24 @@ function createHermesCommercialPriorityBrief(summary,{clock=()=>Date.now()}={}){
   work.waiting_documents+work.in_review+work.discrepancy_found+
    work.review_submitted>work.tracked_titles))
   throw Error('commercial_work_context_invalid');
+ const priority=summary.reconciliation_priority;
+ if(priority!==undefined){
+  if(!priority||priority.source!=='Duplicate'||
+   priority.method!=='days_overdue_and_value_v1'||
+   priority.as_of!==summary.as_of||priority.erp_linx_conciliated!==false||
+   priority.includes_only_open_balance!==true||
+   !validCount(priority.overdue_without_work)||
+   priority.overdue_without_work>overdue.count||
+   ['overdue_30plus','overdue_1to29','due_next7'].some(k=>
+    !priority[k]||!validCount(priority[k].count)||
+    !Number.isSafeInteger(cents(priority[k].balance_brl)))||
+   priority.overdue_30plus.count+priority.overdue_1to29.count!==overdue.count||
+   cents(priority.overdue_30plus.balance_brl)+
+    cents(priority.overdue_1to29.balance_brl)!==amount.overdue||
+   priority.due_next7.count>next.count||
+   cents(priority.due_next7.balance_brl)>amount.next)
+   throw Error('priority_proof_inconsistent');
+ }
  const alerts=[];
  if(overdue.count>0&&amount.overdue>0)
   alerts.push(Object.freeze({code:'verify_overdue',priority:1,
@@ -75,6 +93,7 @@ function createHermesCommercialPriorityBrief(summary,{clock=()=>Date.now()}={}){
    share_of_open_balance_percent:percentage},
   next_30_days_titles:{count:next.count,balance_brl:amount.next/100},
   ...(work?{reconciliation_work:{...work}}:{}),
+  ...(priority?{reconciliation_priority:{...priority}}:{}),
   alerts,alerts_dispatched:false,external_write_performed:false,
   payment_authorized:false,financial_decision_automated:false
  });
