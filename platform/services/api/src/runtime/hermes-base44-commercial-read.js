@@ -99,6 +99,30 @@ function shapeCommercialData(json){
    ...Object.fromEntries(fields.map(k=>[k,r[k]]))
   });
  }
+ // Source-attested full-company aggregate; no title, supplier or PII.
+ // Older Base44 versions may omit it, which means unavailable, NOT zero.
+ if(Object.hasOwn(json,'reconciliation_priority')){
+  const p=json.reconciliation_priority;
+  const bands=['overdue_30plus','overdue_1to29','due_next7'];
+  if(!p||p.source!=='Duplicate'||p.as_of!==json.as_of||
+   p.method!=='days_overdue_and_value_v1'||p.erp_linx_conciliated!==false||
+   p.includes_only_open_balance!==true||
+   !count(p.overdue_without_work)||p.overdue_without_work>json.overdue_titles.count||
+   bands.some(k=>!p[k]||!count(p[k].count)||!money(p[k].balance_brl))||
+   p.overdue_30plus.count+p.overdue_1to29.count!==json.overdue_titles.count||
+   Math.abs(p.overdue_30plus.balance_brl+p.overdue_1to29.balance_brl-
+     json.overdue_titles.balance_brl)>0.001||
+   p.due_next7.count>json.next_30_days_titles.count||
+   p.due_next7.balance_brl>json.next_30_days_titles.balance_brl+0.001)
+   throw Error('commercial_priority_contract_invalid');
+  shaped.reconciliation_priority=Object.freeze({
+   source:'Duplicate',as_of:p.as_of,method:'days_overdue_and_value_v1',
+   erp_linx_conciliated:false,includes_only_open_balance:true,
+   overdue_without_work:p.overdue_without_work,
+   ...Object.fromEntries(bands.map(k=>[k,Object.freeze({
+    count:p[k].count,balance_brl:p[k].balance_brl})]))
+  });
+ }
  return Object.freeze(shaped);
 }
 async function readBase44CommercialSummary({
