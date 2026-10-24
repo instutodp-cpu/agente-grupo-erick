@@ -10,6 +10,7 @@ const analyst=require('../src/runtime/hermes-analyst-templates');
 const governed=require('../src/runtime/hermes-governed-agent');
 const businessMemory=require('../src/runtime/hermes-business-evidence-memory');
 const autoMemory=require('../src/runtime/hermes-automemory-curator');
+const brainReader=require('../src/runtime/hermes-brain-telegram-reader');
 const codexFallback=require('../src/runtime/hermes-codex-fallback');
 const openRouter=require('../src/runtime/hermes-openrouter-secondary');
 const ownerDecisions=require('../src/runtime/hermes-owner-decision-memory');
@@ -163,7 +164,8 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
 }
 async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
  readLive=async()=>{throw Error('history_live_disabled')},liveEnabled=false,
- agentModel=null,autoMemoryEnabled=false,secondaryProvider=null}){
+ agentModel=null,autoMemoryEnabled=false,secondaryProvider=null,
+ brainLive=brainReader.createReader({HERMES_BRAIN_LIVE_ENABLED:'false'})}){
  checkStateDirectory(stateDir);
  const offsetRecord=loadState(stateDir,'offset.json');
  const offset=offsetRecord?.offset??0;
@@ -209,6 +211,18 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
    update:item,ownerId:owner?.owner_id??null,pairing,
    clock,query,
    readFinops:()=>finops.validate(loadState(stateDir,'ai-finops-daily.json')),
+   readBrain:async term=>{
+    if(!brainLive.enabled)throw Error('brain_live_disabled');
+    const today=new Date(clock()).toISOString().slice(0,10);
+    const record=loadState(stateDir,'brain-read-budget.json');
+    if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
+      !Number.isInteger(record.count)||record.count<0||record.count>12))
+      throw Error('brain_read_budget_corrupt');
+    const used=record?.date===today?record.count:0;
+    if(used>=12)throw Error('brain_read_budget_exhausted');
+    saveState(stateDir,'brain-read-budget.json',{date:today,count:used+1});
+    return brainLive.query(term);
+   },
    readAutocurated:()=>autoMemoryEnabled?
     autoMemory.render(loadState(stateDir,'auto-memory.json'),clock()):
     'Memória automática indisponível: piloto ainda não ativado.',
@@ -455,6 +469,7 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  const api=telegramClient(botToken,fetchImpl);
  const query=hermesClient(machineToken,fetchImpl);
  const readLive=createLiveQuery(environment);
+ const brainLive=brainReader.createReader(environment,{readSecret});
  const loginEnabled=environment.HERMES_AGENT_LLM_ENABLED==='true';
  const agentModel=environment.HERMES_AGENT_PROVIDER==='codex-login'?
   require('../src/runtime/hermes-codex-login-bridge').createCodexModel({
@@ -488,7 +503,7 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  audit(dir,{at:new Date(clock()).toISOString(),event:'gateway_started',
   stage:'staging',writes_enabled:false});
  for(;;)await pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,secondaryProvider,
-  liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true',
+  liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true',brainLive,
   autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true'});
 }
 if(require.main===module){
