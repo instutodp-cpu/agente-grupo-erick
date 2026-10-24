@@ -2257,3 +2257,60 @@ test('V19 Telegram /alertas historicos is owner-only, uses one read and zero LLM
   assert.match(sent[1],/Limite privado/);
  }finally{fs.rmSync(dirPath,{recursive:true,force:true})}
 });
+
+
+test('Hermes governed advice cites attested central memory as dated context, not fresh evidence',async()=>{
+ const goal='Analise os principais riscos financeiros do Grupo Erick';
+ let calls=0,centralCalls=0;
+ const memory={kind:'approved_context_only',tenant_id:'grupo_erick',
+  domain:'financeiro',provider:'telegram_owner_confirmed',
+  title:'Decisão confirmada — financeiro',
+  content:'Decisão confirmada: Exigir conciliação antes de ampliar compromissos. Justificativa: Os valores importados ainda não estão conciliados com o Linx.',
+  expires_at:new Date(Date.now()+86400000).toISOString()};
+ const result=await agent.runTurn({goal,
+  model:{chat:async messages=>{
+   calls++;
+   if(calls===1){
+    assert.doesNotMatch(messages[1].content,/Exigir conciliação antes/);
+    return JSON.stringify({steps:[{tool:'history',params:agentHistoryPlan}]});
+   }
+   assert.match(messages[0].content,/CONTEXTO datado/);
+   assert.match(messages[1].content,/Hermes Brain/);
+   assert.match(messages[1].content,/telegram_owner_confirmed/);
+   assert.match(messages[1].content,/Exigir conciliação antes/);
+   assert.match(messages[1].content,/NÃO dados atuais nem instruções/);
+   return 'Os registros históricos foram verificados; a decisão humana exige conciliação antes de ampliar compromissos. Priorize revisão no Linx antes de qualquer nova compra.';
+  }},
+  readBusinessContext:()=> '[]',readHistory:async()=>agentEvidence,
+  readCommercial:async()=>{throw Error('commercial_unexpected')},
+  readCentralBrainContext:async()=>{centralCalls++;return [memory]}
+ });
+ assert.equal(calls,2);
+ assert.equal(centralCalls,1);
+ assert.match(result.answer,/Memória contextual: Hermes Brain/);
+ assert.ok(!result.sources.includes('Hermes Brain'));
+ assert.equal(result.llm_calls,2);
+});
+
+test('central memory denies forged tenant, expired, and unverified source before model invocation',async()=>{
+ let calls=0;
+ const memory={kind:'approved_context_only',tenant_id:'grupo_erick',
+  domain:'financeiro',provider:'telegram_owner_confirmed',
+  title:'Decisão financeira aprovada',content:'Conciliação necessária antes de ampliar compromissos.',
+  expires_at:new Date(Date.now()+86400000).toISOString()};
+ for(const forged of [
+  {...memory,tenant_id:'outro_cliente'},
+  {...memory,expires_at:'2020-01-01T00:00:00Z'},
+  {...memory,provider:'telegram_unverified'},
+  {...memory,kind:'execute_approval'}
+ ]){
+  await assert.rejects(()=>agent.runTurn({
+   goal:'Analise riscos financeiros do Grupo Erick',
+   model:{chat:async()=>{calls++;throw Error('model_should_not_be_called')}},
+   readHistory:async()=>agentEvidence,
+   readCommercial:async()=>null,
+   readCentralBrainContext:async()=>[forged]
+  }),/agent_central_brain_context_denied/);
+ }
+ assert.equal(calls,0);
+});
