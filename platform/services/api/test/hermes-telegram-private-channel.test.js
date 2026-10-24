@@ -2314,3 +2314,35 @@ test('central memory denies forged tenant, expired, and unverified source before
  }
  assert.equal(calls,0);
 });
+
+
+test('Telegram /pendencias shows verified administrative progress, no invented settlement',()=>{
+ assert.equal(core.intentFor('/pendencias'),'compras');
+ const brief={source:'Compras homologacao',company:'Grupo Erick',
+  source_state:'homologacao',erp_linx_conciliated:false,
+  alerts_dispatched:false,payment_authorized:false,as_of:'2026-10-24',
+  purchases_last_30_days:{count:2,net_brl:150},
+  open_titles:{count:3,balance_brl:210},
+  overdue_titles:{count:1,balance_brl:70},
+  next_30_days_titles:{count:2,balance_brl:140},
+  reconciliation_work:{source:'ReconciliationWorkEvent',as_of:'2026-10-24',
+   erp_linx_conciliated:false,payment_recorded:false,tracked_titles:2,
+   waiting_documents:1,in_review:1,discrepancy_found:0,review_submitted:0}
+ };
+ const payload={status:'succeeded',executed:true,network_call_performed:true,
+  simulated:false,write_performed:false,production_used:false,
+  trace_id:'11111111-1111-4111-8111-111111111111',brief};
+ const msg=core.hermesReply('compras',payload);
+ assert.match(msg,/Com tarefa registrada: 2/);
+ assert.match(msg,/Aguardando documentos: 1/);
+ assert.match(msg,/NÃO comprovam conciliação/);
+ assert.match(msg,/Somente leitura\. Rastreio:/);
+ const {reconciliation_work,...old}=brief;
+ const outdated=core.hermesReply('compras',{...payload,brief:old});
+ assert.match(outdated,/fonte indisponível nesta versão/);
+ assert.doesNotMatch(outdated,/Com tarefa registrada: 0/);
+ const fraudulent={...reconciliation_work,payment_recorded:true};
+ assert.throws(()=>core.hermesReply('compras',{
+  ...payload,brief:{...brief,reconciliation_work:fraudulent}
+ }),/invalid_work_context/);
+});
