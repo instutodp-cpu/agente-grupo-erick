@@ -200,6 +200,20 @@ function hermesReply(intent,x){
     .some(k=>!safeCount(work[k]))||
    work.waiting_documents+work.in_review+work.discrepancy_found+
     work.review_submitted>work.tracked_titles))throw Error('invalid_work_context');
+  const metrics=['missing_named_responsible','work_deadlines_overdue',
+   'work_due_next_7','work_without_deadline','with_evidence_reference'];
+  const hasMetrics=!!work&&metrics.some(k=>Object.hasOwn(work,k));
+  if(hasMetrics&&(metrics.some(k=>!safeCount(work[k])||work[k]>work.tracked_titles)||
+    work.work_deadlines_overdue+work.work_due_next_7+
+     work.work_without_deadline>work.tracked_titles))
+   throw Error('invalid_work_metrics');
+  const detail=hasMetrics?[
+   'Sem responsável nominal: '+num.format(work.missing_named_responsible),
+   'Tarefas com prazo vencido: '+num.format(work.work_deadlines_overdue),
+   'Tarefas vencendo nos próximos 7 dias: '+num.format(work.work_due_next_7),
+   'Tarefas sem prazo: '+num.format(work.work_without_deadline),
+   'Com referência documental registrada: '+num.format(work.with_evidence_reference)
+  ]:['Prazos e responsáveis: métricas indisponíveis nesta versão.'];
   const lines=work?[
    'Acompanhamento documental (não são títulos conciliados):',
    'Com tarefa registrada: '+num.format(work.tracked_titles),
