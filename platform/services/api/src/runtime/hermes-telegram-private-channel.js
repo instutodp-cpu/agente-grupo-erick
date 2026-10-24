@@ -10,6 +10,7 @@ const diagnostic=require('./hermes-owner-diagnostic');
 const matrix=require('./hermes-store-month-matrix');
 const alerts=require('./hermes-operational-alerts');
 const fallback=require('./hermes-codex-fallback');
+const brainReader=require('./hermes-brain-telegram-reader');
 const ROUTES=Object.freeze({
  compras:'/internal/commercial-read-pilot/brief',
  lotoia:'/internal/lotoia-read-pilot/health',status:'/health'
@@ -21,6 +22,7 @@ const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
  'Comandos antigos: /vendas 2026-05, /produtos 2026-05.\n'+
  'Também aceito "resumo das compras" e "situação do LotoIA".\n'+
  'Memória de decisões: /decisao (propor, confirmar, cancelar) e /decisoes.\n'+
+ 'Segundo cérebro central: /cerebro TERMO (somente quando conexão RLS autorizada).\n'+
  'Métricas privadas de IA: /economia. Diagnóstico: /diagnostico, /diagnostico lojas, /diagnostico cruzamento. Alertas: /alertas historicos.\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
@@ -251,7 +253,8 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  readAnalystContext=async()=>null,writeAnalystContext=async()=>{},
  readAnalyst=async()=>null,readAgent=async()=>null,agentEnabled=false,
  readDecisions=async()=>null,writeDecisions=async()=>{},
- readFinops=async()=>null,readAutocurated=async()=>null,readGovernedFallback=async()=>null}){
+ readFinops=async()=>null,readAutocurated=async()=>null,readGovernedFallback=async()=>null,
+ readBrain=async()=>{throw Error('brain_machine_reader_not_activated')}}){
  const msg=privateMessage(update);
  if(!msg)return {kind:'ignored'};
  if(typeof send!=='function'||typeof query!=='function')
@@ -273,6 +276,22 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
   return {kind:'paired'};
  }
  if(msg.userId!==ownerId)return {kind:'unauthorized'};
+ if(msg.text==='/cerebro'){
+  await send(msg.userId,'🧠 Consulte o segundo cérebro central com /cerebro TERMO. Exemplo: /cerebro conciliação. Somente fontes aprovadas e ainda válidas.');
+  return {kind:'answered',intent:'brain_help',source:'local_instruction'};
+ }
+ const brainMatch=msg.text.match(/^\/cerebro\s+(.+)$/i);
+ if(brainMatch){
+  let reply;
+  try{
+   const rows=await readBrain(brainMatch[1]);
+   reply=brainReader.render(rows);
+  }catch{
+   reply='Segundo cérebro central indisponível ou não autorizado. Nenhuma memória foi inferida ou substituída por cache local.';
+  }
+  await send(msg.userId,reply);
+  return {kind:'answered',intent:'brain_live',source:'supabase_brain_rls'};
+ }
  if(msg.text==='/memorias'){
   let reply;
   try{
