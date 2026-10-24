@@ -51,6 +51,16 @@ function createHermesCommercialPriorityBrief(summary,{clock=()=>Date.now()}={}){
   work.waiting_documents+work.in_review+work.discrepancy_found+
    work.review_submitted>work.tracked_titles))
   throw Error('commercial_work_context_invalid');
+ if(work!==undefined){
+  const metrics=['missing_named_responsible','work_deadlines_overdue',
+   'work_due_next_7','work_without_deadline','with_evidence_reference'];
+  const hasMetrics=metrics.some(k=>Object.hasOwn(work,k));
+  if(hasMetrics&&(metrics.some(k=>!validCount(work[k])||k==='tracked_titles')||
+   metrics.some(k=>work[k]>work.tracked_titles)||
+   work.work_deadlines_overdue+work.work_due_next_7+
+    work.work_without_deadline>work.tracked_titles))
+   throw Error('commercial_work_metrics_invalid');
+ }
  const priority=summary.reconciliation_priority;
  if(priority!==undefined){
   if(!priority||priority.source!=='Duplicate'||
