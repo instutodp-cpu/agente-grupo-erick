@@ -30,6 +30,21 @@ function safeTerm(text){
   throw Error('brain_query_invalid');
  return q;
 }
+// Fixed enterprise topics, not model-chosen searches or arbitrary SQL.
+// Two terms at most; no broader bulk memory access from free-form requests.
+function relevantTerms(goal){
+ if(typeof goal!=='string'||goal.length<8||goal.length>600)
+  throw Error('brain_context_goal_denied');
+ const q=goal.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+ const strategy=/\b(risc\w*|prioridad\w*|estrateg\w*|decis\w*|recomend\w*|analise|avali\w*|diagnostic\w*|o que sabemos|grupo erick|empresa)\b/.test(q);
+ const financial=/\b(financ\w*|concili\w*|linx|compromiss\w*|duplicat\w*|compr\w*|vencid\w*|caixa|fluxo de caixa)\b/.test(q);
+ const commercial=/\b(comerc\w*|vend\w*|cancelad\w*|cancelament\w*|histor\w*|softcom|registro\w*|loja\w*|fatur\w*)\b/.test(q);
+ if(!strategy&&!financial&&!commercial)return [];
+ if((strategy&&!financial&&!commercial)||(/\brisc\w*\b/.test(q)&&financial))
+  return ['conciliação','cancelados'];
+ if(financial&&commercial)return ['conciliação','cancelados'];
+ return financial?['conciliação']:commercial?['cancelados']:['conciliação'];
+}
 function createReader(env,{readSecret,loadDriver=()=>require('pg')}={}){
  if(env.HERMES_BRAIN_LIVE_ENABLED!=='true')return DENIED;
  if(env.HERMES_DEPLOYMENT_STAGE!=='staging'||
@@ -101,4 +116,4 @@ function render(rows){
  if(reply.length>3200)throw Error('brain_reply_too_large');
  return reply;
 }
-module.exports={createReader,safeTerm,render,QUERY,PROJECT,USER,ROLE,SESSION_POOLER_PATTERN};
+module.exports={createReader,safeTerm,relevantTerms,render,QUERY,PROJECT,USER,ROLE,SESSION_POOLER_PATTERN};
