@@ -5,6 +5,8 @@ const {retrieve,SEARCH}=require('../src/runtime/hermes-brain-postgres-search');
 const USER='11111111-1111-4111-8111-111111111111';
 const FIXED_NOW=Date.parse('2026-10-24T12:00:00.000Z');
 const item={tenant_id:'client::alpha',memory_id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+ source_id:'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+ source_item_digest:'sha256:'+'a'.repeat(64),reference_digest:'sha256:'+'b'.repeat(64),
  title:'Projeto aprovado',content:'Memória com fonte',domain:'projetos',
  classification:'internal',visibility:'owner_only',provider:'documentos',
  source_version:'v1',memory_status:'approved',source_status:'verified',
@@ -29,6 +31,10 @@ test('bounded full-text retrieval requires verified RLS role and parameterized S
  const r=await retrieve({pool:adapter,tenant_id:'client::alpha',user_id:USER,clock:()=>FIXED_NOW,search:'memória',limit:3});
  assert.equal(r.items.length,1);
  assert.equal(r.items[0].title,'Projeto aprovado');
+ assert.equal(r.items[0].source_id,item.source_id);
+ assert.equal(r.items[0].reference_digest,item.reference_digest);
+ assert.equal(r.items[0].source_item_digest,item.source_item_digest);
+ assert.equal(r.items[0].trust_level,'verified_source_approved_memory');
  assert.equal(r.read_only,true);
  assert.deepEqual(adapter.calls[2].params,['client::alpha','memória',3]);
  assert.equal(adapter.calls[2].sql,SEARCH);
@@ -43,6 +49,9 @@ test('source verification, approval and TTL enforced by SQL and result contract'
  assert.match(SEARCH,/s[.]status='verified'/);
  assert.match(SEARCH,/m[.]tenant_id=\$1/);
  assert.match(SEARCH,/s[.]tenant_id=m[.]tenant_id/);
+ assert.match(SEARCH,/s[.]source_updated_at<=now\(\)/);
+ assert.match(SEARCH,/m[.]updated_at<=now\(\)/);
+ assert.match(SEARCH,/s[.]reference_digest/);
  const arg={tenant_id:'client::alpha',user_id:USER,search:'projeto',clock:()=>FIXED_NOW};
  for(const variant of [
   {tenant_id:'client::other'},
@@ -55,6 +64,11 @@ test('source verification, approval and TTL enforced by SQL and result contract'
   {expires_at:'2026-10-24T12:00:00.000Z'},
   {expires_at:'not-a-date'},
   {source_updated_at:'bad-timestamp'},
+  {source_updated_at:'2026-10-25T12:00:00.000Z'},
+  {updated_at:'2026-10-25T12:00:00.000Z'},
+  {source_id:'not-uuid'},
+  {reference_digest:'sha256:invalid'},
+  {source_item_digest:'sha256:invalid'},
   {classification:'secret'},
   {visibility:'unrestricted'},
   {title:'x'.repeat(241)},
