@@ -218,3 +218,35 @@ test('missing work schema remains unavailable, never fabricated zero progress',a
   assert.equal(Object.hasOwn(data,'reconciliation_work'),false);
  }finally{tok.close();}
 });
+
+
+test('priorities read from signed Base44 are source-scoped and balanced to overdue totals',async()=>{
+ const tok=protectedKey();
+ try{
+  const p=commercial(),priority={
+   source:'Duplicate',as_of:p.as_of,method:'days_overdue_and_value_v1',
+   erp_linx_conciliated:false,includes_only_open_balance:true,
+   overdue_without_work:471,
+   overdue_30plus:{count:300,balance_brl:700000},
+   overdue_1to29:{count:171,balance_brl:498243.10},
+   due_next7:{count:20,balance_brl:30000}
+  };
+  const verified=await readBase44CommercialSummary({
+   environment:env(tok.file),fetchImpl:async()=>resp({...p,reconciliation_priority:priority})
+  });
+  assert.deepEqual(verified.reconciliation_priority,priority);
+  for(const bad of [
+   {...priority,overdue_without_work:999},
+   {...priority,source:'Other tenant'},
+   {...priority,as_of:'2020-01-01'},
+   {...priority,overdue_30plus:{count:300,balance_brl:123}},
+   {...priority,method:'financial_payment_authorized'},
+   {...priority,due_next7:{count:20,balance_brl:1000000}}
+  ]){
+   await assert.rejects(()=>readBase44CommercialSummary({
+    environment:env(tok.file),fetchImpl:async()=>resp({
+     ...p,reconciliation_priority:bad})
+   }),/commercial_priority_contract_invalid/);
+  }
+ }finally{tok.close();}
+});
