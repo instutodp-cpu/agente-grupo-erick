@@ -9,7 +9,7 @@ BEGIN
    WHERE oid='hermes_brain.memory_items'::regclass
    AND relrowsecurity AND relforcerowsecurity
  ) OR (SELECT count(*) FROM hermes_brain.memory_items
-       WHERE tenant_id='grupo_erick' AND status='approved')<>4
+       WHERE tenant_id='grupo_erick' AND status='approved')<4
     OR (SELECT count(*) FROM hermes_brain.automemory_admissions
        WHERE tenant_id='grupo_erick' AND status='admitted')<>4
  THEN RAISE EXCEPTION 'brain_telegram_readiness_incomplete'; END IF;
