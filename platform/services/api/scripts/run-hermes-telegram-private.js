@@ -194,6 +194,18 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     count:next.items.length});
   }
  }
+ const queryBrainLimited=async term=>{
+  if(!brainLive.enabled)throw Error('brain_live_disabled');
+  const today=new Date(clock()).toISOString().slice(0,10);
+  const record=loadState(stateDir,'brain-read-budget.json');
+  if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
+    !Number.isInteger(record.count)||record.count<0||record.count>12))
+    throw Error('brain_read_budget_corrupt');
+  const used=record?.date===today?record.count:0;
+  if(used>=12)throw Error('brain_read_budget_exhausted');
+  saveState(stateDir,'brain-read-budget.json',{date:today,count:used+1});
+  return brainLive.query(term);
+ };
  let current=offset,handled=0;
  for(const item of updates){
   if(!Number.isSafeInteger(item?.update_id)||item.update_id<current)
@@ -211,18 +223,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
    update:item,ownerId:owner?.owner_id??null,pairing,
    clock,query,
    readFinops:()=>finops.validate(loadState(stateDir,'ai-finops-daily.json')),
-   readBrain:async term=>{
-    if(!brainLive.enabled)throw Error('brain_live_disabled');
-    const today=new Date(clock()).toISOString().slice(0,10);
-    const record=loadState(stateDir,'brain-read-budget.json');
-    if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
-      !Number.isInteger(record.count)||record.count<0||record.count>12))
-      throw Error('brain_read_budget_corrupt');
-    const used=record?.date===today?record.count:0;
-    if(used>=12)throw Error('brain_read_budget_exhausted');
-    saveState(stateDir,'brain-read-budget.json',{date:today,count:used+1});
-    return brainLive.query(term);
-   },
+   readBrain:queryBrainLimited,
    readAutocurated:()=>autoMemoryEnabled?
     autoMemory.render(loadState(stateDir,'auto-memory.json'),clock()):
     'Memória automática indisponível: piloto ainda não ativado.',
@@ -338,6 +339,24 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
       loadState(stateDir,'owner-decisions.json'),question,clock()),
      readAutoMemoryContext:question=>autoMemoryEnabled?
       autoMemory.context(loadState(stateDir,'auto-memory.json'),question,clock()):'[]',
+     readCentralBrainContext:async question=>{
+      const terms=brainReader.relevantTerms(question);
+      if(terms.length===0)return [];
+      const results=[];
+      for(const term of terms){
+       const rows=await queryBrainLimited(term);
+       for(const item of rows){
+        if(results.some(x=>x.title===item.title&&x.content===item.content))continue;
+        results.push({kind:'approved_context_only',tenant_id:'grupo_erick',
+         domain:item.domain,provider:item.provider,title:item.title,
+         content:item.content,expires_at:item.expires_at});
+        if(results.length===2)break;
+       }
+       if(results.length===2)break;
+      }
+      return results;
+     },
+
      readHistory:async plan=>{
       const record=loadState(stateDir,'history-live-budget.json');
       if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
