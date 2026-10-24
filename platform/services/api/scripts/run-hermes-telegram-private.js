@@ -340,6 +340,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
      readAutoMemoryContext:question=>autoMemoryEnabled?
       autoMemory.context(loadState(stateDir,'auto-memory.json'),question,clock()):'[]',
      readCentralBrainContext:async question=>{
+      if(!brainLive.enabled)return []; // legacy non-brain staging pilot remains operable
       const terms=brainReader.relevantTerms(question);
       if(terms.length===0)return [];
       const results=[];
