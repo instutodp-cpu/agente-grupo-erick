@@ -517,7 +517,10 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  try{
   const isDomain=intent==='compras'||intent==='lotoia';
   const cached=isDomain?verifiedCache(await readCache(intent),msg.userId,intent,clock()):null;
-  if(cached&&cached.age<=CACHE_REUSE_MS){
+  // Work tracking must query current recorded events; old financial cache is
+  // safe only as a visibly dated fallback when the shared quota runs out.
+  const freshWork=/^\/pendencias(?:@\w+)?$/i.test(msg.text.trim());
+  if(cached&&!freshWork&&cached.age<=CACHE_REUSE_MS){
    await send(msg.userId,cachedReply(cached));
    return {kind:'answered',intent,cache:'hit'};
   }
