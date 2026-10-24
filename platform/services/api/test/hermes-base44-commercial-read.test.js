@@ -250,3 +250,30 @@ test('priorities read from signed Base44 are source-scoped and balanced to overd
   }
  }finally{tok.close();}
 });
+
+
+test('attested operational workload metrics preserve zero and deny forged deadlines',async()=>{
+ const s=commercial();
+ const work={source:'ReconciliationWorkEvent',as_of:s.as_of,
+  erp_linx_conciliated:false,payment_recorded:false,
+  tracked_titles:3,waiting_documents:1,in_review:1,discrepancy_found:0,review_submitted:1,
+  missing_named_responsible:1,work_deadlines_overdue:1,work_due_next_7:1,
+  work_without_deadline:1,with_evidence_reference:2};
+ const token=protectedKey();
+ try{
+  const got=await readBase44CommercialSummary({
+   environment:env(token.file),fetchImpl:async()=>resp({...s,reconciliation_work:work})
+  });
+  assert.deepEqual(got.reconciliation_work,work);
+  for(const broken of [
+   {...work,work_deadlines_overdue:4},
+   {...work,work_without_deadline:2},
+   {...work,missing_named_responsible:-1},
+   {...work,with_evidence_reference:undefined}
+  ]){
+   await assert.rejects(()=>readBase44CommercialSummary({
+    environment:env(token.file),fetchImpl:async()=>resp({...s,reconciliation_work:broken})
+   }),/commercial_work_metrics_invalid/);
+  }
+ }finally{token.close();}
+});
