@@ -2384,3 +2384,33 @@ test('Telegram /prioridades gives real scoped maturity bands without LLM or sett
   ...envelope,brief:{...brief,reconciliation_priority:undefined}
  }),/wrong_priority_source_or_totals/);
 });
+
+
+test('Telegram /pendencias reports real administrative due dates but never named people',()=>{
+ const brief={source:'Compras homologacao',company:'Grupo Erick',
+  source_state:'homologacao',erp_linx_conciliated:false,
+  alerts_dispatched:false,payment_authorized:false,as_of:'2026-10-24',
+  purchases_last_30_days:{count:2,net_brl:150},
+  open_titles:{count:3,balance_brl:210},
+  overdue_titles:{count:2,balance_brl:130},
+  next_30_days_titles:{count:1,balance_brl:80},
+  reconciliation_work:{source:'ReconciliationWorkEvent',as_of:'2026-10-24',
+   erp_linx_conciliated:false,payment_recorded:false,
+   tracked_titles:2,waiting_documents:1,in_review:1,discrepancy_found:0,review_submitted:0,
+   missing_named_responsible:1,work_deadlines_overdue:1,
+   work_due_next_7:0,work_without_deadline:1,with_evidence_reference:1}
+ };
+ const envelope={status:'succeeded',executed:true,network_call_performed:true,
+  simulated:false,write_performed:false,production_used:false,
+  trace_id:'11111111-1111-4111-8111-111111111111',brief};
+ assert.equal(core.intentFor('/pendencias'),'compras');
+ const message=core.hermesReply('compras',envelope);
+ assert.match(message,/Sem responsável nominal: 1/);
+ assert.match(message,/Tarefas com prazo vencido: 1/);
+ assert.match(message,/Com referência documental registrada: 1/);
+ assert.match(message,/NÃO comprovam conciliação/);
+ assert.doesNotMatch(message,/CNPJ|CPF|Documento secreto|nome de funcionário/);
+ const missing={...brief,reconciliation_work:{
+  ...brief.reconciliation_work,work_without_deadline:undefined}};
+ assert.throws(()=>core.hermesReply('compras',{...envelope,brief:missing}),/invalid_work_metrics/);
+});
