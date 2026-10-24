@@ -16,7 +16,7 @@ const ROUTES=Object.freeze({
  lotoia:'/internal/lotoia-read-pilot/health',status:'/health'
 });
 const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
- 'Comandos: /compras, /lotoia, /historico, /historico lojas, /historico meses, /status, /ajuda.\n'+
+ 'Comandos: /compras, /pendencias, /lotoia, /historico, /historico lojas, /historico meses, /status, /ajuda.\n'+ 
  'Pergunte naturalmente: vendeu quanto em janeiro 2026; compare janeiro 2025 e 2026; cancelamentos em junho; qual loja vendeu mais.\n'+
  'Consultas usam indicadores históricos auditáveis, não faturamento conciliado.\n'+
  'Comandos antigos: /vendas 2026-05, /produtos 2026-05.\n'+
@@ -40,7 +40,7 @@ function intentFor(text){
     t==='resumo historico de vendas')return 'historico';
  if(parseSalesCommand(text))return 'historico_live';
  if(analyst.planQuestion(text))return 'business_analyst';
- if(/^\/compras(?:@\w+)?$/.test(t)||
+ if(/^\/(?:compras|pendencias)(?:@\w+)?$/.test(t)||
   (/\b(compras|duplicatas)\b/.test(t)&&
    /\b(resumo|saldo|venciment\w*|pendenc\w*|total|quanto|qual|quais|mostre|mostra|situacao|relatorio)\b/.test(t)))
   return 'compras';
@@ -190,6 +190,23 @@ function hermesReply(intent,x){
   if(![opened,over,upcoming].every(v=>safeCount(v?.count)&&safeMoney(v.balance_brl))||
    !safeCount(purchases?.count)||!safeMoney(purchases?.net_brl)||
    over.balance_brl>opened.balance_brl)throw Error('invalid_balances');
+  const work=b.reconciliation_work;
+  if(work!==undefined&&(!work||work.source!=='ReconciliationWorkEvent'||
+   work.as_of!==b.as_of||work.payment_recorded!==false||
+   work.erp_linx_conciliated!==false||
+   ['tracked_titles','waiting_documents','in_review','discrepancy_found','review_submitted']
+    .some(k=>!safeCount(work[k]))||
+   work.waiting_documents+work.in_review+work.discrepancy_found+
+    work.review_submitted>work.tracked_titles))throw Error('invalid_work_context');
+  const lines=work?[
+   'Acompanhamento documental (não são títulos conciliados):',
+   'Com tarefa registrada: '+num.format(work.tracked_titles),
+   'Aguardando documentos: '+num.format(work.waiting_documents),
+   'Em conferência: '+num.format(work.in_review),
+   'Divergência registrada: '+num.format(work.discrepancy_found),
+   'Enviados à revisão: '+num.format(work.review_submitted),
+   '⚠️ Essas etapas NÃO comprovam conciliação no Linx nem pagamento.'
+  ]:['Acompanhamento documental: fonte indisponível nesta versão.'];
   return ['📦 Compras — Grupo Erick (homologação)',
    'Referência: '+b.as_of,
    'Compras dos últimos 30 dias: '+brl.format(purchases.net_brl)+
@@ -199,6 +216,7 @@ function hermesReply(intent,x){
     ' ('+num.format(over.count)+' títulos)',
    'Próximos 30 dias: '+brl.format(upcoming.balance_brl)+
     ' ('+num.format(upcoming.count)+' títulos)',
+   ...lines,
    '⚠️ Dados não conciliados com o ERP Linx.',
    'Somente leitura. Rastreio: '+trace].join('\n');
  }
