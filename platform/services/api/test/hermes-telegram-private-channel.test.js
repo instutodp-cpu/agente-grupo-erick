@@ -2346,3 +2346,41 @@ test('Telegram /pendencias shows verified administrative progress, no invented s
   ...payload,brief:{...brief,reconciliation_work:fraudulent}
  }),/invalid_work_context/);
 });
+
+
+test('Telegram /prioridades gives real scoped maturity bands without LLM or settlement claims',()=>{
+ assert.equal(core.intentFor('/prioridades'),'prioridades');
+ assert.equal(core.ROUTES.prioridades,'/internal/commercial-read-pilot/brief');
+ const brief={source:'Compras homologacao',company:'Grupo Erick',
+  source_state:'homologacao',erp_linx_conciliated:false,
+  alerts_dispatched:false,payment_authorized:false,as_of:'2026-10-24',
+  purchases_last_30_days:{count:2,net_brl:150},
+  open_titles:{count:3,balance_brl:210},
+  overdue_titles:{count:2,balance_brl:130},
+  next_30_days_titles:{count:1,balance_brl:80},
+  reconciliation_priority:{
+   source:'Duplicate',as_of:'2026-10-24',method:'days_overdue_and_value_v1',
+   erp_linx_conciliated:false,includes_only_open_balance:true,
+   overdue_without_work:2,
+   overdue_30plus:{count:1,balance_brl:100},
+   overdue_1to29:{count:1,balance_brl:30},
+   due_next7:{count:1,balance_brl:80}
+  }
+ };
+ const envelope={status:'succeeded',executed:true,network_call_performed:true,
+  simulated:false,write_performed:false,production_used:false,
+  trace_id:'11111111-1111-4111-8111-111111111111',brief};
+ const msg=core.hermesReply('prioridades',envelope);
+ assert.match(msg,/Atraso ≥30 dias: 1 títulos/);
+ assert.match(msg,/Vencidos SEM acompanhamento documental: 2/);
+ assert.match(msg,/não prova dívida exigível/);
+ assert.doesNotMatch(msg,/CNPJ|fornecedor teste|Pagamento autorizado/);
+ assert.match(msg,/Somente leitura\. Rastreio:/);
+ assert.throws(()=>core.hermesReply('prioridades',{
+  ...envelope,brief:{...brief,reconciliation_priority:
+    {...brief.reconciliation_priority,overdue_without_work:3}}
+ }),/wrong_priority_source_or_totals/);
+ assert.throws(()=>core.hermesReply('prioridades',{
+  ...envelope,brief:{...brief,reconciliation_priority:undefined}
+ }),/wrong_priority_source_or_totals/);
+});
