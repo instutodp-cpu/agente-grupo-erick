@@ -163,3 +163,22 @@ test('aged payable priorities preserve verified totals and no financial action',
  forged.reconciliation_priority={...s.reconciliation_priority,overdue_without_work:472};
  assert.throws(()=>createHermesCommercialPriorityBrief(forged,{clock:()=>NOW}),/priority_proof_inconsistent/);
 });
+
+
+test('documentary deadlines and assignment metrics pass through brief without settlement',()=>{
+ const s=fixture();
+ const work={source:'ReconciliationWorkEvent',as_of:s.as_of,
+  erp_linx_conciliated:false,payment_recorded:false,
+  tracked_titles:2,waiting_documents:1,in_review:1,discrepancy_found:0,review_submitted:0,
+  missing_named_responsible:1,work_deadlines_overdue:1,work_due_next_7:0,
+  work_without_deadline:1,with_evidence_reference:1};
+ s.reconciliation_work=work;
+ const got=createHermesCommercialPriorityBrief(s,{clock:()=>NOW});
+ assert.deepEqual(got.reconciliation_work,work);
+ assert.equal(got.payment_authorized,false);
+ assert.equal(got.external_write_performed,false);
+ const invalid=fixture();
+ invalid.reconciliation_work={...work,work_due_next_7:2};
+ assert.throws(()=>createHermesCommercialPriorityBrief(invalid,{clock:()=>NOW}),
+  /commercial_work_metrics_invalid/);
+});
