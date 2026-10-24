@@ -63,4 +63,8 @@ docker cp "$ROOT/platform/migrations/hermes/046_stage_attested_automemory_for_ow
 docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/brain-payload.sql
 docker cp "$ROOT/platform/services/api/scripts/hermes-brain-staged-publication-rls-sandbox-fixture.sql" "$CONTAINER":/tmp/brain-staged-roundtrip.sql
 docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/brain-staged-roundtrip.sql | grep 'BRAIN_OWNER_STAGED_FOUR_PUBLICATION_AND_REPLAY_OK'
+docker cp "$ROOT/platform/migrations/hermes/047_create_telegram_brain_reader_no_login.sql" "$CONTAINER":/tmp/brain-telegram-reader.sql
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/brain-telegram-reader.sql
+docker cp "$ROOT/platform/services/api/scripts/hermes-brain-telegram-machine-role-rls-fixture.sql" "$CONTAINER":/tmp/brain-telegram-reader-fixture.sql
+docker exec "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q -f /tmp/brain-telegram-reader-fixture.sql | grep 'BRAIN_MACHINE_ROLE_SCOPED_AND_REVOCATION_OK'
 echo BRAIN_EPHEMERAL_POSTGRES_RLS_TEST_OK
