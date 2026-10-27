@@ -137,3 +137,19 @@ Antes de implantar a migração em Supabase, validar essa nova constraint em
 PostgreSQL descartável, e depois executar testes autenticados RLS de dois
 usuários por canal autorizado. A aprovação do CI do repositório não equivale
 a produção pronta.
+
+
+## Evidência adicional de PostgreSQL descartável (27/10/2026)
+
+Depois de detectar e corrigir um erro de sintaxe na migração candidata,
+a versão com `personal_digest_matches_content` foi executada com sucesso
+em PostgreSQL 16 local à VPS, usando contêiner descartável com rede desativada,
+sem vincular portas ou dados reais. Um INSERT de texto sintético com hash
+SHA-256 correspondente foi aceito; um segundo INSERT sintético com hash
+inconsistente foi recusado pela constraint. O contêiner foi eliminado ao fim.
+
+**Escopo limitado da evidência:** comprovação de SQL/constraint e integridade
+de conteúdo, não de autenticação Supabase nem de isolamento RLS entre pessoas.
+A simulação de identidades na ferramenta remota foi bloqueada, portanto
+continua pendente teste autorizado de RLS com sessões genuínas em ambiente
+seguro. Produção, memória empresarial e dados privados permaneceram intocados.
