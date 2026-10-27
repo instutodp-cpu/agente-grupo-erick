@@ -2414,3 +2414,47 @@ test('Telegram /pendencias reports real administrative due dates but never named
   ...brief.reconciliation_work,work_without_deadline:undefined}};
  assert.throws(()=>core.hermesReply('compras',{...envelope,brief:missing}),/invalid_work_metrics/);
 });
+
+test('Telegram 429/5xx and network failures are classified as transient; credentials fail closed',async()=>{
+ const fakeToken='12345:'+('a'.repeat(40));
+ for(const status of [429,500,502,503]){
+  const api=runner.telegramClient(fakeToken,async()=>({status,ok:false}));
+  await assert.rejects(api('getUpdates',{}),/telegram_provider_temporarily_unavailable/);
+ }
+ for(const status of [400,401,403,409]){
+  const api=runner.telegramClient(fakeToken,async()=>({status,ok:false}));
+  const expected=status===401||status===403?'auth_denied':
+   status===409?'webhook_conflict':'request_denied';
+  const code=status===409?'telegram_webhook_conflict':status===400?
+   'telegram_provider_request_denied':'telegram_provider_auth_denied';
+  await assert.rejects(api('getUpdates',{}),new RegExp(code));
+ }
+ const network=runner.telegramClient(fakeToken,async()=>{throw new TypeError('synthetic network');});
+ await assert.rejects(network('getUpdates',{}),/telegram_provider_transport_unavailable/);
+ assert.equal(runner.isRecoverableTelegramError(Error('telegram_provider_transport_unavailable')),true);
+ assert.equal(runner.isRecoverableTelegramError(Error('telegram_provider_temporarily_unavailable')),true);
+ assert.equal(runner.isRecoverableTelegramError(Error('telegram_provider_auth_denied')),false);
+ assert.equal(runner.isRecoverableTelegramError(Error('telegram_channel_disabled')),false);
+});
+test('Telegram poll retry uses capped backoff, resets after success and halts on unsafe failures',async()=>{
+ let attempts=0;const waits=[],observed=[];
+ await assert.rejects(runner.resilientTelegramPolling({
+  poll:async()=>{
+   attempts++;
+   if([1,2,4].includes(attempts))throw Error('telegram_provider_transport_unavailable');
+   if(attempts===5)throw Error('telegram_scope_denied');
+  },
+  sleep:async ms=>waits.push(ms),onRecovery:x=>observed.push(x)
+ }),/telegram_scope_denied/);
+ assert.equal(attempts,5);
+ assert.deepEqual(waits,[1000,2000,1000]);
+ assert.deepEqual(observed.map(x=>x.consecutive_failures),[1,2,1]);
+ assert.equal(observed.length,3);
+ let tries=0;const delays=[];
+ await assert.rejects(runner.resilientTelegramPolling({
+  poll:async()=>{tries++;if(tries<=9)throw Error('telegram_provider_temporarily_unavailable');
+   throw Error('telegram_provider_auth_denied')},
+  sleep:async ms=>delays.push(ms)
+ }),/telegram_provider_auth_denied/);
+ assert.deepEqual(delays,[1000,2000,4000,8000,16000,30000,30000,30000,30000]);
+});

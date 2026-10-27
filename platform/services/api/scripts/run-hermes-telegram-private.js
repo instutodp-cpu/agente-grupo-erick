@@ -97,12 +97,25 @@ function telegramClient(token,fetchImpl=globalThis.fetch){
  return async(method,payload)=>{
   if(!['getMe','getWebhookInfo','getUpdates','sendMessage'].includes(method))
    throw Error('telegram_api_method_denied');
-  const res=await fetchImpl(TELEGRAM_ORIGIN+'/bot'+token+'/'+method,{
-   method:'POST',redirect:'error',
-   headers:{'Content-Type':'application/json','Accept':'application/json'},
-   body:JSON.stringify(payload),signal:AbortSignal.timeout(25000)
-  });
-  if(res.status!==200||!res.ok)throw Error('telegram_provider_unavailable');
+  let res;
+  try{
+   res=await fetchImpl(TELEGRAM_ORIGIN+'/bot'+token+'/'+method,{
+    method:'POST',redirect:'error',
+    headers:{'Content-Type':'application/json','Accept':'application/json'},
+    body:JSON.stringify(payload),signal:AbortSignal.timeout(25000)
+   });
+  }catch(error){
+   if(error?.name==='TimeoutError'||error?.name==='AbortError'||
+      error instanceof TypeError)
+    throw Error('telegram_provider_transport_unavailable');
+   throw error;
+  }
+  // Bad credentials, webhook conflicts or malformed requests must fail closed.
+  // Retry only transport/rate-limit/server outages, never authorization errors.
+  if(res.status===401||res.status===403)throw Error('telegram_provider_auth_denied');
+  if(res.status===409)throw Error('telegram_webhook_conflict');
+  if(res.status===429||res.status>=500)throw Error('telegram_provider_temporarily_unavailable');
+  if(res.status!==200||!res.ok)throw Error('telegram_provider_request_denied');
   const json=await smallJSON(res);
   if(json.ok!==true)throw Error('telegram_provider_not_ok');
   return json.result;
@@ -474,6 +487,33 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
  }
  return {handled,next_offset:current};
 }
+// Retry only recoverable Telegram transport failures. A claimed update offset
+// is never rolled back; restarting the poll does not replay a sent message.
+// These recoveries grant no new permission, no writes and no tool execution.
+const RECOVERABLE_TELEGRAM_ERRORS=new Set([
+ 'telegram_provider_transport_unavailable',
+ 'telegram_provider_temporarily_unavailable'
+]);
+function isRecoverableTelegramError(error){
+ return error instanceof Error&&RECOVERABLE_TELEGRAM_ERRORS.has(error.message);
+}
+async function resilientTelegramPolling({poll,sleep=ms=>new Promise(r=>setTimeout(r,ms)),
+  onRecovery=()=>{}}={}){
+ if(typeof poll!=='function'||typeof sleep!=='function'||
+    typeof onRecovery!=='function')throw Error('telegram_poll_runner_invalid');
+ let failures=0;
+ for(;;){
+  try{await poll();failures=0;}
+  catch(error){
+   if(!isRecoverableTelegramError(error))throw error;
+   failures=Math.min(failures+1,6);
+   // Maximum 30 seconds between retries; no busy-loop or unbounded delay.
+   const delay_ms=Math.min(30000,1000*(2**(failures-1)));
+   onRecovery({code:error.message,consecutive_failures:failures,delay_ms});
+   await sleep(delay_ms);
+  }
+ }
+}
 async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  clock=()=>Date.now()}={}){
  if(environment.HERMES_TELEGRAM_ENABLED!=='true'||
@@ -522,13 +562,20 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  if(hook?.url)throw Error('telegram_webhook_conflict');
  audit(dir,{at:new Date(clock()).toISOString(),event:'gateway_started',
   stage:'staging',writes_enabled:false});
- for(;;)await pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,secondaryProvider,
-  liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true',brainLive,
-  autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true'});
+ await resilientTelegramPolling({
+  poll:()=>pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,secondaryProvider,
+   liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true',brainLive,
+   autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true'}),
+  onRecovery:({code,consecutive_failures,delay_ms})=>audit(dir,{
+   at:new Date(clock()).toISOString(),event:'telegram_poll_retry',
+   code,consecutive_failures,delay_ms
+  })
+ });
 }
 if(require.main===module){
  runForever().catch(()=>{console.error('hermes_telegram_channel_stopped_fail_closed');
   process.exitCode=1;});
 }
 module.exports={checkStateDirectory,readSecret,loadState,saveState,audit,
- smallJSON,telegramClient,hermesClient,createLiveQuery,pollOnce,runForever};
+ smallJSON,telegramClient,hermesClient,createLiveQuery,pollOnce,runForever,
+ isRecoverableTelegramError,resilientTelegramPolling};
