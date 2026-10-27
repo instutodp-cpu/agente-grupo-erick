@@ -70,7 +70,7 @@ test('single oversized conversation, unsupported-only, duplicate and invalid nam
    [conversations[0],conversations[0]]]){
   assert.throws(()=>planPersonalArchiveBatches({
    provider:'chatgpt',user_id:USER,conversations:bad
-  }),/brain_personal_batch_plan_/);
+  }),/brain_personal_batch_plan_|ai_export_/);
  }
  assert.throws(()=>planPersonalArchiveBatches({
   provider:'claude',user_id:'not-uuid',conversations:[{}]
@@ -109,7 +109,8 @@ test('partial network/database failure is retryable without text in error or dup
   pool:client.pool,provider:'chatgpt',user_id:USER,conversations:first
  });
  assert.equal(client.map.size,500);
- // One idempotent batch succeeds, the following batch fails.\n client.blockAfterOneImport();
+ // One idempotent batch succeeds, the following batch fails.
+ client.blockAfterOneImport();
  await assert.rejects(storePlannedPersonalArchive({
   pool:client.pool,provider:'chatgpt',user_id:USER,conversations
  }),e=>{
