@@ -36,6 +36,35 @@ function textualContent(content){
  if(typeof content.text==='string')return content.text;
  return null;
 }
+function nonTextPartCount(content){
+ const parts=Array.isArray(content)?content:
+  (isObj(content)&&Array.isArray(content.parts)?content.parts:null);
+ if(!parts)return 0;
+ return parts.filter(x=>!(typeof x==='string'||
+   (isObj(x)&&x.type==='text'&&typeof x.text==='string'))).length;
+}
+function selectedChatGPTBranch(conversation){
+ const map=conversation.mapping;
+ if(conversation.current_node===undefined||conversation.current_node===null)
+  return null;
+ const node=conversation.current_node;
+ if(!SOURCE_ID.test(node)||!Object.hasOwn(map,node))
+  deny('selected_branch_invalid');
+ const selected=new Set();
+ let current=node;
+ while(current!==null){
+  if(selected.has(current)||selected.size>MAX_MESSAGES*3)
+   deny('selected_branch_cycle');
+  selected.add(current);
+  const obj=map[current];
+  if(!isObj(obj))deny('selected_branch_shape_invalid');
+  const parent=obj.parent??null;
+  if(parent!==null&&(!SOURCE_ID.test(parent)||!Object.hasOwn(map,parent)))
+   deny('selected_branch_parent_invalid');
+  current=parent;
+ }
+ return selected;
+}
 function sourceRef(provider,conversation_id,message_id){
  return provider+':'+digest(conversation_id).slice(0,28)+':'+digest(message_id).slice(0,28);
 }
@@ -57,7 +86,11 @@ function asRecords(source,provider){
   deny('batch_shape_or_size_denied');
  return source.map((conversation,index)=>{
   if(!isObj(conversation))deny('conversation_shape_denied');
-  const original_id=provider==='chatgpt'?conversation.id:
+  if(provider==='chatgpt'&&conversation.id&&conversation.conversation_id&&
+     conversation.id!==conversation.conversation_id)
+   deny('ambiguous_conversation_identity');
+  const original_id=provider==='chatgpt'?
+    (conversation.conversation_id||conversation.id):
     (conversation.uuid||conversation.id);
   if(typeof original_id!=='string'||!SOURCE_ID.test(original_id))
    deny('conversation_id_denied');
@@ -67,6 +100,7 @@ function asRecords(source,provider){
   let messages=[];
   if(provider==='chatgpt'){
    if(!isObj(conversation.mapping))deny('mapping_required');
+   const selected=selectedChatGPTBranch(conversation);
    const nodes=Object.entries(conversation.mapping);
    if(nodes.length>MAX_MESSAGES*3)deny('mapping_too_large');
    for(const [node_id,node] of nodes){
@@ -87,7 +121,9 @@ function asRecords(source,provider){
     if(parent_id!==null&&!SOURCE_ID.test(parent_id))deny('parent_id_denied');
     const text=textualContent(m.content);
     messages.push({original_message_id,role,parent_id,
-      timestamp:strictDate(m.create_time),
+      timestamp:strictDate(m.create_time),nontext_parts:nonTextPartCount(m.content),
+      branch_status:selected===null?'unknown':
+       selected.has(node_id)?'selected':'alternate',
       text,kind:m.content?.content_type||'unknown'});
    }
   }else{
@@ -101,7 +137,8 @@ function asRecords(source,provider){
     const text=typeof m.text==='string'?m.text:
       (Array.isArray(m.content)?cleanText(m.content):textualContent(m.content));
     messages.push({original_message_id,role,parent_id:null,
-      timestamp:strictDate(m.created_at),text,kind:'claude_message'});
+      timestamp:strictDate(m.created_at),nontext_parts:nonTextPartCount(m.content),
+      branch_status:'not_applicable',text,kind:'claude_message'});
    }
   }
   if(messages.length>MAX_MESSAGES)deny('too_many_messages');
@@ -115,7 +152,8 @@ function normalizeExport({provider,conversations,grant}={}){
  verifyGrant(grant,provider);
  const recs=asRecords(conversations,provider);
  const keys=new Set(),items=[],seenConversations=new Set();
- let ignored=0,unsupported=0;
+ let ignored=0,unsupported=0,nontext=0;
+ let selectedMessages=0,alternateMessages=0,unknownBranchMessages=0;
  for(const conv of recs){
   if(seenConversations.has(conv.original_id))deny('duplicate_conversation');
   seenConversations.add(conv.original_id);
@@ -130,6 +168,7 @@ function normalizeExport({provider,conversations,grant}={}){
     m.role==='assistant'?'assistant':null:
     m.role==='human'?'user':m.role==='assistant'?'assistant':null;
    if(!role){ignored++;continue;} // No system/tool/developer transcription
+   nontext+=m.nontext_parts;
    if(typeof m.text!=='string'||!m.text.trim()){
     unsupported++;unknown++;continue; // nontext/media coverage explicitly reported
    }
@@ -144,12 +183,16 @@ function normalizeExport({provider,conversations,grant}={}){
     conversation_title:conv.title,conversation_updated_at:conv.updated_at,
     role,created_at:m.timestamp,
     parent_ref:m.parent_id?sourceRef(provider,conv.original_id,m.parent_id):null,
+    branch_status:m.branch_status,nontext_parts_omitted:m.nontext_parts,
     content:m.text,
     content_digest:'sha256:'+digest(m.text),
     classification:'confidential',visibility:'owner_only',
     memory_status:'unreviewed',source_authorization_ref:grant.authorization_ref
    }));
    included++;
+   if(m.branch_status==='selected')selectedMessages++;
+   else if(m.branch_status==='alternate')alternateMessages++;
+   else if(m.branch_status==='unknown')unknownBranchMessages++;
   }
   // Empty/system-only/multimodal-only conversations are *not* counted as
   // fully recovered; receipts must not claim full coverage.
@@ -159,7 +202,10 @@ function normalizeExport({provider,conversations,grant}={}){
   provider,tenant_id:grant.tenant_id,workspace_type:'personal',
   conversation_count:recs.length,message_count:items.length,
   omitted_nonuser_messages:ignored,unsupported_text_messages:unsupported,
-  coverage:unsupported?'partial_text_only':'supported_text_only',
+  omitted_nontext_parts:nontext,selected_branch_messages:selectedMessages,
+  alternate_branch_messages:alternateMessages,
+  unknown_branch_messages:unknownBranchMessages,
+  coverage:unsupported||nontext?'partial_text_only':'supported_text_only',
   items:Object.freeze(items),status:'normalized_unpersisted',
   raw_export_persisted:false,memory_written:false,
   cross_workspace_shared:false,provider_api_called:false,

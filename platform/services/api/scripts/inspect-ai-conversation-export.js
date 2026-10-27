@@ -36,6 +36,10 @@ function run(argv=process.argv.slice(2)){
   text_messages:result.message_count,
   unsupported_text_messages:result.unsupported_text_messages,
   omitted_nonuser_messages:result.omitted_nonuser_messages,
+  omitted_nontext_parts:result.omitted_nontext_parts,
+  selected_branch_messages:result.selected_branch_messages,
+  alternate_branch_messages:result.alternate_branch_messages,
+  unknown_branch_messages:result.unknown_branch_messages,
   coverage:result.coverage,memory_written:false,
   raw_export_persisted:false,credential_authorized:false,
   next_step:'trusted_owner_authenticated_review_and_storage_not_enabled'};

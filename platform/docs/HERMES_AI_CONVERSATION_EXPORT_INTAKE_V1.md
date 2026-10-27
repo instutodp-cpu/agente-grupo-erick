@@ -46,3 +46,9 @@ Não incluir dados privados em fixtures, respostas HTTP ou relatórios de teste.
 4. Consultas pelo Hermes/Telegram condicionadas a autenticação e a uma escolha explícita do workspace pessoal; contas corporativas não podem ver esse contexto.
 
 **Composio na VPS:** pode futuramente mediar ferramentas OAuth e suas scopes por conexão, mas não deve ser usado para supor acesso ao histórico completo das interfaces ChatGPT, Claude, DeepSeek ou Manus. Ainda não houve conexão Composio à VPS nesta PR.
+
+## Incremento V1.1 — identidade real e ramificações ChatGPT
+
+O export do ChatGPT pode usar `conversation_id` em vez do antigo `id`. Os dois formatos são aceitos, mas se ambos estiverem presentes e divergirem o lote é negado. O JSON original pode conter várias respostas regeneradas para uma pergunta; o leitor percorre `current_node` e `parent` para identificar o ramo selecionado e marca cada mensagem como `selected`, `alternate` ou `unknown` (quando não há `current_node`). Um nó inexistente, ciclo ou ponteiro inválido interrompe a prévia. **Respostas alternativas nunca devem ser combinadas na narrativa como se fossem a escolha final.**
+
+A prévia local mostra apenas contagens de mensagens selecionadas, alternativas e com ramo desconhecido. Imagens, arquivos e outros blocos que acompanhem texto geram contagem explícita em `omitted_nontext_parts`; uma mensagem mista não produz uma declaração falsa de cobertura integral. Não há conexão, envio ou persistência de dados pessoais neste incremento.

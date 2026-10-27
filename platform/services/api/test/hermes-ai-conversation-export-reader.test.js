@@ -143,5 +143,53 @@ test('ChatGPT graph requires a real parent, preserves replies by message id',()=
  assert.equal(valid.items[1].parent_ref,sourceRef('chatgpt','conv001','one'));
  const broken=structuredClone(chatgpt);
  broken[0].mapping.node2.parent='outside';
- assert.throws(()=>importG({conversations:broken}),/parent_id_denied/);
+ assert.throws(()=>importG({conversations:broken}),/selected_branch_parent_invalid|parent_id_denied/);
+});
+
+test('official ChatGPT conversation_id and regenerated alternatives retain selected branch',()=>{
+ const a={conversation_id:'official-conv',title:'Discussao',
+  current_node:'reply_b',mapping:{
+    root:{parent:null,message:null},
+    prompt:{parent:'root',message:{id:'p',author:{role:'user'},
+      create_time:1760000000,content:{parts:['Pergunta?']}}},
+    reply_a:{parent:'prompt',message:{id:'a',author:{role:'assistant'},
+      create_time:1760000001,content:{parts:['Alternativa antiga']}}},
+    reply_b:{parent:'prompt',message:{id:'b',author:{role:'assistant'},
+      create_time:1760000002,content:{parts:['Resposta selecionada']}}}
+  }};
+ const r=importG({conversations:[a]});
+ assert.equal(r.message_count,3);
+ assert.equal(r.selected_branch_messages,2);
+ assert.equal(r.alternate_branch_messages,1);
+ assert.equal(r.unknown_branch_messages,0);
+ const chosen=r.items.find(x=>x.content==='Resposta selecionada');
+ const alternate=r.items.find(x=>x.content==='Alternativa antiga');
+ assert.equal(chosen.branch_status,'selected');
+ assert.equal(alternate.branch_status,'alternate');
+ assert.equal(chosen.parent_ref,sourceRef('chatgpt','official-conv','p'));
+ assert.equal(alternate.parent_ref,chosen.parent_ref);
+ assert.notEqual(chosen.source_ref,alternate.source_ref);
+ const missing=structuredClone(a);delete missing.current_node;
+ const unknown=importG({conversations:[missing]});
+ assert.equal(unknown.unknown_branch_messages,3);
+ const bogus=structuredClone(a);bogus.current_node='unavailable';
+ assert.throws(()=>importG({conversations:[bogus]}),/selected_branch_invalid/);
+ const loop=structuredClone(a);loop.mapping.prompt.parent='reply_b';
+ assert.throws(()=>importG({conversations:[loop]}),/selected_branch_cycle/);
+ const duplicated=structuredClone(a);duplicated.id='other-id';
+ assert.throws(()=>importG({conversations:[duplicated]}),/ambiguous_conversation_identity/);
+});
+test('mixed text/media replies never claim complete history',()=>{
+ const item={conversation_id:'mixed',current_node:'one',mapping:{
+  one:{parent:null,message:{id:'one',author:{role:'assistant'},
+   content:{content_type:'multimodal_text',parts:['Aqui está a imagem',
+    {content_type:'image_asset_pointer',asset_pointer:'ignored'}]}}}
+ }};
+ const r=importG({conversations:[item]});
+ assert.equal(r.message_count,1);
+ assert.equal(r.items[0].content,'Aqui está a imagem');
+ assert.equal(r.items[0].nontext_parts_omitted,1);
+ assert.equal(r.omitted_nontext_parts,1);
+ assert.equal(r.coverage,'partial_text_only');
+ assert.equal(r.items[0].memory_status,'unreviewed');
 });
