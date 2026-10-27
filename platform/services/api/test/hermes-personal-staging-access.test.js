@@ -180,3 +180,23 @@ test('authenticated identity alone cannot search or erase when services are unav
  assert.equal(x.calls.length,before);
  assert.equal(x.element('results').children.length,0);
 });
+
+test('staging-only deployment helper is scoped, reversible and rejects unverified artifacts',()=>{
+ const f=path.resolve(__dirname,
+  '../../../infra/staging-observation/scripts/stage-personal-login-preview.sh');
+ const source=fs.readFileSync(f,'utf8');
+ const {spawnSync}=require('node:child_process');
+ const syntax=spawnSync('bash',['-n',f],{encoding:'utf8',timeout:6000});
+ assert.equal(syntax.status,0,'install helper shell syntax must be valid');
+ assert.match(source,/--check/);
+ assert.match(source,/--apply/);
+ assert.match(source,/if \[\[ "\$mode" == "--apply" && "\$EUID" -ne 0 \]\]/);
+ assert.match(source,/git hash-object/);
+ assert.match(source,/expected_html="35ed774a99972d182ed5bb3b4f21012973fe15fa"/);
+ assert.match(source,/expected_js="de0b0b8d043d3bac8b620ccb09c77310bc1344eb"/);
+ assert.match(source,/path \/brain\/ \/brain\/app[.]js \/brain\/personal[.]html \/brain\/personal-app[.]js/);
+ assert.match(source,/caddy validate/);
+ assert.match(source,/caddy reload/);
+ assert.match(source,/preview_rolled_back_due_to_failure/);
+ assert.doesNotMatch(source,/service_role|SUPABASE_SECRET|GRANT ALL|psql |DROP TABLE|supabase db push|docker rm|git checkout|git push/i);
+});

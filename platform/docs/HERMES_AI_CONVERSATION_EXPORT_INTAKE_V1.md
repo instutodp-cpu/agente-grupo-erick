@@ -293,3 +293,46 @@ O upload de exportações continua ausente e bloqueado. Testes com Supabase
 simulado verificam tanto login sem módulo instalado quanto recusa de ações
 manual ou programaticamente disparadas nessa condição. A PR ainda não foi
 implantada e nenhum histórico pessoal foi acessado.
+
+
+## V3.5 — prévia pessoal de staging, publicação delimitada e reversível
+
+O CI da PR #564 aprovou o login que distingue identidade validada de
+módulo pessoal não instalado. A inspeção do servidor em 27/10/2026 confirmou:
+GET /brain/ = 200; GET /brain/personal.html e /brain/personal-app.js = 404.
+O Caddy só admite os dois caminhos empresariais /brain/ e /brain/app.js.
+O webroot /var/www/hermes-brain-staging/brain e /etc/caddy/Caddyfile
+são protegidos por root. O operador hermesadmin não tem sudo sem senha.
+
+Os **dois artefatos públicos** da PR foram copiados para
+/home/hermesadmin/hermes-personal-preview-pr564, fora do webroot e sem
+históricos ou segredos. Git blob SHAs, verificados pelo instalador:
+- personal.html: 35ed774a99972d182ed5bb3b4f21012973fe15fa
+- personal-app.js: de0b0b8d043d3bac8b620ccb09c77310bc1344eb
+
+O instalador stage-personal-login-preview.sh, preparado nessa pasta,
+passou em --check no servidor: conferência das duas origens,
+precondição do Caddy e caddy validate. Por padrão não modifica nada.
+O modo --apply exige root e realiza apenas estas operações:
+- acrescenta as duas rotas pessoais ao matcher estático existente;
+- instala os arquivos verificados no webroot;
+- salva o Caddyfile em /var/backups/hermes-personal-preview.*;
+- valida, recarrega o Caddy e exige GET 200 nas duas rotas;
+- em falha restaura o Caddyfile anterior e remove os dois arquivos.
+
+Comando para execução **somente após revisão administrativa** pela
+identidade root do servidor:
+
+    bash /home/hermesadmin/hermes-personal-preview-pr564/stage-personal-login-preview.sh --apply
+
+O sucesso libera **somente a página de login**. Migrações 049/050
+continuam não aplicadas, portanto consentimento, pesquisa, exclusão
+e importação permanecem bloqueados. O URL de redirecionamento do OTP
+https://hermes-staging.grupoerick.tech/brain/personal.html
+também precisa estar na allowlist de redirect URLs do Supabase Auth,
+em acordo com o fluxo do login, antes de enviar o primeiro link.
+
+**Estado:** --check aprovado e artefatos preparados. --apply NÃO
+executado por falta de privilégio root. O caminho pessoal não foi
+publicado; nenhuma migração, backend, banco ou conversa privada foi
+alterada. Isso não delega autoridade de merge nem ativa A3 em produção.
