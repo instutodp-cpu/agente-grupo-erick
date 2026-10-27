@@ -121,7 +121,7 @@ test('migration is personal-only with owner RLS, source grants and purge cascade
  }
  assert.match(sql,/owner_user_id=\(SELECT auth[.]uid\(\)\)/);
  assert.match(sql,/personal_history_create_with_active_consent/);
- assert.match(sql,/c[.]revoked_at IS NULL/);
+ assert.match(sql,/g[.]revoked_at IS NULL/);
  assert.match(sql,/ON DELETE CASCADE/);
  assert.match(sql,/classification='confidential'/);
  assert.match(sql,/visibility='owner_only'/);
