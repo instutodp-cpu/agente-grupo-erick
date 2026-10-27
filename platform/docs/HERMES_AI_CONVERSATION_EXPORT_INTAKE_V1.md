@@ -153,3 +153,45 @@ de conteúdo, não de autenticação Supabase nem de isolamento RLS entre pessoa
 A simulação de identidades na ferramenta remota foi bloqueada, portanto
 continua pendente teste autorizado de RLS com sessões genuínas em ambiente
 seguro. Produção, memória empresarial e dados privados permaneceram intocados.
+
+
+## Incremento V3 — operações pessoais autenticadas no staging (não implantado)
+
+Migração candidata `050_create_personal_archive_authenticated_rpc.sql`:
+cinco RPCs públicos do Supabase exclusivamente para `authenticated`,
+todos com `SECURITY INVOKER`, `auth.uid()` e RLS existente.
+Operações: `hermes_personal_source_status`,
+`hermes_personal_source_consent`,
+`hermes_personal_source_revoke`,
+`hermes_personal_source_erase`,
+`hermes_personal_history_search`.
+
+As funções não aceitam `tenant_id`, `company_id`, `user_id` ou
+chaves de autenticação como argumento. A identidade vem somente de
+`auth.uid()`. Nenhuma função cria memória aprovada, importa ZIPs,
+altera Grupo Erick ou chama APIs externas. A escolha da plataforma é
+estritamente `chatgpt` ou `claude`. Revogar remove a leitura;
+excluir remove registro de consentimento e mensagens vinculadas.
+
+A interface `brain-web/personal.html` e o JS correspondente
+`personal-app.js` são **página separada** do piloto empresarial
+(que continua em `/brain/`). A página pessoal usa login OTP já
+existente, sem criação automática de usuários, não persiste sessão
+em storage local, nunca apresenta arquivo pessoal a usuários
+não autenticados e exige confirmação explícita antes de consentir
+ou apagar uma fonte.
+
+A página de histórico pessoal **não tem botão de upload**: até o
+ingresso de arquivo estar autenticado, a migração 049 e a RPC 050
+serem homologadas em ambiente confiável e o isolamento RLS ser
+verificado entre usuários reais, o Hermes não deve receber ZIPs.
+O staging não está publicado com esse novo código e o Supabase
+ativo não tem essa migração; as funções de autenticação da página
+não funcionarão no site até passar os gates de implantação.
+
+Evidência: ambas as migrações 049+050 executadas com sucesso em
+PostgreSQL 16 descartável com rede desativada e sem dados reais;
+essa comprovação é de sintaxe/privilégios ao criar, **não** equivale
+a autenticação JWT/RLS E2E nem confirma eliminação real de dados.
+Nenhum segredo novo é necessário; a chave pública Supabase já
+usada no piloto não é service_role.
