@@ -12,6 +12,7 @@
 
 const http = require('http');
 const { randomUUID } = require('crypto');
+const { createPersonalArchiveIngressBootstrap } = require('./runtime/hermes-brain-personal-ingress-bootstrap');
 const { getCapability } = require('./capabilities/registry');
 const { evaluateConfirmationGate } = require('./core/confirmation-gate');
 const { classifyConfirmationResponse } = require('./core/confirmation-response');
@@ -537,7 +538,9 @@ function createServer({
 if (require.main === module) {
   const missionIngressComposition = createPublicWebOperationalMissionIngressBootstrap();
   const liveReadComposition = createHermesGithubLiveReadBootstrap();
+  const personalArchiveComposition = createPersonalArchiveIngressBootstrap();
   const server = createServer({
+    personalArchiveIngress: personalArchiveComposition.ingress,
     machineIdentityRegistry: liveReadComposition.machineIdentityRegistry ||
       missionIngressComposition.machineIdentityRegistry,
     missionIngress: missionIngressComposition.missionIngress,
@@ -555,7 +558,7 @@ if (require.main === module) {
       console.log(JSON.stringify({ level: 'info', event: 'api_shutdown', signal }));
       server.close(async () => {
         try { await missionIngressComposition.close(); }
-        finally { process.exit(0); }
+        finally { try { await personalArchiveComposition.close(); } finally { process.exit(0); } }
       });
     });
   }
