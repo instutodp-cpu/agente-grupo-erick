@@ -88,6 +88,36 @@ test('real PostgreSQL RLS: separate users, revoke, purge, immutable hash, deny a
   assert.equal(await count(pool,B,MESSAGES),1);
   assert.equal(await count(pool,A,CONSENTS),1);
   assert.equal(await count(pool,B,CONSENTS),1);
+
+  // Test the real JWT-to-PostgreSQL binder against live RLS policies in CI.
+  // No actual personal accounts, tokens, or user exports are involved.
+  const {createPersonalJwtBoundPgBinder}
+    =require('../src/runtime/hermes-brain-personal-jwt-bound-pg');
+  const {withAuthenticatedTransaction}
+    =require('../src/runtime/hermes-brain-authenticated-transaction');
+  const binder=createPersonalJwtBoundPgBinder({pgPool:pool});
+  for(const [actor,foreign] of [[A,B],[B,A],[A,B]]){
+   const scoped=await binder({userId:actor});
+   try{
+    const checked=await withAuthenticatedTransaction({
+     pool:scoped.pool,user_id:actor,readOnly:false,
+     work:async connection=>{
+      const principal=await connection.query(
+       'SELECT current_user AS role,(SELECT auth.uid())::text AS uid');
+      const own=await connection.query(
+       'SELECT count(*)::int AS n FROM '+MESSAGES);
+      const inaccessible=await connection.query(
+       'SELECT count(*)::int AS n FROM '+MESSAGES+
+       ' WHERE owner_user_id=$1',[foreign]);
+      return {role:principal.rows[0].role,uid:principal.rows[0].uid,
+       own:own.rows[0].n,foreign:inaccessible.rows[0].n};
+     }});
+    assert.deepEqual(checked,{
+     role:'authenticated',uid:actor,own:1,foreign:0
+    });
+   }finally{await scoped.close()}
+  }
+
   assert.equal((await as(pool,B,c=>c.query('SELECT * FROM '+
    rpc('history_search')+'($1,$2,$3)',['chatgpt','SYNTHETIC',5]))).rowCount,0);
   const own=await as(pool,A,c=>c.query('SELECT * FROM '+
