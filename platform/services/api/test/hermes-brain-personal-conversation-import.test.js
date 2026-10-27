@@ -129,3 +129,15 @@ test('migration is personal-only with owner RLS, source grants and purge cascade
  assert.match(sql,/GRANT DELETE/);
  assert.doesNotMatch(sql,/SECURITY DEFINER|GRANT UPDATE \(content\)|GRANT ALL ON TABLE/i);
 });
+
+test('large, circular or non-serializable batches never open database sessions',async()=>{
+ const huge=[{...sample[0],title:'X'.repeat(2200000)}];
+ const oversized=mock();
+ await assert.rejects(run(oversized,{conversations:huge}),/request_size_denied/);
+ assert.equal(oversized.calls.length,0);
+ const circular=structuredClone(sample);
+ circular[0].self=circular[0];
+ const bad=mock();
+ await assert.rejects(run(bad,{conversations:circular}),/invalid_json/);
+ assert.equal(bad.calls.length,0);
+});

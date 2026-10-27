@@ -89,3 +89,31 @@ Para homologação: login Supabase pessoal independente de Grupo Erick,
 consentimento autenticado distinto por provedor, aplicar migração revisada,
 abrir importação privada de lotes, verificar autorização entre dois usuários
 e revogação/remoção completas antes de liberar pesquisa.
+
+
+## Incremento V2.1 — busca pessoal autenticada, ainda sem implantação
+
+Adicionado `src/runtime/hermes-brain-personal-history-search.js`:
+recupera exclusivamente registros não aprovados da fonte pessoal escolhida,
+por sessão PostgreSQL/JWT autenticada, com consulta SQL parametrizada,
+limite de 1–10 resultados, conferência repetida de `auth.uid()`,
+validação de hashes SHA-256, visibilidade `owner_only` e selo de confiança
+`unreviewed_personal_archive`. A resposta ao titular pode conter o texto
+original como dado não confiável; **não é instrução operacional, memória
+confirmada ou autorização de execução**.
+
+A política SELECT da migração foi reforçada: revogar o consentimento de
+uma fonte agora bloqueia **também a pesquisa** no histórico dessa fonte,
+não somente a importação. A exclusão do consentimento remove os arquivos
+históricos associados em cascata. Um índice de pesquisa textual permite
+consultas por palavras, sem pressupor busca vetorial/RAG.
+
+O importador ganhou limite de tamanho **antes** de abrir transações, além
+do limite por lote já existente. O futuro ingresso HTTP autenticado deve
+rejeitar cargas acima do limite antes de fazer JSON.parse.
+Importações grandes exigirão divisão em lotes com verificação de completude.
+
+Estágio: **GitHub/testes**, não deploy em Supabase ou VPS; não há endpoint
+público, fluxo de autenticação pessoal habilitado, upload nem leitura real
+de históricos do usuário. Não usar service_role ou bot Grupo Erick
+para executar este caminho.

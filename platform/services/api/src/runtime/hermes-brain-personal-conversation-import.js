@@ -41,6 +41,14 @@ async function storePersonalConversationBatch({pool,user_id,provider,conversatio
  if(!UUID.test(user_id||'')||!['chatgpt','claude'].includes(provider)||
     !Array.isArray(conversations)||conversations.length<1)
    deny('request_denied');
+ // Preflight before acquiring a database connection. The authenticated
+ // ingress must ALSO reject HTTP bodies larger than this limit.
+ let preview;
+ try{preview=JSON.stringify(conversations)}
+ catch{deny('invalid_json')}
+ if(typeof preview!=='string'||Buffer.byteLength(preview,'utf8')>MAX_JSON_BYTES)
+  deny('request_size_denied');
+ preview=null;
  return withAuthenticatedTransaction({pool,user_id,readOnly:false,work:async client=>{
   const consents=await client.query(CONSENT_SQL,[provider]);
   if(consents?.rows?.length!==1||!UUID.test(consents.rows[0]?.grant_id||''))
