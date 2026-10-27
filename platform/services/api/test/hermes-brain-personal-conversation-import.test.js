@@ -126,6 +126,8 @@ test('migration is personal-only with owner RLS, source grants and purge cascade
  assert.match(sql,/classification='confidential'/);
  assert.match(sql,/visibility='owner_only'/);
  assert.match(sql,/memory_status='unreviewed'/);
+ assert.match(sql,/CONSTRAINT personal_digest_matches_content CHECK/);
+ assert.match(sql,/sha256\(convert_to\(content,'UTF8'\)\)/);
  assert.match(sql,/GRANT DELETE/);
  assert.doesNotMatch(sql,/SECURITY DEFINER|GRANT UPDATE \(content\)|GRANT ALL ON TABLE/i);
 });

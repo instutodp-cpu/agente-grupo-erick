@@ -117,3 +117,23 @@ Estágio: **GitHub/testes**, não deploy em Supabase ou VPS; não há endpoint
 público, fluxo de autenticação pessoal habilitado, upload nem leitura real
 de históricos do usuário. Não usar service_role ou bot Grupo Erick
 para executar este caminho.
+
+
+## Incremento V2.2 — integridade conferida pelo próprio PostgreSQL
+
+A migração de armazenamento pessoal agora exige que cada `content_digest`
+seja exatamente o SHA-256 (UTF-8) do campo `content`, por uma constraint
+nativa do PostgreSQL. Isso protege contra gravações diretas que tentem
+contornar o importador Node; apenas verificar a aparência de um hash não
+é suficiente. O conteúdo continua privado, `owner_only` e `unreviewed`.
+
+O primeiro teste de aplicação da migração em um PostgreSQL 16 isolado e
+sem rede foi concluído para a versão anterior à nova constraint. Os testes
+de RLS por sessões simuladas NÃO foram executados: a ferramenta remota
+bloqueou a simulação; nenhum resultado sobre isolamento real deve ser
+inferido daí. O contêiner de QA e seus arquivos foram eliminados.
+
+Antes de implantar a migração em Supabase, validar essa nova constraint em
+PostgreSQL descartável, e depois executar testes autenticados RLS de dois
+usuários por canal autorizado. A aprovação do CI do repositório não equivale
+a produção pronta.
