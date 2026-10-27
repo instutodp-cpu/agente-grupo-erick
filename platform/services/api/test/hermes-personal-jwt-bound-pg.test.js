@@ -113,6 +113,9 @@ test('bootstrap defaults off; staging/environment/project gates reject invalid c
   HERMES_PERSONAL_SUPABASE_URL:'https://asceucchdnuoaqgdjbtg.supabase.co/',
   HERMES_PERSONAL_SUPABASE_PUBLISHABLE_KEY:'sb_publishable_testing'
  };
+ assert.throws(()=>createPersonalArchiveIngressBootstrap({
+  env:base
+ }),/personal_ingress_ca_required/);
  const pgPool=harness().pgPool;
  assert.throws(()=>createPersonalArchiveIngressBootstrap({
   env:{...base,HERMES_PERSONAL_ENVIRONMENT:'production'},pgPool
