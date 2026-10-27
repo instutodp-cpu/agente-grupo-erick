@@ -195,3 +195,32 @@ essa comprovação é de sintaxe/privilégios ao criar, **não** equivale
 a autenticação JWT/RLS E2E nem confirma eliminação real de dados.
 Nenhum segredo novo é necessário; a chave pública Supabase já
 usada no piloto não é service_role.
+
+
+## Incremento V3.1 — homologação de RLS no PostgreSQL do CI
+
+Adicionado `test/hermes-personal-rls-postgres.integration.test.js` à
+matriz **já existente** `postgres-persistence` do Hermes. Esse job usa
+PostgreSQL 16 descartável, dados sintéticos, schemas isolados, e executa
+as migrações `049` e `050` como SQL real. O teste impõe identidades
+fictícias distintas com o papel `authenticated` para verificar:
+
+- A e B consultam exclusivamente seus próprios registros e fontes;
+- B não pode conceder consentimento, escrever ou revogar dados de A;
+- RPC de pesquisa não retorna histórico de outro usuário;
+- após revogação, a leitura e novas escritas são bloqueadas;
+- exclusão da fonte retira registros associados por cascata e não afeta B;
+- o SHA-256 inconsistente é rejeitado pela constraint do PostgreSQL;
+- papéis `anon` e de leitor empresarial não recebem acesso;
+- RLS fica `ENABLED` e `FORCED` nas duas tabelas.
+
+**Interpretação precisa:** o teste comprova comportamento de RLS
+em um banco PostgreSQL real do CI, usando identidade de teste simulada.
+Ele **não comprova** assinatura JWT externa, login real Supabase
+do proprietário, implantação nem isolamento ponta a ponta em produção.
+Sem as duas etapas separadas — validação JWT e homologação do
+ingresso autenticado — o upload pessoal permanece bloqueado.
+
+Os testes nunca incluem históricos reais, credenciais ou mensagens
+privadas; não provisionam usuário real e não ligam a aplicação à
+instância de produção.
