@@ -129,10 +129,28 @@ function createServer({
   machineIdentityRegistry = null,
   missionIngress = null,
   githubReadPilot = null,
+  // Private upload remains DISABLED unless an independently authorized
+  // JWT-verifying, RLS-bound ingress composition is explicitly supplied.
+  personalArchiveIngress = null,
   requestIdentityMode = REQUEST_IDENTITY_MODES.PUBLIC
 } = {}) {
   return http.createServer((req, res) => {
     beginCallerObservation(req, res, { requestIdFactory: randomUUID });
+    // Separate personal trust boundary. Never reuse machine or company identity.
+    // Absent composition is inert and cannot store any personal content.
+    if ((req.url || '').split('?')[0] === '/internal/personal-archive/batch') {
+      if (!personalArchiveIngress ||
+          typeof personalArchiveIngress.enabled !== 'function' ||
+          !personalArchiveIngress.enabled() ||
+          typeof personalArchiveIngress.handle !== 'function') {
+        return sendJson(res, 503, { error: 'personal_ingress_disabled' });
+      }
+      return Promise.resolve().then(()=>
+        personalArchiveIngress.handle(req,res)
+      ).catch(()=>
+        sendJson(res,503,{ error: 'personal_ingress_unavailable' })
+      );
+    }
     try {
       attachRequestIdentity(req, {
         mode: requestIdentityMode,
