@@ -6,6 +6,9 @@ const {normalizeExport}=require('./hermes-ai-conversation-export-reader');
 const {createHash}=require('node:crypto');
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_CONVERSATIONS=20000,MAX_ITEMS=500,MAX_BYTES=2*1024*1024;
+// Plain batch receipts must NEVER expose the user's original chat content.
+// Payloads are visible only to this module through the non-enumerable WeakMap.
+const PRIVATE_BATCH_PAYLOADS=new WeakMap();
 function deny(code){throw Error('brain_personal_batch_plan_'+code);}
 function bytes(value){
  let encoded;
@@ -45,15 +48,14 @@ function planPersonalArchiveBatches({provider,user_id,conversations}={}){
   result.rawBytes<=MAX_BYTES&&result.normalizedBytes<=MAX_BYTES;
  function publish(group,result){
   if(!fits(result))deny('unrepresentable_batch');
-  batches.push(Object.freeze({
-   // Confidential, in-process only; never include this field in a public
-   // receipt, log, telemetry, error or network response.
-   conversations:Object.freeze([...group]),
+  const receipt=Object.freeze({
    conversation_count:group.length,
    message_count:result.normal.message_count,
    raw_bytes:result.rawBytes,
    normalized_bytes:result.normalizedBytes
-  }));
+  });
+  PRIVATE_BATCH_PAYLOADS.set(receipt,Object.freeze([...group]));
+  batches.push(receipt);
   selectedCount+=result.normal.message_count;
   omitted+=result.normal.omitted_nonuser_messages;
   nontext+=result.normal.omitted_nontext_parts;
@@ -104,8 +106,11 @@ async function storePlannedPersonalArchive({pool,user_id,provider,conversations}
  for(const batch of plan.batches){
   let receipt;
   try{
+   const privatePayload=PRIVATE_BATCH_PAYLOADS.get(batch);
+   if(!Array.isArray(privatePayload)||privatePayload.length!==batch.conversation_count)
+    throw Error('brain_personal_archive_payload_integrity_denied');
    receipt=await storePersonalConversationBatch({
-    pool,user_id,provider,conversations:batch.conversations
+    pool,user_id,provider,conversations:privatePayload
    });
   }catch{
    // Do not propagate SQL/provider exceptions containing private input data.

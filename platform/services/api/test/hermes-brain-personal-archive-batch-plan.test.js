@@ -140,3 +140,42 @@ test('media omitted is reported, never marked as complete',()=>{
  assert.equal(plan.coverage,'partial_text_only');
  assert.equal(plan.text_message_count,1);
 });
+
+test('planning receipts are safe to JSON serialize without exposing private message text',()=>{
+ const conversations=makeConversations(3);
+ conversations[1].title='PRIVATE_TITLE_UNIQUE_919';
+ conversations[1].mapping.end.message.content.parts=['PRIVATE_MESSAGE_UNIQUE_818'];
+ const plan=planPersonalArchiveBatches({
+  provider:'chatgpt',user_id:USER,conversations
+ });
+ assert.equal(plan.text_message_count,3);
+ assert.equal(plan.batch_count,1);
+ const dump=JSON.stringify(plan);
+ const inspected=require('node:util').inspect(plan,{depth:7,showHidden:false});
+ for(const secret of ['PRIVATE_TITLE_UNIQUE_919','PRIVATE_MESSAGE_UNIQUE_818',
+  'Synthetic planning fact 0','Synthetic planning fact 2']){
+  assert.equal(dump.includes(secret),false);
+  assert.equal(inspected.includes(secret),false);
+ }
+ for(const batch of plan.batches){
+  assert.equal(Object.hasOwn(batch,'conversations'),false);
+  assert.equal('conversations' in batch,false);
+  assert(Object.isFrozen(batch));
+ }
+ const receipt=JSON.parse(dump);
+ assert.equal(receipt.text_message_count,3);
+ assert.equal(receipt.history_persisted,false);
+ assert.equal(receipt.batches.length,1);
+ assert.equal(receipt.batches[0].conversation_count,3);
+});
+test('private WeakMap payloads still permit authenticated import of planned batches',async()=>{
+ const database=db();
+ const conversations=makeConversations(3);
+ conversations[0].mapping.end.message.content.parts=['SECRET_TEXT_IMPORT_737'];
+ const result=await storePlannedPersonalArchive({
+  pool:database.pool,user_id:USER,provider:'chatgpt',conversations
+ });
+ assert.equal(result.inserted,3);
+ assert.equal(database.map.size,3);
+ assert.equal(JSON.stringify(result).includes('SECRET_TEXT_IMPORT_737'),false);
+});

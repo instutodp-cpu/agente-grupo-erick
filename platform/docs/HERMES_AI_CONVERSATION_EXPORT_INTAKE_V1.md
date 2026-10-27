@@ -248,10 +248,29 @@ por arquivo; a preparação de um único objeto conversa com mais de 500
 mensagens suportadas exige estratégia de fracionamento especial ainda não
 implementada. Nenhum fluxo de envio/streaming, JWT real no servidor,
 conexão de usuário pessoal, importação ou implantação foi liberado
-neste incremento. O array `batches[].conversations` contém texto
-confidencial **apenas em memória** e não pode ser serializado em logs,
-telemetria, respostas ou artefatos de build.
+neste incremento. O planejamento guarda as conversas confidenciais
+em um WeakMap privado do módulo, sem incluí-las nos recibos de lote.
+`JSON.stringify(plan)` e a inspeção comum só mostram metadados numéricos,
+nenhum texto ou título. O conteúdo continua em memória durante a execução;
+o ingresso não pode imprimi-lo em logs, telemetria ou respostas.
 
 Para ativação, continuam pendentes autenticação pessoal real no Supabase,
 revisão do ingresso privado, aplicação governada das migrações 049/050
 e verificação ponta a ponta com consentimento por provedor.
+
+
+## V3.3 — recibos sem texto confidencial
+
+Antes, `planPersonalArchiveBatches` retornava objetos contendo
+`batches[].conversations`. Isso poderia vazar o histórico caso algum
+chamador registrasse ou serializasse o plano por engano. Agora, cada
+recibo de lote contém exclusivamente contagens/tamanhos, enquanto os
+objetos confidenciais permanecem em um `WeakMap` privado que só o
+importador do módulo consegue recuperar. Testes com marcadores textuais
+sintéticos verificam que `JSON.stringify(plan)`, inspeção padrão,
+retornos e contagens não expõem as mensagens; a importação idempotente
+em transações autenticadas continua funcional.
+
+Não se trata de criptografia do processo nem de autorização para
+exportar dados reais: o conteúdo ainda precisa de um ambiente de
+execução seguro, JWT validado, fonte autorizada e política de retenção.
