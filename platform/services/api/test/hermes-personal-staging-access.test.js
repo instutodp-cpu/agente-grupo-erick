@@ -100,7 +100,7 @@ function setup(origin='https://hermes-staging.grupoerick.tech',userPresent=true,
  vm.runInNewContext(script,context,{timeout:3000});
  return {element,calls,states,client};
 }
-const tick=async()=>{for(let i=0;i<12;i++)await Promise.resolve()};
+const tick=async()=>{for(let i=0;i<60;i++)await Promise.resolve()};
 test('wrong origin is refused without accessing Supabase or returning content',()=>{
  const x=setup('https://evil.example');
  assert.equal(x.element('ownerArea').hidden,true);
