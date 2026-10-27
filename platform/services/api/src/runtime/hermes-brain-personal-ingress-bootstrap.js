@@ -48,6 +48,13 @@ function createPersonalArchiveIngressBootstrap({env=process.env,pgPool=null,
   // Verify the full chain AND hostname; system root CA alone can be
   // insufficient for Supabase Postgres. No insecure TLS fallback.
   const ca=readProjectCertificate(env.HERMES_PERSONAL_PG_CA_FILE);
+  // A production DB pool must never retain credentials for an admin role.
+  // This account must be provisioned separately with NOINHERIT and NOBYPASSRLS.
+  const allowedLogin='hermes_personal_ingress';
+  const requestedLogin=decodeURIComponent(parsed.username);
+  if(requestedLogin!==allowedLogin &&
+    requestedLogin!==allowedLogin+'.asceucchdnuoaqgdjbtg')
+   throw Error('personal_ingress_scoped_db_login_required');
   const {Pool}=require('pg');
   pool=new Pool({connectionString:url,ssl:{ca,rejectUnauthorized:true,servername:parsed.hostname},
    max:2,idleTimeoutMillis:10000,connectionTimeoutMillis:6000,
