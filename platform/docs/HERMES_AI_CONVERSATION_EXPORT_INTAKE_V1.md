@@ -52,3 +52,40 @@ Não incluir dados privados em fixtures, respostas HTTP ou relatórios de teste.
 O export do ChatGPT pode usar `conversation_id` em vez do antigo `id`. Os dois formatos são aceitos, mas se ambos estiverem presentes e divergirem o lote é negado. O JSON original pode conter várias respostas regeneradas para uma pergunta; o leitor percorre `current_node` e `parent` para identificar o ramo selecionado e marca cada mensagem como `selected`, `alternate` ou `unknown` (quando não há `current_node`). Um nó inexistente, ciclo ou ponteiro inválido interrompe a prévia. **Respostas alternativas nunca devem ser combinadas na narrativa como se fossem a escolha final.**
 
 A prévia local mostra apenas contagens de mensagens selecionadas, alternativas e com ramo desconhecido. Imagens, arquivos e outros blocos que acompanhem texto geram contagem explícita em `omitted_nontext_parts`; uma mensagem mista não produz uma declaração falsa de cobertura integral. Não há conexão, envio ou persistência de dados pessoais neste incremento.
+
+
+## Incremento V2 — persistência pessoal preparada, não implantada
+
+Migração revisável: platform/migrations/hermes/049_create_personal_conversation_archive.sql.
+Os dados históricos pessoais terão duas tabelas separadas no schema hermes_brain:
+personal_import_consents e personal_conversation_messages. Não se inserem conversas
+em memória empresarial nem no catálogo de fatos aprovados.
+
+O tenant pessoal será gerado pelo próprio banco como personal::<Supabase auth.uid()>.
+RLS ativado e forçado, políticas para authenticated condicionadas ao auth.uid()
+real, concessões por usuário e por provedor, conteúdo imutável, status unreviewed
+e classificação confidential / owner_only. Não há privilégios para service_role
+ou bot empresarial no novo caminho.
+
+O usuário terá mecanismos de consentimento por fonte; revogação impede novas
+importações e exclusão do consentimento apaga em cascata o histórico sob aquele
+grant. A autorização dada nesta conversa NÃO constitui credencial ou sessão
+Supabase válida e não cria o registro de consentimento no banco: é preciso
+vincular a ação ao dono real via login pessoal.
+
+src/runtime/hermes-brain-personal-conversation-import.js utiliza a
+transação autenticada existente (sem service_role), consulta o consentimento
+ativo no banco, normaliza a exportação por fonte, limita a 500 mensagens e
+2 MiB por transação, valida hashes de conteúdo antes/depois, e gera recibo
+apenas com contagens. Mudança em uma mesma referência causa ROLLBACK.
+Conteúdo de mensagem não deve aparecer em retornos HTTP, logs ou relatórios.
+
+Estado atual: migração não aplicada, espaço pessoal ainda não provisionado,
+nenhum ZIP ou JSON real recebido, nenhuma conta pessoal conectada,
+endpoint privado de upload ainda não implementado, nenhuma operação E2E real.
+Esta camada não autoriza ingestão via Telegram, chat ou Composio.
+
+Para homologação: login Supabase pessoal independente de Grupo Erick,
+consentimento autenticado distinto por provedor, aplicar migração revisada,
+abrir importação privada de lotes, verificar autorização entre dois usuários
+e revogação/remoção completas antes de liberar pesquisa.
