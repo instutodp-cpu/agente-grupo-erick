@@ -224,3 +224,34 @@ ingresso autenticado — o upload pessoal permanece bloqueado.
 Os testes nunca incluem históricos reais, credenciais ou mensagens
 privadas; não provisionam usuário real e não ligam a aplicação à
 instância de produção.
+
+
+## V3.2 — plano de lotes recuperável para históricos grandes
+
+O módulo `hermes-brain-personal-archive-batch-plan.js` prepara em memória
+lotes de até 500 mensagens textuais e 2 MiB, sem enviar arquivos nem registrar
+conteúdo em logs. Ele percorre todas as conversas da fonte, mantendo IDs de
+origem estáveis e contando mensagens textuais, mídia não importada e conteúdo
+não recuperável. Nenhuma conversa é ignorada para atingir os limites: se uma
+única conversa for excessiva, a preparação falha explicitamente para revisão,
+em vez de reportar uma importação completa falsa.
+
+`storePlannedPersonalArchive` reutiliza o importador transacional existente,
+com conferência de consentimento ativo e sessão autenticada **em cada lote**.
+Uma falha em lote posterior não desfaz os anteriores já confirmados; repetir
+a mesma fonte utiliza IDs estáveis e `ON CONFLICT DO NOTHING`, contabilizando
+duplicações e retomando as mensagens não gravadas. O recibo final retorna
+somente contagens e cobertura, nunca textos nem títulos.
+
+**Limites restantes:** a leitura JSON local atual está limitada a 32 MiB
+por arquivo; a preparação de um único objeto conversa com mais de 500
+mensagens suportadas exige estratégia de fracionamento especial ainda não
+implementada. Nenhum fluxo de envio/streaming, JWT real no servidor,
+conexão de usuário pessoal, importação ou implantação foi liberado
+neste incremento. O array `batches[].conversations` contém texto
+confidencial **apenas em memória** e não pode ser serializado em logs,
+telemetria, respostas ou artefatos de build.
+
+Para ativação, continuam pendentes autenticação pessoal real no Supabase,
+revisão do ingresso privado, aplicação governada das migrações 049/050
+e verificação ponta a ponta com consentimento por provedor.
