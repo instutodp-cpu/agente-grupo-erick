@@ -17,6 +17,23 @@
   active=false;owner.hidden=true;login.hidden=false;
   results.replaceChildren();
  }
+ function disablePersonalOperations(){
+  active=false;
+  statuses.clear();
+  results.replaceChildren();
+  for(const provider of choice){
+   document.getElementById(provider+'Status').textContent=
+    'Módulo pessoal não habilitado';
+   document.getElementById(provider+'Grant').disabled=true;
+   document.getElementById(provider+'Revoke').disabled=true;
+  }
+  document.getElementById('searchForm').querySelector('button').disabled=true;
+  document.getElementById('erase').disabled=true;
+ }
+ function enablePersonalOperations(){
+  document.getElementById('searchForm').querySelector('button').disabled=false;
+  document.getElementById('erase').disabled=false;
+ }
  if(location.origin!==origin||location.pathname!=='/brain/personal.html'||
    !script||!window.supabase||
    typeof window.supabase.createClient!=='function'||
@@ -62,15 +79,33 @@
  }
  async function unlock(){
   deny();
+  let user;
   try{
-   const user=await checkedUser();
-   active=true;
-   document.getElementById('ownerIdentity').textContent=
-    'Sessão pessoal autenticada: '+String(user.email||'usuário confirmado');
+   // Wait until the Supabase client finishes processing an OTP URL redirect.
+   // getSession is NOT authority: getUser verifies the session with Auth.
+   const session=await client.auth.getSession();
+   if(session.error||!session.data?.session)
+    throw Error('personal_session_missing');
+   user=await checkedUser();
+  }catch(_){
+   deny();notify('Sem acesso pessoal confirmado. Solicite novo link de login.');
+   return;
+  }
+  login.hidden=true;owner.hidden=false;
+  document.getElementById('ownerIdentity').textContent=
+   'Identidade confirmada pelo Supabase Auth: '+String(user.email||'usuário confirmado');
+  active=true;
+  try{
    await refreshSources();
-   login.hidden=true;owner.hidden=false;
-   notify('Sessão pessoal verificada. Permissões limitadas a esta identidade.');
-  }catch(_){deny();notify('Sem acesso pessoal confirmado. Solicite novo link de login.');}
+   enablePersonalOperations();
+   notify('Identidade verificada e módulo pessoal habilitado para esta sessão.');
+  }catch(_){
+   // An absent RPC or a denied RLS policy is a SERVICE READINESS failure.
+   // Do not falsely tell the owner that the authenticated identity failed.
+   disablePersonalOperations();
+   notify('Identidade confirmada. O módulo pessoal ainda não está habilitado; '+
+    'autorizações, pesquisa e importação permanecem bloqueadas.');
+  }
  }
  document.getElementById('loginForm').addEventListener('submit',async event=>{
   event.preventDefault();

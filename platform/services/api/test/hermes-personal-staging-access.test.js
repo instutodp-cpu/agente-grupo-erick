@@ -40,6 +40,7 @@ test('staging personal page is separate, no direct upload or corporate operation
  assert.match(script,/location[.]pathname!=='\/brain\/personal[.]html'/);
  assert.match(script,/persistSession:false/);
  assert.match(script,/shouldCreateUser:false/);
+ assert.match(script,/client[.]auth[.]getSession\(\)/);
  assert.match(script,/client[.]auth[.]getUser\(\)/);
  assert.match(script,/client[.]rpc\(name,args\)/);
  assert.match(script,/receipt!==true/);
@@ -47,7 +48,7 @@ test('staging personal page is separate, no direct upload or corporate operation
  assert.match(script,/item[.]trust_level!=='unreviewed_personal_archive'/);
  assert.doesNotMatch(script,/innerHTML|localStorage|sessionStorage|fetch\(|\bservice_role\b|grupo_erick|memory_items/i);
 });
-function setup(origin='https://hermes-staging.grupoerick.tech',userPresent=true){
+function setup(origin='https://hermes-staging.grupoerick.tech',userPresent=true,rpcUnavailable=false){
  const el=new Map(),calls=[];
  function element(id){
   if(!el.has(id))el.set(id,{id,hidden:false,disabled:false,
@@ -65,12 +66,14 @@ function setup(origin='https://hermes-staging.grupoerick.tech',userPresent=true)
   auth:{
    getUser:async()=>({data:{user:userPresent?{email:'owner@example.test'}:null},
      error:userPresent?null:Error('unauthorized')}),
-   getSession:async()=>({data:{session:null},error:null}),
+   getSession:async()=>({data:{session:userPresent?{access_token:'synthetic_fixture'}:null},error:null}),
    signInWithOtp:async()=>({error:null}),
    signOut:async()=>({error:null})
   },
   rpc:async(name,args)=>{
    calls.push({name,args});
+   if(name==='hermes_personal_source_status'&&rpcUnavailable)
+    return {error:Error('synthetic_rpc_not_deployed'),data:null};
    if(name==='hermes_personal_source_status')return {error:null,data:
     [...states].map(([provider,status])=>({provider,status,archived_messages:0}))};
    if(name==='hermes_personal_source_consent'){
@@ -141,4 +144,39 @@ test('explicit EXCLUIR is required before deletion of personal source',async()=>
  await erase({currentTarget:{disabled:false}});await tick();
  assert(x.calls.some(c=>c.name==='hermes_personal_source_erase'
   &&c.args.p_provider==='claude'));
+});
+
+test('verified login remains visible but ALL private operations fail closed before RPC deployment',async()=>{
+ const x=setup(undefined,true,true);await tick();
+ assert.equal(x.element('ownerArea').hidden,false);
+ assert.equal(x.element('loginArea').hidden,true);
+ assert.match(x.element('ownerIdentity').textContent,/Identidade confirmada/);
+ assert.match(x.element('status').textContent,/módulo pessoal ainda não está habilitado/);
+ assert.equal(x.element('chatgptGrant').disabled,true);
+ assert.equal(x.element('claudeGrant').disabled,true);
+ assert.equal(x.element('chatgptRevoke').disabled,true);
+ assert.equal(x.element('claudeRevoke').disabled,true);
+ assert.equal(x.element('erase').disabled,true);
+ assert.equal(x.element('results').children.length,0);
+ // Even synthetic click bypassing a disabled button must not reach a write RPC.
+ x.element('chatgptConsent').checked=true;
+ await x.element('chatgptGrant').listeners.click({
+  currentTarget:{disabled:false}
+ });
+ assert(!x.calls.some(c=>c.name==='hermes_personal_source_consent'));
+ assert.equal(x.states.get('chatgpt'),'not_connected');
+});
+test('authenticated identity alone cannot search or erase when services are unavailable',async()=>{
+ const x=setup(undefined,true,true);await tick();
+ const before=x.calls.length;
+ x.element('provider').value='chatgpt';
+ x.element('query').value='Hermes';
+ await x.element('searchForm').listeners.submit({
+  preventDefault(){},currentTarget:{querySelector:()=>({disabled:false})}
+ });
+ x.element('eraseProvider').value='claude';
+ x.element('eraseConfirm').value='EXCLUIR';
+ await x.element('erase').listeners.click({currentTarget:{disabled:false}});
+ assert.equal(x.calls.length,before);
+ assert.equal(x.element('results').children.length,0);
 });

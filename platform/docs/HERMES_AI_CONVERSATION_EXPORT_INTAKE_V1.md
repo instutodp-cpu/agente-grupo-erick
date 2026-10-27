@@ -274,3 +274,22 @@ em transações autenticadas continua funcional.
 Não se trata de criptografia do processo nem de autorização para
 exportar dados reais: o conteúdo ainda precisa de um ambiente de
 execução seguro, JWT validado, fonte autorizada e política de retenção.
+
+
+## V3.4 — login pessoal verificável sem publicar o arquivo
+
+A página `/brain/personal.html` espera a inicialização de uma sessão
+Supabase Auth via `getSession()` (somente sincronização inicial), depois
+confirma o titular com `getUser()` (requisição verificada ao Auth).
+A tela diferencia a identidade autenticada da disponibilidade das RPCs
+`hermes_personal_*`. A ausência da migração `050` ou uma negativa de
+permissão **não** transforma login válido em erro de autenticação:
+o titular permanece identificado e pode encerrar sua sessão, mas a interface
+mantém autorização, consulta e exclusão privadas desabilitadas.
+
+O desbloqueio dessas operações exige que a RPC real de status responda
+corretamente para duas fontes separadas; somente `getUser()` não as ativa.
+O upload de exportações continua ausente e bloqueado. Testes com Supabase
+simulado verificam tanto login sem módulo instalado quanto recusa de ações
+manual ou programaticamente disparadas nessa condição. A PR ainda não foi
+implantada e nenhum histórico pessoal foi acessado.
