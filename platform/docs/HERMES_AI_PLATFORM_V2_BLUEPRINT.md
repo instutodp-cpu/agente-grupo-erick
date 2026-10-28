@@ -158,3 +158,44 @@ especialistas → canais (WhatsApp/Base44) → escala.
 - Colocar segredos no código ou logs.
 - Rodar Claude Code/Codex como serviço 24/7.
 - Implementar complexidade antes da fundação estar desacoplada.
+
+## Atualização de interpretação operacional — Maestro / Hermes e SaaS multi-tenant (2026-10)
+
+Este blueprint permanece a referência de arquitetura **lógica**, mas suas
+referências a Railway, Redis e Qdrant como primeiros alvos descrevem um
+desenho anterior, **não a implantação atual de staging**. A execução Telegram
+homologada opera hoje na Hostinger VPS e consulta o histórico por PostgreSQL.
+A escolha de pgvector, Qdrant, Redis ou fila externa deve obedecer às
+interfaces já especificadas, testes de custo/qualidade/isolamento e benefício
+comprovado. Nenhuma dependência adicional é condição para memória textual
+simples.
+
+Compatibilidade de responsabilidades: **Maestro é o Control Plane** de
+identidade, tenant, autorizações, aprovações, domínios, orçamento e billing;
+**Hermes é o Execution Plane** que usa as capacidades governadas. O termo
+antigo "Hermes Core" abrange essas interfaces; não autoriza criar um segundo
+orquestrador rival ou duplicar agentes por tenant/domínio.
+
+Compatibilidade de espaços: `TENANT_WORKSPACE_ISOLATION.md` especifica
+`personal`, `grupo_erick` e `external_client` com ids
+`personal::<user_id>`, `grupo_erick` e `client::<client_id>`.
+O valor antigo `corporate` em `CORPORATE_WORKSPACE_CONNECTOR_POLICY.md`
+é uma designação de categoria de conector; qualquer adaptação para
+`grupo_erick` deve ocorrer em uma borda autenticada e versionada.
+**Não** inferir um alias corporativo a partir de texto do usuário e não
+ampliar credenciais por compatibilidade de strings.
+
+A meta comercial é multi-tenant/multiempresa: cliente A e cliente B nunca
+compartilham memória, conectores, cache, budgets, filas, evidências, RAG,
+auditoria, empresa ou loja. Não existe herança implícita entre contextos
+pessoal, Grupo Erick e clientes terceiros; usuário com múltiplos memberships
+escolhe explicitamente um espaço verificado. Domínios são capacidades
+configuráveis por tenant, não aplicativos/clones completos por cliente.
+
+Codex Login utilizado no piloto Telegram é uma assistência de inferência
+governada em staging, **não uma alteração de autoridade de merge nem um
+substituto para serviço de billing multi-tenant**. A arquitetura final de
+memória e onboarding comercial está detalhada em
+`HERMES_SAAS_MULTI_TENANT_SECOND_BRAIN_EXECUTION_MISSION.md`; o
+verificador `hermes-brain-tenant-boundary.js` só valida metadados de leitura
+e requer AuthN e storage/RLS reais antes de ser conectado a dados de clientes.

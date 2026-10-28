@@ -12,6 +12,7 @@
 
 const http = require('http');
 const { randomUUID } = require('crypto');
+const { createPersonalArchiveIngressBootstrap } = require('./runtime/hermes-brain-personal-ingress-bootstrap');
 const { getCapability } = require('./capabilities/registry');
 const { evaluateConfirmationGate } = require('./core/confirmation-gate');
 const { classifyConfirmationResponse } = require('./core/confirmation-response');
@@ -129,10 +130,28 @@ function createServer({
   machineIdentityRegistry = null,
   missionIngress = null,
   githubReadPilot = null,
+  // Private upload remains DISABLED unless an independently authorized
+  // JWT-verifying, RLS-bound ingress composition is explicitly supplied.
+  personalArchiveIngress = null,
   requestIdentityMode = REQUEST_IDENTITY_MODES.PUBLIC
 } = {}) {
   return http.createServer((req, res) => {
     beginCallerObservation(req, res, { requestIdFactory: randomUUID });
+    // Separate personal trust boundary. Never reuse machine or company identity.
+    // Absent composition is inert and cannot store any personal content.
+    if ((req.url || '').split('?')[0] === '/internal/personal-archive/batch') {
+      if (!personalArchiveIngress ||
+          typeof personalArchiveIngress.enabled !== 'function' ||
+          !personalArchiveIngress.enabled() ||
+          typeof personalArchiveIngress.handle !== 'function') {
+        return sendJson(res, 503, { error: 'personal_ingress_disabled' });
+      }
+      return Promise.resolve().then(()=>
+        personalArchiveIngress.handle(req,res)
+      ).catch(()=>
+        sendJson(res,503,{ error: 'personal_ingress_unavailable' })
+      );
+    }
     try {
       attachRequestIdentity(req, {
         mode: requestIdentityMode,
@@ -519,7 +538,9 @@ function createServer({
 if (require.main === module) {
   const missionIngressComposition = createPublicWebOperationalMissionIngressBootstrap();
   const liveReadComposition = createHermesGithubLiveReadBootstrap();
+  const personalArchiveComposition = createPersonalArchiveIngressBootstrap();
   const server = createServer({
+    personalArchiveIngress: personalArchiveComposition.ingress,
     machineIdentityRegistry: liveReadComposition.machineIdentityRegistry ||
       missionIngressComposition.machineIdentityRegistry,
     missionIngress: missionIngressComposition.missionIngress,
@@ -537,7 +558,7 @@ if (require.main === module) {
       console.log(JSON.stringify({ level: 'info', event: 'api_shutdown', signal }));
       server.close(async () => {
         try { await missionIngressComposition.close(); }
-        finally { process.exit(0); }
+        finally { try { await personalArchiveComposition.close(); } finally { process.exit(0); } }
       });
     });
   }

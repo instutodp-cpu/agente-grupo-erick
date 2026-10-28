@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; connect-src https://asceucchdnuoaqgdjbtg.supabase.co; img-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'">
+<title>Hermes — Segundo Cérebro pessoal (staging)</title>
+<style>
+:root{color-scheme:dark;font:16px system-ui,-apple-system,sans-serif;background:#0d1117;color:#e6edf3}main{max-width:730px;margin:2rem auto;padding:0 1rem}h1{font-size:1.5rem}h2{font-size:1.1rem}p{line-height:1.5}
+section{padding:1.1rem 0;border-bottom:1px solid #374151}label{display:block;margin:.7rem 0 .4rem}input,select{background:#151f2a;color:inherit;border:1px solid #8193ac;padding:.65rem;width:100%;box-sizing:border-box;border-radius:6px;font:inherit}button{background:#213b65;color:#fff;border:1px solid #a0acc0;padding:.65rem .9rem;border-radius:6px;font:inherit;cursor:pointer;margin:.6rem .6rem .3rem 0}button:disabled{opacity:.45;cursor:wait}article{border-bottom:1px solid #374151;padding:.7rem 0;white-space:pre-wrap;overflow-wrap:anywhere}.muted{color:#aab8cc}#status{border:1px solid #697f9c;padding:.75rem;white-space:pre-wrap}small{color:#acbad0}.destructive{border-color:#fa9191;background:#6a2323}
+</style>
+</head>
+<body><main>
+<p class="muted">STAGING • Espaço pessoal separado das empresas</p>
+<h1>Hermes — Segundo Cérebro pessoal</h1>
+<p>Históricos importados são arquivos pessoais não verificados, nunca memória empresarial aprovada. Nenhuma ação financeira é autorizada por esta tela.</p>
+<p id="status" role="status" aria-live="polite">Validando configuração…</p>
+<section id="loginArea">
+<h2>Entrar</h2>
+<form id="loginForm"><label for="email">E-mail pessoal já cadastrado</label><input id="email" type="email" autocomplete="email" maxlength="254" required><button type="submit">Enviar link seguro</button></form>
+</section>
+<section id="ownerArea" hidden>
+<p id="ownerIdentity"></p><button id="logout" type="button">Encerrar sessão</button>
+<h2>Fontes privadas</h2>
+<p>ChatGPT e Claude exigem consentimento individual. A importação de ZIP ainda está desabilitada.</p>
+<section data-provider="chatgpt">
+<h3>ChatGPT</h3><p id="chatgptStatus" class="muted">Não verificado</p>
+<label><input id="chatgptConsent" type="checkbox"> Autorizo armazenar meu histórico do ChatGPT exclusivamente no espaço pessoal privado.</label>
+<button id="chatgptGrant" type="button">Autorizar esta fonte</button>
+<button id="chatgptRevoke" type="button">Revogar leitura e importação</button>
+</section>
+<section data-provider="claude">
+<h3>Claude</h3><p id="claudeStatus" class="muted">Não verificado</p>
+<label><input id="claudeConsent" type="checkbox"> Autorizo armazenar meu histórico do Claude exclusivamente no espaço pessoal privado.</label>
+<button id="claudeGrant" type="button">Autorizar esta fonte</button>
+<button id="claudeRevoke" type="button">Revogar leitura e importação</button>
+</section>
+<section id="previewArea">
+<h2>Conferir exportação JSON localmente</h2>
+<p>Prévia estrutural sem upload: escolha o arquivo conversations.json extraído no seu próprio dispositivo. O arquivo não será transmitido, importado ou armazenado pelo Hermes. ZIPs ainda não são aceitos.</p>
+<label for="previewProvider">Fonte da exportação</label><select id="previewProvider"><option value="chatgpt">ChatGPT</option><option value="claude">Claude</option></select>
+<label for="previewFile">Arquivo JSON (até 32 MiB)</label><input id="previewFile" type="file" accept=".json,application/json">
+<button id="previewInspect" type="button" disabled>Conferir estrutura sem enviar</button>
+<p id="previewReport" class="muted" role="status" aria-live="polite">Nenhum arquivo conferido.</p>
+</section>
+<h2>Pesquisar meu histórico</h2>
+<form id="searchForm">
+<label for="provider">Plataforma</label><select id="provider"><option value="chatgpt">ChatGPT</option><option value="claude">Claude</option></select>
+<label for="query">Termos</label><input id="query" minlength="2" maxlength="120" required>
+<button type="submit">Pesquisar apenas no meu espaço</button>
+</form>
+<div id="results" aria-live="polite"></div>
+<section>
+<h2>Apagar definitivamente uma fonte</h2>
+<p>Apaga o consentimento e as mensagens desta plataforma armazenadas no Hermes. Não remove suas conversas na plataforma original.</p>
+<label for="eraseProvider">Plataforma</label><select id="eraseProvider"><option value="chatgpt">ChatGPT</option><option value="claude">Claude</option></select>
+<label for="eraseConfirm">Para confirmar a exclusão, digite EXCLUIR</label><input id="eraseConfirm" autocomplete="off" spellcheck="false" maxlength="7">
+<button id="erase" class="destructive" type="button">Apagar minha fonte e histórico</button>
+</section>
+</section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.83.0/dist/umd/supabase.min.js" integrity="sha384-DfTBUIGOZfdRqbGMsYWEFqIOMS+FhBjK3jrRQtRx0rTBCRhdXCKcsyzrTdqgJnze" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script defer src="/brain/personal-app.js" data-supabase-url="https://asceucchdnuoaqgdjbtg.supabase.co" data-publishable-key="sb_publishable_-1diuGVkHwFXfNM-gB25rA_wsxEUy7J"></script>
+</body></html>

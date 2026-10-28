@@ -81,6 +81,56 @@ function shapeCommercialData(json){
   const field=key==='purchases_last_30_days'?'net_brl':'balance_brl';
   shaped[key]={count:item.count,[field]:item[field]};
  }
+ // Optional for historic official-contract versions. When present require
+ // all fields, verified scope and counters; absence is NOT zero progress.
+ if(Object.hasOwn(json,'reconciliation_work')){
+  const r=json.reconciliation_work;
+  const fields=['tracked_titles','waiting_documents','in_review',
+   'discrepancy_found','review_submitted'];
+  if(!r||r.source!=='ReconciliationWorkEvent'||
+   r.as_of!==json.as_of||r.erp_linx_conciliated!==false||
+   r.payment_recorded!==false||fields.some(k=>!count(r[k]))||
+   r.tracked_titles>1e6||
+   fields.slice(1).reduce((n,k)=>n+r[k],0)>r.tracked_titles)
+   throw Error('commercial_work_contract_invalid');
+  const metrics=['missing_named_responsible','work_deadlines_overdue',
+   'work_due_next_7','work_without_deadline','with_evidence_reference'];
+  const hasMetrics=metrics.some(k=>Object.hasOwn(r,k));
+  if(hasMetrics&&(metrics.some(k=>!count(r[k])||r[k]>r.tracked_titles)||
+   r.work_deadlines_overdue+r.work_due_next_7+
+    r.work_without_deadline>r.tracked_titles))
+   throw Error('commercial_work_metrics_invalid');
+  shaped.reconciliation_work=Object.freeze({
+   source:'ReconciliationWorkEvent',as_of:r.as_of,
+   erp_linx_conciliated:false,payment_recorded:false,
+   ...Object.fromEntries(fields.map(k=>[k,r[k]])),
+   ...(hasMetrics?Object.fromEntries(metrics.map(k=>[k,r[k]])):{})
+  });
+ }
+ // Source-attested full-company aggregate; no title, supplier or PII.
+ // Older Base44 versions may omit it, which means unavailable, NOT zero.
+ if(Object.hasOwn(json,'reconciliation_priority')){
+  const p=json.reconciliation_priority;
+  const bands=['overdue_30plus','overdue_1to29','due_next7'];
+  if(!p||p.source!=='Duplicate'||p.as_of!==json.as_of||
+   p.method!=='days_overdue_and_value_v1'||p.erp_linx_conciliated!==false||
+   p.includes_only_open_balance!==true||
+   !count(p.overdue_without_work)||p.overdue_without_work>json.overdue_titles.count||
+   bands.some(k=>!p[k]||!count(p[k].count)||!money(p[k].balance_brl))||
+   p.overdue_30plus.count+p.overdue_1to29.count!==json.overdue_titles.count||
+   Math.abs(p.overdue_30plus.balance_brl+p.overdue_1to29.balance_brl-
+     json.overdue_titles.balance_brl)>0.001||
+   p.due_next7.count>json.next_30_days_titles.count||
+   p.due_next7.balance_brl>json.next_30_days_titles.balance_brl+0.001)
+   throw Error('commercial_priority_contract_invalid');
+  shaped.reconciliation_priority=Object.freeze({
+   source:'Duplicate',as_of:p.as_of,method:'days_overdue_and_value_v1',
+   erp_linx_conciliated:false,includes_only_open_balance:true,
+   overdue_without_work:p.overdue_without_work,
+   ...Object.fromEntries(bands.map(k=>[k,Object.freeze({
+    count:p[k].count,balance_brl:p[k].balance_brl})]))
+  });
+ }
  return Object.freeze(shaped);
 }
 async function readBase44CommercialSummary({
