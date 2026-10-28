@@ -185,7 +185,10 @@ test('authenticated identity alone cannot search or erase when services are unav
 
 test('local JSON inspection never transmits historical text and shows only aggregate metadata',async()=>{
  const x=setup();await tick();
- x.states.set('chatgpt','authorized');
+ x.element('chatgptConsent').checked=true;
+ await x.element('chatgptGrant').listeners.click({currentTarget:{disabled:false}});
+ await tick();
+ assert.equal(x.states.get('chatgpt'),'authorized');
  x.element('previewProvider').value='chatgpt';
  const raw=JSON.stringify([{conversation_id:'synthetic_preview_1',
   title:'TOP_SECRET_TITLE_288',mapping:{node:{
@@ -211,7 +214,10 @@ test('local intake refuses ZIP files and unauthorized providers without reading 
  await x.element('previewInspect').listeners.click({currentTarget:x.element('previewInspect')});
  assert.equal(read,0);
  assert.match(x.element('previewReport').textContent,/Autorize a fonte/);
- x.states.set('claude','authorized');
+ x.element('claudeConsent').checked=true;
+ await x.element('claudeGrant').listeners.click({currentTarget:{disabled:false}});
+ await tick();
+ assert.equal(x.states.get('claude'),'authorized');
  x.element('previewFile').files=[{name:'export.zip',
   size:200,text:async()=>{read++;return '{}'}}];
  await x.element('previewInspect').listeners.click({currentTarget:x.element('previewInspect')});
