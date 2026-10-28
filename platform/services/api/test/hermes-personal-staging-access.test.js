@@ -36,7 +36,9 @@ test('staging personal page is separate, no direct upload or corporate operation
  assert.match(html,/id="chatgptConsent" type="checkbox"/);
  assert.match(html,/id="claudeConsent" type="checkbox"/);
  assert.match(html,/id="eraseConfirm"/);
- assert.doesNotMatch(html,/type="file"|id="upload"|grupo_erick|service_role/i);
+ assert.match(html,/id="previewFile" type="file"/);
+ assert.match(html,/id="previewReport"/);
+ assert.doesNotMatch(html,/id="upload"|grupo_erick|service_role/i);
  assert.match(script,/location[.]pathname!=='\/brain\/personal[.]html'/);
  assert.match(script,/persistSession:false/);
  assert.match(script,/shouldCreateUser:false/);
@@ -181,6 +183,41 @@ test('authenticated identity alone cannot search or erase when services are unav
  assert.equal(x.element('results').children.length,0);
 });
 
+test('local JSON inspection never transmits historical text and shows only aggregate metadata',async()=>{
+ const x=setup();await tick();
+ x.states.set('chatgpt','authorized');
+ x.element('previewProvider').value='chatgpt';
+ const raw=JSON.stringify([{conversation_id:'synthetic_preview_1',
+  title:'TOP_SECRET_TITLE_288',mapping:{node:{
+   message:{author:{role:'user'},content:{parts:['TOP_SECRET_MESSAGE_874']}}
+  }}}]);
+ x.element('previewFile').files=[{name:'conversations.json',
+  size:Buffer.byteLength(raw),text:async()=>raw}];
+ const before=x.calls.length;
+ await x.element('previewInspect').listeners.click({currentTarget:x.element('previewInspect')});
+ assert.equal(x.calls.length,before);
+ assert.match(x.element('previewReport').textContent,/1 conversas/);
+ assert.match(x.element('previewReport').textContent,/Nenhum conteúdo enviado/);
+ assert(!x.element('previewReport').textContent.includes('TOP_SECRET_TITLE_288'));
+ assert(!x.element('previewReport').textContent.includes('TOP_SECRET_MESSAGE_874'));
+ assert.equal(x.element('previewFile').value,'');
+});
+test('local intake refuses ZIP files and unauthorized providers without reading bytes',async()=>{
+ const x=setup();await tick();
+ let read=0;
+ x.element('previewProvider').value='claude';
+ x.element('previewFile').files=[{name:'export.json',
+  size:200,text:async()=>{read++;return '{}'}}];
+ await x.element('previewInspect').listeners.click({currentTarget:x.element('previewInspect')});
+ assert.equal(read,0);
+ assert.match(x.element('previewReport').textContent,/Autorize a fonte/);
+ x.states.set('claude','authorized');
+ x.element('previewFile').files=[{name:'export.zip',
+  size:200,text:async()=>{read++;return '{}'}}];
+ await x.element('previewInspect').listeners.click({currentTarget:x.element('previewInspect')});
+ assert.equal(read,0);
+ assert.match(x.element('previewReport').textContent,/Arquivo recusado/);
+});
 test('staging-only deployment helper is scoped, reversible and rejects unverified artifacts',()=>{
  const f=path.resolve(__dirname,
   '../../../infra/staging-observation/scripts/stage-personal-login-preview.sh');

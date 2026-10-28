@@ -37,6 +37,14 @@ section{padding:1.1rem 0;border-bottom:1px solid #374151}label{display:block;mar
 <button id="claudeGrant" type="button">Autorizar esta fonte</button>
 <button id="claudeRevoke" type="button">Revogar leitura e importação</button>
 </section>
+<section id="previewArea">
+<h2>Conferir exportação JSON localmente</h2>
+<p>Prévia estrutural sem upload: escolha o arquivo conversations.json extraído no seu próprio dispositivo. O arquivo não será transmitido, importado ou armazenado pelo Hermes. ZIPs ainda não são aceitos.</p>
+<label for="previewProvider">Fonte da exportação</label><select id="previewProvider"><option value="chatgpt">ChatGPT</option><option value="claude">Claude</option></select>
+<label for="previewFile">Arquivo JSON (até 32 MiB)</label><input id="previewFile" type="file" accept=".json,application/json">
+<button id="previewInspect" type="button" disabled>Conferir estrutura sem enviar</button>
+<p id="previewReport" class="muted" role="status" aria-live="polite">Nenhum arquivo conferido.</p>
+</section>
 <h2>Pesquisar meu histórico</h2>
 <form id="searchForm">
 <label for="provider">Plataforma</label><select id="provider"><option value="chatgpt">ChatGPT</option><option value="claude">Claude</option></select>

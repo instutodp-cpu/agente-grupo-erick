@@ -16,6 +16,9 @@
  function deny(){
   active=false;owner.hidden=true;login.hidden=false;
   results.replaceChildren();
+  document.getElementById('previewInspect').disabled=true;
+  document.getElementById('previewFile').value='';
+  document.getElementById('previewReport').textContent='Nenhum arquivo conferido.';
  }
  function disablePersonalOperations(){
   active=false;
@@ -29,10 +32,12 @@
   }
   document.getElementById('searchForm').querySelector('button').disabled=true;
   document.getElementById('erase').disabled=true;
+  document.getElementById('previewInspect').disabled=true;
  }
  function enablePersonalOperations(){
   document.getElementById('searchForm').querySelector('button').disabled=false;
   document.getElementById('erase').disabled=false;
+  document.getElementById('previewInspect').disabled=false;
  }
  if(location.origin!==origin||location.pathname!=='/brain/personal.html'||
    !script||!window.supabase||
@@ -188,6 +193,71 @@
   }catch(_){
    results.replaceChildren();notify('Pesquisa pessoal não autorizada ou indisponível.');
   }finally{b.disabled=false;}
+ });
+ // Staging-only local intake preview. No network calls, persistent storage,
+ // import, or display of historical titles and text are permitted here.
+ const previewReport=document.getElementById('previewReport');
+ const previewFile=document.getElementById('previewFile');
+ document.getElementById('previewInspect').addEventListener('click',async event=>{
+  const button=event.currentTarget;
+  const provider=document.getElementById('previewProvider').value;
+  const file=previewFile.files&&previewFile.files[0];
+  if(!active||!choice.has(provider)||statuses.get(provider)!=='authorized'){
+   previewReport.textContent='Autorize a fonte e confirme sua sessão primeiro.';
+   return;
+  }
+  if(!file||typeof file.name!=='string'||
+    !/^[^\\/]+\\.json$/i.test(file.name)||
+    !Number.isSafeInteger(file.size)||file.size<2||
+    file.size>32*1024*1024||typeof file.text!=='function'){
+   previewReport.textContent='Arquivo recusado. Escolha um JSON de até 32 MiB, nunca um ZIP.';
+   return;
+  }
+  button.disabled=true;
+  try{
+   await checkedUser();
+   const raw=JSON.parse(await file.text());
+   const conversations=Array.isArray(raw)?raw:
+    (raw&&Array.isArray(raw.conversations)?raw.conversations:null);
+   if(!conversations||conversations.length<1||conversations.length>20000)
+    throw Error('preview_unsupported_shape');
+   const unique=new Set();
+   let nodes=0;
+   for(const conversation of conversations){
+    if(!conversation||typeof conversation!=='object'||Array.isArray(conversation))
+     throw Error('preview_invalid_conversation');
+    const ref=provider==='chatgpt'?
+     (conversation.conversation_id||conversation.id):
+     (conversation.uuid||conversation.id);
+    if(typeof ref!=='string'||!ref||ref.length>160||unique.has(ref))
+     throw Error('preview_invalid_conversation_id');
+    unique.add(ref);
+    let count;
+    if(provider==='chatgpt'){
+     const mapping=conversation.mapping;
+     if(!mapping||typeof mapping!=='object'||Array.isArray(mapping))
+      throw Error('preview_no_mapping');
+     count=Object.keys(mapping).length;
+    }else{
+     if(!Array.isArray(conversation.chat_messages))
+      throw Error('preview_no_messages');
+     count=conversation.chat_messages.length;
+    }
+    if(count>1000)throw Error('preview_too_many_nodes');
+    nodes+=count;
+   }
+   // This is structural coverage, NOT a normalized-message import receipt.
+   previewReport.textContent='Prévia local: '+conversations.length+
+    ' conversas, '+nodes+' nós/mensagens brutos. Estrutura reconhecida. '+
+    'Nenhum conteúdo enviado ou importado. A contagem de textos válidos será '+
+    'confirmada somente pela homologação do importador.';
+  }catch(_){
+   previewReport.textContent='Estrutura não reconhecida ou sessão indisponível. '+
+    'Nada foi enviado ou importado.';
+  }finally{
+   button.disabled=!active;
+   previewFile.value='';
+  }
  });
  document.getElementById('erase').addEventListener('click',async event=>{
   const provider=document.getElementById('eraseProvider').value;
