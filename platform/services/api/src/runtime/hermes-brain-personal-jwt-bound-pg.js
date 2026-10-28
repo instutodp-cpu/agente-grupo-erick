@@ -14,7 +14,9 @@ function createPersonalJwtBoundPgBinder({pgPool}={}){
    pool:Object.freeze({async connect(){
     if(!open||leased)denied();
     leased=true;
-    const actual=await pgPool.connect();
+    let actual;
+    try{actual=await pgPool.connect()}
+    catch{leased=false;denied()}
     if(!actual||typeof actual.query!=='function'||typeof actual.release!=='function')
      denied();
     let state='new',released=false;
@@ -45,15 +47,16 @@ function createPersonalJwtBoundPgBinder({pgPool}={}){
       // All content SQL is still executed by the pre-existing, reviewed
       // transactional archive module, now as the authenticated DB role.
       if(sql==='COMMIT'||sql==='ROLLBACK'){
-       try{return await actual.query(sql,params)}
-       finally{state='complete'}
+       try{const result=await actual.query(sql,params);state='complete';return result}
+       catch{state='failed';denied()}
       }
       return actual.query(sql,params);
      },
      release(){
       if(released)return;
       released=true;
-      actual.release(state!=='complete');
+      try{actual.release(state!=='complete')}
+      finally{leased=false}
      }
     });
    }}),

@@ -5,6 +5,8 @@ const {createPersonalPrivateIngress,createSupabaseUserVerifier}
  =require('./hermes-brain-personal-private-ingress');
 const {createPersonalJwtBoundPgBinder}
  =require('./hermes-brain-personal-jwt-bound-pg');
+const {storePlannedPersonalArchive}
+ =require('./hermes-brain-personal-archive-batch-plan');
 const fs=require('node:fs');
 const path=require('node:path');
 // Trust only the CA downloaded independently from this Supabase project's
@@ -60,9 +62,14 @@ function createPersonalArchiveIngressBootstrap({env=process.env,pgPool=null,
    max:2,idleTimeoutMillis:10000,connectionTimeoutMillis:6000,
    application_name:'hermes_personal_staging_private'});
  }
+ // Publishing the staging HTTP route is NOT permission to import real data.
+ // An independent operator switch is required to enable persistent writes.
+ const writesEnabled=env.HERMES_PERSONAL_IMPORT_WRITES_ENABLED==='true';
  const ingress=createPersonalPrivateIngress({
   enabled:true,verifyAccessToken,
-  bindUserPool:createPersonalJwtBoundPgBinder({pgPool:pool})
+  bindUserPool:createPersonalJwtBoundPgBinder({pgPool:pool}),
+  store:writesEnabled?storePlannedPersonalArchive:
+   async()=>{throw Error('personal_import_write_gate_closed')}
  });
  return Object.freeze({ingress,async close(){if(typeof pool.end==='function')await pool.end()}});
 }

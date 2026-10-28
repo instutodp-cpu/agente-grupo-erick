@@ -9,7 +9,7 @@ const {withAuthenticatedTransaction}
  =require('../src/runtime/hermes-brain-authenticated-transaction');
 const a='11111111-1111-4111-8111-111111111111';
 const b='22222222-2222-4222-8222-222222222222';
-function harness({spoof=false,role='authenticated',failSetup=false}={}){
+function harness({spoof=false,role='authenticated',failSetup=false,failCommit=false}={}){
  const events=[],connections=[];
  const pgPool={async connect(){
   const instance={uid:null,released:null,done:false};
@@ -29,6 +29,7 @@ function harness({spoof=false,role='authenticated',failSetup=false}={}){
        sql.startsWith('SELECT (SELECT auth.uid())')){
      return {rows:[{db_role:role,user_id:spoof?b:instance.uid}]};
     }
+    if(sql==='COMMIT'&&failCommit)throw Error('SENSITIVE_TRANSACTION_ERROR');
     if(sql==='ROLLBACK'||sql==='COMMIT'){instance.done=true;return {rows:[]}};
     if(sql==='SELECT 42 AS answer')return {rows:[{answer:42}]};
     return {rows:[]};
@@ -130,4 +131,32 @@ test('bootstrap defaults off; staging/environment/project gates reject invalid c
   env:base,pgPool,fetchImpl:async()=>({status:401})
  });
  assert.equal(composition.ingress.enabled(),true);
+});
+
+test('one verified user scope supports sequential authenticated batches with fresh role and uid binding',async()=>{
+ const x=harness();
+ const binder=createPersonalJwtBoundPgBinder({pgPool:x.pgPool});
+ const scope=await binder({userId:a});
+ for(let i=0;i<2;i++){
+  const val=await withAuthenticatedTransaction({
+   pool:scope.pool,user_id:a,readOnly:false,
+   work:async client=>(await client.query('SELECT 42 AS answer')).rows[0].answer
+  });
+  assert.equal(val,42);
+ }
+ assert.equal(x.connections.length,2);
+ assert(x.connections.every(c=>c.released===false));
+ assert.equal(x.events.filter(e=>e.sql==='SET LOCAL ROLE authenticated').length,2);
+ assert.deepEqual(x.events.filter(e=>e.sql.includes("set_config('request.jwt.claim.sub'")).map(e=>e.params[0]),[a,a]);
+ await scope.close();
+ await assert.rejects(scope.pool.connect(),/personal_db_principal_denied/);
+});
+test('failed COMMIT destroys connection rather than returning a poisoned pool session',async()=>{
+ const x=harness({failCommit:true});
+ const scope=await createPersonalJwtBoundPgBinder({pgPool:x.pgPool})({userId:a});
+ await assert.rejects(withAuthenticatedTransaction({
+  pool:scope.pool,user_id:a,readOnly:false,work:async()=>{}
+ }),/personal_db_principal_denied/);
+ assert.equal(x.connections[0].released,true);
+ await scope.close();
 });
