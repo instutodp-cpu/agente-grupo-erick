@@ -207,7 +207,7 @@
    return;
   }
   if(!file||typeof file.name!=='string'||
-    !/^[^\\/]+\\.json$/i.test(file.name)||
+    !file.name.toLowerCase().endsWith('.json')||
     !Number.isSafeInteger(file.size)||file.size<2||
     file.size>32*1024*1024||typeof file.text!=='function'){
    previewReport.textContent='Arquivo recusado. Escolha um JSON de até 32 MiB, nunca um ZIP.';
