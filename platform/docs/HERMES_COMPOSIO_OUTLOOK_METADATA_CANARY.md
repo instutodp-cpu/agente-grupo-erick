@@ -67,7 +67,10 @@ Default is disabled. Additional requirements for a future live trial:
 - Explicit governance/security review of this scoped read-only exception
   to the legacy mock-only Composio provider policy.
 - Migration 051 defines append-only PostgreSQL audit with RLS and revoked
-  anonymous/authenticated grants; it is **not applied** by this PR.
+  public/anonymous/authenticated/service_role grants. Applied on 2026-11-11
+  to Supabase hermes-brain as create_composio_outlook_metadata_audit_v1;
+  verified zero rows, both mutation guard triggers, and eight existing
+  hermes_brain tables preserved. No runtime access grant was added.
 - The PostgreSQL adapter reserves the group-shared 24-hour quota atomically
   using a transaction plus advisory lock before any provider request; it
   persists outcome separately, bound to the same trace and owner.
@@ -96,8 +99,10 @@ is enabled in the deployed runtime.
 ## Next review / activation gate
 1. Confirm the real owner/director user ID in the authenticated corporate
    session and configure the exact allowlist without placing it in Git.
-2. Review and apply migration 051 only to an explicitly approved staging
-   database, with a dedicated restricted runtime database role.
+2. Migration 051 is applied in the approved hermes-brain project.
+   Before operational use, provision a dedicated restricted runtime database
+   role with only the necessary SELECT/INSERT permissions (never UPDATE/DELETE),
+   and verify that the runtime can write audited events under RLS.
 3. Wire the verified owner grant lookup and PostgreSQL reservation/outcome
    adapter to a non-public staging entrypoint, with a kill-switch drill.
 4. The MCP meta-tool is advertised from the VPS; verify the underlying

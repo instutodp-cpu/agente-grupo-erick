@@ -1,8 +1,10 @@
 -- Grupo Erick shared Outlook metadata-only canary: durable quota and audit.
--- Draft migration: not applied by this PR, no live provider calls.
+-- Applied to hermes-brain on 2026-11-11 with restrictive schema/table/function grants.
+-- This repo file is the reviewable canonical DDL; no live provider calls.
 BEGIN;
 
 CREATE SCHEMA IF NOT EXISTS hermes;
+REVOKE ALL ON SCHEMA hermes FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE TABLE IF NOT EXISTS hermes.composio_outlook_metadata_audit (
   event_id UUID PRIMARY KEY,
@@ -31,7 +33,7 @@ CREATE INDEX IF NOT EXISTS composio_outlook_metadata_budget_idx
 
 ALTER TABLE hermes.composio_outlook_metadata_audit ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE hermes.composio_outlook_metadata_audit
-  FROM PUBLIC, anon, authenticated;
+  FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION hermes.reject_composio_outlook_metadata_mutation()
 RETURNS trigger LANGUAGE plpgsql
@@ -41,6 +43,8 @@ BEGIN
   RAISE EXCEPTION 'composio_outlook_metadata_audit_append_only';
 END;
 $$;
+REVOKE ALL ON FUNCTION hermes.reject_composio_outlook_metadata_mutation()
+  FROM PUBLIC, anon, authenticated, service_role;
 
 DROP TRIGGER IF EXISTS composio_outlook_metadata_update_trigger
   ON hermes.composio_outlook_metadata_audit;
