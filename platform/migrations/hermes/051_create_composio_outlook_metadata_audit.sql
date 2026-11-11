@@ -19,8 +19,9 @@ CREATE TABLE IF NOT EXISTS hermes.composio_outlook_metadata_audit (
   UNIQUE (trace_id, event_type),
   CONSTRAINT composio_outlook_metadata_event_consistency CHECK (
     (event_type = 'attempt' AND outcome IS NULL AND sampled_messages IS NULL)
-    OR (event_type = 'result' AND outcome IS NOT NULL
-        AND (outcome = 'FAILED' OR sampled_messages IS NOT NULL))
+    OR (event_type = 'result' AND
+        ((outcome = 'FAILED' AND sampled_messages IS NULL)
+         OR (outcome = 'SUCCEEDED' AND sampled_messages IS NOT NULL)))
   )
 );
 
