@@ -128,7 +128,12 @@ Default is disabled. Additional requirements for a future live trial:
 - The VPS holds a separate mode-0700 Outlook directory with private 0600
   machine bearer, one-entry registry (active=false), owner grant
   (status=pending), and disabled staging env. The real owner UUID is NOT
-  committed to Git. No DB password or CA file has been provisioned.
+  committed to Git. No DB password has been provisioned.
+- A copy of the public Supabase Root 2021 CA certificate was installed in
+  the isolated Outlook directory (mode 0600). A passwordless PostgreSQL
+  STARTTLS probe from the VPS to the exact hermes-brain database host
+  established TLS 1.3 with hostname/certificate verification OK.
+  This proves network/TLS only, NOT database authentication or RLS.
 - The private-config drill verified: disabled gate, inactive bearer denial,
   pending owner grant denial; zero DB connections and provider requests.
 - Maestro owner authorization, database password installation and a scoped
@@ -155,8 +160,9 @@ is enabled in the deployed runtime.
    writer has SELECT/INSERT only under Grupo Erick RLS; audit has zero rows.
    The dedicated role exists but is NOLOGIN with NULL password and no
    inherited writer privileges. Provision the password via a secure channel,
-   enable LOGIN only after review, install the private CA, then test a
-   dedicated VPS connection and audit reservation/outcome with rollback.
+   enable LOGIN only after review, then test a dedicated VPS connection
+   and audit reservation/outcome with rollback. The CA is already installed
+   and its TLS handshake verified, but authentication remains blocked.
 3. Only after those prerequisites, wire a non-public staging entrypoint
    with explicit Maestro authorization and a kill-switch drill.
 4. The MCP meta-tool is advertised from the VPS; verify the underlying
