@@ -120,34 +120,45 @@ Default is disabled. Additional requirements for a future live trial:
   No SSL bypass, postgres login, service_role or personal ingress login.
 - Every audit transaction issues SET LOCAL ROLE hermes_outlook_audit_writer
   before quota check or insert. Missing role membership denies the attempt.
-- No dedicated login, password, machine registry, owner grant or owner
-  approval was created by this PR. Do not enable until these are reviewed.
+- Migration 053 prepared the dedicated database role with NOLOGIN and NULL
+  password. It has only SET (no INHERIT) membership in the restricted writer.
+- The one active Grupo Erick membership was checked against auth.users:
+  existing, email confirmed, not banned or deleted. The user confirmed
+  that this membership belongs to the group's owner/director.
+- The VPS holds a separate mode-0700 Outlook directory with private 0600
+  machine bearer, one-entry registry (active=false), owner grant
+  (status=pending), and disabled staging env. The real owner UUID is NOT
+  committed to Git. No DB password or CA file has been provisioned.
+- The private-config drill verified: disabled gate, inactive bearer denial,
+  pending owner grant denial; zero DB connections and provider requests.
+- Maestro owner authorization, database password installation and a scoped
+  staging trial remain unapproved. Do not activate this pilot.
 
 ## How to test safely
 
 From the isolated worktree:
 
     cd platform/services/api
-    node --test test/hermes-composio-outlook-metadata-*.test.js
+    node --test test/hermes-composio-outlook-metadata-*.test.js test/hermes-composio-outlook-staging-bootstrap.test.js
 
 Tests use synthetic responses and a fixture key only. No provider call.
 The module is not imported into the public API. No environment variable
 is enabled in the deployed runtime.
 
 ## Next review / activation gate
-1. Confirm the real owner/director user ID in the authenticated corporate
-   session and configure the exact allowlist without placing it in Git.
-2. Migrations 051 and 052 are applied in hermes-brain. The restricted
-   hermes_outlook_audit_writer role is NOLOGIN/NOINHERIT/NOBYPASSRLS,
-   has SELECT/INSERT only and two Grupo Erick RLS policies. No application
-   role or service has been granted membership; the only observed member
-   is the Supabase administrative postgres role. The audit has zero rows.
-   The restricted-role INSERT/ROLLBACK test passed without persistent rows.
-   Before operational use, provision a distinct backend-only LOGIN principal
-   with SET-only role membership and verify actual reservation/outcome from
-   the VPS using that login and verified TLS.
-3. Wire the verified owner grant lookup and PostgreSQL reservation/outcome
-   adapter to a non-public staging entrypoint, with a kill-switch drill.
+1. The one active Grupo Erick membership is confirmed by the user as owner;
+   auth.users shows a verified, unblocked identity. Its UUID is staged only
+   in the VPS private configuration, with grant=pending and machine=inactive.
+   Separate explicit Maestro approval and an authenticated owner-session
+   attestation are still required before activation.
+2. Migrations 051, 052 and 053 are applied in hermes-brain. The restricted
+   writer has SELECT/INSERT only under Grupo Erick RLS; audit has zero rows.
+   The dedicated role exists but is NOLOGIN with NULL password and no
+   inherited writer privileges. Provision the password via a secure channel,
+   enable LOGIN only after review, install the private CA, then test a
+   dedicated VPS connection and audit reservation/outcome with rollback.
+3. Only after those prerequisites, wire a non-public staging entrypoint
+   with explicit Maestro authorization and a kill-switch drill.
 4. The MCP meta-tool is advertised from the VPS; verify the underlying
    Outlook action and response shape in a separately approved real metadata
    read only after the authenticated owner and durable audit are wired.

@@ -118,6 +118,34 @@ test('scoped TLS pool, bad bearer blocked, owner grant revocable',async()=>{
     assert.equal(f.state.ends,1);
   }finally{f.cleanup();}
 });
+test('inactive machine key denies pilot before database reservation',async()=>{
+  const f=makeFixture();
+  try{
+    const file=f.environment.HERMES_COMPOSIO_OUTLOOK_MACHINE_REGISTRY_FILE;
+    const data=JSON.parse(fs.readFileSync(file,'utf8'));
+    data.entries[0].active=false;
+    writePrivate(file,data);
+    const b=createComposioOutlookStagingBootstrap({
+      environment:f.environment,PoolClass:f.Pool,fetchImpl:f.fetchImpl
+    });
+    assert.equal((await b.pilot.run({authorization:'Bearer '+TOKEN})).status,
+      'identity_unavailable');
+    assert.equal(f.state.connections,0);
+    assert.equal(f.state.fetches,0);
+    await b.close();
+  }finally{f.cleanup();}
+});
+test('pending owner grant refuses startup before database or provider',()=>{
+  const f=makeFixture();
+  try{
+    writePrivate(f.grantFile,{grants:[{...f.grant,status:'pending'}]});
+    assert.throws(()=>createComposioOutlookStagingBootstrap({
+      environment:f.environment,PoolClass:f.Pool,fetchImpl:f.fetchImpl
+    }),/outlook_owner_grant_not_verified/);
+    assert.equal(f.state.config,null);
+    assert.equal(f.state.fetches,0);
+  }finally{f.cleanup();}
+});
 test('wrong project, login, database and missing certificate fail closed',()=>{
   const f=makeFixture();
   try{
