@@ -99,10 +99,13 @@ is enabled in the deployed runtime.
 ## Next review / activation gate
 1. Confirm the real owner/director user ID in the authenticated corporate
    session and configure the exact allowlist without placing it in Git.
-2. Migration 051 is applied in the approved hermes-brain project.
-   Before operational use, provision a dedicated restricted runtime database
-   role with only the necessary SELECT/INSERT permissions (never UPDATE/DELETE),
-   and verify that the runtime can write audited events under RLS.
+2. Migrations 051 and 052 are applied in hermes-brain. The restricted
+   hermes_outlook_audit_writer role is NOLOGIN/NOINHERIT/NOBYPASSRLS,
+   has SELECT/INSERT only and two Grupo Erick RLS policies. No application
+   role or service has been granted membership; the only observed member
+   is the Supabase administrative postgres role. The audit has zero rows.
+   Before operational use, bind an approved backend-only database principal
+   and verify reservation/outcome under RLS, with a transaction rollback test.
 3. Wire the verified owner grant lookup and PostgreSQL reservation/outcome
    adapter to a non-public staging entrypoint, with a kill-switch drill.
 4. The MCP meta-tool is advertised from the VPS; verify the underlying
