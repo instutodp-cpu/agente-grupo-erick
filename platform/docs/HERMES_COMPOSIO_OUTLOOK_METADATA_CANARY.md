@@ -26,12 +26,24 @@ Second Brain ingestion, scheduling and all generic Composio tools remain blocked
 - Return only count, unread count, attachment count and date bounds.
 - No message persistence, ingestion, embedding, RAG, write, send,
   delete, flag, move or mark-as-read.
-- Corporate scope requires authenticated machine identity, tenant and
-  organization grupo_erick, workspace_type=corporate, explicit matching
-  company_id, user_id, role=admin|financeiro.
-- Company ID must be **explicitly approved and configured** in
-  HERMES_COMPOSIO_OUTLOOK_COMPANY_ID; the mailbox display name alone is
-  not proof of company ownership.
+- User confirmed the Outlook mailbox serves **all Grupo Erick companies and
+  stores**. It is a **group-shared corporate source**, not an Erick Calcados
+  or individual-store/company source.
+- The connector's source boundary is tenant_id=grupo_erick,
+  organization_id=grupo_erick, workspace_type=corporate,
+  connector_scope=corporate_private, group_scope=grupo_erick_all_companies,
+  scope_type=group_shared. No company_id or store_id is attributed.
+- Access is **owner/director only**: authenticated machine identity with
+  scope_source=authenticated_session, user_scope=owner_director, role=admin,
+  and exact user_id allowlisted in HERMES_COMPOSIO_OUTLOOK_OWNER_USER_ID.
+  No store manager, company admin or company finance user inherits access.
+- Identity must be supplied by trusted authenticated context; callers and
+  prompts must not be allowed to construct or elevate these fields.
+- No automatic assignment of messages to a company/store. Future per-company
+  classification or sharing needs evidence, explicit owner-approved rules,
+  RLS, audit and separate authorization; this pilot returns aggregates only.
+- Quota and audit are tenant/group-shared; company_id and store_id are null.
+  A mailbox display name alone is not evidence of company ownership.
 - Never grant the full Composio MCP server to an LLM/agent directly.
 
 ## Fail-closed gates
@@ -67,11 +79,12 @@ The module is not imported into the public API. No environment variable
 is enabled in the deployed runtime.
 
 ## Next review / activation gate
-1. Confirm whether the authorized Outlook mailbox belongs to only one
-   company or is shared by multiple Grupo Erick companies.
-2. Bind an authorized corporate company ID.
+1. Confirm the real owner/director user ID in the authenticated corporate
+   session and configure the exact allowlist without placing it in Git.
+2. Bind the group-shared tenant scope in the durable audit/usage store;
+   do not synthesize a company or store ID for this shared mailbox.
 3. Attach a durable attempt/audit store and validate the MCP response
    shape in a separately approved staging trial.
-4. Only then consider an audited, tenant-scoped operational reader.
+4. Only then consider an audited, group-scoped operational reader.
    Raw email content ingestion requires a **separate** explicit approval,
    retention policy, LGPD review and opt-in.

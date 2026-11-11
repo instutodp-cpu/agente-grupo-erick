@@ -10,7 +10,7 @@ const {createHermesComposioOutlookMetadataRead,
 
 const env = () => ({
   HERMES_COMPOSIO_OUTLOOK_METADATA_ENABLED:'true',
-  HERMES_COMPOSIO_OUTLOOK_COMPANY_ID:'company-fixture',
+  HERMES_COMPOSIO_OUTLOOK_OWNER_USER_ID:'owner-fixture',
   HERMES_DEPLOYMENT_STAGE:'staging',
   HERMES_EXECUTION_ENABLED:'false',
   HERMES_EXECUTION_KILL_SWITCH:'true',
@@ -18,9 +18,12 @@ const env = () => ({
 });
 const identity = () => ({
   tenant_id:'grupo_erick', workspace_type:'corporate',
-  organization_id:'grupo_erick', company_id:'company-fixture',
+  organization_id:'grupo_erick', connector_scope:'corporate_private',
+  group_scope:'grupo_erick_all_companies',
+  scope_source:'authenticated_session', company_id:null, store_id:null,
   principal:{type:'machine',id:'outlook-reader-fixture'},
-  key_id:'reader-key-fixture', user_id:'owner-fixture', role:'admin'
+  key_id:'reader-key-fixture', user_id:'owner-fixture',
+  role:'admin', user_scope:'owner_director'
 });
 const messages = () => [
   {id:'never-return-this-id',receivedDateTime:'2026-11-11T13:00:00Z',
@@ -84,16 +87,22 @@ test('default disabled; no credential, network, or audit',async()=>{
   assert.equal(f.calls.length,0);
   assert.equal(f.audit.length,0);
 });
-test('deny without company scope and for wrong tenant, user, role, company',async()=>{
-  const e=env(); delete e.HERMES_COMPOSIO_OUTLOOK_COMPANY_ID;
+test('deny unconfigured group owner and wrong tenant, store or company context',async()=>{
+  const e=env(); delete e.HERMES_COMPOSIO_OUTLOOK_OWNER_USER_ID;
   const f=fixture({environment:e});
   assert.equal((await f.pilot.run({identity:identity()})).status,
-    'company_scope_not_configured');
+    'group_owner_not_configured');
   const g=fixture();
   for (const change of [
-    {tenant_id:'other'},{workspace_type:'personal'},
-    {organization_id:'other'},{company_id:'other'},
-    {role:'vendedor'},{user_id:''},{principal:{type:'human',id:'x'}}
+    {tenant_id:'external_client'},{workspace_type:'personal'},
+    {organization_id:'other'},{company_id:'erick_calcados'},
+    {store_id:'barreiros'}, {connector_scope:'personal_private'},
+    {group_scope:'erick_calcados_only'},
+    {scope_source:'prompt'},
+    {role:'financeiro'},{role:'gerente_loja'},
+    {user_scope:'finance_user'},
+    {user_id:'store-manager'}, {user_id:''},
+    {principal:{type:'human',id:'x'}}
   ]) {
     assert.equal((await g.pilot.run({identity:{...identity(),...change}})).status,
       'identity_scope_invalid');
@@ -126,6 +135,16 @@ test('durable quota and audit fail closed before network',async()=>{
     'audit_unavailable');
   assert.equal(h.calls.length,0);
 });
+test('usage budget is group-shared, never partitioned by store/company',async()=>{
+  let usageRequest;
+  const f=fixture({readUsage:async request=>{usageRequest=request;return 0;}});
+  assert.equal((await f.pilot.run({identity:identity()})).status,'succeeded');
+  assert.equal(usageRequest.tenant_id,'grupo_erick');
+  assert.equal(usageRequest.scope_type,'group_shared');
+  assert.equal(usageRequest.provider,'COMPOSIO_OUTLOOK');
+  assert.equal(Object.hasOwn(usageRequest,'company_id'),false);
+  assert.equal(Object.hasOwn(usageRequest,'store_id'),false);
+});
 test('only bounded metadata, no content, sender, IDs, or mutations returned',async()=>{
   const f=fixture();
   const result=await f.pilot.run({identity:identity()});
@@ -141,6 +160,11 @@ test('only bounded metadata, no content, sender, IDs, or mutations returned',asy
   assert.equal(f.calls.length,2);
   assert.deepEqual(f.audit.map(x=>x.event),['attempt','result']);
   assert.equal(f.audit[0].operation,'METADATA_READ');
+  assert.equal(f.audit[0].scope_type,'group_shared');
+  assert.equal(f.audit[0].tenant_id,'grupo_erick');
+  assert.equal(f.audit[0].company_id,null);
+  assert.equal(f.audit[0].store_id,null);
+  assert.equal(f.audit[0].user_id,'owner-fixture');
   assert.equal(f.audit[1].outcome,'SUCCEEDED');
   const serialized=JSON.stringify({result,audit:f.audit});
   for (const sensitive of ['never-return-this','also-secret',

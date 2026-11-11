@@ -112,16 +112,23 @@ function createHermesComposioOutlookMetadataRead({
     environment.HERMES_MISSION_INGRESS_ENABLED === 'false';
   async function run({identity}={}) {
     if (!enabled()) return denied('disabled');
-    const companyId = environment.HERMES_COMPOSIO_OUTLOOK_COMPANY_ID;
-    if (!safeId(companyId)) return denied('company_scope_not_configured');
+    // The mailbox is a GROUP-SHARED corporate resource, not a store/company
+    // mailbox. Access is owner-only, explicitly allowlisted, and cannot be
+    // inherited by a store admin or a company's finance role.
+    const ownerUserId = environment.HERMES_COMPOSIO_OUTLOOK_OWNER_USER_ID;
+    if (!safeId(ownerUserId)) return denied('group_owner_not_configured');
     if (identity?.tenant_id !== 'grupo_erick' ||
         identity.workspace_type !== 'corporate' ||
         identity.organization_id !== 'grupo_erick' ||
-        identity.company_id !== companyId ||
+        identity.connector_scope !== 'corporate_private' ||
+        identity.group_scope !== 'grupo_erick_all_companies' ||
+        identity.scope_source !== 'authenticated_session' ||
+        identity.company_id != null || identity.store_id != null ||
         identity.principal?.type !== 'machine' ||
         !safeId(identity.principal.id) || !safeId(identity.key_id) ||
-        !safeId(identity.user_id) ||
-        !['admin','financeiro'].includes(identity.role))
+        identity.user_id !== ownerUserId ||
+        identity.role !== 'admin' ||
+        identity.user_scope !== 'owner_director')
       return denied('identity_scope_invalid');
     if (inFlight) return denied('already_in_flight');
     inFlight = true;
@@ -130,15 +137,17 @@ function createHermesComposioOutlookMetadataRead({
       if (!Number.isSafeInteger(now)) return denied('clock_unavailable');
       let count;
       try {
-        count = await readUsage({tenant_id:'grupo_erick', company_id:companyId,
-          provider:'COMPOSIO_OUTLOOK', since:new Date(now-WINDOW_MS).toISOString()});
+        count = await readUsage({tenant_id:'grupo_erick',
+          scope_type:'group_shared', provider:'COMPOSIO_OUTLOOK',
+          since:new Date(now-WINDOW_MS).toISOString()});
       } catch { return denied('quota_store_unavailable'); }
       if (!Number.isInteger(count) || count < 0)
         return denied('quota_store_unavailable');
       if (count >= maxRequests) return denied('request_budget_exhausted');
       const traceId = randomUUID();
       const audit = {trace_id:traceId, tenant_id:'grupo_erick',
-        company_id:companyId, provider:'COMPOSIO_OUTLOOK',
+        scope_type:'group_shared', company_id:null, store_id:null,
+        user_id:identity.user_id, provider:'COMPOSIO_OUTLOOK',
         operation:'METADATA_READ', resource:'inbox_summary',
         account_alias:ACCOUNT_ALIAS, write_performed:false,
         messages_imported:0, content_read:false};
