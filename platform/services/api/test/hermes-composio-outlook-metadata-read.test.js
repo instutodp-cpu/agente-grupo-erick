@@ -26,8 +26,7 @@ const identity=()=>({
 });
 const messages=()=>[
   {id:'never-return-this-id',receivedDateTime:'2026-11-11T13:00:00Z',
-    isRead:false,hasAttachments:true,subject:'never-return-this-subject',
-    body:{content:'never-return-this-body'}},
+    isRead:false,hasAttachments:true},
   {id:'also-secret',receivedDateTime:'2026-11-10T09:00:00Z',
     isRead:true,hasAttachments:false}
 ];
@@ -64,7 +63,8 @@ function fakeFetch(calls,{invalidResponse=false,missingTool=false}={}) {
     assert.deepEqual(tool.arguments.select,
       ['id','receivedDateTime','isRead','hasAttachments']);
     assert.equal(tool.arguments.folder,'inbox');
-    assert.equal(tool.arguments.response_detail,'minimal');
+    assert.deepEqual(Object.keys(tool.arguments).sort(),
+      ['user_id','folder','top','select'].sort());
     const result=invalidResponse ?
       {successful:true,data:{results:[]}} :
       {successful:true,data:{results:[{tool_slug:'OUTLOOK_LIST_MESSAGES',
@@ -241,6 +241,15 @@ test('invalid or oversized provider metadata rejected',()=>{
   assert.throws(()=>parseSummary(wrap(Array.from({length:11},()=>messages()[0]))));
   assert.throws(()=>parseSummary(wrap([{receivedDateTime:'invalid',
     isRead:false,hasAttachments:false}])));
+});
+test('provider returning body or subject despite select is rejected',()=>{
+  const wrap=values=>({content:[{type:'text',text:JSON.stringify({
+    successful:true,data:{results:[{tool_slug:'OUTLOOK_LIST_MESSAGES',
+      response:{successful:true,data:{value:values}}}]}
+  })}]});
+  for(const extra of [{body:{content:'private'}},
+    {subject:'private'},{from:{emailAddress:{address:'private'}}}])
+    assert.throws(()=>parseSummary(wrap([{...messages()[0],...extra}])));
 });
 test('credential requires ck_ format and private mode',()=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'hermes-outlook-test-'));

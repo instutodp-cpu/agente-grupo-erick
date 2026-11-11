@@ -26,7 +26,10 @@ Second Brain ingestion, scheduling and all generic Composio tools remain blocked
 - One **fixed** Composio meta-tool: COMPOSIO_MULTI_EXECUTE_TOOL.
 - One **fixed** underlying action: OUTLOOK_LIST_MESSAGES, account alias
   outlook-inicial, folder inbox, top 10, select ONLY
-  id, receivedDateTime, isRead, hasAttachments.
+  id, receivedDateTime, isRead, hasAttachments. The Composio action schema
+  was checked directly: these are valid fields. The earlier undocumented
+  response_detail argument was removed. Unexpected subject, body, sender,
+  recipient or other sensitive fields cause fail-closed rejection.
 - No tool discovery from untrusted prompts, no generic MCP pass-through,
   no dynamic action names, no body, preview, sender, recipient, subject,
   attachments or message ID in outputs or audit.

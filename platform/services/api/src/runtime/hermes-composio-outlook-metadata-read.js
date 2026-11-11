@@ -143,8 +143,14 @@ function parseSummary(result) {
     throw Error('message_count_invalid');
   let unread = 0, attachments = 0;
   const dates = [];
+  const forbidden=['body','bodyPreview','uniqueBody','subject','from',
+    'sender','toRecipients','ccRecipients','bccRecipients',
+    'internetMessageHeaders','attachments','replyTo','webLink',
+    'internetMessageId'];
   for (const item of values) {
-    if (!item || typeof item.isRead !== 'boolean' ||
+    if (!item || forbidden.some(field=>Object.hasOwn(item,field)))
+      throw Error('unexpected_sensitive_message_fields');
+    if (typeof item.isRead !== 'boolean' ||
         typeof item.hasAttachments !== 'boolean' ||
         typeof item.receivedDateTime !== 'string' ||
         !Number.isFinite(Date.parse(item.receivedDateTime)))
@@ -235,8 +241,7 @@ function createHermesComposioOutlookMetadataRead({
           arguments:{
             tools:[{tool_slug:TOOL_SLUG, account:ACCOUNT_ALIAS,
               arguments:{user_id:'me', folder:'inbox', top:LIMIT,
-                select:['id','receivedDateTime','isRead','hasAttachments'],
-                response_detail:'minimal'}}],
+                select:['id','receivedDateTime','isRead','hasAttachments']}}],
             thought:'Read only bounded Outlook inbox metadata',
             sync_response_to_workbench:false,
             current_step:'OUTLOOK_METADATA_CANARY'
