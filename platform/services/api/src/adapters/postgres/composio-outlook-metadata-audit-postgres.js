@@ -4,6 +4,9 @@
 const {randomUUID} = require('node:crypto');
 
 const TABLE = 'hermes.composio_outlook_metadata_audit';
+// A dedicated login must be granted SET on this NOLOGIN role; otherwise
+// every transaction fails closed before touching the audit table.
+const ROLE_SQL = 'SET LOCAL ROLE hermes_outlook_audit_writer';
 const LOCK_SQL = 'SELECT pg_advisory_xact_lock(2071, 565)';
 const COUNT_SQL = "SELECT count(*)::int AS attempts FROM " + TABLE +
   " WHERE tenant_id = 'grupo_erick' AND scope_type = 'group_shared'" +
@@ -33,6 +36,7 @@ function createPostgresComposioOutlookAudit({pool}={}) {
     try {
       client=await pool.connect();
       await client.query('BEGIN'); began=true;
+      await client.query(ROLE_SQL);
       // Serializes quota checks across ALL worker processes using this DB.
       await client.query(LOCK_SQL);
       const counted=await client.query(COUNT_SQL);
@@ -70,6 +74,7 @@ function createPostgresComposioOutlookAudit({pool}={}) {
     try {
       client=await pool.connect();
       await client.query('BEGIN'); began=true;
+      await client.query(ROLE_SQL);
       const inserted=await client.query(INSERT_RESULT_SQL,
         [randomUUID(),trace_id,user_id,outcome,sampled_messages]);
       if (inserted?.rowCount !== 1) throw Error('outlook_audit_outcome_conflict');
@@ -88,4 +93,4 @@ function createPostgresComposioOutlookAudit({pool}={}) {
 }
 
 module.exports = {createPostgresComposioOutlookAudit,
-  TABLE, LOCK_SQL, COUNT_SQL, INSERT_ATTEMPT_SQL, INSERT_RESULT_SQL};
+  TABLE, ROLE_SQL, LOCK_SQL, COUNT_SQL, INSERT_ATTEMPT_SQL, INSERT_RESULT_SQL};

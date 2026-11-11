@@ -5,7 +5,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {randomUUID}=require('node:crypto');
 const {createPostgresComposioOutlookAudit,
-  LOCK_SQL,COUNT_SQL,INSERT_ATTEMPT_SQL,INSERT_RESULT_SQL,TABLE}=
+  ROLE_SQL,LOCK_SQL,COUNT_SQL,INSERT_ATTEMPT_SQL,INSERT_RESULT_SQL,TABLE}=
   require('../src/adapters/postgres/composio-outlook-metadata-audit-postgres');
 
 class ScriptedPool {
@@ -17,7 +17,7 @@ class ScriptedPool {
       query:async (sql,params=[])=>{
         this.queries.push({sql,params});
         if(sql===this.failAt)throw Error('simulated database outage');
-        if(['BEGIN','COMMIT','ROLLBACK',LOCK_SQL].includes(sql))return {rows:[]};
+        if(['BEGIN','COMMIT','ROLLBACK',ROLE_SQL,LOCK_SQL].includes(sql))return {rows:[]};
         if(sql===COUNT_SQL)
           return {rows:[{attempts:this.events.filter(e=>e.type==='attempt').length}]};
         if(sql===INSERT_ATTEMPT_SQL||sql===INSERT_RESULT_SQL) {
@@ -60,9 +60,9 @@ test('atomic reservation persists attempt before outcome',async()=>{
   assert.deepEqual(reserved,{reserved:true,trace_id});
   assert.equal(pool.events.length,1);
   assert.equal(pool.events[0].type,'attempt');
-  assert.deepEqual(pool.queries.slice(0,4).map(q=>q.sql),
-    ['BEGIN',LOCK_SQL,COUNT_SQL,INSERT_ATTEMPT_SQL]);
-  assert.equal(pool.queries[4].sql,'COMMIT');
+  assert.deepEqual(pool.queries.slice(0,5).map(q=>q.sql),
+    ['BEGIN',ROLE_SQL,LOCK_SQL,COUNT_SQL,INSERT_ATTEMPT_SQL]);
+  assert.equal(pool.queries[5].sql,'COMMIT');
   const outcome=await audit.appendOutcome({
     trace_id,user_id:'owner-fixture',outcome:'SUCCEEDED',sampled_messages:2});
   assert.deepEqual(outcome,{persisted:true,trace_id});
@@ -110,6 +110,20 @@ test('outcome without matching attempt and owner is blocked',async()=>{
   await assert.rejects(()=>audit.appendOutcome({trace_id,
     user_id:'another-owner',outcome:'FAILED'}));
   assert.equal(pool.events.length,1);
+});
+test('ungranted restricted role fails closed before any audit SQL',async()=>{
+  const pool=new ScriptedPool({failAt:ROLE_SQL});
+  const audit=createPostgresComposioOutlookAudit({pool});
+  await assert.rejects(()=>audit.reserveAttempt({trace_id:randomUUID(),
+    user_id:'owner-fixture'}));
+  assert.deepEqual(pool.queries.map(q=>q.sql),['BEGIN',ROLE_SQL,'ROLLBACK']);
+  assert.equal(pool.events.length,0);
+  assert.equal(pool.releases,1);
+  await assert.rejects(()=>audit.appendOutcome({trace_id:randomUUID(),
+    user_id:'owner-fixture',outcome:'FAILED'}));
+  assert.deepEqual(pool.queries.slice(3).map(q=>q.sql),
+    ['BEGIN',ROLE_SQL,'ROLLBACK']);
+  assert.equal(pool.events.length,0);
 });
 test('database outage fails closed, rolls back and releases connection',async()=>{
   const pool=new ScriptedPool({failAt:COUNT_SQL});

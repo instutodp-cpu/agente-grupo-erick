@@ -19,7 +19,7 @@ const env=()=>({
 const identity=()=>({
   tenant_id:'grupo_erick',workspace_type:'corporate',
   organization_id:'grupo_erick',connector_scope:'corporate_private',
-  group_scope:'grupo_erick_all_companies',scope_source:'authenticated_session',
+  group_scope:'grupo_erick_all_companies',scope_source:'trusted_machine_owner_grant',
   company_id:null,store_id:null,
   principal:{type:'machine',id:'reader-fixture'},key_id:'reader-key-fixture',
   user_id:'owner-fixture',role:'admin',user_scope:'owner_director'

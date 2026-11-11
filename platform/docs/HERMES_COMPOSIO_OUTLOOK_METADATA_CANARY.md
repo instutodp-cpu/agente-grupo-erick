@@ -41,13 +41,17 @@ Second Brain ingestion, scheduling and all generic Composio tools remain blocked
   connector_scope=corporate_private, group_scope=grupo_erick_all_companies,
   scope_type=group_shared. No company_id or store_id is attributed.
 - Access is **owner/director only**: authenticated machine identity with
-  scope_source=authenticated_session, user_scope=owner_director, role=admin,
-  and exact user_id allowlisted in HERMES_COMPOSIO_OUTLOOK_OWNER_USER_ID.
+  scope_source=trusted_machine_owner_grant, user_scope=owner_director,
+  role=admin, and exact user_id allowlisted in
+  HERMES_COMPOSIO_OUTLOOK_OWNER_USER_ID. This grant is NOT equivalent to
+  a currently authenticated human session; separate Maestro owner approval
+  remains mandatory before any real mailbox access.
   No store manager, company admin or company finance user inherits access.
 - Identity is resolved using the existing machine bearer registry plus a
   trusted server-side owner grant lookup; run() accepts an authorization
-  credential, **not** a caller-supplied identity object. The grant reader
-  must be bound to an authenticated, verified owner mapping before activation.
+  credential, **not** a caller-supplied identity object. The private
+  staging bootstrap re-reads a mode-0600 owner grant file on every attempt,
+  allowing immediate revocation. No verified owner mapping is installed yet.
   Callers and prompts cannot construct or elevate these fields.
 - No automatic assignment of messages to a company/store. Future per-company
   classification or sharing needs evidence, explicit owner-approved rules,
@@ -74,16 +78,47 @@ Default is disabled. Additional requirements for a future live trial:
 - The PostgreSQL adapter reserves the group-shared 24-hour quota atomically
   using a transaction plus advisory lock before any provider request; it
   persists outcome separately, bound to the same trace and owner.
-- The canary requires injected reserveAttempt/appendOutcome dependencies;
-  neither the DB pool nor the trusted owner grant is wired to live runtime.
-- Confirmed group owner identity from trusted authenticated session context,
-  not from prompt text.
+- The private staging bootstrap now wires the audit adapter, strict TLS
+  PostgreSQL pool configuration, machine bearer registry and revocable
+  owner grant lookup. It is not imported by the deployed runtime.
+- A dedicated LOGIN role and its private password file are **not provisioned**;
+  the existing personal ingress DB account and Supabase admin/service_role
+  credentials must never be reused for corporate Outlook auditing.
+- The owner UUID and machine grant must be independently verified before
+  staging activation. A machine grant alone does not prove a human session.
 - A separately approved, non-public staging entrypoint; no automatic
   startup, cron, Telegram command, or production endpoint.
 - Network egress only to the Composio Connect endpoint; timeout and
   maximum response size; secret file must remain private.
 - Bounded budget (default 10 attempts per 24h), shared across the entire group.
 - Kill-switch drill and rollback verification.
+
+## Verified restricted-role rollback test (2026-11-11)
+- Supabase SQL transaction temporarily enabled SET ROLE for the administrative
+  postgres session, then used SET LOCAL ROLE hermes_outlook_audit_writer.
+- Under that restricted role, INSERT succeeded; UPDATE privilege was false.
+- ROLLBACK reverted the synthetic insert AND the temporary role-grant change.
+  A separate query confirmed zero persisted audit rows and SET option=false.
+- This is a real database permission test, NOT a VPS runtime connection test.
+
+## Private staging bootstrap (not activated)
+- Module: src/runtime/hermes-composio-outlook-staging-bootstrap.js
+- The module is not imported into any public API or deployed service.
+- All original staging/kill-switch gates remain mandatory.
+- Requires an exact verified owner UUID, one machine registry entry, and one
+  owner grant in separate owner-controlled mode-0600 files. The grant must
+  bind tenant, machine key, principal, group scope and owner identity.
+- The grant file is re-read for every attempt so revocation takes effect
+  immediately. Machine registry key revocation requires process restart.
+- Database login MUST be hermes_outlook_audit_login (or its project-qualified
+  pooler variant) against only project asceucchdnuoaqgdjbtg.
+- Database password is loaded from a separate private mode-0600 file.
+  TLS requires a verified Supabase project CA and hostname verification.
+  No SSL bypass, postgres login, service_role or personal ingress login.
+- Every audit transaction issues SET LOCAL ROLE hermes_outlook_audit_writer
+  before quota check or insert. Missing role membership denies the attempt.
+- No dedicated login, password, machine registry, owner grant or owner
+  approval was created by this PR. Do not enable until these are reviewed.
 
 ## How to test safely
 
@@ -104,8 +139,10 @@ is enabled in the deployed runtime.
    has SELECT/INSERT only and two Grupo Erick RLS policies. No application
    role or service has been granted membership; the only observed member
    is the Supabase administrative postgres role. The audit has zero rows.
-   Before operational use, bind an approved backend-only database principal
-   and verify reservation/outcome under RLS, with a transaction rollback test.
+   The restricted-role INSERT/ROLLBACK test passed without persistent rows.
+   Before operational use, provision a distinct backend-only LOGIN principal
+   with SET-only role membership and verify actual reservation/outcome from
+   the VPS using that login and verified TLS.
 3. Wire the verified owner grant lookup and PostgreSQL reservation/outcome
    adapter to a non-public staging entrypoint, with a kill-switch drill.
 4. The MCP meta-tool is advertised from the VPS; verify the underlying

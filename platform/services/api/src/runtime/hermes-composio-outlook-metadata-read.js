@@ -45,7 +45,7 @@ function createComposioOutlookOwnerIdentityResolver({registry,readOwnerGrant}={}
       throw Error('owner_grant_invalid');
     return Object.freeze({tenant_id:'grupo_erick',workspace_type:'corporate',
       organization_id:'grupo_erick',connector_scope:'corporate_private',
-      group_scope:'grupo_erick_all_companies',scope_source:'authenticated_session',
+      group_scope:'grupo_erick_all_companies',scope_source:'trusted_machine_owner_grant',
       company_id:null,store_id:null,principal:machine.principal,
       key_id:machine.key_id,user_id:grant.user_id,
       role:'admin',user_scope:'owner_director'});
@@ -194,7 +194,7 @@ function createHermesComposioOutlookMetadataRead({
         identity.organization_id !== 'grupo_erick' ||
         identity.connector_scope !== 'corporate_private' ||
         identity.group_scope !== 'grupo_erick_all_companies' ||
-        identity.scope_source !== 'authenticated_session' ||
+        identity.scope_source !== 'trusted_machine_owner_grant' ||
         identity.company_id != null || identity.store_id != null ||
         identity.principal?.type !== 'machine' ||
         !safeId(identity.principal.id) || !safeId(identity.key_id) ||
