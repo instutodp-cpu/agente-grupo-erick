@@ -3,18 +3,18 @@
 // agent tool registry, Telegram command, scheduler, or production service.
 const fs = require('node:fs');
 const {randomUUID} = require('node:crypto');
+const {resolveMachineIdentity} = require('../core/machine-identity-resolver');
 
 const MCP_URL = 'https://connect.composio.dev/mcp';
 const SECRET_FILE = '/home/hermesadmin/.config/hermes/secrets/composio_api_key';
 const ACCOUNT_ALIAS = 'outlook-inicial';
 const TOOL_SLUG = 'OUTLOOK_LIST_MESSAGES';
-const WINDOW_MS = 24 * 60 * 60 * 1000;
 const LIMIT = 10;
 const safeId = value => typeof value === 'string' &&
   /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
-const denied = status => Object.freeze({status, executed:false,
-  network_call_performed:false, write_performed:false,
-  messages_imported:0, content_read:false});
+const denied = (status,network_call_performed=false) => Object.freeze({
+  status,executed:false,network_call_performed,write_performed:false,
+  messages_imported:0,content_read:false});
 
 function readCredential(path = SECRET_FILE) {
   const stat = fs.statSync(path);
@@ -23,6 +23,33 @@ function readCredential(path = SECRET_FILE) {
   const key = fs.readFileSync(path, 'utf8');
   if (!/^ck_[^\s]{17,}$/.test(key)) throw Error('credential_format_invalid');
   return key;
+}
+
+// Resolve identity from the existing machine bearer registry plus a trusted
+// server-side owner grant lookup. No identity or scope is accepted from prompts.
+function createComposioOutlookOwnerIdentityResolver({registry,readOwnerGrant}={}) {
+  if (!registry || typeof registry.findByDigest !== 'function' ||
+      typeof readOwnerGrant !== 'function')
+    throw TypeError('outlook_owner_identity_dependencies_invalid');
+  return async ({authorization}={}) => {
+    const machine=resolveMachineIdentity({authorization},registry);
+    if (machine.tenant_id !== 'grupo_erick') throw Error('tenant_denied');
+    const grant=await readOwnerGrant({tenant_id:machine.tenant_id,
+      key_id:machine.key_id,principal_id:machine.principal.id});
+    if (!grant || grant.status !== 'active' ||
+        grant.source !== 'trusted_registry' ||
+        grant.tenant_id !== 'grupo_erick' ||
+        grant.key_id !== machine.key_id ||
+        grant.principal_id !== machine.principal.id ||
+        !safeId(grant.user_id))
+      throw Error('owner_grant_invalid');
+    return Object.freeze({tenant_id:'grupo_erick',workspace_type:'corporate',
+      organization_id:'grupo_erick',connector_scope:'corporate_private',
+      group_scope:'grupo_erick_all_companies',scope_source:'authenticated_session',
+      company_id:null,store_id:null,principal:machine.principal,
+      key_id:machine.key_id,user_id:grant.user_id,
+      role:'admin',user_scope:'owner_director'});
+  };
 }
 
 function parseMcpPayload(body, contentType) {
@@ -42,6 +69,29 @@ function parseMcpPayload(body, contentType) {
   return parsed.result;
 }
 
+async function readBoundedMcpResponse(response,contentType) {
+  if (!response.body || typeof response.body.getReader !== 'function')
+    throw Error('mcp_body_missing');
+  const reader=response.body.getReader();
+  const decoder=new TextDecoder();
+  let bytes=0,body='';
+  try {
+    for (;;) {
+      const {value,done}=await reader.read();
+      if (done) break;
+      bytes+=value.byteLength;
+      if (bytes > 128 * 1024) throw Error('mcp_response_too_large');
+      body+=decoder.decode(value,{stream:true});
+      if (contentType.includes('text/event-stream') &&
+          /\r?\n\r?\n/.test(body)) {
+        try { parseMcpPayload(body,contentType); break; }
+        catch { /* wait for a complete event or abort */ }
+      }
+    }
+    return body+decoder.decode();
+  } finally { try { await reader.cancel(); } catch { /* cleanup */ } }
+}
+
 async function mcpRequest(fetchImpl, key, method, params, sessionId) {
   const payload = {jsonrpc:'2.0', id:randomUUID(), method};
   if (params !== undefined) payload.params = params;
@@ -55,8 +105,26 @@ async function mcpRequest(fetchImpl, key, method, params, sessionId) {
   });
   if (!response || response.status !== 200) throw Error('mcp_http_failed');
   const contentType = String(response.headers?.get('content-type') || '');
-  const result = parseMcpPayload(await response.text(), contentType);
+  if (!contentType.includes('application/json') &&
+      !contentType.includes('text/event-stream'))
+    throw Error('mcp_content_type_invalid');
+  const result = parseMcpPayload(
+    await readBoundedMcpResponse(response,contentType),contentType);
   return {result, sessionId:response.headers?.get('mcp-session-id') || sessionId};
+}
+
+async function mcpNotifyInitialized(fetchImpl,key,sessionId) {
+  const headers={'x-consumer-api-key':key,
+    'Content-Type':'application/json',
+    'Accept':'application/json, text/event-stream'};
+  if (sessionId) headers['mcp-session-id']=sessionId;
+  const response=await fetchImpl(MCP_URL,{
+    method:'POST',headers,
+    body:JSON.stringify({jsonrpc:'2.0',method:'notifications/initialized',params:{}}),
+    redirect:'error',signal:AbortSignal.timeout(10000)
+  });
+  if (!response || (response.status !== 202 && response.status !== 200))
+    throw Error('mcp_initialized_notification_failed');
 }
 
 function parseSummary(result) {
@@ -96,10 +164,11 @@ function parseSummary(result) {
 
 function createHermesComposioOutlookMetadataRead({
   environment=process.env, fetchImpl=globalThis.fetch,
-  appendAudit, readUsage, credentialReader=readCredential,
-  clock=()=>Date.now(), maxRequests=10
+  reserveAttempt, appendOutcome, resolveIdentity,
+  credentialReader=readCredential, maxRequests=10
 }={}) {
-  if (typeof appendAudit !== 'function' || typeof readUsage !== 'function' ||
+  if (typeof reserveAttempt !== 'function' || typeof appendOutcome !== 'function' ||
+      typeof resolveIdentity !== 'function' ||
       typeof fetchImpl !== 'function' || typeof credentialReader !== 'function' ||
       !Number.isInteger(maxRequests) || maxRequests < 1 || maxRequests > 20)
     throw TypeError('dependencies_invalid');
@@ -110,8 +179,11 @@ function createHermesComposioOutlookMetadataRead({
     environment.HERMES_EXECUTION_ENABLED === 'false' &&
     environment.HERMES_EXECUTION_KILL_SWITCH === 'true' &&
     environment.HERMES_MISSION_INGRESS_ENABLED === 'false';
-  async function run({identity}={}) {
+  async function run({authorization}={}) {
     if (!enabled()) return denied('disabled');
+    let identity;
+    try { identity=await resolveIdentity({authorization}); }
+    catch { return denied('identity_unavailable'); }
     // The mailbox is a GROUP-SHARED corporate resource, not a store/company
     // mailbox. Access is owner-only, explicitly allowlisted, and cannot be
     // inherited by a store admin or a company's finance role.
@@ -133,38 +205,31 @@ function createHermesComposioOutlookMetadataRead({
     if (inFlight) return denied('already_in_flight');
     inFlight = true;
     try {
-      const now = clock();
-      if (!Number.isSafeInteger(now)) return denied('clock_unavailable');
-      let count;
-      try {
-        count = await readUsage({tenant_id:'grupo_erick',
-          scope_type:'group_shared', provider:'COMPOSIO_OUTLOOK',
-          since:new Date(now-WINDOW_MS).toISOString()});
-      } catch { return denied('quota_store_unavailable'); }
-      if (!Number.isInteger(count) || count < 0)
-        return denied('quota_store_unavailable');
-      if (count >= maxRequests) return denied('request_budget_exhausted');
       const traceId = randomUUID();
-      const audit = {trace_id:traceId, tenant_id:'grupo_erick',
-        scope_type:'group_shared', company_id:null, store_id:null,
-        user_id:identity.user_id, provider:'COMPOSIO_OUTLOOK',
-        operation:'METADATA_READ', resource:'inbox_summary',
-        account_alias:ACCOUNT_ALIAS, write_performed:false,
-        messages_imported:0, content_read:false};
-      try {
-        await appendAudit(Object.freeze({...audit, event:'attempt',
-          at:new Date(now).toISOString()}));
-      } catch { return denied('audit_unavailable'); }
-      let summary, called = false;
+      let reservation;
+      try { reservation=await reserveAttempt({trace_id:traceId,
+        user_id:identity.user_id,max_requests:maxRequests}); }
+      catch { return denied('audit_reservation_unavailable'); }
+      if (!reservation || reservation.reserved !== true ||
+          reservation.trace_id !== traceId) {
+        return denied(reservation?.reason === 'request_budget_exhausted' ?
+          'request_budget_exhausted' : 'audit_reservation_unavailable');
+      }
+      let summary,networkStarted=false;
       try {
         const key = credentialReader();
-        called = true;
+        networkStarted=true;
         const init = await mcpRequest(fetchImpl, key, 'initialize', {
           protocolVersion:'2025-03-26', capabilities:{},
           clientInfo:{name:'hermes-outlook-readonly',version:'0.1'}
         });
         if (!init.result?.serverInfo && !init.result?.protocolVersion)
           throw Error('mcp_initialize_invalid');
+        await mcpNotifyInitialized(fetchImpl,key,init.sessionId);
+        const listed=await mcpRequest(fetchImpl,key,'tools/list',undefined,init.sessionId);
+        if (!Array.isArray(listed.result?.tools) ||
+            !listed.result.tools.some(tool=>tool?.name==='COMPOSIO_MULTI_EXECUTE_TOOL'))
+          throw Error('composio_tool_not_advertised');
         const call = await mcpRequest(fetchImpl, key, 'tools/call', {
           name:'COMPOSIO_MULTI_EXECUTE_TOOL',
           arguments:{
@@ -179,16 +244,21 @@ function createHermesComposioOutlookMetadataRead({
         }, init.sessionId);
         summary = parseSummary(call.result);
       } catch {
-        try { await appendAudit(Object.freeze({...audit,event:'result',
-          at:new Date(clock()).toISOString(), outcome:'FAILED',
-          real_provider_called:called})); }
-        catch { return denied('audit_unavailable_after_provider'); }
-        return denied('provider_failed');
+        try {
+          const outcome=await appendOutcome({trace_id:traceId,
+            user_id:identity.user_id,outcome:'FAILED',sampled_messages:null});
+          if (outcome?.persisted !== true || outcome.trace_id !== traceId)
+            throw Error('audit_outcome_not_persisted');
+        } catch { return denied('audit_unavailable_after_provider',networkStarted); }
+        return denied('provider_failed',networkStarted);
       }
-      try { await appendAudit(Object.freeze({...audit,event:'result',
-        at:new Date(clock()).toISOString(), outcome:'SUCCEEDED',
-        real_provider_called:true, sampled_messages:summary.sampled_messages})); }
-      catch { return denied('audit_unavailable_after_provider'); }
+      try {
+        const outcome=await appendOutcome({trace_id:traceId,
+          user_id:identity.user_id,outcome:'SUCCEEDED',
+          sampled_messages:summary.sampled_messages});
+        if (outcome?.persisted !== true || outcome.trace_id !== traceId)
+          throw Error('audit_outcome_not_persisted');
+      } catch { return denied('audit_unavailable_after_provider',networkStarted); }
       return Object.freeze({status:'succeeded', trace_id:traceId,
         executed:true, network_call_performed:true, write_performed:false,
         messages_imported:0, content_read:false, ...summary});
@@ -197,4 +267,4 @@ function createHermesComposioOutlookMetadataRead({
   return Object.freeze({run});
 }
 module.exports = {createHermesComposioOutlookMetadataRead,
-  parseSummary, readCredential};
+  createComposioOutlookOwnerIdentityResolver, parseSummary, readCredential};
