@@ -94,7 +94,15 @@ test('scoped TLS pool, bad bearer blocked, owner grant revocable',async()=>{
   try{
     const b=createComposioOutlookStagingBootstrap({
       environment:f.environment,PoolClass:f.Pool,fetchImpl:f.fetchImpl,
-      credentialReader:()=>{throw Error('no credential read before reservation');}
+      credentialReader:()=>{throw Error('no credential read before reservation');},
+      authorizeRead:async()=>({approval_id:'maestro-synthetic-1',
+        decision:'APPROVED',source:'maestro_control_plane',
+        governance_review:'APPROVED',tenant_id:'grupo_erick',user_id:OWNER,
+        provider_id:'composio',account_alias:'outlook-inicial',
+        operation:'OUTLOOK_LIST_MESSAGES',data_scope:'metadata_only',
+        max_messages:10,read_only:true,one_time:true,
+        approved_at:new Date(Date.now()-1000).toISOString(),
+        expires_at:new Date(Date.now()+120000).toISOString()})
     });
     assert.equal(b.enabled,true);
     assert.equal(f.state.config.host,'db.'+PROJECT+'.supabase.co');
@@ -116,6 +124,19 @@ test('scoped TLS pool, bad bearer blocked, owner grant revocable',async()=>{
     assert.equal(f.state.fetches,0);
     await b.close();await b.close();
     assert.equal(f.state.ends,1);
+  }finally{f.cleanup();}
+});
+test('bootstrap never supplies Maestro approval by default',async()=>{
+  const f=makeFixture();
+  try{
+    const b=createComposioOutlookStagingBootstrap({
+      environment:f.environment,PoolClass:f.Pool,fetchImpl:f.fetchImpl
+    });
+    assert.equal((await b.pilot.run({authorization:'Bearer '+TOKEN})).status,
+      'maestro_approval_unavailable');
+    assert.equal(f.state.connections,0);
+    assert.equal(f.state.fetches,0);
+    await b.close();
   }finally{f.cleanup();}
 });
 test('inactive machine key denies pilot before database reservation',async()=>{

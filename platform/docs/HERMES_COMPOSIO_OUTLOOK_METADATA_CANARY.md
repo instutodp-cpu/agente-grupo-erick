@@ -54,7 +54,8 @@ Second Brain ingestion, scheduling and all generic Composio tools remain blocked
   trusted server-side owner grant lookup; run() accepts an authorization
   credential, **not** a caller-supplied identity object. The private
   staging bootstrap re-reads a mode-0600 owner grant file on every attempt,
-  allowing immediate revocation. No verified owner mapping is installed yet.
+  allowing immediate revocation. The confirmed owner mapping is staged
+  privately with status=pending and is not yet authorized for use.
   Callers and prompts cannot construct or elevate these fields.
 - No automatic assignment of messages to a company/store. Future per-company
   classification or sharing needs evidence, explicit owner-approved rules,
@@ -84,6 +85,15 @@ Default is disabled. Additional requirements for a future live trial:
 - The private staging bootstrap now wires the audit adapter, strict TLS
   PostgreSQL pool configuration, machine bearer registry and revocable
   owner grant lookup. It is not imported by the deployed runtime.
+- A trusted Maestro authorizeRead callback must consume a fresh (max 5 min),
+  one-time owner approval for exactly this provider, account, tenant, action,
+  metadata-only scope and maximum 10 messages. The callback must also verify
+  the separately reviewed governance exception. If absent, revoked, expired
+  or mismatched, no DB reservation or Composio request occurs. The deployed
+  bootstrap supplies NO approval callback by default.
+- Only id/receivedDateTime/isRead/hasAttachments are accepted in provider
+  message objects. Unexpected fields are rejected; IDs are never returned.
+  The 24-hour request quota cannot be raised above 10 in this canary.
 - A dedicated LOGIN role and its private password file are **not provisioned**;
   the existing personal ingress DB account and Supabase admin/service_role
   credentials must never be reused for corporate Outlook auditing.
@@ -136,8 +146,40 @@ Default is disabled. Additional requirements for a future live trial:
   This proves network/TLS only, NOT database authentication or RLS.
 - The private-config drill verified: disabled gate, inactive bearer denial,
   pending owner grant denial; zero DB connections and provider requests.
-- Maestro owner authorization, database password installation and a scoped
-  staging trial remain unapproved. Do not activate this pilot.
+- On 2026-11-11 the user approved PREPARATION of a single metadata-only
+  trial, not automatic execution. A synthetic public-key credential exchange
+  passed, but automatic provisioning of the real database credential was
+  blocked by the tool security policy. The login was explicitly reset to
+  NOLOGIN/PASSWORD NULL and independently verified; no credential file was
+  installed. The temporary exchange key was removed. Do not bypass this
+  policy; provisioning requires a separate user-controlled secure workflow.
+- Maestro owner authorization, the governance exception, database password
+  installation and a scoped staging trial remain pending. Do not activate.
+
+## Scoped governance exception proposal — PENDING, not approved
+
+The existing provider registry and permission overlay classify `composio`
+as `mock_only`. This draft does not override that contract. A future
+exception must be reviewed by the Maestro security/governance authority
+before any real Outlook message metadata is requested.
+
+- Provider: `composio` / `app_integration_hub`; critical risk.
+- Tenant and source: `grupo_erick`, group-shared corporate Outlook,
+  account alias `outlook-inicial`; no store/company inference.
+- Allowed action candidate: `OUTLOOK_LIST_MESSAGES`, inbox only,
+  `top=10`, `select=id,receivedDateTime,isRead,hasAttachments`.
+- Output: aggregate counts and date bounds only; no IDs, subjects,
+  senders, recipients, bodies, attachments, persistence or Second Brain import.
+- Forbidden: all other Composio tools, email send/write, calendar modification,
+  generic tool execution, production and automated schedules.
+- Human approval: owner/director verified in an authenticated session;
+  Maestro must consume a fresh one-time approval with a five-minute window.
+- Technical gates: staging-only, private machine grant, dedicated TLS
+  PostgreSQL login, committed append-only audit and shared 10/24h quota.
+- Rollback: revoke owner grant, deactivate machine registry entry,
+  disable pilot and revoke the dedicated database LOGIN.
+- Decision: **PENDING GOVERNANCE REVIEW**. User confirmation in chat is
+  approval to prepare, not a governance exception or Maestro authorization.
 
 ## How to test safely
 

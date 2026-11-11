@@ -60,7 +60,7 @@ function createOwnerGrantReader(file,expectedOwner) {
 }
 function createComposioOutlookStagingBootstrap({
   environment=process.env,PoolClass=null,fetchImpl=globalThis.fetch,
-  credentialReader
+  credentialReader,authorizeRead
 }={}) {
   const disabled=()=>Object.freeze({enabled:false,pilot:null,async close(){}});
   if(environment.HERMES_COMPOSIO_OUTLOOK_METADATA_ENABLED!=='true')
@@ -108,7 +108,8 @@ function createComposioOutlookStagingBootstrap({
   const pilot=createHermesComposioOutlookMetadataRead({
     environment,fetchImpl,reserveAttempt:audit.reserveAttempt,
     appendOutcome:audit.appendOutcome,resolveIdentity,
-    ...(credentialReader?{credentialReader}:{})
+    ...(credentialReader?{credentialReader}:{}),
+    ...(authorizeRead?{authorizeRead}:{})
   });
   let closed=false;
   return Object.freeze({enabled:true,pilot,async close(){

@@ -24,6 +24,15 @@ const identity=()=>({
   principal:{type:'machine',id:'reader-fixture'},key_id:'reader-key-fixture',
   user_id:'owner-fixture',role:'admin',user_scope:'owner_director'
 });
+const approval=()=>({
+  approval_id:'maestro-synthetic-approved-1',decision:'APPROVED',
+  source:'maestro_control_plane',governance_review:'APPROVED',
+  tenant_id:'grupo_erick',user_id:'owner-fixture',provider_id:'composio',
+  account_alias:'outlook-inicial',operation:'OUTLOOK_LIST_MESSAGES',
+  data_scope:'metadata_only',max_messages:10,read_only:true,one_time:true,
+  approved_at:new Date(Date.now()-1000).toISOString(),
+  expires_at:new Date(Date.now()+120000).toISOString()
+});
 const messages=()=>[
   {id:'never-return-this-id',receivedDateTime:'2026-11-11T13:00:00Z',
     isRead:false,hasAttachments:true},
@@ -75,7 +84,8 @@ function fakeFetch(calls,{invalidResponse=false,missingTool=false}={}) {
   };
 }
 function fixture({environment=env(),resolveIdentity, reserveAttempt,
-  appendOutcome,fetchImpl,credentialReader=()=> 'ck_fixture_only_secret',
+  appendOutcome,authorizeRead=async()=>approval(),fetchImpl,
+  credentialReader=()=> 'ck_fixture_only_secret',
   maxRequests=10}={}) {
   const calls=[],audit=[];
   const pilot=createHermesComposioOutlookMetadataRead({
@@ -89,7 +99,8 @@ function fixture({environment=env(),resolveIdentity, reserveAttempt,
       audit.push({event:'result',...item});
       return {persisted:true,trace_id:item.trace_id};
     }),
-    fetchImpl:fetchImpl||fakeFetch(calls),credentialReader,maxRequests
+    fetchImpl:fetchImpl||fakeFetch(calls),credentialReader,maxRequests,
+    authorizeRead
   });
   return {pilot,calls,audit};
 }
@@ -99,6 +110,35 @@ test('default disabled; no identity, credential, network, or audit',async()=>{
   assert.equal((await run(f)).status,'disabled');
   assert.equal(f.calls.length,0);
   assert.equal(f.audit.length,0);
+});
+test('missing Maestro approval denies before audit, secrets or network',async()=>{
+  const f=fixture({authorizeRead:null});
+  assert.equal((await run(f)).status,'maestro_approval_unavailable');
+  assert.equal(f.audit.length,0);
+  assert.equal(f.calls.length,0);
+  const g=fixture({authorizeRead:async()=>{throw Error('Maestro unavailable');}});
+  assert.equal((await run(g)).status,'maestro_approval_unavailable');
+  assert.equal(g.audit.length,0);
+  assert.equal(g.calls.length,0);
+});
+test('Maestro approval requires fresh one-time scope and governance exception',async()=>{
+  const invalid=[
+    {decision:'PENDING'},{source:'caller_prompt'},
+    {governance_review:'PENDING'},{tenant_id:'other'},
+    {user_id:'another-owner'},{provider_id:'google_workspace_super'},
+    {account_alias:'other'},{operation:'OUTLOOK_SEND_MAIL'},
+    {data_scope:'full_content'},{max_messages:11},
+    {read_only:false},{one_time:false},{approval_id:''},
+    {approved_at:new Date(Date.now()-600000).toISOString(),
+      expires_at:new Date(Date.now()+120000).toISOString()},
+    {expires_at:new Date(Date.now()-1000).toISOString()}
+  ];
+  for(const patch of invalid){
+    const f=fixture({authorizeRead:async()=>({...approval(),...patch})});
+    assert.equal((await run(f)).status,'maestro_approval_unavailable');
+    assert.equal(f.audit.length,0);
+    assert.equal(f.calls.length,0);
+  }
 });
 test('owner identity is resolved from trusted auth, not caller-supplied fields',async()=>{
   const f=fixture();
@@ -250,6 +290,19 @@ test('provider returning body or subject despite select is rejected',()=>{
   for(const extra of [{body:{content:'private'}},
     {subject:'private'},{from:{emailAddress:{address:'private'}}}])
     assert.throws(()=>parseSummary(wrap([{...messages()[0],...extra}])));
+});
+test('unrecognized message fields and malformed IDs fail closed',()=>{
+  const wrap=values=>({content:[{type:'text',text:JSON.stringify({
+    successful:true,data:{results:[{tool_slug:'OUTLOOK_LIST_MESSAGES',
+      response:{successful:true,data:{value:values}}}]}
+  })}]});
+  assert.throws(()=>parseSummary(wrap([{...messages()[0],
+    private_custom_field:'not requested'}])));
+  assert.throws(()=>parseSummary(wrap([{...messages()[0],id:{secret:'nested'}}])));
+  assert.throws(()=>parseSummary(wrap([{...messages()[0],id:''}])));
+});
+test('cannot raise Outlook canary daily quota above 10',()=>{
+  assert.throws(()=>fixture({maxRequests:11}),/dependencies_invalid/);
 });
 test('credential requires ck_ format and private mode',()=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'hermes-outlook-test-'));

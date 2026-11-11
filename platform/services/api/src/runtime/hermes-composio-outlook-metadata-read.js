@@ -16,6 +16,30 @@ const denied = (status,network_call_performed=false) => Object.freeze({
   status,executed:false,network_call_performed,write_performed:false,
   messages_imported:0,content_read:false});
 
+// A caller's chat confirmation is not a Maestro authorization record.
+// The trusted control plane must consume a one-time, fresh, scope-bound
+// approval AND a separately reviewed Composio read-only exception.
+function isValidMaestroReadApproval(approval,identity,now=Date.now()) {
+  if (!approval || typeof approval !== 'object' ||
+      approval.decision !== 'APPROVED' ||
+      approval.source !== 'maestro_control_plane' ||
+      approval.governance_review !== 'APPROVED' ||
+      approval.tenant_id !== 'grupo_erick' ||
+      approval.user_id !== identity?.user_id ||
+      approval.provider_id !== 'composio' ||
+      approval.account_alias !== ACCOUNT_ALIAS ||
+      approval.operation !== TOOL_SLUG ||
+      approval.data_scope !== 'metadata_only' ||
+      approval.max_messages !== LIMIT ||
+      approval.read_only !== true || approval.one_time !== true ||
+      !safeId(approval.approval_id)) return false;
+  const approved=Date.parse(approval.approved_at);
+  const expires=Date.parse(approval.expires_at);
+  return Number.isFinite(approved) && Number.isFinite(expires) &&
+    approved <= now && now < expires && expires > approved &&
+    expires - approved <= 5 * 60 * 1000;
+}
+
 function readCredential(path = SECRET_FILE) {
   const stat = fs.statSync(path);
   if (!stat.isFile() || (stat.mode & 0o077) !== 0 || stat.size > 512)
@@ -143,14 +167,13 @@ function parseSummary(result) {
     throw Error('message_count_invalid');
   let unread = 0, attachments = 0;
   const dates = [];
-  const forbidden=['body','bodyPreview','uniqueBody','subject','from',
-    'sender','toRecipients','ccRecipients','bccRecipients',
-    'internetMessageHeaders','attachments','replyTo','webLink',
-    'internetMessageId'];
+  const allowed=new Set(['id','receivedDateTime','isRead','hasAttachments']);
   for (const item of values) {
-    if (!item || forbidden.some(field=>Object.hasOwn(item,field)))
+    if (!item || typeof item !== 'object' || Array.isArray(item) ||
+        Object.keys(item).some(field=>!allowed.has(field)))
       throw Error('unexpected_sensitive_message_fields');
-    if (typeof item.isRead !== 'boolean' ||
+    if (typeof item.id !== 'string' || item.id.length < 1 ||
+        item.id.length > 1024 || typeof item.isRead !== 'boolean' ||
         typeof item.hasAttachments !== 'boolean' ||
         typeof item.receivedDateTime !== 'string' ||
         !Number.isFinite(Date.parse(item.receivedDateTime)))
@@ -170,13 +193,13 @@ function parseSummary(result) {
 
 function createHermesComposioOutlookMetadataRead({
   environment=process.env, fetchImpl=globalThis.fetch,
-  reserveAttempt, appendOutcome, resolveIdentity,
+  reserveAttempt, appendOutcome, resolveIdentity, authorizeRead,
   credentialReader=readCredential, maxRequests=10
 }={}) {
   if (typeof reserveAttempt !== 'function' || typeof appendOutcome !== 'function' ||
       typeof resolveIdentity !== 'function' ||
       typeof fetchImpl !== 'function' || typeof credentialReader !== 'function' ||
-      !Number.isInteger(maxRequests) || maxRequests < 1 || maxRequests > 20)
+      !Number.isInteger(maxRequests) || maxRequests < 1 || maxRequests > 10)
     throw TypeError('dependencies_invalid');
   let inFlight = false;
   const enabled = () =>
@@ -211,6 +234,18 @@ function createHermesComposioOutlookMetadataRead({
     if (inFlight) return denied('already_in_flight');
     inFlight = true;
     try {
+      // No network, secret access or DB reservation without a trusted,
+      // fresh, one-time Maestro+governance approval for this exact scope.
+      let approval;
+      try {
+        if (typeof authorizeRead === 'function')
+          approval=await authorizeRead({tenant_id:identity.tenant_id,
+            user_id:identity.user_id,provider_id:'composio',
+            account_alias:ACCOUNT_ALIAS,operation:TOOL_SLUG,
+            data_scope:'metadata_only',max_messages:LIMIT,read_only:true});
+      } catch { /* missing or revoked approval fails closed */ }
+      if (!isValidMaestroReadApproval(approval,identity))
+        return denied('maestro_approval_unavailable');
       const traceId = randomUUID();
       let reservation;
       try { reservation=await reserveAttempt({trace_id:traceId,
@@ -272,4 +307,5 @@ function createHermesComposioOutlookMetadataRead({
   return Object.freeze({run});
 }
 module.exports = {createHermesComposioOutlookMetadataRead,
-  createComposioOutlookOwnerIdentityResolver, parseSummary, readCredential};
+  createComposioOutlookOwnerIdentityResolver, parseSummary, readCredential,
+  isValidMaestroReadApproval};
