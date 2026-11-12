@@ -37,6 +37,10 @@ function validEntry(e,now=Date.now()){
  !['money','records','cancelled'].includes(e.metric)||
  !analyst.isPeriod(e.period)||
  e.other_period!==null&&(typeof e.other_period!=='string'||!analyst.isPeriod(e.other_period))||
+ (e.template==='compare'&&(e.other_period===null||
+  e.other_period===e.period||e.other_period.length!==e.period.length))||
+ (e.template!=='compare'&&e.other_period!==null)||
+ (e.template==='products'&&!e.period.startsWith('2026'))||
  e.source!==(e.template==='products'?analyst.PRODUCT_SOURCE:analyst.SOURCE))throw Error('memory_entry_denied');
  return e;
 }
