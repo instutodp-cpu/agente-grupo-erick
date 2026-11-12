@@ -60,7 +60,9 @@ function observe(store,data,plan,now=Date.now()){
  const next=normalizeEntry(data,plan,now);
  // A delayed provider response must not replace a newer observation of the same query.
  const previous=current.entries.find(e=>e.key===next.key);
- if(previous&&Date.parse(previous.at)>Date.parse(next.at))return current;
+ // Equal timestamps are replay-equivalent: preserve the first verified observation.
+ // This makes duplicate deliveries idempotent even if a later payload differs.
+ if(previous&&Date.parse(previous.at)>=Date.parse(next.at))return current;
  const entries=current.entries.filter(e=>e.key!==next.key).concat(next)
   .sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)).slice(0,MAX_ENTRIES);
  return validStore({schema:SCHEMA,tenant_id:TENANT,scope:'enterprise',entries},now);

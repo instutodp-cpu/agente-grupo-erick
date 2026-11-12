@@ -1215,6 +1215,20 @@ test('enterprise memory ignores delayed older observation of the same query',asy
  assert.deepEqual(after,first);
  assert.equal(after.entries[0].at,recent.at);
 });
+test('enterprise memory preserves first observation on same-timestamp replay',async()=>{
+ const now=Date.parse('2026-11-12T04:00:00Z');
+ const p={tenant_id:'grupo_erick',template:'period',period:'2026-05',
+  other_period:null,metric:'records',store:null};
+ const db=records=>({query:async()=>({rows:[{records:String(records),
+  cancelled:'7',noncancelled:String(records-7),amount:'12000.00',
+  last_day:'2026-05-31'}]})});
+ const first=await analyst.execute(db(100),p,()=>new Date(now-1000));
+ const replay=await analyst.execute(db(101),p,()=>new Date(now-1000));
+ const initial=businessEvidence.observe(null,first,p,now);
+ const after=businessEvidence.observe(initial,replay,p,now);
+ assert.deepEqual(after,initial);
+ assert.equal(after.entries[0].summary,initial.entries[0].summary);
+});
 test('year-on-year history compares only January through May of both years',async()=>{
  const p={tenant_id:'grupo_erick',template:'compare',period:'2025',
   other_period:'2026',metric:'money',store:null};
