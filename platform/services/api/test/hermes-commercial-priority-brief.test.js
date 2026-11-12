@@ -126,3 +126,59 @@ test('new route has same identity, persisted budget and non-sensitive audit',asy
  }finally{await new Promise(resolve=>server.close(resolve));
   fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+
+test('work progress propagates as context only, preserving payment and ERP restrictions',()=>{
+ const s=fixture();
+ s.reconciliation_work={source:'ReconciliationWorkEvent',as_of:s.as_of,
+  erp_linx_conciliated:false,payment_recorded:false,
+  tracked_titles:2,waiting_documents:1,in_review:0,
+  discrepancy_found:0,review_submitted:1};
+ const result=createHermesCommercialPriorityBrief(s,{clock:()=>NOW});
+ assert.equal(result.reconciliation_work.tracked_titles,2);
+ assert.equal(result.reconciliation_work.review_submitted,1);
+ assert.equal(result.payment_authorized,false);
+ const forged=fixture();
+ forged.reconciliation_work={...s.reconciliation_work,payment_recorded:true};
+ assert.throws(()=>createHermesCommercialPriorityBrief(forged,{clock:()=>NOW}),/commercial_work_context_invalid/);
+});
+
+
+test('aged payable priorities preserve verified totals and no financial action',()=>{
+ const s=fixture();
+ s.reconciliation_priority={
+  source:'Duplicate',as_of:s.as_of,method:'days_overdue_and_value_v1',
+  erp_linx_conciliated:false,includes_only_open_balance:true,
+  overdue_without_work:471,
+  overdue_30plus:{count:300,balance_brl:700000},
+  overdue_1to29:{count:171,balance_brl:498243.1},
+  due_next7:{count:20,balance_brl:30000}
+ };
+ const b=createHermesCommercialPriorityBrief(s,{clock:()=>NOW});
+ assert.deepEqual(b.reconciliation_priority,s.reconciliation_priority);
+ assert.equal(b.payment_authorized,false);
+ assert.equal(b.external_write_performed,false);
+ assert.equal(b.erp_linx_conciliated,false);
+ const forged=fixture();
+ forged.reconciliation_priority={...s.reconciliation_priority,overdue_without_work:472};
+ assert.throws(()=>createHermesCommercialPriorityBrief(forged,{clock:()=>NOW}),/priority_proof_inconsistent/);
+});
+
+
+test('documentary deadlines and assignment metrics pass through brief without settlement',()=>{
+ const s=fixture();
+ const work={source:'ReconciliationWorkEvent',as_of:s.as_of,
+  erp_linx_conciliated:false,payment_recorded:false,
+  tracked_titles:2,waiting_documents:1,in_review:1,discrepancy_found:0,review_submitted:0,
+  missing_named_responsible:1,work_deadlines_overdue:1,work_due_next_7:0,
+  work_without_deadline:1,with_evidence_reference:1};
+ s.reconciliation_work=work;
+ const got=createHermesCommercialPriorityBrief(s,{clock:()=>NOW});
+ assert.deepEqual(got.reconciliation_work,work);
+ assert.equal(got.payment_authorized,false);
+ assert.equal(got.external_write_performed,false);
+ const invalid=fixture();
+ invalid.reconciliation_work={...work,work_due_next_7:2};
+ assert.throws(()=>createHermesCommercialPriorityBrief(invalid,{clock:()=>NOW}),
+  /commercial_work_metrics_invalid/);
+});

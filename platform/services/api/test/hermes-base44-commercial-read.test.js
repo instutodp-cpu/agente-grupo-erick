@@ -178,3 +178,102 @@ test('commercial gate is off by default and shares staging kill switch',async()=
  assert.equal(provider,0);
  }finally{tok.close();}
 });
+
+
+test('official work progress is scoped, never a payment or ERP settlement',async()=>{
+ const s=commercial();
+ s.reconciliation_work={source:'ReconciliationWorkEvent',as_of:s.as_of,
+  erp_linx_conciliated:false,payment_recorded:false,
+  tracked_titles:8,waiting_documents:2,in_review:3,
+  discrepancy_found:1,review_submitted:2};
+ const tok=protectedKey();
+ try{
+  const result=await readBase44CommercialSummary({
+   environment:env(tok.file),fetchImpl:async()=>resp(s)
+  });
+  assert.deepEqual(result.reconciliation_work,s.reconciliation_work);
+  assert.equal(result.reconciliation_work.payment_recorded,false);
+  for(const bad of [
+   {...s.reconciliation_work,payment_recorded:true},
+   {...s.reconciliation_work,erp_linx_conciliated:true},
+   {...s.reconciliation_work,tracked_titles:2},
+   {...s.reconciliation_work,as_of:'2024-01-01'},
+   {...s.reconciliation_work,source:'Outro Cliente'},
+   {...s.reconciliation_work,waiting_documents:-1}
+  ]){
+   await assert.rejects(readBase44CommercialSummary({
+    environment:env(tok.file),fetchImpl:async()=>resp({
+     ...s,reconciliation_work:bad})
+   }),/commercial_work_contract_invalid/);
+  }
+ }finally{tok.close();}
+});
+test('missing work schema remains unavailable, never fabricated zero progress',async()=>{
+ const tok=protectedKey();
+ try{
+  const s=commercial();
+  const data=await readBase44CommercialSummary({
+   environment:env(tok.file),fetchImpl:async()=>resp(s)
+  });
+  assert.equal(Object.hasOwn(data,'reconciliation_work'),false);
+ }finally{tok.close();}
+});
+
+
+test('priorities read from signed Base44 are source-scoped and balanced to overdue totals',async()=>{
+ const tok=protectedKey();
+ try{
+  const p=commercial(),priority={
+   source:'Duplicate',as_of:p.as_of,method:'days_overdue_and_value_v1',
+   erp_linx_conciliated:false,includes_only_open_balance:true,
+   overdue_without_work:471,
+   overdue_30plus:{count:300,balance_brl:700000},
+   overdue_1to29:{count:171,balance_brl:498243.10},
+   due_next7:{count:20,balance_brl:30000}
+  };
+  const verified=await readBase44CommercialSummary({
+   environment:env(tok.file),fetchImpl:async()=>resp({...p,reconciliation_priority:priority})
+  });
+  assert.deepEqual(verified.reconciliation_priority,priority);
+  for(const bad of [
+   {...priority,overdue_without_work:999},
+   {...priority,source:'Other tenant'},
+   {...priority,as_of:'2020-01-01'},
+   {...priority,overdue_30plus:{count:300,balance_brl:123}},
+   {...priority,method:'financial_payment_authorized'},
+   {...priority,due_next7:{count:20,balance_brl:1000000}}
+  ]){
+   await assert.rejects(()=>readBase44CommercialSummary({
+    environment:env(tok.file),fetchImpl:async()=>resp({
+     ...p,reconciliation_priority:bad})
+   }),/commercial_priority_contract_invalid/);
+  }
+ }finally{tok.close();}
+});
+
+
+test('attested operational workload metrics preserve zero and deny forged deadlines',async()=>{
+ const s=commercial();
+ const work={source:'ReconciliationWorkEvent',as_of:s.as_of,
+  erp_linx_conciliated:false,payment_recorded:false,
+  tracked_titles:3,waiting_documents:1,in_review:1,discrepancy_found:0,review_submitted:1,
+  missing_named_responsible:1,work_deadlines_overdue:1,work_due_next_7:1,
+  work_without_deadline:1,with_evidence_reference:2};
+ const token=protectedKey();
+ try{
+  const got=await readBase44CommercialSummary({
+   environment:env(token.file),fetchImpl:async()=>resp({...s,reconciliation_work:work})
+  });
+  assert.deepEqual(got.reconciliation_work,work);
+  for(const broken of [
+   {...work,work_deadlines_overdue:4},
+   {...work,work_without_deadline:2},
+   {...work,missing_named_responsible:-1},
+   {...work,with_evidence_reference:undefined}
+  ]){
+   await assert.rejects(()=>readBase44CommercialSummary({
+    environment:env(token.file),fetchImpl:async()=>resp({...s,reconciliation_work:broken})
+   }),/commercial_work_metrics_invalid/);
+  }
+ }finally{token.close();}
+});
