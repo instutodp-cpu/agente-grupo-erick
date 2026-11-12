@@ -166,6 +166,18 @@ function reply(data,requested){
   p.template==='products'?5:1)||
  typeof data.at!=='string'||!Number.isFinite(Date.parse(data.at)))
  throw Error('analyst_reply_denied');
+ // Cached or injected evidence must not introduce duplicate/foreign dimensions.
+ const seenEvidence=new Set();
+ for(const r of data.rows){
+  if(!r||typeof r!=='object'||Array.isArray(r))throw Error('analyst_reply_denied');
+  const dimension=p.template==='products'?r.code:p.template==='period'?null:r.label;
+  if(p.template==='stores'&&!STORES.includes(dimension)||
+     p.template==='compare'&&dimension!==p.period&&dimension!==p.other_period||
+     p.template==='products'&&(typeof dimension!=='string'||
+       !/^[0-9]{1,12}$/.test(dimension))||
+     dimension!==null&&seenEvidence.has(dimension))throw Error('analyst_reply_denied');
+  if(dimension!==null)seenEvidence.add(dimension);
+ }
  const lines=['📊 Hermes — análise histórica Grupo Erick',
   'Fonte: Supabase / '+data.source,
   'Consultado em: '+new Date(data.at).toLocaleString('pt-BR',{timeZone:'America/Recife',hour12:false})];

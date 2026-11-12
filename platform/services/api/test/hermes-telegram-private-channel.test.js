@@ -902,6 +902,16 @@ test('historical analyst refuses a result from another metric, store, tenant or 
   {rows:[...data.rows,...data.rows]}
  ])assert.throws(()=>analyst.reply({...data,...changed},p),/analyst_reply_denied/);
 });
+test('analyst response rejects duplicate, foreign and malformed ranking dimensions',()=>{
+ const p={tenant_id:'grupo_erick',template:'stores',period:'2026-05',
+  other_period:null,metric:'records',store:null};
+ const item={label:'CALCADOS',records:100,cancelled:7,amount:12000,last_day:'2026-05-31'};
+ const base={tenant_id:'grupo_erick',mode:'online_aggregate',source:analyst.SOURCE,
+  at:'2026-10-22T14:00:00Z',plan:p,rows:[item]};
+ assert.match(analyst.reply(base,p),/CALCADOS/);
+ for(const rows of [[item,item],[{...item,label:'OTHER_TENANT'}],[null]])
+  assert.throws(()=>analyst.reply({...base,rows},p),/analyst_reply_denied/);
+});
 test('period totals do not duplicate the requested count when cancellations are the metric',async()=>{
  const p=analyst.planQuestion('Quantas vendas canceladas em junho 2026?');
  const data=await analyst.execute({query:async()=>({rows:[{
