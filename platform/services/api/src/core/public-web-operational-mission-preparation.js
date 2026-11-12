@@ -22,19 +22,21 @@ function nonEmpty(value) {
   return typeof value === 'string' && value.trim() !== '';
 }
 
-function validOperationalChallenge(challenge) {
+function validOperationalChallenge(challenge, subjectId) {
   return challenge?.ok === true
     && challenge.status === 'EMAIL_REAUTH_OPERATIONAL_CHALLENGE_READY'
     && nonEmpty(challenge.challenge_id)
     && nonEmpty(challenge.action_digest)
     && nonEmpty(challenge.delivery_reference)
+    && challenge.subject_id === subjectId
     && challenge.execution_authorized === false
     && challenge.production_allowed === false;
 }
 
 function validStoredTrial(record) {
   return record?.trial_config?.environment === 'staging'
-    && record.trial_config?.maximum_requests === 1;
+    && record.trial_config?.maximum_requests === 1
+    && nonEmpty(record.trial_config?.operator_id);
 }
 
 function hasExecutionArtifacts(record = {}) {
@@ -50,7 +52,6 @@ function evidenceMatchesMission(evidence, record, evidenceKey) {
     && evidence.single_use === true
     && evidence.challenge_id === record.reauth_challenge_id
     && evidence.action_digest === record.reauth_action_digest
-    && evidence.subject_id === 'human:owner'
     && evidence.subject_id === record.trial_config?.operator_id
     && (!nonEmpty(evidence.evidence_key) || evidence.evidence_key === evidenceKey);
 }
@@ -75,7 +76,8 @@ async function prepareOperationalMissionReauth({ inbox, mission_run_id, challeng
       target_path: found.record.target_path,
       mission_id: found.record.mission_id,
       mission_run_id,
-      contract_hash: found.record.contract_hash
+      contract_hash: found.record.contract_hash,
+      subject_id: found.record.trial_config.operator_id
     });
   } catch (_error) {
     const completedAt = String(clock());
@@ -88,7 +90,7 @@ async function prepareOperationalMissionReauth({ inbox, mission_run_id, challeng
     return blocked('reauth_challenge_preparation_failed');
   }
 
-  if (!validOperationalChallenge(challenge)) {
+  if (!validOperationalChallenge(challenge, found.record.trial_config.operator_id)) {
     const completedAt = String(clock());
     await inbox.transition({
       mission_run_id,
@@ -120,6 +122,7 @@ async function prepareOperationalMissionReauth({ inbox, mission_run_id, challeng
     contract_hash:found.record.contract_hash,
     target_origin:found.record.target_origin,
     target_path:found.record.target_path,
+    subject_id:found.record.trial_config.operator_id,
     challenge_id:challenge.challenge_id,
     action_digest:challenge.action_digest,
     delivery_reference:challenge.delivery_reference,
@@ -175,7 +178,8 @@ async function refreshOperationalMissionReauth({ inbox, evidenceStore, mission_r
       target_path:record.target_path,
       mission_id:record.mission_id,
       mission_run_id,
-      contract_hash:record.contract_hash
+      contract_hash:record.contract_hash,
+      subject_id:record.trial_config.operator_id
     });
   } catch (_error) {
     await inbox.transition({
@@ -187,7 +191,7 @@ async function refreshOperationalMissionReauth({ inbox, evidenceStore, mission_r
     return blocked('reauth_refresh_challenge_preparation_failed');
   }
 
-  if (!validOperationalChallenge(challenge)) {
+  if (!validOperationalChallenge(challenge, record.trial_config.operator_id)) {
     await inbox.transition({
       mission_run_id,
       expected_status:'preparing',
@@ -219,6 +223,7 @@ async function refreshOperationalMissionReauth({ inbox, evidenceStore, mission_r
     contract_hash:record.contract_hash,
     target_origin:record.target_origin,
     target_path:record.target_path,
+    subject_id:record.trial_config.operator_id,
     challenge_id:challenge.challenge_id,
     action_digest:challenge.action_digest,
     delivery_reference:challenge.delivery_reference,
