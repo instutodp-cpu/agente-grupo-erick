@@ -12,6 +12,7 @@
 
 const http = require('http');
 const { randomUUID } = require('crypto');
+const { createPersonalArchiveIngressBootstrap } = require('./runtime/hermes-brain-personal-ingress-bootstrap');
 const { getCapability } = require('./capabilities/registry');
 const { evaluateConfirmationGate } = require('./core/confirmation-gate');
 const { classifyConfirmationResponse } = require('./core/confirmation-response');
@@ -29,6 +30,7 @@ const {
 } = require('./core/request-identity');
 const { beginCallerObservation, confirmationMetadata } = require('./core/caller-observability');
 const { resolveMachineIdentity } = require('./core/machine-identity-resolver');
+const { createHermesGithubLiveReadBootstrap } = require('./pilots/hermes-github-live-read-bootstrap');
 const { createPublicWebOperationalMissionIngressBootstrap } = require('./pilots/public-web-operational-mission-ingress-bootstrap');
 
 const SERVICE = 'hermes-api';
@@ -127,10 +129,29 @@ function readJsonBody(req) {
 function createServer({
   machineIdentityRegistry = null,
   missionIngress = null,
+  githubReadPilot = null,
+  // Private upload remains DISABLED unless an independently authorized
+  // JWT-verifying, RLS-bound ingress composition is explicitly supplied.
+  personalArchiveIngress = null,
   requestIdentityMode = REQUEST_IDENTITY_MODES.PUBLIC
 } = {}) {
   return http.createServer((req, res) => {
     beginCallerObservation(req, res, { requestIdFactory: randomUUID });
+    // Separate personal trust boundary. Never reuse machine or company identity.
+    // Absent composition is inert and cannot store any personal content.
+    if ((req.url || '').split('?')[0] === '/internal/personal-archive/batch') {
+      if (!personalArchiveIngress ||
+          typeof personalArchiveIngress.enabled !== 'function' ||
+          !personalArchiveIngress.enabled() ||
+          typeof personalArchiveIngress.handle !== 'function') {
+        return sendJson(res, 503, { error: 'personal_ingress_disabled' });
+      }
+      return Promise.resolve().then(()=>
+        personalArchiveIngress.handle(req,res)
+      ).catch(()=>
+        sendJson(res,503,{ error: 'personal_ingress_unavailable' })
+      );
+    }
     try {
       attachRequestIdentity(req, {
         mode: requestIdentityMode,
@@ -142,6 +163,41 @@ function createServer({
 
     const { method } = req;
     const url = (req.url || '/').split('?')[0];
+
+    if (url === '/internal/github-read-pilot' ||
+        url === '/internal/github-read-pilot/readiness' ||
+        url === '/internal/economy-read-pilot/selic' ||
+        url === '/internal/economy-read-pilot/ipca' ||
+        url === '/internal/commercial-read-pilot/summary' ||
+        url === '/internal/commercial-read-pilot/brief' ||
+        url === '/internal/lotoia-read-pilot/health') {
+      if (method !== 'GET' || req.url !== url) {
+        return sendJson(res, 405, { error: 'method_not_allowed' });
+      }
+      if (!githubReadPilot || typeof githubReadPilot.execute !== 'function' ||
+          typeof githubReadPilot.enabled !== 'function' ||
+          !githubReadPilot.enabled()) {
+        return sendJson(res, 503, { error: 'pilot_disabled' });
+      }
+      let identity;
+      try {
+        identity=resolveMachineIdentity({
+          authorization:req.headers?.authorization
+        },machineIdentityRegistry);
+      } catch {
+        return sendJson(res, 401, { error: 'unauthorized' });
+      }
+      return Promise.resolve().then(()=>githubReadPilot.execute({identity,resource:url.endsWith('/readiness')?'readiness':
+          url.endsWith('/selic')?'selic':url.endsWith('/ipca')?'ipca':
+          url.endsWith('/summary')?'commercial':
+          url.endsWith('/brief')?'commercial_brief':
+          url.endsWith('/lotoia-read-pilot/health')?'lotoia_health':'readme'})).then(result=>{
+        const code=result.status==='succeeded'?200:
+          result.status==='request_budget_exhausted'?429:503;
+        res.setHeader('Cache-Control','no-store');
+        return sendJson(res,code,result);
+      }).catch(()=>sendJson(res,503,{error:'pilot_failed'}));
+    }
 
     if (method === 'GET' && url === '/health') {
       return sendJson(res, 200, { status: 'ok', service: SERVICE, version: VERSION });
@@ -481,9 +537,14 @@ function createServer({
 // quando `createServer` é importado por testes.
 if (require.main === module) {
   const missionIngressComposition = createPublicWebOperationalMissionIngressBootstrap();
+  const liveReadComposition = createHermesGithubLiveReadBootstrap();
+  const personalArchiveComposition = createPersonalArchiveIngressBootstrap();
   const server = createServer({
-    machineIdentityRegistry: missionIngressComposition.machineIdentityRegistry,
-    missionIngress: missionIngressComposition.missionIngress
+    personalArchiveIngress: personalArchiveComposition.ingress,
+    machineIdentityRegistry: liveReadComposition.machineIdentityRegistry ||
+      missionIngressComposition.machineIdentityRegistry,
+    missionIngress: missionIngressComposition.missionIngress,
+    githubReadPilot:liveReadComposition.githubReadPilot
   });
 
   server.listen(PORT, () => {
@@ -497,7 +558,7 @@ if (require.main === module) {
       console.log(JSON.stringify({ level: 'info', event: 'api_shutdown', signal }));
       server.close(async () => {
         try { await missionIngressComposition.close(); }
-        finally { process.exit(0); }
+        finally { try { await personalArchiveComposition.close(); } finally { process.exit(0); } }
       });
     });
   }

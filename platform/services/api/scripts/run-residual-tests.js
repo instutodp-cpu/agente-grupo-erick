@@ -37,6 +37,14 @@ function parseInvocation(args) {
   throw new Error('invalid argument: expected --shard=X/Y or --group=GROUP_NAME');
 }
 
+// The dedicated PostgreSQL integration group shares one ephemeral CI database.
+// Node's default parallel test-file workers race on CREATE SCHEMA IF NOT EXISTS
+// and table cleanup; serialize ONLY that group, without changing other shards.
+function buildNodeTestArgs(invocation,files) {
+  const exclusivePg=invocation.mode==='group'&&invocation.groupName==='postgres-persistence';
+  return ['--test',...(exclusivePg?['--test-concurrency=1']:[]),...files];
+}
+
 function main(args = process.argv.slice(2)) {
   let invocation;
   try {
@@ -82,7 +90,7 @@ function main(args = process.argv.slice(2)) {
   }
 
   console.log(`run-ci-test-group: running ${files.length} file(s) in ${label} (${partition.discoveredCount} discovered)`);
-  const result = spawnSync(process.execPath, ['--test', ...files], { stdio: 'inherit', cwd: path.join(__dirname, '..') });
+  const result = spawnSync(process.execPath, buildNodeTestArgs(invocation,files), { stdio: 'inherit', cwd: path.join(__dirname, '..') });
   process.exitCode = result.status === null ? 1 : result.status;
 }
 
@@ -90,4 +98,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { main, parseInvocation };
+module.exports = { main, parseInvocation, buildNodeTestArgs };

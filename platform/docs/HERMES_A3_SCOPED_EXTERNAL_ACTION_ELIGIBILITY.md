@@ -334,3 +334,554 @@ must be bound to the exact post-MissionRun action, and no new human promotion
 has occurred. This change alone is not operational E2E evidence. Do not
 reuse the historic public-web run, replay the previous single-use authorization,
 or repeat the historic update-file canary.
+
+## Simulated official MissionRun source candidate (20 October 2026; NOT A3 promotion)
+
+The existing Maestro dispatch Gateway marks non-public-web dispatches `dispatch_simulado=true`.
+Prior A3 readers required `dispatch_simulado=false` for every run, unintentionally
+excluding the only currently established official zero-effect simulation run path.
+That must **not** be solved by mislabeling a simulated run as operational.
+
+Maestro Pessoal sandbox checkpoint `6ad7534c70b57597c48d7be4` now has a
+read-only eligibility helper for a completed, simulated official `MissionRun`:
+require status `concluida`, an exact single `MissionDispatchOutbox` receipt
+with matching workspace/mission/run/dispatch token/contract hash, simulated mock
+provider and acknowledged dispatch state. This is only **source candidacy**;
+an outbox acknowledgment alone is not an A3 staging-gate receipt.
+
+The Hermes privileged read bridge may now query that run, but remains blocked
+unless Maestro additionally verifies the independently signed Ed25519 A3 source
+attestation, current precisely scoped human approval, globally unique single-use
+ID, durable `sealed` claim, and exact action/target/intent bindings. A missing,
+unpublished, inaccessible or invalid gateway response fails closed. The older
+operational-run rule remains unchanged. Local transport mocks are **tests only**.
+
+**Not done:** deploy or configure Maestro A3 stage and issuer verification
+settings; independently produce and sign genuine zero-effect staging receipts;
+authorize a new A3-specific human decision; establish server-to-server
+service identity; or perform any actual A3 SCM mutation. Production/A4,
+merge authority, and promotion for update_file/Draft create_pull_request
+remain forbidden. The 15 October public-web MissionRun and 19 October
+update_file canary do not meet this new source contract.
+
+
+### A3 source hardening — exact Mission Contract and cross-approval replay (20 Oct 2026)
+
+Maestro Pessoal sandbox checkpoint `6ad76bacc924d49ff794f174`
+(c03c5046ff257b623f36f2842dc462d87ab635d3) requires the
+original official Mission Contract to match the exact MissionRun's
+mission/workspace/dispatch idempotency key/emitter/issue time and to
+declare `github_api`, an explicit human-approval policy, a code/test mission
+type and `merge`, `publish`, `production` denied actions.
+A correct contract hash is **necessary but not sufficient**. In particular,
+the historical `public_web_read` canary must never qualify as an A3 source.
+
+Both signed admission and provenance read now require exactly one official
+`SolicitacaoAprovacao` across **all workspaces** for the proposed
+`a3_single_use_authorization_id`, rechecked during persistence and on reads.
+Duplicates deny without accepting a second approval, including if a second
+approval appears after a source was sealed. These read/check/claim controls
+**do not provide atomic global uniqueness** across independent concurrent
+approval creations: an authoritative storage `UNIQUE` constraint or
+equivalent exclusive ledger remains required before operational promotion.
+
+Maestro Deno synthetic tests: 29 passed, 0 failed. The Hermes
+authenticated read bridge duplicates the purpose/scope check before even
+calling `verify_integrity` or `verify_a3_provenance`. Missing source
+authentication, independent zero-effect simulation receipt, issuer key,
+current scoped human approval and actual deployment remain hard blocks.
+No issuer was created and no real A3 source/mutation was emitted.
+
+
+### Contract issuer vs. dispatch actor compatibility — 20 Oct 2026
+
+Official `dispatchService` snapshots `buildMissionContract` **before** acquiring
+its Mission dispatch lock. Its contract `requested_by.id` and
+`metadata.emitted_by` identify the *mission creator*, while
+`MissionRun.emitted_by` identifies the authenticated *dispatcher*.
+The `MissionRun.issued_at` is recorded after contract creation; therefore
+the timestamps must be valid canonical ISO datetimes in strictly
+non-decreasing order, within five minutes, not exactly equal.
+
+The Maestro and Hermes authenticated-read guards now bind
+mission/workspace/idempotency key exactly, independently validate both
+actor roles and original creator binding, and require the issuer timestamp
+to precede the official run timestamp within the bounded dispatch window.
+This resolves a confirmed false-negative in the previous guard without
+trusting input-supplied source proof. Maestro 29/29 synthetic tests passed
+(checkpoint `6ad77c9fd0aa036752cc7539`, commit
+`46869922ec40030ecf63ce256f6b7c94cd1d16b7`).
+
+The independent zero-effect receipt, exact post-run human approval,
+global transactional single-use ownership and signing/deployment gates
+remain mandatory and are **not** provided by this compatibility fix.
+
+
+### Staging PostgreSQL global single-use claim migration — 20 Oct 2026
+
+PR #563 includes `034_create_maintainer_a3_source_authorization_claims.sql`
+as a deliberately **unapplied** staging-only schema migration in the existing
+`hermes` PostgreSQL namespace. It is distinct from
+`maintainer_scm_write_consumption` and does **not** consume an SCM
+authorization or attest a simulation. Database-enforced exclusivity applies
+globally across workspaces to
+`single_use_authorization_id` (PRIMARY KEY), `approval_reference`,
+`simulation_receipt_digest` and `source_record_digest`. The table
+stores bound mission/workspace/run/operation/target/intent/issuer-signed-record
+digests only, no credentials or provider capabilities.
+
+The exact migration was tested against staging PostgreSQL inside an
+outer explicit transaction, stripping only the migration's own
+`BEGIN`/`COMMIT` wrappers and ending with **ROLLBACK**. Observed:
+schema creation, rejection of duplicate authorization IDs, duplicate approvals,
+duplicate simulation receipts and the `production` environment; one
+synthetic row before rollback, zero table persistence afterward.
+No migration was deployed and no official Base44 evidence was written.
+
+Two further explicit blocks remain:
+1. The independent, trusted issuer must prove a **real**, newly completed
+   zero-effect A3 simulation receipt bound to an official code-scoped MissionRun
+   and an exact post-run human decision, not merely an acknowledged mock outbox.
+2. A privileged staging service must atomically claim this durable PostgreSQL
+   key **before** the Maestro attestation is finalized or consumed by Hermes;
+   until the real authority path uses the database constraint, the schema
+   remains a tested contract, **not** enforcement in the live A3 gate.
+
+Neither observation-only HTTP, a valid contract hash, nor this migration
+authorizes an external SCM operation, merge, production or A4.
+
+
+### A3 source claim persistence — non-executing adapter (20 October 2026)
+
+The existing PR now contains
+`platform/services/api/src/core/hermes-maintainer-a3-source-claim-postgres-persistence.js`,
+a non-HTTP, default-disabled PostgreSQL persistence adapter for migration 034.
+It is **not** the independent Ed25519 issuer, the authoritative Maestro
+approval decision, an execution action, or the pre-existing SCM write
+consumption. No production dispatch path imports or enables this adapter.
+
+An intentionally absent privileged server callback
+`verifyOfficialSource` must eventually authenticate the official
+MissionRun, specific post-run human decision, correctly signed source and
+independently confirmed zero-effect simulation receipt. A request's
+`verified` flag is not trusted as authority. The callback cannot be supplied
+from HTTP input; server composition will remain fail-closed until genuine
+evidence can be verified. Enabling also requires both
+`HERMES_DEPLOYMENT_STAGE=staging` and
+`HERMES_A3_SOURCE_CLAIMS_ENABLED=true` from server-owned configuration.
+
+Given a trusted verifier, this component validates exact claim scope,
+atomically inserts into the existing migration-034 PostgreSQL table,
+commits and read-verifies the immutable binding. All conflicts, replays,
+unavailable verifiers and uncertain persistence return a denial. It
+never returns `execution_authorized=true`, never calls a provider and
+never inserts into the SCM consumption ledger.
+
+Synthetic adapter/schema tests 9/9 passed on staging VPS; the focused
+self-audit + A3 reader suite passed 24/24 and returned an empty
+`errors` array after refreshing source/test inventory counts.
+PostgreSQL uniqueness was previously tested in rollback-only staging
+transactions. **Migration 034 remains unapplied in the durable staging
+database; the adapter has no live execution wiring.** No signed A3
+attestation was issued, no authorization consumed and no new MissionRun
+created. Integrating the real issuer callback and durable claims into
+the Maestro↔Hermes admission decision remains a separate gate in the
+same ongoing PR, not a reason to fabricate evidence or open micro-PRs.
+
+
+### A3 ownership read-time revalidation (October 20, 2026)
+
+The existing default-disabled `hermes-maintainer-a3-source-claim-postgres-persistence`
+adapter now exposes `verifyOwned(input)` as a **read-only** check. It
+reinvokes its separately provisioned privileged `verifyOfficialSource` callback
+for *every* read, checks the entire official claim scope against input, and
+reads the PostgreSQL staging ownership row by the authoritative single-use
+authorization ID. It requires exactly one row with matching immutable
+workspace, mission, MissionRun, approval, operation, target, intent, signed
+source digest and independent simulation receipt digest.
+
+Missing or revoked approval, invalid issuer, unavailable issuer, missing row,
+any mismatch, unavailable DB or disabled staging flags deny before a positive
+ownership response. Even a positive `verifyOwned` response explicitly has
+`execution_authorized=false`, `write_performed=false`,
+`production_allowed=false` and `merge_authority=false`. No HTTP route or
+automatic SCM authorization is created.
+
+This does **not** mean the authoritative receipt has been produced: there is
+still no newly completed A3 MissionRun, independent observed simulation
+receipt, issuer provisioned, exact post-run approval, or connected
+Maestro↔PostgreSQL trusted verifier. The observation API must remain
+non-executing. Revalidation is a prerequisite for a future authorized
+admission gate, not its replacement.
+
+
+### Official A3 smoke isolation and revision binding (20 October 2026)
+
+The official pre-simulation candidate reader now accepts ONLY an existing
+authenticated, integrally verified **queued, simulated, code-test MissionRun**
+with one exact mission/run ID. Its hashed Mission Contract must have
+`metadata.tipo=testar`, `allowed_tools=["github_api"]`, deny merge,
+publish and production, and a strictly scoped `context`:
+
+```json
+{
+  "a3_simulation": {
+    "version": "a3_zero_effect_smoke_v1",
+    "operation": "update_file",
+    "repository": "instutodp-cpu/agente-grupo-erick",
+    "test_id": "hermes_core_smoke",
+    "revision_sha": "<the exact real 40-character staging commit SHA>",
+    "network_allowed": false,
+    "write_allowed": false,
+    "production_allowed": false
+  }
+}
+```
+
+The operation and commit SHA must be fixed **inside the official hashed
+MissionRun contract**, not added from caller-supplied request fields after
+dispatch. The existing runtime test executor/allowlisted smoke tests are
+reused through the established test-execution boundary. The new A3-specific
+runner requires server-owned `HERMES_A3_TEST_IMAGE_ID` pinned to a local
+Docker `sha256:` image ID; exact local Git checkout HEAD must equal the
+signed-off Mission Contract `revision_sha`.
+
+A3's subprocess is invoked only through the local Docker CLI with fixed
+`--pull=never --network=none --read-only --cap-drop=ALL`,
+`--security-opt=no-new-privileges`, an unprivileged user, memory/CPU/PID
+limits, ephemeral `/tmp`, a read-only source bind and two fixed allowlisted
+Node tests. It cannot receive arbitrary CLI parameters, network endpoints,
+credentials or mount paths from an A3 request. The staged server must keep
+`HERMES_EXECUTION_ENABLED=false`,
+`HERMES_EXECUTION_KILL_SWITCH=true`,
+`HERMES_MISSION_INGRESS_ENABLED=false`; the separate A3 test feature flag
+is OFF by default.
+
+Real VPS verification on the isolated checkout (GitHub PR #563 revision
+`8689708a7ae1219f73072bb382066fe2c77655c0`) ran:
+* 29/29 relevant A3 unit tests, self-audit `errors:[]`;
+* 5/5 subprocess smoke tests in manually verified Docker no-network,
+  read-only, reduced-privilege mode;
+* the **actual pinned-image A3 test runner** on that checkout, reporting
+  `test_id=hermes_core_smoke`, `passed=true`,
+  `receipt=test_process_passed` (an **ephemeral process return**, NOT an
+  independent A3 receipt or issuer-signed attestation);
+* healthy HTTPS 200 for the untouched staging observation container, a
+  healthy PostgreSQL staging container, 0 source authorization claims.
+
+**No real A3 MissionRun was created, dispatched, claimed or completed by
+these tests**. The test run did not update the official outbox or Maestro
+MissionRun. The resulting process observation is deliberately insufficient
+for `STAGING_SIMULATION_RECONCILED`; it has no independent durable receipt,
+no verified issuer, no exact post-run human decision, no permission to claim
+the PostgreSQL single-use authorization or consume SCM authority.
+
+The production A3 observation composition remains uninstalled on any HTTP
+route or operational ingress. A real zero-effect receipt must eventually
+bind actual sandbox/container/process identity, exact verified commit, issuer
+identity/signature, official MissionRun/contract digest, audit timestamps and
+independently attested effect policy. Until that evidence is generated and
+reconciled by a trustworthy issuer, all downstream A3 gates remain CLOSED.
+
+
+### A3 independent-witness read gate (PR #563; 20 Oct 2026)
+
+Official staging facts, verified directly after the initial operator session:
+* Official Mission `6ad7e310737fee5ec40456e6` and MissionRun
+  `6ad7f24438f9d9c3f10d93dc` remain `na_fila`.
+* Exactly one **durable process-only observation** exists in migration 035:
+  `process_observed`, digest
+  `sha256:3ebdaa2c663351147d67b8effd741a6272ec58ca81ec806e034dd5fea4b2c00d`.
+  Reserved `2026-10-20T23:48:18.767340Z`, finished
+  `2026-10-20T23:48:19.481864Z`.
+  `subprocess_passed=true`; network/SCM effects **unknown**.
+* Official outbox `6ad7f244dd5fbd0781cbab02` remains
+  `pending`, `mock`, not acknowledged; there are 0 source claims.
+* Maestro Ed25519 queued snapshot signature verified against the independently
+  pinned public key **at the instant of reservation**. It expired afterwards.
+  This is *source authentication only*, not a simulation-effects receipt.
+
+Added **pure read-only independent-witness receipt verifier**, a staging-only
+durable receipt schema 036 and a default-disabled PostgreSQL admission reader.
+Schema 036 has a foreign key to the existing observation, UNIQUE run/mission/
+outbox/receipt and observational digest, RLS, revoked public access and
+bounded issuance/commit times. The independent witness receipt requires
+a separately pinned Ed25519 issuer public key, immutable official MissionRun,
+contract/image/SHA/outbox binding, process observation digest and timeline,
+exact Docker isolation controls and a container identity. The admission reader
+cross-checks the signed issuer statement with both PostgreSQL rows and a
+current **authenticated** Maestro source callback; on mismatch or outage it
+fails closed. A valid *synthetic* signature in tests is not evidence of a real
+witness. Neither verification nor stored receipt authorizes SCM or production.
+
+**Critically missing**: the physically independent live supervisor/issuer,
+external private-key custody and independent database writer role; a
+contemporaneously witnessed single process; durable receipt entry; an
+official reconciliation service allowed to ACK the outbox; and a new human
+decision bound after the verified execution. Migration 036 is tested only in
+a transaction with `ROLLBACK`, not deployed. The witness reader is NOT
+installed on any HTTP route or operational execution path, and the flag
+`HERMES_A3_INDEPENDENT_WITNESS_READ_ENABLED` defaults to OFF.
+Never provide the issuer private key to Hermes/Maestro. Do not
+retroactively sign the existing observed run, repeat its process, treat
+mock ACK as receipt, or mark it `concluida`. The current run is
+**not eligible** for a verified zero-effect receipt after the fact.
+Only a separate future, explicitly authorized and simultaneously witnessed
+execution could produce that evidence, and no such execution has occurred.
+
+### A3 external independent supervisor contract (PR #563, following CI #1816)
+
+The operator-independent module lives at
+`platform/independent-witness/`, kept OUTSIDE the Hermes runtime and
+Maestro service code, with **no private key, credential, HTTP route, automatic
+execution, or deployed agent**. It is a separately deployable adapter contract,
+NOT proof that a separate trust domain currently exists. Do not deploy it
+inside the current Hermes/VPS application process or pass Hermes/Maestro
+credentials to its operator. An actual independent issuer host/principal,
+separate signing-key custody and an issuer-only PostgreSQL path with explicit
+RLS policies must be independently authorized/provisioned.
+
+For any **future separately authorized** MissionRun:
+1. Hermes must reserve migration 035 exactly once before any process.
+2. The independently managed supervisor verifies the short-lived
+   Maestro-signed queued snapshot against a separately pinned Maestro
+   public key, the immutable checkout SHA, and the staging kill-switch
+   configuration. A `process_observed` or otherwise non-reserved run is
+   categorically rejected. The old A3 MissionRun
+   `6ad7f24438f9d9c3f10d93dc` is ineligible.
+3. The issuer DB role must atomically reserve migration 037's globally
+   unique witness-attempt row **before** Docker create. Ambiguous commits
+   or duplicate mission/run/outbox reservations permanently deny replay.
+4. A separately controlled Docker daemon creates a pinned-image, no-network,
+   read-only-rootfs, read-only-source, cap-drop-ALL, unprivileged,
+   no-new-privileges container. The supervisor inspects its immutable
+   identity and controls before start and after exit, waits for exactly one
+   process, and removes only its own known container. There is no user-
+   supplied Docker command, image tag, provider request, SCM write or
+   production action. The signed statement attests isolation controls and
+   process exit, NOT independently observed network syscall counts.
+5. Only after **that exact supervised subprocess** is durably finalized in
+   migration 035 can the external signer create its canonical Ed25519
+   record, verify it with the independently pinned public key, and
+   atomically insert/read back migration 036's unique receipt row.
+   Signing and DB commit have bounded timing. Any failure stays locked.
+6. The existing disabled read-admission rechecks the receipt, official
+   source, signed scope and durable observation; successful verification
+   **still does not** ACK the mock outbox, complete a MissionRun, confer
+   SCM authority, or bypass later post-run human approval.
+
+Migration 036 was deployed after a green CI with 0 receipts. Migration 037
+is **schema-only proposed** and was verified on the real staging PostgreSQL
+inside a transaction with mandatory ROLLBACK. There is NO independent key,
+external witness deployment, connected issuer-owned DB writer, signed
+receipt, reconciliation engine, human post-run approval, or permission to
+dispatch/repeat any MissionRun. Production and SCM writes stay blocked.
+A deployment of the independent supervisor needs an explicit future
+authorization for that future run, separate external infrastructure,
+credentials and trust policy. CI synthetic signatures cannot substitute.
+
+#### Strengthened cross-process replay guard (subsequent increment in PR #563)
+
+The independently controlled PostgreSQL attempt writer performs a conditional
+`INSERT ... SELECT` only when the authoritative migration-035 row is still
+`reserved`, matches the mission/run/workspace/contract/revision/image and was
+reserved within the previous 120 seconds. `FOR UPDATE OF o` locks that
+observation row within the same transaction to prevent a stale concurrent
+`process_observed` transition from being admitted. No row/no confirmation
+means zero Docker starts; no retry after an uncertain result.
+
+The default-disabled read admission requires **all three** matching records:
+process observation (035), independently signed receipt (036), and globally
+unique witness attempt (037), with bounded order of timestamps. Signed
+receipt alone is never enough. The supervisor independently checks every
+returned claim field, source pinning again after process exit, added
+container capabilities and successful disposal; any uncertainty rejects
+the receipt. Neither the stronger checks nor the SQL migration creates a
+new mission, a second test, a proof of zero effects or authority to ACK
+an outbox, write SCM, merge or deploy.
+
+### Minimal real GitHub read-only service pilot (separate from A3)
+
+Operational acceleration increment: `GET /internal/github-read-pilot`
+inside the existing Hermes HTTP API, using the already contracted
+`hermes-maintainer-github-repository-reader-adapter`. Strictly separate
+from A3's historical MissionRun and any SCM write authority.
+
+* Explicit staging-only flag `HERMES_GITHUB_READ_PILOT_ENABLED=true`;
+  all existing execution/mission ingress kill-switch settings remain blocked.
+* Authenticate against the **existing machine identity registry**, loaded
+  from a mode-0600 identity digest file. Only the mapped `grupo_erick`
+  tenant; no caller-supplied repository, path, ref, URL, body or arbitrary
+  prompt. Target: GitHub `instutodp-cpu/agente-grupo-erick`,
+  `main:README.md`, GET only.
+* One external GitHub HTTPS GET per API pilot process by default, max 3
+  configurable, 8-second timeout, redirect disabled, 128 KiB provider cap,
+  64 KiB decoded content cap. No OAuth or token needed for public README.
+* Sanitized append-only JSONL audit must sync to disk **before** the provider
+  call (attempt) and before reporting success (result). Protected file 0600,
+  no raw content, token, headers or response payload; response reports only
+  trace ID, hashes and non-sensitive metadata.
+* `/message`, `/confirm`, Mission Gateway A3, merge, SCM actions, and
+  production remain exactly unchanged. Existing staging observation API
+  container is NOT redeployed by this pilot; one loopback-only standalone
+  Hermes HTTP server is sufficient for a controlled E2E.
+* Unit tests with synthetic GitHub HTTP verify missing/wrong identity,
+  disabled flags, cross-tenant attempts, concurrent budget, provider errors,
+  durable audit and success. Real GitHub read evidence is **not** an
+  independent zero-effect A3 attestation.
+
+#### Read domain iteration: durable budget and GitHub readiness
+
+The live-read domain now supports exactly two GET resources,
+`/internal/github-read-pilot` (README) and
+`/internal/github-read-pilot/readiness` (official readiness-map JSON).
+Both use the same authenticated machine tenant, pinned repository/main
+GitHub reader adapter, TLS path and durable append-only audit.
+
+The second operation returns bounded aggregate counts only (capabilities
+total, tested, proven-E2E and operational). It does not accept arbitrary
+repository/path/ref, does not expose the raw readiness document and cannot
+execute updates. The staging adapter remains production-gated.
+
+The staging service budget is **12 attempts per rolling 24-hour window**,
+loaded from the protected fsync JSONL ledger on every request, rather than
+resetting after service restart. A failed attempt consumes budget. In-process
+calls are serialized, and malformed/unavailable ledger fails closed. This
+budget assumes **exactly one bound staging service instance**; it is not a
+distributed quota and is not a permission to scale replicas or enable
+a production stage. The protected audit file retains its 1 MiB cap and
+requires explicit operator rotation when full. The existing A3 mission,
+outbox, code-writing, merge and general execution authorities are unchanged.
+
+#### Second real read-only domain: Brazil monetary indicators (BCB/SGS)
+
+Existing authenticated HTTPS machine endpoint also supports the fixed routes
+`GET /internal/economy-read-pilot/selic` (Copom meta Selic, series 432, %
+per year) and `GET /internal/economy-read-pilot/ipca` (monthly IPCA, series
+433, % per month). The BCB public SGS API returns JSON using a fixed URL,
+no credentials, no user-supplied parameters, no arbitrary domain fetch. <8KiB
+response, max 20 rows, 8-second timeout, strict schema and date validation,
+and sanitized numeric output only.
+
+Important data caveat: SGS series 432 can include future-dated records. The
+runtime selects the latest **observation on or before the Recife-local
+calendar date**, and rejects missing or stale records (>14 days for Selic,
+>95 days for monthly IPCA); it never silently promotes an upcoming date
+into an effective current value. BCB rates are reference data, not
+financial recommendations.
+
+The **same** machine identity, `grupo_erick` tenant, single-instance
+serialized gate, persisted 12-attempt rolling 24h shared audit/quota and
+staging-only kill switches cover BOTH the GitHub and BCB read domains.
+The separate old public-web canary is not imported, replayed or dispatched.
+This is still staging and not permission for production data writes.
+
+#### Official Purchases aggregate integration — prepared, disabled until scoped identity
+
+The next allowed resource uses `POST /internal/commercial-read-pilot/summary`
+on the **existing** staging Hermes machine-authenticated read ingress,
+which invokes only the official `Compras homologação` Base44 backend function
+`getHermesCommercialSummary` at pinned app `69c495eb174a34cc5ccf8577`.
+The operation is a POST transport for read-only aggregation, not any mutation.
+No arbitrary input/body/repository/URL, and the external Base44 URL must
+match the exact official HTTPS app origin `compras-evolucao-copy-5ccf8577.base44.app`
+and the fixed `/functions/getHermesCommercialSummary` endpoint path.
+No service-role authentication from outside Base44. The Base44 backend
+verifies a short-lived Ed25519 signature over the fixed aggregate request,
+using a pinned public key; only the corresponding mode-0600 private key in
+the VPS can sign. No Base44 user session, administrative bearer, shared
+secret, raw financial record or external service-role token is copied to
+the VPS. The backend maps the signature only to an aggregate-only Grupo
+Erick read, never to generic app entity operations.
+
+`HERMES_BASE44_COMMERCIAL_READ_ENABLED` defaults to false and requires
+`HERMES_BASE44_COMMERCIAL_FUNCTION_URL` and
+`HERMES_BASE44_COMMERCIAL_SIGNING_KEY_FILE` before any external HTTP call can run.
+The same staging-only flags, existing machine principal, shared persistent
+audit and 12-attempt rolling 24h quota apply. No raw rows, invoices, staff,
+supplier identities, tokens, or HTTP request bodies are emitted in evidence.
+The Base44 return shape is validated against a tight aggregate-only schema
+and explicitly marks `erp_linx_conciliated:false`.
+
+**Operational status at construction:** Base44 code/checkpoint exists, but
+Base44 function deployment and an actual signed POST from the VPS
+are verified. Hermes' HTTP ingress with shared audit and quota must still
+be validated and reconciled with the remote GitHub PR before public rollout. The endpoint must NOT be put behind public
+Caddy until its authenticated test and deployment rights are confirmed.
+
+#### Commercial priorities (increment after live signed read)
+
+The existing **same-tenant, machine-authenticated** staging read ingress
+supports a fixed `GET /internal/commercial-read-pilot/brief` route. One
+request calls the pinned official **Compras homologação** Base44 summary
+function once under the existing Ed25519 signature, persists the same
+two-stage fsync audit and consumes the **shared** 12-attempt rolling
+24-hour budget. No background cron, delivery, new external integration
+or extra permissions are introduced.
+
+The result is a deterministic executive brief with read-only verification
+priorities: check overdue registered titles, upcoming-30-day titles, and
+reconcile with Linx. It returns aggregated counts/amounts only, rejects
+other tenants, contradictory balances, invalid amounts, future snapshots,
+or source snapshots older than one Recife-local calendar day. Flags
+`alerts_dispatched:false`, `payment_authorized:false`,
+`external_write_performed:false` and `erp_linx_conciliated:false`
+make the advisory nature explicit.
+
+These registered balances are **not** independently reconciled ERP debts.
+The route must not be exposed in Caddy until this exact code commit
+passes CI and an isolated localhost service has been validated.
+
+#### LotoIA: independent tenant-pinned operational health (disabled by default)
+
+The official Base44 `LotoIA` app `68d304fd3c2a6353d2cb0b4d` has an
+owner-managed pilot scope limited to the **two active Erick lotteries in
+Barreiros and Sirinhaém**. QA stores and tenants cannot be counted.
+The separate `GET /internal/lotoia-read-pilot/health` on the same
+existing machine-authenticated staging reader uses an app-specific
+Ed25519 signing key to call one pinned official Base44 backend function
+`POST /functions/getHermesLotoiaHealth` with literal `{}`, while
+sharing the existing single-instance fsynced JSONL audit and 12 attempts
+per 24-hour budget with Github, BCB and Compras. This route is disabled
+unless `HERMES_LOTOIA_READ_ENABLED=true` and
+`HERMES_LOTOIA_FUNCTION_URL`, `HERMES_LOTOIA_ALLOWED_ORIGIN`, and
+`HERMES_LOTOIA_SIGNING_KEY_FILE` are all provisioned. The origin
+must be an explicitly approved HTTPS Base44 app hostname.
+
+Only aggregate counts of pending closing settlements, unresolved alerts,
+and cash closures in the past seven days are emitted; known outstanding
+amounts are distinguished from records lacking values. Zero rows
+mean *no records in this tenant*, not proof of reconciled operations.
+No bet, lottery game, boleto, Pix, customer, operator or financial
+movement raw entity is accessible from this endpoint. No record writes,
+notifications, payments, or A3/production execution are authorized.
+Tenant scope is **pinned in the Base44 backend**, and the Hermes reader
+accepts only the canonical two-store aggregate and date-fresh responses.
+First live deployment requires publication of the official Base44
+function, exact-HEAD GitHub CI green, and a scoped HTTPS E2E test.
+
+#### LotoIA reporting coverage — advisory visibility, not a reconciliation
+
+The same existing `GET /internal/lotoia-read-pilot/health` now includes a
+bounded **7-calendar-day data coverage check** for both explicitly pinned
+Erick lottery stores: operator cash, cash physical counts, Caixa reports,
+financial movements and closing records. The Base44 function reads only
+those five entity types (the cash closures already in the health read),
+restricts every scan by exact operational tenant and store ID, denies
+cross-tenant/duplicate rows, rejects invalid dates and refuses to publish
+partially fetched pages (200-row cap). This adds **no new route, job,
+agent, signed identity, permission or outbound notification**.
+
+`data_coverage.status` must be one of `no_recent_records`,
+`partial_records`, or `sources_present_unverified`. Even when all
+five sources have entries for both stores, `real_world_completeness_verified`
+remains `false`. Missing recent entries cannot be interpreted as
+absence of pending settlements or as evidence of reconciled cash.
+Hermes independently validates per-store vs aggregate source counts
+before returning only whitelisted fields. No raw financial movement,
+customer, Pix or bet record escapes.
+
+Operational activation requires the updated LotoIA Base44 function to be
+published and the exact GitHub HEAD CI to pass, followed by authenticated
+HTTPS E2E and durable audit; current deployed v6 must remain untouched
+until the successor passes this gate.
