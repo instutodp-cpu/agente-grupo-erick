@@ -912,6 +912,15 @@ test('analyst response rejects duplicate, foreign and malformed ranking dimensio
  for(const rows of [[item,item],[{...item,label:'OTHER_TENANT'}],[null]])
   assert.throws(()=>analyst.reply({...base,rows},p),/analyst_reply_denied/);
 });
+test('historical query rejects impossible imported calendar days',async()=>{
+ const p={tenant_id:'grupo_erick',template:'period',period:'2026-02',
+  other_period:null,metric:'records',store:null};
+ for(const bad of ['2026-02-30','2025-02-29','2026-04-31']){
+  const db={query:async()=>({rows:[{records:'100',cancelled:'7',
+    noncancelled:'93',amount:'12000.00',last_day:bad}]})};
+  await assert.rejects(analyst.execute(db,p),/analyst_counts_invalid/);
+ }
+});
 test('analyst refuses corrupted cached numeric evidence before formatting',async()=>{
  const p={tenant_id:'grupo_erick',template:'period',period:'2026-05',
   other_period:null,metric:'money',store:null};
@@ -920,7 +929,8 @@ test('analyst refuses corrupted cached numeric evidence before formatting',async
   last_day:'2026-05-31'}]})},p);
  assert.ok(analyst.reply(data,p).includes('12.000,00'));
  for(const patch of [{records:-1},{cancelled:101},{amount:Infinity},
-  {amount:NaN},{amount:-10},{last_day:'invalid'}])
+  {amount:NaN},{amount:-10},{last_day:'invalid'},
+  {last_day:'2026-02-30'},{last_day:'2025-02-29'}])
   assert.throws(()=>analyst.reply({...data,rows:[{...data.rows[0],...patch}]},p),
    /analyst_reply_denied/);
 });

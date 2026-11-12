@@ -114,6 +114,12 @@ function money(n){
  if(!/^[0-9]{1,13}(\.[0-9]{1,2})?$/.test(String(n)))throw Error('analyst_invalid_amount');
  return Number(n);
 }
+function validImportedDay(day){
+ if(typeof day!=='string'||!/^202[56]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(day))
+  return false;
+ const parsed=new Date(day+'T00:00:00.000Z');
+ return Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===day;
+}
 function row(r,template){
  if(!r||typeof r!=='object')throw Error('analyst_bad_row');
  if(template==='products'){
@@ -122,7 +128,7 @@ function row(r,template){
   return {code:r.product_code,name:r.product_label,items:integer(r.item_records)};
  }
  const o={records:integer(r.records),cancelled:integer(r.cancelled),amount:money(r.amount),last_day:r.last_day};
- if(o.cancelled>o.records||o.last_day!==null&&!/^202[56]-(0[1-9]|1[0-2])-[0-3][0-9]$/.test(o.last_day))throw Error('analyst_counts_invalid');
+ if(o.cancelled>o.records||o.last_day!==null&&!validImportedDay(o.last_day))throw Error('analyst_counts_invalid');
  // Every store must reconcile registered = cancelled + noncancelled;
  // a ranking must never display an inconsistent source aggregate.
  if(integer(r.noncancelled)!==o.records-o.cancelled)throw Error('analyst_counts_invalid');
@@ -186,8 +192,7 @@ function reply(data,requested){
      !Number.isSafeInteger(r.cancelled)||r.cancelled<0||
      r.cancelled>r.records||typeof r.amount!=='number'||
      !Number.isFinite(r.amount)||r.amount<0||
-     r.last_day!==null&&(typeof r.last_day!=='string'||
-       !/^202[56]-(0[1-9]|1[0-2])-[0-3][0-9]$/.test(r.last_day)))
+     r.last_day!==null&&!validImportedDay(r.last_day))
    throw Error('analyst_reply_denied');
  }
  const lines=['📊 Hermes — análise histórica Grupo Erick',
