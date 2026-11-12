@@ -123,7 +123,9 @@ function row(r,template){
  }
  const o={records:integer(r.records),cancelled:integer(r.cancelled),amount:money(r.amount),last_day:r.last_day};
  if(o.cancelled>o.records||o.last_day!==null&&!/^202[56]-(0[1-9]|1[0-2])-[0-3][0-9]$/.test(o.last_day))throw Error('analyst_counts_invalid');
- if(template!=='stores'&&integer(r.noncancelled)!==o.records-o.cancelled)throw Error('analyst_counts_invalid');
+ // Every store must reconcile registered = cancelled + noncancelled;
+ // a ranking must never display an inconsistent source aggregate.
+ if(integer(r.noncancelled)!==o.records-o.cancelled)throw Error('analyst_counts_invalid');
  if(template!=='period'){
   if(template==='stores'?!STORES.includes(r.label):!isPeriod(r.label))throw Error('analyst_label_invalid');
   o.label=r.label;
@@ -155,8 +157,14 @@ const label=m=>m==='cancelled'?'registros marcados como cancelados':m==='money'?
 function reply(data,requested){
  const p=validate(requested);
  if(!data||data.tenant_id!==TENANT||data.mode!=='online_aggregate'||
- data.source!==(p.template==='products'?PRODUCT_SOURCE:SOURCE)||data.plan.template!==p.template||
- data.plan.period!==p.period||data.plan.other_period!==p.other_period||!Array.isArray(data.rows))
+ data.source!==(p.template==='products'?PRODUCT_SOURCE:SOURCE)||
+ !data.plan||data.plan.tenant_id!==TENANT||
+ data.plan.template!==p.template||data.plan.period!==p.period||
+ data.plan.other_period!==p.other_period||data.plan.metric!==p.metric||
+ data.plan.store!==p.store||!Array.isArray(data.rows)||
+ data.rows.length>(p.template==='compare'?2:p.template==='stores'?6:
+  p.template==='products'?5:1)||
+ typeof data.at!=='string'||!Number.isFinite(Date.parse(data.at)))
  throw Error('analyst_reply_denied');
  const lines=['📊 Hermes — análise histórica Grupo Erick',
   'Fonte: Supabase / '+data.source,

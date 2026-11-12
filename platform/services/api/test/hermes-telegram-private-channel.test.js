@@ -875,6 +875,33 @@ test('owner-only sequential product question followed by month retains product i
   assert.equal(runner.loadState(state,'history-live-budget.json').count,2);
  }finally{fs.rmSync(state,{recursive:true,force:true});}
 });
+test('historical store rankings reject noncancelled totals that do not reconcile',async()=>{
+ const p={tenant_id:'grupo_erick',template:'stores',period:'2026-05',
+  other_period:null,metric:'records',store:null};
+ const db={query:async()=>({rows:[{label:'CALCADOS',records:'100',
+  cancelled:'7',noncancelled:'94',amount:'12000.00',last_day:'2026-05-31'}]})};
+ await assert.rejects(analyst.execute(db,p),/analyst_counts_invalid/);
+ const valid={query:async()=>({rows:[{label:'CALCADOS',records:'100',
+  cancelled:'7',noncancelled:'93',amount:'12000.00',last_day:'2026-05-31'}]})};
+ const data=await analyst.execute(valid,p);
+ assert.match(analyst.reply(data,p),/CALCADOS: 100/);
+});
+test('historical analyst refuses a result from another metric, store, tenant or date',async()=>{
+ const p={tenant_id:'grupo_erick',template:'period',period:'2026-05',
+  other_period:null,metric:'records',store:'CALCADOS'};
+ const data=await analyst.execute({query:async()=>({rows:[{
+  records:'100',cancelled:'7',noncancelled:'93',amount:'12000.00',
+  last_day:'2026-05-31'}]})},p);
+ assert.match(analyst.reply(data,p),/CALCADOS/);
+ for(const changed of [
+  {plan:{...p,metric:'money'}},
+  {plan:{...p,store:'VARIEDADES'}},
+  {plan:{...p,tenant_id:'another_tenant'}},
+  {at:'not-a-date'},
+  {plan:null},
+  {rows:[...data.rows,...data.rows]}
+ ])assert.throws(()=>analyst.reply({...data,...changed},p),/analyst_reply_denied/);
+});
 test('period totals do not duplicate the requested count when cancellations are the metric',async()=>{
  const p=analyst.planQuestion('Quantas vendas canceladas em junho 2026?');
  const data=await analyst.execute({query:async()=>({rows:[{
