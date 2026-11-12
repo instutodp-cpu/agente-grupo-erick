@@ -875,6 +875,65 @@ test('owner-only sequential product question followed by month retains product i
   assert.equal(runner.loadState(state,'history-live-budget.json').count,2);
  }finally{fs.rmSync(state,{recursive:true,force:true});}
 });
+test('historical store rankings reject noncancelled totals that do not reconcile',async()=>{
+ const p={tenant_id:'grupo_erick',template:'stores',period:'2026-05',
+  other_period:null,metric:'records',store:null};
+ const db={query:async()=>({rows:[{label:'CALCADOS',records:'100',
+  cancelled:'7',noncancelled:'94',amount:'12000.00',last_day:'2026-05-31'}]})};
+ await assert.rejects(analyst.execute(db,p),/analyst_counts_invalid/);
+ const valid={query:async()=>({rows:[{label:'CALCADOS',records:'100',
+  cancelled:'7',noncancelled:'93',amount:'12000.00',last_day:'2026-05-31'}]})};
+ const data=await analyst.execute(valid,p);
+ assert.match(analyst.reply(data,p),/CALCADOS: 100/);
+});
+test('historical analyst refuses a result from another metric, store, tenant or date',async()=>{
+ const p={tenant_id:'grupo_erick',template:'period',period:'2026-05',
+  other_period:null,metric:'records',store:'CALCADOS'};
+ const data=await analyst.execute({query:async()=>({rows:[{
+  records:'100',cancelled:'7',noncancelled:'93',amount:'12000.00',
+  last_day:'2026-05-31'}]})},p);
+ assert.match(analyst.reply(data,p),/CALCADOS/);
+ for(const changed of [
+  {plan:{...p,metric:'money'}},
+  {plan:{...p,store:'VARIEDADES'}},
+  {plan:{...p,tenant_id:'another_tenant'}},
+  {at:'not-a-date'},
+  {plan:null},
+  {rows:[...data.rows,...data.rows]}
+ ])assert.throws(()=>analyst.reply({...data,...changed},p),/analyst_reply_denied/);
+});
+test('analyst response rejects duplicate, foreign and malformed ranking dimensions',()=>{
+ const p={tenant_id:'grupo_erick',template:'stores',period:'2026-05',
+  other_period:null,metric:'records',store:null};
+ const item={label:'CALCADOS',records:100,cancelled:7,amount:12000,last_day:'2026-05-31'};
+ const base={tenant_id:'grupo_erick',mode:'online_aggregate',source:analyst.SOURCE,
+  at:'2026-10-22T14:00:00Z',plan:p,rows:[item]};
+ assert.match(analyst.reply(base,p),/CALCADOS/);
+ for(const rows of [[item,item],[{...item,label:'OTHER_TENANT'}],[null]])
+  assert.throws(()=>analyst.reply({...base,rows},p),/analyst_reply_denied/);
+});
+test('historical query rejects impossible imported calendar days',async()=>{
+ const p={tenant_id:'grupo_erick',template:'period',period:'2026-02',
+  other_period:null,metric:'records',store:null};
+ for(const bad of ['2026-02-30','2025-02-29','2026-04-31']){
+  const db={query:async()=>({rows:[{records:'100',cancelled:'7',
+    noncancelled:'93',amount:'12000.00',last_day:bad}]})};
+  await assert.rejects(analyst.execute(db,p),/analyst_counts_invalid/);
+ }
+});
+test('analyst refuses corrupted cached numeric evidence before formatting',async()=>{
+ const p={tenant_id:'grupo_erick',template:'period',period:'2026-05',
+  other_period:null,metric:'money',store:null};
+ const data=await analyst.execute({query:async()=>({rows:[{
+  records:'100',cancelled:'7',noncancelled:'93',amount:'12000.00',
+  last_day:'2026-05-31'}]})},p);
+ assert.ok(analyst.reply(data,p).includes('12.000,00'));
+ for(const patch of [{records:-1},{cancelled:101},{amount:Infinity},
+  {amount:NaN},{amount:-10},{last_day:'invalid'},
+  {last_day:'2026-02-30'},{last_day:'2025-02-29'}])
+  assert.throws(()=>analyst.reply({...data,rows:[{...data.rows[0],...patch}]},p),
+   /analyst_reply_denied/);
+});
 test('period totals do not duplicate the requested count when cancellations are the metric',async()=>{
  const p=analyst.planQuestion('Quantas vendas canceladas em junho 2026?');
  const data=await analyst.execute({query:async()=>({rows:[{
@@ -1109,6 +1168,71 @@ test('Codex login local Unix socket integration returns typed answer and rejects
 
 // Business analyst coverage equivalence and narrow enterprise memory.
 const businessEvidence=require('../src/runtime/hermes-business-evidence-memory');
+test('enterprise evidence memory rejects inconsistent comparison dimensions and product periods',()=>{
+ const at=Date.parse('2026-11-12T02:00:00Z');
+ const base={kind:businessEvidence.KIND,tenant_id:businessEvidence.TENANT,scope:'enterprise',
+  key:'a'.repeat(24),at:'2026-11-11T02:00:00Z',period:'2026-05',
+  other_period:null,template:'period',metric:'records',source:analyst.SOURCE,
+  summary:'📊 Hermes — análise histórica Grupo Erick\nFonte: agregados históricos verificados'};
+ assert.equal(businessEvidence.validEntry(base,at),base);
+ for(const changes of [
+  {template:'compare'},
+  {template:'compare',other_period:'2026-05'},
+  {template:'compare',other_period:'2025'},
+  {other_period:'2025-05'},
+  {template:'products',period:'2025-05',source:analyst.PRODUCT_SOURCE},
+  {tenant_id:'personal'},
+  {scope:'personal'},
+  {at:'2026-11-31T02:00:00Z'},
+  {at:'2026-02-30T02:00:00Z'},
+  {at:'2026-11-11T25:00:00Z'},
+  {at:'2026-11-11T02:00:00+00:00'}
+ ])assert.throws(()=>businessEvidence.validEntry({...base,...changes},at),/memory_entry_denied/);
+});
+test('enterprise evidence memory restores newest verified observations regardless of disk order',()=>{
+ const now=Date.parse('2026-11-12T02:00:00Z');
+ const make=(key,at)=>({kind:businessEvidence.KIND,tenant_id:businessEvidence.TENANT,
+  scope:'enterprise',key:key.repeat(24),at,period:'2026-05',other_period:null,
+  template:'period',metric:'records',source:analyst.SOURCE,
+  summary:'📊 Hermes — análise histórica Grupo Erick\\nFonte: agregados históricos verificados'});
+ const old=make('a','2026-11-02T02:00:00Z');
+ const recent=make('b','2026-11-11T02:00:00Z');
+ const expired=make('c','2026-10-01T02:00:00Z');
+ const store={schema:businessEvidence.SCHEMA,tenant_id:businessEvidence.TENANT,
+  scope:'enterprise',entries:[old,expired,recent]};
+ const restored=businessEvidence.validStore(store,now);
+ assert.deepEqual(restored.entries.map(x=>x.key),[recent.key,old.key]);
+ const facts=JSON.parse(businessEvidence.context(store,'vendas 2026',now));
+ assert.equal(facts[0].queried_at,recent.at);
+ assert.equal(facts.length,2);
+});
+test('enterprise memory ignores delayed older observation of the same query',async()=>{
+ const now=Date.parse('2026-11-12T04:00:00Z');
+ const p={tenant_id:'grupo_erick',template:'period',period:'2026-05',
+  other_period:null,metric:'records',store:null};
+ const db={query:async()=>({rows:[{records:'100',cancelled:'7',
+  noncancelled:'93',amount:'12000.00',last_day:'2026-05-31'}]})};
+ const recent=await analyst.execute(db,p,()=>new Date(now-1000));
+ const delayed=await analyst.execute(db,p,()=>new Date(now-60000));
+ const first=businessEvidence.observe(null,recent,p,now);
+ const after=businessEvidence.observe(first,delayed,p,now);
+ assert.deepEqual(after,first);
+ assert.equal(after.entries[0].at,recent.at);
+});
+test('enterprise memory preserves first observation on same-timestamp replay',async()=>{
+ const now=Date.parse('2026-11-12T04:00:00Z');
+ const p={tenant_id:'grupo_erick',template:'period',period:'2026-05',
+  other_period:null,metric:'records',store:null};
+ const db=records=>({query:async()=>({rows:[{records:String(records),
+  cancelled:'7',noncancelled:String(records-7),amount:'12000.00',
+  last_day:'2026-05-31'}]})});
+ const first=await analyst.execute(db(100),p,()=>new Date(now-1000));
+ const replay=await analyst.execute(db(101),p,()=>new Date(now-1000));
+ const initial=businessEvidence.observe(null,first,p,now);
+ const after=businessEvidence.observe(initial,replay,p,now);
+ assert.deepEqual(after,initial);
+ assert.equal(after.entries[0].summary,initial.entries[0].summary);
+});
 test('year-on-year history compares only January through May of both years',async()=>{
  const p={tenant_id:'grupo_erick',template:'compare',period:'2025',
   other_period:'2026',metric:'money',store:null};

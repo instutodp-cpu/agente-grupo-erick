@@ -36,8 +36,8 @@ test('historic summaries keep actual comparison numbers rather than a truncated 
  const at=new Date(now-3600000).toISOString();
  const plan={tenant_id:'grupo_erick',template:'compare',period:'2025',other_period:'2026',metric:'records',store:null};
  const data={tenant_id:'grupo_erick',mode:'online_aggregate',source:analyst.SOURCE,at,plan,
-  rows:[{label:'2025',records:4122,cancelled:120,amount:91000},
-        {label:'2026',records:4999,cancelled:125,amount:102000}]};
+  rows:[{label:'2025',records:4122,cancelled:120,amount:91000,last_day:null},
+        {label:'2026',records:4999,cancelled:125,amount:102000,last_day:null}]};
  const observed=evidence.observe(null,data,plan,now);
  const snapshot=a.curate({ownerDecisions:null,businessEvidence:observed,now,
   policy:{enabled:true,tenant_id:'grupo_erick',decisions:false,aggregates:true}});
