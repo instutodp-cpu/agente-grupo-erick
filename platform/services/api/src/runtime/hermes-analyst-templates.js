@@ -177,6 +177,18 @@ function reply(data,requested){
        !/^[0-9]{1,12}$/.test(dimension))||
      dimension!==null&&seenEvidence.has(dimension))throw Error('analyst_reply_denied');
   if(dimension!==null)seenEvidence.add(dimension);
+  if(p.template==='products'){
+   if(typeof r.name!=='string'||r.name.length>100||
+      !/^[\p{L}\p{N} .,:;()\-+\/%ºª°&_']+$/u.test(r.name)||
+      !Number.isSafeInteger(r.items)||r.items<0)
+     throw Error('analyst_reply_denied');
+  }else if(!Number.isSafeInteger(r.records)||r.records<0||
+     !Number.isSafeInteger(r.cancelled)||r.cancelled<0||
+     r.cancelled>r.records||typeof r.amount!=='number'||
+     !Number.isFinite(r.amount)||r.amount<0||
+     r.last_day!==null&&(typeof r.last_day!=='string'||
+       !/^202[56]-(0[1-9]|1[0-2])-[0-3][0-9]$/.test(r.last_day)))
+   throw Error('analyst_reply_denied');
  }
  const lines=['📊 Hermes — análise histórica Grupo Erick',
   'Fonte: Supabase / '+data.source,
