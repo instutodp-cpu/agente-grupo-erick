@@ -7,6 +7,12 @@ const analyst=require('./hermes-analyst-templates');
 const TENANT='grupo_erick',KIND='historical_aggregate_v1';
 const MAX_ENTRIES=12,MAX_AGE_MS=14*86400000,MAX_CONTEXT=1500;
 const SCHEMA=1;
+function validTimestamp(at){
+ if(typeof at!=='string'||!/^20\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(at))return false;
+ const time=Date.parse(at);
+ return Number.isFinite(time)&&new Date(time).toISOString()===
+  (at.includes('.')?at:at.replace('Z','.000Z'));
+}
 function shape(o,fields){
  return o&&typeof o==='object'&&!Array.isArray(o)&&
   Object.keys(o).sort().join('|')===fields.slice().sort().join('|');
@@ -18,7 +24,7 @@ function normalizeEntry(data,plan,now=Date.now()){
  const summary=analyst.reply(data,p);
  if(summary.length>1800||!summary.startsWith('📊 Hermes'))throw Error('memory_summary_denied');
  const timestamp=Date.parse(data.at);
- if(!Number.isFinite(timestamp)||timestamp>now+60000||timestamp<now-MAX_AGE_MS)throw Error('memory_time_denied');
+ if(!validTimestamp(data.at)||timestamp>now+60000||timestamp<now-MAX_AGE_MS)throw Error('memory_time_denied');
  const key=crypto.createHash('sha256').update(JSON.stringify(p)).digest('hex').slice(0,24);
  return {kind:KIND,tenant_id:TENANT,scope:'enterprise',
    key,at:data.at,period:p.period,other_period:p.other_period,
@@ -29,7 +35,7 @@ function validEntry(e,now=Date.now()){
  if(!shape(e,['kind','tenant_id','scope','key','at','period','other_period','template','metric','source','summary'])||
  e.kind!==KIND||e.tenant_id!==TENANT||e.scope!=='enterprise'||
  typeof e.key!=='string'||!/^[a-f0-9]{24}$/.test(e.key)||
- typeof e.at!=='string'||!Number.isFinite(Date.parse(e.at))||
+ !validTimestamp(e.at)||
  Date.parse(e.at)>now+60000||
  typeof e.summary!=='string'||e.summary.length<50||e.summary.length>1800||
  !e.summary.startsWith('📊 Hermes')||

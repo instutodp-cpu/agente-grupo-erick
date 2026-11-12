@@ -1182,7 +1182,11 @@ test('enterprise evidence memory rejects inconsistent comparison dimensions and 
   {other_period:'2025-05'},
   {template:'products',period:'2025-05',source:analyst.PRODUCT_SOURCE},
   {tenant_id:'personal'},
-  {scope:'personal'}
+  {scope:'personal'},
+  {at:'2026-11-31T02:00:00Z'},
+  {at:'2026-02-30T02:00:00Z'},
+  {at:'2026-11-11T25:00:00Z'},
+  {at:'2026-11-11T02:00:00+00:00'}
  ])assert.throws(()=>businessEvidence.validEntry({...base,...changes},at),/memory_entry_denied/);
 });
 test('enterprise evidence memory restores newest verified observations regardless of disk order',()=>{
