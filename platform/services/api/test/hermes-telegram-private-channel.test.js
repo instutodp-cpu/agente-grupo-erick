@@ -1185,6 +1185,23 @@ test('enterprise evidence memory rejects inconsistent comparison dimensions and 
   {scope:'personal'}
  ])assert.throws(()=>businessEvidence.validEntry({...base,...changes},at),/memory_entry_denied/);
 });
+test('enterprise evidence memory restores newest verified observations regardless of disk order',()=>{
+ const now=Date.parse('2026-11-12T02:00:00Z');
+ const make=(key,at)=>({kind:businessEvidence.KIND,tenant_id:businessEvidence.TENANT,
+  scope:'enterprise',key:key.repeat(24),at,period:'2026-05',other_period:null,
+  template:'period',metric:'records',source:analyst.SOURCE,
+  summary:'📊 Hermes — análise histórica Grupo Erick\\nFonte: agregados históricos verificados'});
+ const old=make('a','2026-11-02T02:00:00Z');
+ const recent=make('b','2026-11-11T02:00:00Z');
+ const expired=make('c','2026-10-01T02:00:00Z');
+ const store={schema:businessEvidence.SCHEMA,tenant_id:businessEvidence.TENANT,
+  scope:'enterprise',entries:[old,expired,recent]};
+ const restored=businessEvidence.validStore(store,now);
+ assert.deepEqual(restored.entries.map(x=>x.key),[recent.key,old.key]);
+ const facts=JSON.parse(businessEvidence.context(store,'vendas 2026',now));
+ assert.equal(facts[0].queried_at,recent.at);
+ assert.equal(facts.length,2);
+});
 test('year-on-year history compares only January through May of both years',async()=>{
  const p={tenant_id:'grupo_erick',template:'compare',period:'2025',
   other_period:'2026',metric:'money',store:null};

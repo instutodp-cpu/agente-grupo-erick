@@ -52,7 +52,8 @@ function validStore(store,now=Date.now()){
  const keys=new Set();
  for(const e of store.entries){validEntry(e,now);if(keys.has(e.key))throw Error('memory_duplicate');keys.add(e.key);}
  // Expired but otherwise valid entries must be evicted, never poison future reads.
- return {...store,entries:store.entries.filter(e=>now-Date.parse(e.at)<=MAX_AGE_MS)};
+ return {...store,entries:store.entries.filter(e=>now-Date.parse(e.at)<=MAX_AGE_MS)
+  .sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)||a.key.localeCompare(b.key))};
 }
 function observe(store,data,plan,now=Date.now()){
  const current=validStore(store,now);
