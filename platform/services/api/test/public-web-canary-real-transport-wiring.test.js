@@ -181,17 +181,27 @@ test('telemetry separates provider invocation, transport invocation, and network
 });
 
 
-test('secret access context selects staging purpose without leaking into local tests', () => {
+test('secret access context requires exact staging contract and preserves local tests', () => {
   const input = { trace_id: 'trace', request_id: 'request' };
   const session = { environment: 'staging', configuration_id: 'config', connector_id: 'connector', provider_id: 'provider', adapter_id: 'adapter', workspace_type: 'corporate', tenant_id: 'grupo_erick', operator_id: 'operator' };
-  const staging = buildSecretAccessContext(input, session, { environment: 'staging' });
+  const contract = {
+    secretAccessContract: {
+      environment: 'staging',
+      purpose: 'public_web_canary_execution',
+      production_allowed: false,
+      exportable: false,
+      single_request: true
+    }
+  };
+  const staging = buildSecretAccessContext(input, session, contract);
   assert.equal(staging.environment, 'staging');
   assert.equal(staging.purpose, 'public_web_canary_execution');
-  const local = buildSecretAccessContext(input, { ...session, environment: 'local_test' }, { environment: 'local_test' });
+  assert.equal(staging.production_allowed, false);
+  assert.equal(staging.exportable, false);
+  assert.equal(staging.single_request, true);
+  const local = buildSecretAccessContext(input, { ...session, environment: 'local_test' }, {});
   assert.equal(local.environment, 'local_test');
   assert.equal(local.purpose, 'local_test_readiness_validation');
-  const synthetic = buildSecretAccessContext(input, session, { environment: 'local_test' });
-  assert.equal(synthetic.environment, 'local_test');
-  assert.equal(synthetic.purpose, 'local_test_readiness_validation');
+  assert.equal(buildSecretAccessContext(input, session, {}), null);
   assert.notEqual(staging.environment, 'production');
 });

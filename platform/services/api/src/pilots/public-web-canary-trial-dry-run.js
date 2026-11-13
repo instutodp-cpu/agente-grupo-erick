@@ -218,6 +218,13 @@ function createSyntheticCanaryContext(plan, overrides = {}) {
     configurationRegistry: overrides.configurationRegistry || defaultConfigurationRegistry(plan, configurationVersion, secretReferenceId),
     secretReferenceRegistry: overrides.secretReferenceRegistry || defaultSecretReferenceRegistry(plan, secretReferenceId),
     secretResolver: overrides.secretResolver || createLocalTestSecretResolver({ now: nowIso(overrides) }),
+    secretAccessContract: overrides.secretAccessContract || (plan.environment === 'staging' ? {
+      environment: 'staging',
+      purpose: 'public_web_canary_execution',
+      production_allowed: false,
+      exportable: false,
+      single_request: true
+    } : undefined),
     readinessResult,
     nodeHttpsClient: overrides.nodeHttpsClient || fakeNodeHttpsClient(overrides.fakeHttpsResponse),
     dnsResolver: overrides.dnsResolver || fakeDnsResolver(),
@@ -251,6 +258,13 @@ function createOperationalCanaryContext(plan, bindings = {}) {
     configurationRegistry: bindings.configurationRegistry,
     secretReferenceRegistry: bindings.secretReferenceRegistry,
     secretResolver: bindings.secretResolver,
+    secretAccessContract: bindings.secretAccessContract || {
+      environment: 'staging',
+      purpose: 'public_web_canary_execution',
+      production_allowed: false,
+      exportable: false,
+      single_request: true
+    },
     readinessResult: bindings.readinessResult,
     rateLimitBudget: bindings.rateLimitBudget || createPublicWebPilotBudget({ clock: bindings.clock }),
     costBudget: bindings.costBudget || createPublicWebPilotBudget({ clock: bindings.clock }),
