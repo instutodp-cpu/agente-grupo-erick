@@ -1,0 +1,12 @@
+const test=require('node:test');const assert=require('node:assert/strict');
+const {requireFragments,assessExtractedObligation,contractLifecycle,detectContractCandidates}=require('../src/hermes/legal/contract-intelligence');
+const obligation=(o={})=>({obligation_id:'o1',contract_id:'c1',obligor_ref:'p1',obligation_type:'pay',fragment_refs:['f1'],confidence:.95,review_status:'verified',...o});
+test('clause or obligation without source fragment fails provenance',()=>assert.equal(requireFragments({fragment_refs:[]}).valid,false));
+test('high confidence does not bypass human review for obligation',()=>assert.equal(assessExtractedObligation(obligation({review_status:'candidate'})).reason,'human_review_required'));
+test('low confidence verified extraction still fails closed',()=>assert.equal(assessExtractedObligation(obligation({confidence:.5})).usable,false));
+test('verified traceable obligation becomes usable for analysis',()=>assert.equal(assessExtractedObligation(obligation()).usable,true));
+test('contract before effective date is not effective',()=>assert.equal(contractLifecycle({effective_from:'2027-01-01'},'2026-10-06').state,'not_effective'));
+test('contract after declared end date is expired',()=>assert.equal(contractLifecycle({effective_from:'2025-01-01',effective_until:'2026-01-01'},'2026-10-06').state,'expired'));
+test('contract inside declared term is recognized',()=>assert.equal(contractLifecycle({effective_from:'2025-01-01',effective_until:'2027-01-01'},'2026-10-06').state,'in_term'));
+test('risk-relevant clause candidates remain explicit',()=>{const r=detectContractCandidates({clauses:[{clause_id:'r',clause_type:'renewal'},{clause_id:'p',clause_type:'penalty'}],obligations:[]});assert.deepEqual(r.renewal_clauses,['r']);assert.deepEqual(r.penalty_clauses,['p']);});
+test('unreviewed obligations are surfaced instead of executed',()=>assert.deepEqual(detectContractCandidates({clauses:[],obligations:[obligation({review_status:'candidate'})]}).obligations_requiring_review,['o1']));

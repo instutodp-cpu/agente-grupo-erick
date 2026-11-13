@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalSource",
+  "type": "object",
+  "required": [
+    "source_id",
+    "source_type",
+    "jurisdiction",
+    "authority_level",
+    "official",
+    "retrieved_at",
+    "source_ref"
+  ],
+  "properties": {
+    "source_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_type": {
+      "enum": [
+        "legislation",
+        "regulation",
+        "precedent",
+        "process_metadata",
+        "internal_document",
+        "open_web",
+        "other"
+      ]
+    },
+    "jurisdiction": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authority_level": {
+      "enum": [
+        "primary_official",
+        "official_metadata",
+        "secondary",
+        "internal",
+        "discovery_only"
+      ]
+    },
+    "official": {
+      "type": "boolean"
+    },
+    "retrieved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "effective_from": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "effective_until": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "terms_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

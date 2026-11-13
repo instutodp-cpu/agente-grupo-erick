@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalObligation",
+  "type": "object",
+  "required": [
+    "obligation_id",
+    "contract_id",
+    "obligor_ref",
+    "obligation_type",
+    "fragment_refs",
+    "confidence",
+    "review_status"
+  ],
+  "properties": {
+    "obligation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "contract_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "obligor_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "beneficiary_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "obligation_type": {
+      "enum": [
+        "pay",
+        "deliver",
+        "perform",
+        "refrain",
+        "notify",
+        "maintain",
+        "renew",
+        "other"
+      ]
+    },
+    "fragment_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "due_date": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "amount_brl": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "review_status": {
+      "enum": [
+        "candidate",
+        "verified",
+        "rejected"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

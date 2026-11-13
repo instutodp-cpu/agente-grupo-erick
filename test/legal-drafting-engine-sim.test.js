@@ -1,0 +1,13 @@
+const test=require('node:test');const assert=require('node:assert/strict');
+const {assessDraftInputs,createLegalDraft,assertDraftBoundary,linkReview}=require('../src/hermes/legal/drafting-engine');
+const bundle={bundle_id:'eb1',status:'verified'};
+const base={matterScope:'m1',draftType:'notice',templateRef:'notice-v1',templateVersion:'1',bundle,sections:[{section_id:'s1',label:'FACT',content:'Fato verificado',claim_refs:['c1']}]};
+test('drafting without evidence bundle fails closed',()=>assert.equal(assessDraftInputs({...base,bundle:null}).allowed,false));
+test('unverified evidence bundle blocks drafting',()=>assert.equal(assessDraftInputs({...base,bundle:{bundle_id:'x',status:'unsupported'}}).allowed,false));
+test('material legal authority section requires claim provenance',()=>assert.equal(assessDraftInputs({...base,sections:[{section_id:'s',label:'LEGAL_AUTHORITY',content:'x',claim_refs:[]}]}).allowed,false));
+test('traceable verified inputs permit draft creation',()=>assert.equal(createLegalDraft(base).status,'ready_for_review'));
+test('created legal draft can never execute externally',()=>assert.equal(createLegalDraft(base).external_execution,false));
+test('draft artifact hash is deterministic',()=>assert.equal(createLegalDraft(base).artifact_hash,createLegalDraft(base).artifact_hash));
+test('draft boundary rejects externally executable artifact',()=>assert.equal(assertDraftBoundary({...createLegalDraft(base),external_execution:true}).allowed,false));
+test('draft boundary rejects signed lifecycle state',()=>assert.equal(assertDraftBoundary({...createLegalDraft(base),status:'signed'}).allowed,false));
+test('review run can be linked for later independent review',()=>assert.equal(linkReview(createLegalDraft(base),'review-2').review_run_ref,'review-2'));

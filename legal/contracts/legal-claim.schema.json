@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalClaim",
+  "type": "object",
+  "required": [
+    "claim_id",
+    "claim_type",
+    "statement",
+    "support_status",
+    "evidence_refs"
+  ],
+  "properties": {
+    "claim_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "claim_type": {
+      "enum": [
+        "fact",
+        "internal_document",
+        "legal_authority",
+        "precedent",
+        "inference",
+        "recommendation"
+      ]
+    },
+    "statement": {
+      "type": "string",
+      "minLength": 1
+    },
+    "support_status": {
+      "enum": [
+        "supported",
+        "conflicted",
+        "insufficient",
+        "unsupported"
+      ]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "uncertainty": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

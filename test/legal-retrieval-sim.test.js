@@ -1,0 +1,13 @@
+const test=require('node:test');const assert=require('node:assert/strict');
+const {planLegalRetrieval,rankLegalCandidates,buildRetrievalEvidence}=require('../src/hermes/legal/retrieval-planner');
+const q={query_id:'q1',text:'regra aplicável',jurisdiction:'BR-PE',as_of:'2026-10-06',purpose:'legal_authority',max_results:10};
+const authority={authority_id:'a1',authority_type:'law',jurisdiction:'BR',issuer:'Federal',identifier:'1',publication_date:'2025-01-01',effective_from:'2025-01-01',effective_until:null,status:'effective',supersedes:[],superseded_by:[],source_snapshot_ref:'s'};
+const c=(o={})=>({candidate_id:'c1',source_id:'planalto',jurisdiction:'BR',relevance:.8,authority,evidence_type:'legal_authority',source_snapshot_ref:'s1',supports:['claim1'],integrity_status:'verified',...o});
+test('authority retrieval is source-first and excludes open web from planned authority sources',()=>{const p=planLegalRetrieval(q);assert.equal(p.source_order.includes('open_web'),false);assert.equal(p.require_provenance,true);});
+test('official primary source outranks discovery-only source',()=>{const r=rankLegalCandidates({...q,purpose:'discovery'},[c(),c({candidate_id:'web',source_id:'open_web',relevance:1})]);assert.equal(r[0].source_id,'planalto');});
+test('open web is ineligible to certify legal authority even with perfect relevance',()=>{const r=rankLegalCandidates(q,[c({source_id:'open_web',relevance:1})]);assert.equal(r[0].eligible,false);});
+test('wrong jurisdiction candidate fails closed',()=>{const r=rankLegalCandidates(q,[c({jurisdiction:'US-CA'})]);assert.equal(r[0].eligible,false);});
+test('future authority is excluded despite semantic relevance',()=>{const future={...authority,publication_date:'2027-01-01',effective_from:'2027-01-01'};assert.equal(rankLegalCandidates(q,[c({authority:future,relevance:1})])[0].eligible,false);});
+test('relevance cannot overpower authority tier',()=>{const r=rankLegalCandidates({...q,purpose:'discovery'},[c({relevance:.1}),c({candidate_id:'web',source_id:'open_web',relevance:1})]);assert.equal(r[0].source_id,'planalto');});
+test('retrieval evidence preserves source snapshot provenance',()=>{const ranked=rankLegalCandidates(q,[c()]);const e=buildRetrievalEvidence(q,ranked);assert.equal(e[0].source_snapshot_ref,'s1');});
+test('conflicting retrieval evidence is preserved, not discarded',()=>{const ranked=rankLegalCandidates(q,[c(),c({candidate_id:'c2',contradicts:['claim1'],supports:[]})]);const e=buildRetrievalEvidence(q,ranked);assert.equal(e.length,2);assert.deepEqual(e[1].contradicts,['claim1']);});
