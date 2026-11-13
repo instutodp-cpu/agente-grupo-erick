@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalDeadline",
+  "type": "object",
+  "required": [
+    "deadline_id",
+    "matter_scope",
+    "deadline_type",
+    "status",
+    "trigger_ref",
+    "basis_refs",
+    "calculation_policy_ref",
+    "calendar_ref",
+    "due_date",
+    "review_status"
+  ],
+  "properties": {
+    "deadline_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "matter_scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "deadline_type": {
+      "enum": [
+        "contractual",
+        "procedural",
+        "regulatory",
+        "internal",
+        "other"
+      ]
+    },
+    "status": {
+      "enum": [
+        "detected",
+        "calculated",
+        "validated",
+        "confirmed",
+        "expired",
+        "cancelled"
+      ]
+    },
+    "trigger_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "basis_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "calculation_policy_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "calendar_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "due_date": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "review_status": {
+      "enum": [
+        "candidate",
+        "reviewed",
+        "confirmed",
+        "rejected"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

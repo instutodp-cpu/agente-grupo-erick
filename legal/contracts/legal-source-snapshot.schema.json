@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalSourceSnapshot",
+  "type": "object",
+  "required": [
+    "snapshot_id",
+    "source_id",
+    "retrieved_at",
+    "content_hash",
+    "immutable",
+    "raw_evidence_preserved"
+  ],
+  "properties": {
+    "snapshot_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "retrieved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "content_hash": {
+      "type": "string",
+      "minLength": 16
+    },
+    "immutable": {
+      "const": true
+    },
+    "raw_evidence_preserved": {
+      "const": true
+    },
+    "supersedes_snapshot_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "retrieval_run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false
+}
