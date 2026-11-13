@@ -217,8 +217,40 @@ function buildPublicWebRequest(input, session, targetUrl, limits) {
   };
 }
 
-function buildSecretAccessContext(input, session, secretReference) {
+function buildSecretAccessContext(input, session, deps = {}) {
+  const contract = deps.secretAccessContract;
+  const secretReference = deps.secretReference;
   const stagingReference = session.environment === 'staging' && secretReference?.environment === 'staging';
+  if (session.environment === 'staging' && !secretReference) return null;
+  if (stagingReference) {
+    if (
+      !contract ||
+      contract.environment !== 'staging' ||
+      contract.purpose !== 'public_web_canary_execution' ||
+      contract.production_allowed !== false ||
+      contract.exportable !== false ||
+      contract.single_request !== true
+    ) return null;
+    return {
+      trace_id: input.trace_id,
+      request_id: input.request_id,
+      configuration_id: session.configuration_id,
+      connector_id: session.connector_id,
+      provider_id: session.provider_id,
+      adapter_id: session.adapter_id,
+      workspace_type: session.workspace_type,
+      tenant_id: session.tenant_id,
+      environment: contract.environment,
+      purpose: contract.purpose,
+      requested_by: session.operator_id,
+      production_allowed: false,
+      exportable: false,
+      single_request: true,
+      simulated: true,
+      executed: false,
+      real_provider_called: false
+    };
+  }
   return {
     trace_id: input.trace_id,
     request_id: input.request_id,
@@ -228,8 +260,8 @@ function buildSecretAccessContext(input, session, secretReference) {
     adapter_id: session.adapter_id,
     workspace_type: session.workspace_type,
     tenant_id: session.tenant_id,
-    environment: stagingReference ? 'staging' : 'local_test',
-    purpose: stagingReference ? 'public_web_canary_execution' : 'local_test_readiness_validation',
+    environment: 'local_test',
+    purpose: 'local_test_readiness_validation',
     requested_by: session.operator_id,
     simulated: true,
     executed: false,
@@ -361,6 +393,11 @@ function createPublicWebCanaryRunner(deps = {}) {
     let providerInvoked = false;
     let transportInvoked = false;
     let externalNetworkCalled = false;
+    const secretAccessContext = buildSecretAccessContext(input, session, {
+      ...deps,
+      secretReference: binding.secret_reference
+    });
+    if (!secretAccessContext) return await abortReservedExecution('CANARY_CONFIGURATION_BLOCKED', 'staging_secret_access_contract_required');
     const policyDnsResolver = () => dns.approved_ips.slice();
     const transport = createPublicWebRealTransportCandidate({
       enabled: true,
@@ -421,7 +458,7 @@ function createPublicWebCanaryRunner(deps = {}) {
         allowed_workspaces: Array.isArray(deps.workspaceAllowlist) ? deps.workspaceAllowlist : undefined,
         allowed_users: Array.isArray(deps.userAllowlist) ? deps.userAllowlist : undefined,
         secretReference: binding.secret_reference,
-        secretAccessContext: buildSecretAccessContext(input, session, binding.secret_reference),
+        secretAccessContext,
         clock: deps.clock
       });
       let normalized = normalizeNetworkResult(result, input, session, networkStarted, deps, {
