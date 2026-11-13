@@ -13,7 +13,7 @@ function inbox(initial='accepted') {
   const transitions=[];
   return {transitions,get record(){return record;},async getByRun(id){return id===record.mission_run_id?{ok:true,status:'FOUND',record}:{ok:false,status:'NOT_FOUND',reason:'mission_not_found'};},async transition(input){transitions.push(input);if(record.status!==input.expected_status)return {ok:false,status:'CONFLICT',reason:'mission_status_changed',current_status:record.status};record={...record,status:input.next_status,...input.patch};return {ok:true,status:'TRANSITIONED',record};}};
 }
-function challenge(overrides={}) {return {ok:true,status:'EMAIL_REAUTH_OPERATIONAL_CHALLENGE_READY',challenge_id:`sha256:${'b'.repeat(64)}`,action_digest:`sha256:${'c'.repeat(64)}`,delivery_reference:'delivery-1',identity_alias:'owner-primary-email',issued_at:'2026-10-14T22:00:00.000Z',ttl_seconds:600,execution_authorized:false,production_allowed:false,...overrides};}
+function challenge(overrides={}) {return {ok:true,status:'EMAIL_REAUTH_OPERATIONAL_CHALLENGE_READY',subject_id:'human:owner',challenge_id:`sha256:${'b'.repeat(64)}`,action_digest:`sha256:${'c'.repeat(64)}`,delivery_reference:'delivery-1',identity_alias:'owner-primary-email',issued_at:'2026-10-14T22:00:00.000Z',ttl_seconds:600,execution_authorized:false,production_allowed:false,...overrides};}
 function evidenceStore(overrides={}) {return {async readVerified(){return {ok:true,durable:true,single_use:true,challenge_id:challenge().challenge_id,action_digest:challenge().action_digest,subject_id:'human:owner',verified_at:'2026-10-14T22:00:30.000Z',...overrides};}};}
 
 test('accepted mission creates a fresh challenge and moves durably to awaiting human reauth',async()=>{
@@ -21,6 +21,20 @@ test('accepted mission creates a fresh challenge and moves durably to awaiting h
   const result=await prepareOperationalMissionReauth({inbox:store,mission_run_id:'run-1',challengeFactory:async input=>{calls+=1;assert.equal(input.target_origin,'https://example.com');assert.equal(input.target_path,'/docs');return challenge();}});
   assert.equal(result.ok,true);assert.equal(result.status,'PUBLIC_WEB_OPERATIONAL_MISSION_AWAITING_HUMAN_REAUTH');assert.equal(calls,1);assert.equal(store.record.status,'awaiting_human_reauth');assert.equal(store.record.reauth_challenge_id,challenge().challenge_id);assert.equal(result.execution_authorized,false);assert.equal(result.external_network_called,false);
   assert.deepEqual(store.transitions.map(x=>[x.expected_status,x.next_status]),[['accepted','preparing'],['preparing','awaiting_human_reauth']]);
+});
+
+
+test('non-legacy trusted operator is propagated and can bind matching evidence',async()=>{
+  const store=inbox();store.record.trial_config.operator_id='operator-1';
+  const prepared=await prepareOperationalMissionReauth({inbox:store,mission_run_id:'run-1',challengeFactory:async input=>{
+    assert.equal(input.subject_id,'operator-1');
+    return challenge({subject_id:'operator-1'});
+  }});
+  assert.equal(prepared.ok,true);
+  const key=`sha256:${'d'.repeat(64)}`;
+  const bound=await bindOperationalMissionEvidence({inbox:store,evidenceStore:evidenceStore({subject_id:'operator-1'}),mission_run_id:'run-1',evidence_key:key});
+  assert.equal(bound.ok,true);
+  assert.equal(bound.status,'PUBLIC_WEB_OPERATIONAL_MISSION_READY_FOR_TTY');
 });
 
 test('non-accepted mission does not mint another reauth challenge',async()=>{
@@ -232,7 +246,7 @@ test('refresh CLI wires the exact durable GitHub mission to a fresh challenge wi
     environment:cliRuntime(t),PoolClass:Pool,argv:[],clock:()=> '2026-10-15T16:30:00.000Z',
     inboxFactory:()=>store,
     evidenceStoreFactory:()=>({async readVerified(key){assert.equal(key,`sha256:${'d'.repeat(64)}`);return {ok:true,durable:true,single_use:true,evidence_key:key,challenge_id:`sha256:${'b'.repeat(64)}`,action_digest:`sha256:${'c'.repeat(64)}`,subject_id:'human:owner',verified_at:'2026-10-15T16:14:51.000Z'};}}),
-    challengeFactory:async({env})=>{challengeCalls+=1;assert.equal(env.HERMES_REAUTH_TARGET_ORIGIN,'https://api.github.com');assert.equal(env.HERMES_REAUTH_TARGET_PATH,'/');return {ok:true,status:'EMAIL_REAUTH_OPERATIONAL_CHALLENGE_READY',challenge_id:`sha256:${'e'.repeat(64)}`,action_digest:`sha256:${'f'.repeat(64)}`,delivery_reference:'delivery-refresh',identity_alias:'owner-primary-email',issued_at:'2026-10-15T16:30:00.000Z',ttl_seconds:600,execution_authorized:false,production_allowed:false};}
+    challengeFactory:async({env})=>{challengeCalls+=1;assert.equal(env.HERMES_REAUTH_TARGET_ORIGIN,'https://api.github.com');assert.equal(env.HERMES_REAUTH_TARGET_PATH,'/');assert.equal(env.HERMES_REAUTH_SUBJECT_ID,'human:owner');return {ok:true,status:'EMAIL_REAUTH_OPERATIONAL_CHALLENGE_READY',subject_id:'human:owner',challenge_id:`sha256:${'e'.repeat(64)}`,action_digest:`sha256:${'f'.repeat(64)}`,delivery_reference:'delivery-refresh',identity_alias:'owner-primary-email',issued_at:'2026-10-15T16:30:00.000Z',ttl_seconds:600,execution_authorized:false,production_allowed:false};}
   });
   assert.equal(result.ok,true);
   assert.equal(result.status,'PUBLIC_WEB_OPERATIONAL_MISSION_REAUTH_REFRESHED_AWAITING_HUMAN_REAUTH');

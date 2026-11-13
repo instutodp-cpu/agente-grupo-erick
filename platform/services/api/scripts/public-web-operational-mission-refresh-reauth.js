@@ -29,12 +29,13 @@ async function main({
       evidenceStore,
       mission_run_id:missionRunId,
       clock,
-      challengeFactory:({target_origin,target_path,mission_id,mission_run_id,contract_hash})=>effectiveChallengeFactory({
+      challengeFactory:({target_origin,target_path,mission_id,mission_run_id,contract_hash,subject_id})=>effectiveChallengeFactory({
         PoolClass:EffectivePoolClass,
         env:{
           ...environment,
           HERMES_REAUTH_TARGET_ORIGIN:target_origin,
-          HERMES_REAUTH_TARGET_PATH:target_path
+          HERMES_REAUTH_TARGET_PATH:target_path,
+          HERMES_REAUTH_SUBJECT_ID:subject_id
         },
         mission_id,
         mission_run_id,
