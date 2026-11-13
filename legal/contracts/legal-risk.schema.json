@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalRisk",
+  "type": "object",
+  "required": [
+    "risk_id",
+    "risk_type",
+    "severity",
+    "source_kind",
+    "clause_ref",
+    "fragment_refs",
+    "status"
+  ],
+  "properties": {
+    "risk_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "risk_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "severity": {
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "source_kind": {
+      "enum": [
+        "playbook_deviation",
+        "authority_backed",
+        "extraction_uncertainty"
+      ]
+    },
+    "clause_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "fragment_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "playbook_rule_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "authority_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "status": {
+      "enum": [
+        "candidate",
+        "verified",
+        "dismissed"
+      ]
+    },
+    "explanation": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

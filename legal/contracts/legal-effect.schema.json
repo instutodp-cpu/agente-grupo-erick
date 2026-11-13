@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalEffect",
+  "type": "object",
+  "required": [
+    "effect_type",
+    "binding",
+    "judicial",
+    "affects_rights",
+    "affects_obligations",
+    "external_party",
+    "reversible",
+    "qualified_review_required",
+    "approval_required"
+  ],
+  "properties": {
+    "effect_type": {
+      "enum": [
+        "none",
+        "advisory",
+        "internal",
+        "external_nonbinding",
+        "external_binding",
+        "judicial"
+      ]
+    },
+    "binding": {
+      "type": "boolean"
+    },
+    "judicial": {
+      "type": "boolean"
+    },
+    "affects_rights": {
+      "type": "boolean"
+    },
+    "affects_obligations": {
+      "type": "boolean"
+    },
+    "financial_exposure_brl": {
+      "type": "number",
+      "minimum": 0
+    },
+    "external_party": {
+      "type": "boolean"
+    },
+    "reversible": {
+      "type": "boolean"
+    },
+    "qualified_review_required": {
+      "type": "boolean"
+    },
+    "approval_required": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false
+}

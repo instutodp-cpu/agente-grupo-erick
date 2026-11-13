@@ -500,7 +500,7 @@
     "platform_docs": 153,
     "core_source_files": 734,
     "api_tests": 663,
-    "github_workflows": 2,
+    "github_workflows": 3,
     "marketing_files": 202,
     "core_family_counts": {
       "hermes_maintainer": 178,

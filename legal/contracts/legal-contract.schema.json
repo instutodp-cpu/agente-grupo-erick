@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LegalContract",
+  "type": "object",
+  "required": [
+    "contract_id",
+    "matter_scope",
+    "document_id",
+    "current_version_id",
+    "status",
+    "party_refs"
+  ],
+  "properties": {
+    "contract_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "matter_scope": {
+      "type": "string",
+      "minLength": 1
+    },
+    "document_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "current_version_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "under_review",
+        "approved",
+        "active",
+        "expired",
+        "terminated",
+        "unknown"
+      ]
+    },
+    "party_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "effective_from": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "effective_until": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date"
+    },
+    "renewal_type": {
+      "enum": [
+        "none",
+        "fixed",
+        "automatic",
+        "unknown"
+      ]
+    }
+  },
+  "additionalProperties": false
+}
