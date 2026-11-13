@@ -219,7 +219,10 @@ function buildPublicWebRequest(input, session, targetUrl, limits) {
 
 function buildSecretAccessContext(input, session, deps = {}) {
   const contract = deps.secretAccessContract;
-  if (session.environment === 'staging') {
+  const secretReference = deps.secretReference;
+  const stagingReference = session.environment === 'staging' && secretReference?.environment === 'staging';
+  if (session.environment === 'staging' && !secretReference) return null;
+  if (stagingReference) {
     if (
       !contract ||
       contract.environment !== 'staging' ||
@@ -390,7 +393,10 @@ function createPublicWebCanaryRunner(deps = {}) {
     let providerInvoked = false;
     let transportInvoked = false;
     let externalNetworkCalled = false;
-    const secretAccessContext = buildSecretAccessContext(input, session, deps);
+    const secretAccessContext = buildSecretAccessContext(input, session, {
+      ...deps,
+      secretReference: binding.secret_reference
+    });
     if (!secretAccessContext) return await abortReservedExecution('CANARY_CONFIGURATION_BLOCKED', 'staging_secret_access_contract_required');
     const policyDnsResolver = () => dns.approved_ips.slice();
     const transport = createPublicWebRealTransportCandidate({

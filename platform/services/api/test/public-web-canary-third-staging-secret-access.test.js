@@ -20,7 +20,7 @@ function contract() {
 }
 
 test('staging secret access requires exact explicit contract',()=>{
-  const result=buildSecretAccessContext(input(),session(),{secretAccessContract:contract()});
+  const result=buildSecretAccessContext(input(),session(),{secretAccessContract:contract(),secretReference:{environment:'staging'}});
   assert.equal(result.environment,'staging');
   assert.equal(result.purpose,'public_web_canary_execution');
   assert.equal(result.production_allowed,false);
@@ -31,7 +31,7 @@ test('staging secret access requires exact explicit contract',()=>{
 });
 
 test('staging fails closed when secret access contract is missing or drifts',()=>{
-  assert.equal(buildSecretAccessContext(input(),session(),{}),null);
+  assert.equal(buildSecretAccessContext(input(),session(),{secretReference:{environment:'staging'}}),null);
   for (const patch of [
     {environment:'local_test'},
     {purpose:'local_test_readiness_validation'},
@@ -40,7 +40,8 @@ test('staging fails closed when secret access contract is missing or drifts',()=
     {single_request:false}
   ]) {
     assert.equal(buildSecretAccessContext(input(),session(),{
-      secretAccessContract:{...contract(),...patch}
+      secretAccessContract:{...contract(),...patch},
+      secretReference:{environment:'staging'}
     }),null);
   }
 });

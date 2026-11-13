@@ -193,7 +193,10 @@ test('secret access context requires exact staging contract and preserves local 
       single_request: true
     }
   };
-  const staging = buildSecretAccessContext(input, session, contract);
+  const staging = buildSecretAccessContext(input, session, {
+    ...contract,
+    secretReference: { environment: 'staging' }
+  });
   assert.equal(staging.environment, 'staging');
   assert.equal(staging.purpose, 'public_web_canary_execution');
   assert.equal(staging.production_allowed, false);
@@ -202,6 +205,9 @@ test('secret access context requires exact staging contract and preserves local 
   const local = buildSecretAccessContext(input, { ...session, environment: 'local_test' }, {});
   assert.equal(local.environment, 'local_test');
   assert.equal(local.purpose, 'local_test_readiness_validation');
-  assert.equal(buildSecretAccessContext(input, session, {}), null);
+  const synthetic = buildSecretAccessContext(input, session, { secretReference: { environment: 'local_test' } });
+  assert.equal(synthetic.environment, 'local_test');
+  assert.equal(synthetic.purpose, 'local_test_readiness_validation');
+  assert.equal(buildSecretAccessContext(input, session, { secretReference: { environment: 'staging' } }), null);
   assert.notEqual(staging.environment, 'production');
 });
