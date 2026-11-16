@@ -30,3 +30,6 @@ Este C7 não implementa:
 - integração real com cartão, adquirente ou banco.
 
 Cancelamento de venda, fiscal, adquirente e banco devem ser cruzados em camadas futuras; uma fonte não apaga silenciosamente as demais.
+
+
+A auditoria de MDR usa aritmética inteira também no limite de `Number.MAX_SAFE_INTEGER`, evitando arredondamento flutuante silencioso.
