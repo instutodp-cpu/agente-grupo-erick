@@ -120,3 +120,20 @@ test('chargeback preserves evidence and cannot imply autonomous external defense
   assert.equal(chargeback.requiresHumanApproval, true);
   assert.deepEqual(chargeback.evidenceIds, ['e1']);
 });
+
+test('MDR audit keeps integer precision at the safe-cent boundary', () => {
+  const grossCents = Number.MAX_SAFE_INTEGER;
+  const expectedMdrCents = 900719925474;
+  const receivable = createCardReceivable({
+    receivableId: 'large-r',
+    cardTransactionId: 'large-ct',
+    installmentNumber: 1,
+    grossCents,
+    mdrCents: expectedMdrCents,
+    expectedNetCents: grossCents - expectedMdrCents,
+    expectedSettlementDate: '2026-11-02T10:00:00-03:00'
+  });
+  const audit = auditMdr(receivable, { version: 'boundary-v1', mdrBasisPoints: 1 });
+  assert.equal(audit.expectedMdrCents, expectedMdrCents);
+  assert.equal(audit.status, 'MATCHED');
+});
