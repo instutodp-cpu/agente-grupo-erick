@@ -51,7 +51,7 @@ case "$SCRIPT_SOURCE" in
   ;;
  "$BASE"/releases/*)
   RELEASE_NAME="${SCRIPT_SOURCE#"$BASE/releases/"}"
-  [[ "$RELEASE_NAME" =~ ^[a-z0-9-]+-[0-9a-f]{40}\\.js$ ]] || deny unexpected_bot_mounts
+  [[ "$RELEASE_NAME" =~ ^[a-z0-9-]+-[0-9a-f]{40}\.js$ ]] || deny unexpected_bot_mounts
   [[ -f "$SCRIPT_SOURCE" && ! -L "$SCRIPT_SOURCE" && "$(stat -c '%a' "$SCRIPT_SOURCE")" == 600 ]] || deny unexpected_bot_mounts
   ;;
  *)
