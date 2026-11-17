@@ -41,6 +41,14 @@ test('invalid or tampered handoffs fail closed before runtime calls', async () =
   assert.ok(result.blockers.includes('EXECUTED_MUST_BE_FALSE'));
 });
 
+test('canonical runtime requirements cannot be removed from a handoff', async () => {
+  const value = { ...handoff(), requiresCanonicalExecutionAttempt: false };
+  const result = await admitAccountingRuntime({ handoff: value, runtime: {} });
+  assert.equal(result.status, 'BLOCKED');
+  assert.equal(result.reason, 'HANDOFF_INVALID');
+  assert.ok(result.blockers.includes('CANONICAL_ATTEMPT_REQUIREMENT_MISSING'));
+});
+
 test('missing canonical runtime fails closed', async () => {
   const result = await admitAccountingRuntime({ handoff: handoff() });
   assert.equal(result.status, 'BLOCKED');

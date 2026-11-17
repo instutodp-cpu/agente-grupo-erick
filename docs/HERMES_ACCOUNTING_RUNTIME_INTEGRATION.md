@@ -9,7 +9,12 @@ The handoff carries tenant identity, operation identity, capability and idempote
 - \`SIMULATION\`;
 - \`SHADOW\`.
 
-Production is structurally rejected. Every accepted handoff forces:
+Production is structurally rejected. Every accepted handoff also requires the canonical runtime markers to remain true:
+- `requiresCanonicalExecutionJob=true`;
+- `requiresCanonicalExecutionAttempt=true`;
+- `requiresDurableAdmission=true`.
+
+Every accepted handoff forces:
 
 - \`executed=false\`;
 - \`externalEffectAllowed=false\`;

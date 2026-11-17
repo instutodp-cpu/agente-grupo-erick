@@ -25,6 +25,13 @@ function validateAccountingRuntimeHandoff(handoff) {
   if (handoff.executed !== false) blockers.push('EXECUTED_MUST_BE_FALSE');
   if (handoff.externalEffectAllowed !== false) blockers.push('EXTERNAL_EFFECT_MUST_BE_FALSE');
   if (handoff.realProviderAllowed !== false) blockers.push('REAL_PROVIDER_MUST_BE_FALSE');
+  for (const [field, blocker] of [
+    ['requiresCanonicalExecutionJob', 'CANONICAL_JOB_REQUIREMENT_MISSING'],
+    ['requiresCanonicalExecutionAttempt', 'CANONICAL_ATTEMPT_REQUIREMENT_MISSING'],
+    ['requiresDurableAdmission', 'DURABLE_ADMISSION_REQUIREMENT_MISSING']
+  ]) {
+    if (handoff[field] !== true) blockers.push(blocker);
+  }
   for (const field of [
     'handoffId',
     'tenantId',
