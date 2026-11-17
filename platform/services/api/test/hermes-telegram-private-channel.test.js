@@ -2582,3 +2582,26 @@ test('Telegram poll retry uses capped backoff, resets after success and halts on
  }),/telegram_provider_auth_denied/);
  assert.deepEqual(delays,[1000,2000,4000,8000,16000,30000,30000,30000,30000]);
 });
+
+
+const historyRolloutScript=fs.readFileSync(
+ path.resolve(__dirname,'../scripts/deploy-hermes-telegram-history-staging.sh'),'utf8');
+
+test('history rollout accepts only the pinned repository or a protected release script mount',()=>{
+ assert.ok(historyRolloutScript.includes('SCRIPT_SOURCE="$(docker inspect'));
+ assert.ok(historyRolloutScript.includes('case "$SCRIPT_SOURCE" in'));
+ assert.ok(historyRolloutScript.includes('"$BASE"/releases/*'));
+ assert.ok(historyRolloutScript.includes('RELEASE_NAME="\${SCRIPT_SOURCE#"$BASE/releases/"}"'));
+ assert.ok(historyRolloutScript.includes('[[ "$RELEASE_NAME" =~ ^[a-z0-9-]+-[0-9a-f]{40}\\.js$ ]]'));
+ assert.ok(historyRolloutScript.includes('! -L "$SCRIPT_SOURCE"'));
+ assert.ok(historyRolloutScript.includes('stat -c \\'%a\\' "$SCRIPT_SOURCE"'));
+});
+
+test('history rollout remains explicit, read-only in check mode, and fail-closed',()=>{
+ assert.ok(historyRolloutScript.includes('PRECHECK_DATABASE_ONLY'));
+ assert.ok(historyRolloutScript.includes('PRECHECK_OK_NO_CHANGES'));
+ assert.ok(historyRolloutScript.includes('HERMES_HISTORY_LIVE_ENABLED=true'));
+ assert.ok(historyRolloutScript.includes('HERMES_EXECUTION_ENABLED=false'));
+ assert.ok(historyRolloutScript.includes('HERMES_EXECUTION_KILL_SWITCH=true'));
+ assert.ok(historyRolloutScript.includes('deny(){'));
+});
