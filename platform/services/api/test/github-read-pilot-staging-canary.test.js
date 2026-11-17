@@ -29,7 +29,7 @@ test('GitHub read-pilot canary keeps staging and read-only boundaries explicit',
   assert.match(runbook, /Supabase/i);
   assert.match(runbook, /no automatic\s+merge, deploy, restart/i);
   assert.match(runbook, /rollback/i);
-  assert.match(runbook, /required state is `STOP`/i);
+  assert.match(runbook, /required state\s+is `STOP`/i);
 });
 
 test('GitHub read-pilot canary does not embed secret material or public ingress', () => {
