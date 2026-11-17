@@ -182,3 +182,10 @@ test('documentary deadlines and assignment metrics pass through brief without se
  assert.throws(()=>createHermesCommercialPriorityBrief(invalid,{clock:()=>NOW}),
   /commercial_work_metrics_invalid/);
 });
+test('immutable read-pilot image includes its loopback entrypoint', () => {
+  const dockerfile = fs.readFileSync(path.resolve(__dirname, '../Dockerfile'), 'utf8');
+  assert.match(
+    dockerfile,
+    /^COPY scripts\/run-hermes-github-read-pilot\.js \.\/scripts\/run-hermes-github-read-pilot\.js$/m
+  );
+});
