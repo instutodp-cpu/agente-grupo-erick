@@ -12,7 +12,7 @@ test('history rollout accepts only the pinned repository or a protected release 
  assert.match(script,/case "\$SCRIPT_SOURCE" in/);
  assert.match(script,/\$BASE"\/releases\/\*/);
  assert.match(script,/RELEASE_NAME=\\?\$\{SCRIPT_SOURCE#/);
- assert.match(script,/\^\[a-z0-9-\]\+-\[0-9a-f\]\{40\}\\\\\.js\$/);
+ assert.ok(script.includes('[[ "$RELEASE_NAME" =~ ^[a-z0-9-]+-[0-9a-f]{40}\\.js$ ]]'));
  assert.match(script,/! -L "\$SCRIPT_SOURCE"/);
  assert.match(script,/stat -c '%a' "\$SCRIPT_SOURCE"/);
 });
