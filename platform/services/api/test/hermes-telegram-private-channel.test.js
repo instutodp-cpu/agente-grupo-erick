@@ -2591,10 +2591,10 @@ test('history rollout accepts only the pinned repository or a protected release 
  assert.ok(historyRolloutScript.includes('SCRIPT_SOURCE="$(docker inspect'));
  assert.ok(historyRolloutScript.includes('case "$SCRIPT_SOURCE" in'));
  assert.ok(historyRolloutScript.includes('"$BASE"/releases/*'));
- assert.ok(historyRolloutScript.includes('RELEASE_NAME="\${SCRIPT_SOURCE#"$BASE/releases/"}"'));
+ assert.ok(historyRolloutScript.includes('RELEASE_NAME="${SCRIPT_SOURCE#"$BASE/releases/"}"'));
  assert.ok(historyRolloutScript.includes('[[ "$RELEASE_NAME" =~ ^[a-z0-9-]+-[0-9a-f]{40}\\.js$ ]]'));
  assert.ok(historyRolloutScript.includes('! -L "$SCRIPT_SOURCE"'));
- assert.ok(historyRolloutScript.includes('stat -c \\'%a\\' "$SCRIPT_SOURCE"'));
+ assert.ok(historyRolloutScript.includes(`stat -c '%a' \"$SCRIPT_SOURCE\"`));
 });
 
 test('history rollout remains explicit, read-only in check mode, and fail-closed',()=>{
