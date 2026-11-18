@@ -45,7 +45,19 @@ fi
 [[ "$(docker inspect "$OLD" --format '{{.State.Health.Status}}')" == healthy ]] || deny bot_unhealthy
 [[ "$(count_pollers)" == 1 ]] || deny duplicate_pollers
 [[ "$(docker inspect hermes-read-pilot-v7 --format '{{.State.Health.Status}}')" == healthy ]] || deny read_pilot
-[[ "$(docker inspect "$OLD" --format '{{range .Mounts}}{{if eq .Destination "/app"}}{{.Source}}{{end}}{{end}}')" == "$ROOT/platform/services/api" ]] || deny unexpected_bot_mounts
+SCRIPT_SOURCE="$(docker inspect "$OLD" --format '{{range .Mounts}}{{if eq .Destination "/app"}}{{.Source}}{{end}}{{if eq .Destination "/app/scripts/run-hermes-telegram-private.js"}}{{.Source}}{{end}}{{end}}')"
+case "$SCRIPT_SOURCE" in
+ "$ROOT/platform/services/api")
+  ;;
+ "$BASE"/releases/*)
+  RELEASE_NAME="${SCRIPT_SOURCE#"$BASE/releases/"}"
+  [[ "$RELEASE_NAME" =~ ^[a-z0-9-]+-[0-9a-f]{40}\.js$ ]] || deny unexpected_bot_mounts
+  [[ -f "$SCRIPT_SOURCE" && ! -L "$SCRIPT_SOURCE" && "$(stat -c '%a' "$SCRIPT_SOURCE")" == 600 ]] || deny unexpected_bot_mounts
+  ;;
+ *)
+  deny unexpected_bot_mounts
+  ;;
+esac
 ! docker container inspect "$BACKUP" >/dev/null 2>&1 || deny existing_backup
 echo PRECHECK_DATABASE_ONLY
 docker run --rm --network bridge --read-only --user 1000:1000 \
