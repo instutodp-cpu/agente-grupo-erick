@@ -249,7 +249,40 @@ real nem usuário. Cada PR nova aumenta o custo de manutenção (CI de ~4 min,
 
 ### Projeto acessível: `hermes-insight-hub-staging` (`vvzvqinbzdqzcwrfoomd`)
 
-*(preenchido abaixo após a reativação)*
+Estava **pausado**; reativado em 18/11 (status `ACTIVE_HEALTHY`). *(observado)*
+
+- **Quase vazio e sem uso.** Schema `hermes` tem 4 tabelas; só as de
+  reautenticação por e-mail têm linhas (36 desafios, 15 evidências). Inbox de
+  missões e auditoria de canário: 0 linhas. O Supabase pausa projetos
+  gratuitos depois de dias sem acesso, ou seja, nada usava esse banco.
+- **Migrations do repo não batem com o banco.** O banco registra 6 migrations
+  (PoC multi-tenant, BFF Base44, auditoria do canário). Das 45 em
+  `platform/migrations/hermes/`, só as de canário, reautenticação e inbox
+  (017–019, 029–032) têm tabela correspondente. Ciclo de autorização,
+  confirmações, jobs, workers, governança, escrita no GitHub e segundo
+  cérebro (038–045) **não existem aqui**: ou estão no projeto de produção,
+  ou nunca foram aplicadas. Falta um registro de qual migration está em qual
+  banco.
+- **Advisor de segurança (crítico):** RLS desligado em
+  `hermes.strong_human_reauth_email_challenges` e
+  `hermes.strong_human_reauth_email_evidence`. Risco real hoje é **baixo**:
+  `anon` e `authenticated` não têm `USAGE` no schema `hermes` nem grants nas
+  tabelas, então a API pública não chega lá. Mesmo assim, vale ligar o RLS
+  como segunda barreira. O acesso do Hermes é pelo papel `postgres`, que
+  ignora RLS, então isto não quebra nada do runtime. **Não apliquei**; decida
+  você:
+
+  ```sql
+  ALTER TABLE hermes.strong_human_reauth_email_challenges ENABLE ROW LEVEL SECURITY;
+  ALTER TABLE hermes.strong_human_reauth_email_evidence ENABLE ROW LEVEL SECURITY;
+  ```
+
+- `hermes_poc` (PoC de isolamento): RLS ligado, `authenticated` lê
+  organizações e grava `tenant_records`; 0 linhas. Coerente com uma PoC.
+- Advisor de performance: 9 índices nunca usados. Irrelevante com tabelas
+  vazias.
+- **Sugestão:** se nada for usar esse projeto nas próximas semanas, pausar de
+  novo (Dashboard → Project Settings → Pause).
 
 ### Projeto de produção: `yxmdrrwqxwzsdgcgskrm` — *não verificado*
 
