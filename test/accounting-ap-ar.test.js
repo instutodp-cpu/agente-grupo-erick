@@ -51,6 +51,12 @@ test('document creates an obligation but never implies payment', () => {
   assert.equal(payable.paymentChannel, null);
 });
 
+test('obligation accepts numeric amount in cents contract', () => {
+  const payable = createObligation({ ...payableBase, originalAmountCents: 12345 });
+  assert.equal(payable.originalAmountCents, 12345);
+  assert.equal(payable.outstandingCents, 12345);
+});
+
 test('obligation is deeply immutable and rejects invalid dates and money', () => {
   const evidenceIds = ['e1'];
   const payable = createObligation({ ...payableBase, evidenceIds });
