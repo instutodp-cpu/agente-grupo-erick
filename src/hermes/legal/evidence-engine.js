@@ -2,9 +2,9 @@ const MATERIAL_TYPES=new Set(['legal_authority','precedent','recommendation']);
 function indexEvidence(evidence){const map=new Map();for(const e of evidence||[])map.set(e.evidence_id,e);return map;}
 function evaluateClaim(claim,evidence){
  const idx=indexEvidence(evidence);const refs=(claim.evidence_refs||[]).map(id=>idx.get(id)).filter(Boolean);
- const valid=refs.filter(e=>e.integrity_status==='verified');
+ const valid=refs.filter(e=>e.integrity_status==='verified');const verified=(evidence||[]).filter(e=>e&&e.integrity_status==='verified');
  const supporting=valid.filter(e=>(e.evidence_id&&refs.some(ref=>ref.evidence_id===e.evidence_id))&&(e.supports||[]).includes(claim.claim_id));
- const contrary=valid.filter(e=>(e.contradicts||[]).includes(claim.claim_id));
+ const contrary=verified.filter(e=>(e.contradicts||[]).includes(claim.claim_id));
  if(contrary.length) return {status:'conflicted',certifiable:false,supporting:supporting.map(x=>x.evidence_id),contrary:contrary.map(x=>x.evidence_id)};
  if(!supporting.length) return {status:'unsupported',certifiable:false,supporting:[],contrary:[]};
  if(MATERIAL_TYPES.has(claim.claim_type) && supporting.every(e=>['fact','internal_document','process_metadata'].includes(e.evidence_type))){
