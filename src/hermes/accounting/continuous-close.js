@@ -40,14 +40,14 @@ function requireSafeInteger(value, field, nonNegative = false) {
 
 function requireCompetence(value) {
   required(value, 'competence');
-  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(value)) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) {
     throw new Error('competence must be YYYY-MM');
   }
 }
 
 function requireIsoDateOrTimestamp(value, field) {
   required(value, field);
-  if (/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const parts = value.split('-').map(Number);
     const date = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
     if (
@@ -60,7 +60,7 @@ function requireIsoDateOrTimestamp(value, field) {
     return;
   }
   if (
-    !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?(?:Z|[+-]\\d{2}:\\d{2})$/.test(value) ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) ||
     Number.isNaN(Date.parse(value))
   ) {
     throw new Error(field + ' must be an ISO date or timestamp');

@@ -50,7 +50,10 @@ test('driver decomposition exposes unexplained change with safe arithmetic',()=>
   assert.throws(
     ()=>decomposeDrivers({
       currentCents:Number.MAX_SAFE_INTEGER,priorCents:0,
-      drivers:[{name:'overflow',impactCents:Number.MAX_SAFE_INTEGER}]
+      drivers:[
+        {name:'overflow-a',impactCents:Number.MAX_SAFE_INTEGER},
+        {name:'overflow-b',impactCents:1}
+      ]
     }),
     error=>error.code==='OVERFLOW'
   );

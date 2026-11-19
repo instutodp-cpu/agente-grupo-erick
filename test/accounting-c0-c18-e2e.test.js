@@ -52,7 +52,9 @@ test('C0-C18 happy path composes reconciliation, close, audit and accountant han
     unexplainedVarianceCents: 0, unresolvedMaterialExceptions: 0, evidenceManifestHash: 'manifest-e2e-1'
   });
   assert.equal(readiness(close).ready, true);
-  assert.equal(transitionClose(close.status, 'READY_FOR_REVIEW', { ready: true }), 'READY_FOR_REVIEW');
+  assert.equal(transitionClose(close.status, 'INGESTING'), 'INGESTING');
+  assert.equal(transitionClose('INGESTING', 'RECONCILING'), 'RECONCILING');
+  assert.equal(transitionClose('RECONCILING', 'READY_FOR_REVIEW', { ready: true }), 'READY_FOR_REVIEW');
   assert.equal(transitionClose('READY_FOR_REVIEW', 'HUMAN_REVIEW'), 'HUMAN_REVIEW');
   assert.equal(transitionClose('HUMAN_REVIEW', 'READY_TO_CLOSE', { humanReviewed: true }), 'READY_TO_CLOSE');
   assert.equal(transitionClose('READY_TO_CLOSE', 'CLOSED', { ready: true, humanApproved: true }), 'CLOSED');

@@ -15,7 +15,7 @@ function deepFreeze(value, seen = new Set()) {
   return Object.freeze(value);
 }
 function failure(code, message) {
-  const error = new Error(message || code);
+  const error = new Error(code + ': ' + (message || code));
   error.code = code;
   return error;
 }
