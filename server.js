@@ -12,9 +12,10 @@ const { simulateDecision } = require('./src/hermes/intelligence/shadow');
 const { recordDecision: recordHilDecision, snapshot: hilMetricsSnapshot } = require('./src/hermes/intelligence/metrics');
 const { buildDecisionReport } = require('./src/hermes/intelligence/report');
 const { buildFinanceExecution } = require('./src/hermes/finance/finance-execution');
+const { createChatAccessGuard } = require('./src/hermes/http/chat-access');
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '32kb' }));
 app.use(express.static('public'));
 
 function getPositiveIntegerEnv(name, defaultValue) {
@@ -25,6 +26,19 @@ function getPositiveIntegerEnv(name, defaultValue) {
 const CLAUDE_API_TIMEOUT_MS = getPositiveIntegerEnv('CLAUDE_API_TIMEOUT_MS', 120000);
 const CHAT_RESPONSE_TIMEOUT_MS = getPositiveIntegerEnv('CHAT_RESPONSE_TIMEOUT_MS', 180000);
 const MAX_TOOL_LOOPS = getPositiveIntegerEnv('MAX_TOOL_LOOPS', 6);
+const CHAT_RATE_LIMIT_WINDOW_MS = getPositiveIntegerEnv(
+  'HERMES_CHAT_RATE_LIMIT_WINDOW_MS',
+  60_000
+);
+const CHAT_RATE_LIMIT_MAX = getPositiveIntegerEnv(
+  'HERMES_CHAT_RATE_LIMIT_MAX',
+  20
+);
+const chatAccessGuard = createChatAccessGuard({
+  token: process.env.HERMES_CHAT_AUTH_TOKEN,
+  windowMs: CHAT_RATE_LIMIT_WINDOW_MS,
+  maxRequests: CHAT_RATE_LIMIT_MAX
+});
 
 function logStructured(level, event, fields = {}) {
   const payload = {
@@ -289,7 +303,22 @@ const tools = [
 ];
 
 // ── Endpoint principal do agente ─────────────────────────────────────────────
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', (req, res, next) => {
+  const access = chatAccessGuard.check(req);
+  if (access.allowed) return next();
+
+  if (access.retryAfterSeconds) {
+    res.setHeader('Retry-After', String(access.retryAfterSeconds));
+  }
+
+  const errorMessage =
+    access.code === 'chat_auth_not_configured'
+      ? 'Chat temporariamente indisponível.'
+      : access.code === 'chat_rate_limited'
+        ? 'Limite temporário atingido. Tente novamente mais tarde.'
+        : 'Autorização necessária.';
+  return res.status(access.status).json({ error: errorMessage });
+}, async (req, res) => {
   const requestId = crypto.randomUUID();
   const startedAt = Date.now();
   const { messages } = req.body || {};
