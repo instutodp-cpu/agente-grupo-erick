@@ -385,9 +385,10 @@ function forecastCash(obligations, input = {}) {
     }
     requireSafeCents(obligation.outstandingCents, 'outstandingCents');
     const days = daysFromDue(obligation.dueDate, input.asOf);
-    if (days <= 0) continue;
+    const daysUntilDue = -days;
+    if (daysUntilDue < 0) continue;
     for (const window of FORECAST_WINDOWS) {
-      if (days > window) continue;
+      if (daysUntilDue > window) continue;
       if (obligation.kind === 'RECEIVABLE') {
         windows[window].inflowCents = addSafe(
           windows[window].inflowCents,
