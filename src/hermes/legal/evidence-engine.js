@@ -3,7 +3,7 @@ function indexEvidence(evidence){const map=new Map();for(const e of evidence||[]
 function evaluateClaim(claim,evidence){
  const idx=indexEvidence(evidence);const refs=(claim.evidence_refs||[]).map(id=>idx.get(id)).filter(Boolean);
  const valid=refs.filter(e=>e.integrity_status==='verified');
- const supporting=valid.filter(e=>(e.supports||[]).includes(claim.claim_id));
+ const supporting=valid.filter(e=>(e.evidence_id&&refs.some(ref=>ref.evidence_id===e.evidence_id))&&(e.supports||[]).includes(claim.claim_id));
  const contrary=valid.filter(e=>(e.contradicts||[]).includes(claim.claim_id));
  if(contrary.length) return {status:'conflicted',certifiable:false,supporting:supporting.map(x=>x.evidence_id),contrary:contrary.map(x=>x.evidence_id)};
  if(!supporting.length) return {status:'unsupported',certifiable:false,supporting:[],contrary:[]};
