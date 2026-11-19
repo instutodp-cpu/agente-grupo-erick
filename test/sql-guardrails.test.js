@@ -78,6 +78,16 @@ test('schema não permitido bloqueado', () => {
   assert.strictEqual(validateSql('SELECT * FROM information_schema.tables').ok, false);
 });
 
+test('relações adicionais após vírgula são bloqueadas', () => {
+  const authUsers = validateSql('SELECT * FROM vw_faturamento_mensal, auth.users');
+  assert.strictEqual(authUsers.ok, false);
+  assert.strictEqual(authUsers.reason, 'disallowed_schema');
+
+  const pgShadow = validateSql('SELECT * FROM vw_faturamento_mensal, pg_catalog.pg_shadow b');
+  assert.strictEqual(pgShadow.ok, false);
+  assert.strictEqual(pgShadow.reason, 'disallowed_schema');
+});
+
 test('tabela fora da allowlist bloqueada', () => {
   const r = validateSql('SELECT * FROM segredos');
   assert.strictEqual(r.ok, false);
