@@ -198,7 +198,7 @@ test('collection preparation is overdue-only and human-bound', () => {
   const prepared = prepareCollectionCase({
     collectionCaseId: 'case-1',
     obligation: receivable,
-    asOf: '2026-11-20'
+    asOf: '2026-11-05'
   });
   assert.equal(prepared.agingBucket, '1_30');
   assert.equal(prepared.authority, 'PREPARE');
