@@ -93,7 +93,6 @@ function createObligation(input = {}) {
     'tenantId',
     'companyId',
     'counterpartyId',
-    'originalAmountCents',
     'dueDate',
     'sourceDocumentId'
   ]) {
