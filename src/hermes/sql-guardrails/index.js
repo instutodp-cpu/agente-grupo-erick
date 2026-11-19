@@ -126,7 +126,7 @@ function skipBalancedSqlExpression(sql, start) {
 }
 
 function readRelationAt(sql, start) {
-  const match = sql.slice(start).match(/^([a-z_][a-z0-9_$." ]*)/i);
+  const match = sql.slice(start).match(/^([a-z_][a-z0-9_$."]*)/i);
   if (!match) return null;
   return {
     relation: match[1].replace(/"/g, '').replace(/[.,;]+$/, '').trim().toLowerCase(),
@@ -218,7 +218,7 @@ function extractCommaSeparatedFromRelations(sql) {
 
 function extractRelations(sql) {
   const relations = [];
-  const relationRegex = /\b(?:from|join)\s+([a-z_][a-z0-9_$." ]*)/gi;
+  const relationRegex = /\b(?:from|join)\s+([a-z_][a-z0-9_$."]*)/gi;
   let match;
   while ((match = relationRegex.exec(sql)) !== null) {
     const raw = match[1].replace(/"/g, '').replace(/[.,;]+$/, '').trim();
