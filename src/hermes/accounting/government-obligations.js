@@ -97,10 +97,10 @@ function validateGovernmentEvent(input={}){
   });
 }
 function assertFiscalSubmit(input={}){
-  if(input.state!=='APPROVED')
-    throw failure('FISCAL_NOT_APPROVED','fiscal submission requires APPROVED state');
   if(input.humanApproved!==true)
     throw failure('APPROVAL_REQUIRED','fiscal submission requires human approval');
+  if(input.state!=='APPROVED')
+    throw failure('FISCAL_NOT_APPROVED','fiscal submission requires APPROVED state');
   return true;
 }
 function recordGovernmentResponse(input={}){

@@ -44,7 +44,7 @@ function requirePositiveInteger(value, field) {
 
 function requireIsoDate(value, field) {
   required(value, field);
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new Error(field + ' must be an ISO date');
   }
   const parts = value.split('-').map(Number);
@@ -93,7 +93,6 @@ function createObligation(input = {}) {
     'tenantId',
     'companyId',
     'counterpartyId',
-    'originalAmountCents',
     'dueDate',
     'sourceDocumentId'
   ]) {
@@ -386,9 +385,10 @@ function forecastCash(obligations, input = {}) {
     }
     requireSafeCents(obligation.outstandingCents, 'outstandingCents');
     const days = daysFromDue(obligation.dueDate, input.asOf);
-    if (days <= 0) continue;
+    const daysUntilDue = -days;
+    if (daysUntilDue < 0) continue;
     for (const window of FORECAST_WINDOWS) {
-      if (days > window) continue;
+      if (daysUntilDue > window) continue;
       if (obligation.kind === 'RECEIVABLE') {
         windows[window].inflowCents = addSafe(
           windows[window].inflowCents,

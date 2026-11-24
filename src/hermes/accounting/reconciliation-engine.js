@@ -123,6 +123,18 @@ function classifyMatch({ matchLevel, deterministicPassed, varianceCents, explain
   return 'PARTIAL';
 }
 
+function deriveReconciliationId(input, expectedCents, observedCents) {
+  return input.reconciliationId || [
+    'reconciliation',
+    input.reconciliationType ?? 'GENERIC',
+    input.method ?? 'UNKNOWN',
+    expectedCents,
+    observedCents,
+    JSON.stringify(input.expectedEvidenceIds ?? []),
+    JSON.stringify(input.observedEvidenceIds ?? [])
+  ].join(':');
+}
+
 function reconcileAmounts(input = {}) {
   requireArray(input.expectedAmountsCents ?? []);
   requireArray(input.observedAmountsCents ?? []);
@@ -138,6 +150,7 @@ function reconcileAmounts(input = {}) {
 
   return createReconciliation({
     ...input,
+    reconciliationId: deriveReconciliationId(input, expectedCents, observedCents),
     expectedCents,
     observedCents,
     status
