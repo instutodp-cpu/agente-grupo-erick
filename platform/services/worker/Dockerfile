@@ -1,5 +1,5 @@
 # Hermes Core — Worker (scaffold). Sem dependências npm ainda: imagem enxuta.
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 

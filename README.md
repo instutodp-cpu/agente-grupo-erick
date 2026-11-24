@@ -1,49 +1,32 @@
-# Assistente Grupo Erick
+# Hermes Grupo Erick
 
-Chat de gestão com IA para consulta de dados das lojas do Grupo Erick.
+Assistente de gestão do Grupo Erick (varejo de calçados e roupas em
+Barreiros-PE e Sirinhaém-PE).
 
-## Stack
-- Node.js + Express (backend)
-- Claude API claude-sonnet-4-6 com tool use (agente)
-- Supabase PostgreSQL (banco de dados)
-- HTML/CSS/JS puro (frontend)
+## Onde está cada parte
 
-## Deploy no Railway
+| Parte | Pasta | Situação |
+| --- | --- | --- |
+| Bot Telegram privado e API de leitura | `platform/` | Em uso (VPS, modo staging). Ver `platform/README.md` |
+| Módulos de domínio (templates SQL, finanças, contabilidade, jurídico, inteligência) | `src/hermes/` | Testados em `test/`; os templates SQL são a base das próximas consultas do bot |
+| Marketing (contratos e simulações) | `marketing/` | Somente simulação |
+| Auditoria de uso diário | `docs/HERMES_AUDITORIA_USO_DIARIO_2026-11-24.md` | Estado atual e plano |
 
-### 1. Crie um novo serviço
-- New Project → Deploy from GitHub repo
-- Selecione este repositório
+O chat web v1 (`server.js` + `public/`, publicado no Railway) foi
+**aposentado em 2026-11**: não estava mais no ar e carregava riscos que
+voltariam se fosse republicado. O código continua no histórico do git.
 
-### 2. Configure as variáveis de ambiente
-No painel do Railway, vá em Variables e adicione:
-
-```
-ANTHROPIC_API_KEY=sk-ant-...
-DATABASE_URL=postgresql://postgres.yxmdrrwqxwzsdgcgskrm:SENHA@aws-1-sa-east-1.pooler.supabase.com:5432/postgres
-```
-
-### 3. Deploy automático
-O Railway vai detectar o package.json e rodar `npm start` automaticamente.
-
-### 4. Gere a URL pública
-Settings → Networking → Generate Domain
-
-## Desenvolvimento local
+## Testes
 
 ```bash
-npm install
-cp .env.example .env
-# Preencha o .env com suas credenciais
-npm start
-# Acesse http://localhost:3001
+npm ci
+npm test                       # suíte da raiz (inclui platform/)
+cd platform/services/api && npm ci && npm test   # suíte da plataforma
 ```
 
-## Estrutura
-```
-├── server.js          # Backend Node.js + agente Claude
-├── public/
-│   └── index.html     # Interface do chat
-├── package.json
-├── .env.example
-└── README.md
+## Validar os SQL Templates contra o banco
+
+```bash
+cp .env.example .env           # preencha DATABASE_URL (papel somente leitura)
+npm run validate:templates
 ```

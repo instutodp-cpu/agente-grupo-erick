@@ -1,5 +1,24 @@
 # CHANGELOG.md
 
+## 2026-11-24 — Aposentadoria do chat web v1
+
+### Removido
+
+- `server.js` e `public/index.html` (chat web v1 com Claude e SQL livre). Não
+  estava mais publicado no Railway e, se republicado, voltaria com: rota sem
+  login, filtro de SQL contornável (ex.: tabela entre aspas), XSS na pílula
+  de consulta e dependências vulneráveis do Express.
+- Dependências `express` e `node-fetch`; `npm audit` da raiz passa a 0.
+
+### Mantido
+
+- Módulos de `src/hermes/` e seus testes, incluindo os SQL Templates, que
+  serão reaproveitados no bot Telegram.
+
+### Alterado
+
+- O workflow `hermes-root-regression.yml` também roda quando `scripts/**` muda.
+- README e `.env.example` descrevem o estado atual.
 
 
 ## 2026-07-03 — PR-20: Capability Resolver

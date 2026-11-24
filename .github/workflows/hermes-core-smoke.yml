@@ -34,7 +34,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install API dependencies
         working-directory: platform/services/api
@@ -72,7 +72,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -93,7 +93,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -114,7 +114,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -135,7 +135,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -156,7 +156,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -177,7 +177,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -198,7 +198,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -219,7 +219,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -240,7 +240,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -261,7 +261,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -282,7 +282,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -303,7 +303,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -324,7 +324,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -345,7 +345,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -380,7 +380,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
@@ -409,7 +409,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - name: Install API dependencies
         working-directory: platform/services/api
         run: npm install
