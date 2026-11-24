@@ -11,7 +11,17 @@ acessíveis daqui. O que depende deles está marcado como *não verificado*, com
 comandos para você conferir (seções 7 e 8).
 
 Legenda: **observado** = conferi no código, nos testes ou na API ·
-**não verificado** = depende da VPS ou de um banco que não acessei.
+**confirmado** = informado pelo proprietário · **não verificado** = depende
+da VPS ou de um banco que não acessei.
+
+### Respostas do proprietário (24/11)
+
+1. **A v1 não está mais no Railway.** *(confirmado)* Os achados S1–S4, todos
+   da v1, deixam de ser risco em produção. Ver seção 3.
+2. **Os dados do Linx ainda não estão integrados via API.** *(confirmado)*
+   G1 segue como a maior lacuna.
+3. **Checklist da VPS:** não sabe como rodar. Ver seção 8.
+4. **Script SQL dos projetos de produção:** não sabe como rodar. Ver seção 8.
 
 ---
 
@@ -19,12 +29,12 @@ Legenda: **observado** = conferi no código, nos testes ou na API ·
 
 | Achado de 18/11 | Situação hoje | O que falta |
 | --- | --- | --- |
-| Chat v1 sem login | PR #582 (rascunho, CI verde) põe token e limite de uso no servidor | A página web não envia o token: depois do merge, o chat web para de funcionar. Decidir entre desligar a v1 ou adicionar login na página |
-| Filtro de SQL com brecha da vírgula | PR #579 (rascunho) fecha a vírgula simples | **Incompleta**, e há brecha nova pior (ver S1) |
-| XSS na pílula de consulta | nenhuma PR | tudo |
+| Chat v1 sem login | **v1 fora do Railway** (confirmado); PR #582 ficou desnecessária | Aposentar o código da v1 e fechar #582 |
+| Filtro de SQL com brecha da vírgula | v1 fora do ar; PR #579 incompleta | Fechar #579 junto com a aposentadoria da v1 |
+| XSS na pílula de consulta | v1 fora do ar | Some com a aposentadoria da v1 |
 | 38 testes quebrados, CI sem a raiz | PR #580 (rascunho) corrige os 38 e cria o workflow da raiz; CI verde | Merge. O workflow ignora mudanças em `server.js` e `public/` |
 | Supabase staging pausado | reativado em 18/11; hoje **hibernando de novo** | Confirma que nada usa esse banco |
-| PRs substituídas abertas | de 12 abertas passou para **16** | Fechar 11 (seção 3, Q2) |
+| PRs substituídas abertas | de 12 abertas passou para **16** | Fechar 13 (seção 3, Q2) |
 | Lacunas de uso diário (G1–G13) | **nenhuma mudou** | tudo |
 
 Resumo: houve um dia de trabalho (19/11) sobre os achados de segurança e de
@@ -50,6 +60,10 @@ O Hermes continua com muita governança e pouca entrega no dia a dia.
   (fora testes), cerca de 10 mil são alcançáveis a partir do bot e da API. O
   resto são contratos e simulações sem dado real. *(observado)*
 
+- **Ninguém na empresa sabe inspecionar a VPS nem os bancos de produção.**
+  *(confirmado em 24/11)* O bot depende de uma VPS, de três projetos Supabase
+  e de um login pessoal do ChatGPT, sem dono técnico conhecido. Ver seção 8.
+
 **Para virar ferramenta diária**, o Hermes precisa de **dado atual (Linx)**,
 **cota e cobertura de perguntas compatíveis com o uso** e **dois usuários**.
 Isso vem antes de qualquer nova camada de governança.
@@ -64,7 +78,7 @@ Isso vem antes de qualquer nova camada de governança.
 | Agente governado (IA) | dentro do bot | ligado se `HERMES_AGENT_LLM_ENABLED=true` | Planeja até 3 consultas (histórico ou compras) e redige a resposta. Modelo: Codex via login ChatGPT (socket local), reserva OpenRouter |
 | API v2 (`platform/services/api`) | VPS (`hermes-staging.grupoerick.tech`) | staging | `/message` só **classifica** a intenção e responde `planned`. Serve os read-pilots que o bot consulta (compras, LotoIA, status) |
 | Worker v2 | `docker-compose` | só emite heartbeat | Não processa fila nenhuma |
-| App v1 (`server.js` + `public/`) | Railway, segundo o README | **não verificado se está no ar** | Chat web com Claude (`claude-sonnet-4-6`) que escreve SQL livre no banco |
+| App v1 (`server.js` + `public/`) | **fora do ar** (confirmado); o README ainda manda publicar no Railway | código parado no repositório | Chat web com Claude (`claude-sonnet-4-6`) que escreve SQL livre no banco |
 
 ### Bancos (três projetos Supabase, não dois)
 
@@ -83,6 +97,15 @@ das lojas. Ele fica no projeto `hermes-brain`.*
 
 ### S1. Filtro de SQL da v1: tabela entre aspas passa direto  *(observado, novo)*
 
+> **Situação em 24/11:** a v1 não está mais publicada (confirmado). S1–S4 não
+> são exploráveis hoje. Mas o código continua no repositório e o `README.md`
+> ainda ensina a publicá-la no Railway: se alguém republicar, os quatro
+> problemas voltam juntos. **Ação recomendada:** uma PR que aposenta a v1,
+> removendo `server.js`, `public/` e o Express. Os módulos de
+> `src/hermes/` (templates, cache, filtro) têm testes próprios e ficam,
+> porque os templates da v1 vão ser portados para o bot (G5). Com isso,
+> fechar #579, #581 e #582.
+
 O filtro (`src/hermes/sql-guardrails/index.js`) só reconhece nomes de tabela
 que começam com letra. Com aspas, ele não vê tabela nenhuma e libera. Teste
 no `main` e na PR #579:
@@ -99,30 +122,26 @@ no `main` e na PR #579:
 | `SELECT loja, extract(year from mes) FROM vw_faturamento_mensal` (legítima) | **bloqueia** | **bloqueia** |
 
 Filtro por expressão regular não fecha esse tipo de brecha: sempre aparece
-uma variação nova. **Ação:** a proteção de verdade é no banco. Criar um papel
-só de leitura que enxerga **apenas** as views e tabelas permitidas, sem
-`auth`, `pg_catalog` nem funções administrativas, e fazer a v1 conectar com
-ele. O filtro vira segunda barreira. Se a v1 não for mais usada, desligar
-resolve tudo de uma vez.
+uma variação nova. Lição para qualquer SQL gerado por IA no futuro: a proteção
+de verdade é um papel de banco que só enxerga as views permitidas (como o bot
+já faz com `hermes_history_login`), e o filtro é só segunda barreira.
 
-### S2. Chat v1 sem login  *(observado)*
+### S2. Chat v1 sem login  *(observado; v1 fora do ar)*
 
-`POST /api/chat` segue aberto no `main`, sem limite de uso. A PR #582 resolve
-no servidor (token + 20 req/min, falha fechada se não houver token
-configurado), mas `public/index.html` não envia token. **Ação:** decidir se a
-v1 ainda tem uso. Se não tiver, desligar no Railway e fechar #579/#582. Se
-tiver, completar #582 com tela de login.
+`POST /api/chat` não tem login nem limite de uso. A PR #582 resolveria no
+servidor, mas a página web não envia o token. Com a v1 fora do ar, não vale
+completar: aposentar.
 
-### S3. XSS na pílula de consulta da v1  *(observado)*
+### S3. XSS na pílula de consulta da v1  *(observado; v1 fora do ar)*
 
 `public/index.html:551` (`addQuerying`) insere a `descricao` gerada pelo
-modelo com `innerHTML`. Nenhuma PR trata. **Ação:** usar `textContent`.
+modelo com `innerHTML`. Some com a aposentadoria da v1.
 
-### S4. Dependências vulneráveis na v1  *(observado, novo)*
+### S4. Dependências vulneráveis na v1  *(observado; v1 fora do ar)*
 
 `npm audit` na raiz: `proxy-addr` (crítica, falsificação de IP),
 `body-parser` (alta, negação de serviço) e `qs` (moderada), todas puxadas
-pelo Express 4.22. Há correção disponível (`npm audit fix`). A API da
+pelo Express 4.22, que só a v1 usa. Somem ao remover o Express. A API da
 plataforma não tem vulnerabilidades.
 
 ### S5. Node 20 fora de suporte  *(observado, novo)*
@@ -148,23 +167,22 @@ enquanto não forem usados.
 Rodei de novo: os testes próprios da raiz são **744, com 38 falhas**
 (Contabilidade e Jurídico). A suíte da plataforma segue **5821/5821**. A PR
 #580 corrige as 38 (conferi: 274/274 nos arquivos afetados) e cria o workflow
-`hermes-root-regression.yml`. **Ação:** merge da #580. Incluir `server.js`,
-`public/**` e `scripts/**` no filtro `paths` do workflow; hoje uma PR que só
-mexe no chat da v1 não dispara os testes da raiz.
+`hermes-root-regression.yml`. **Ação:** merge da #580. Incluir `scripts/**`
+no filtro `paths` do workflow (com a v1 aposentada, `server.js` e `public/`
+deixam de existir).
 
 *(Em 18/11 eu informei "6588 testes"; esse número somava as duas suítes.)*
 
-### Q2. 16 PRs abertas, 11 podem ser fechadas  *(observado)*
+### Q2. 16 PRs abertas, 13 podem ser fechadas  *(observado)*
 
 | PR | Motivo |
 | --- | --- |
 | #453, #400, #250, #531, #530, #544, #543 | Substituídas por #571, #572, #568, #569, #570 e #567 (segundo `docs/HERMES_GOAL_MODE_STATUS_2026-11-13.md`) |
 | #146, #118, #19 | Snapshots antigos sem falha comprovada (mesmo documento) |
-| #581 | Versão anterior da #582; ainda carrega as 38 falhas e o CI dela falhou |
+| #579, #581, #582 | Corrigem a v1, que está fora do ar; resolvidas pela aposentadoria da v1 |
 
-Continuam válidas: #580 (merge), #582 (completar ou fechar), #579 (refazer),
-#575 (rollout do histórico) e #510 (Contabilidade; conferir se a #574 já a
-substituiu).
+Continuam válidas: #580 (merge), #575 (rollout do histórico) e #510
+(Contabilidade; conferir se a #574 já a substituiu).
 
 ### Supabase staging: RLS desligado  *(verificado em 18/11; não reverificado hoje)*
 
@@ -187,12 +205,23 @@ Reconferi cada uma no `main` de hoje.
 
 ### P0 — Sem isso, o Hermes não serve para o dia a dia
 
-**G1. Dado atual (Linx da Seta).** Tudo termina em 08/06/2026. O adaptador
+**G1. Dado atual (Linx da Seta).** Tudo termina em 08/06/2026. Confirmado em
+24/11: **os dados do Linx não estão integrados via API.** O adaptador
 Seta/Linx existe só como contrato (`transportStatus: 'DISCOVERY_REQUIRED'`).
-As pendências da decisão de 29/09 continuam abertas: produto/versão do Linx,
-contato técnico da Seta e método de exportação/API. **Ação:** destravar com a
-Seta agora. Enquanto não houver API, um export diário (CSV) carregado no
-Supabase já entrega boa parte do valor.
+
+Como a API não existe hoje, o caminho mais curto não depende dela:
+
+1. **Descobrir o que o Linx já exporta.** Quase todo ERP de loja gera
+   relatórios de vendas, contas a receber e compras em Excel ou CSV. Basta
+   alguém da loja exportar **um dia** de cada relatório e mandar o arquivo.
+2. **Carga diária a partir do arquivo.** Um script na VPS lê o arquivo e
+   grava no Supabase, num schema próprio (ex.: `linx_import`), registrando
+   origem e data da carga. O bot passa a ler dali.
+3. **API depois.** Quando a Seta liberar API, troca-se só o passo 2, sem
+   mexer no bot.
+
+O que falta para começar: o nome/versão do Linx que a loja usa, quem na loja
+consegue exportar os relatórios, e um arquivo de exemplo de cada um.
 
 **G2. Cotas fixas e pequenas** (`scripts/run-hermes-telegram-private.js`):
 
@@ -261,15 +290,16 @@ filas e workers simulados, canários de escrita) até G1–G6 estarem entregues.
 
 | Quando | Entrega | Itens |
 | --- | --- | --- |
-| Esta semana | Merge da #580 (+ `paths` do workflow); fechar as 11 PRs da Q2 | Q1, Q2 |
-| Esta semana | Decidir a v1: desligar (e fechar #579/#582) **ou** papel de banco só leitura + #582 com login + XSS + `npm audit fix` | S1–S4 |
+| Esta semana | Merge da #580 (+ `paths` do workflow); fechar as 13 PRs da Q2 | Q1, Q2 |
+| Esta semana | Aposentar a v1: remover `server.js`, `public/` e Express; atualizar o README | S1–S4 |
 | Esta semana | Node 22/24 nas imagens e no CI; teto/limpeza no store da API v2 | S5, S6 |
+| Esta semana | Pedir à loja um export de 1 dia de vendas, contas a receber e compras do Linx | G1 |
 | Semana 2 | Janela de datas derivada do banco; anos desde 2011; trocar `25482` | G3, G9 |
 | Semana 2 | Cotas por variável de ambiente; 2 usuários; ajustar palavras proibidas | G2, G4, G7 |
 | Semana 3 | Inadimplência, top vendedores e ticket médio no bot | G5 |
 | Semana 3 | Resumo matinal + aviso de bot fora do ar + backup do estado | G6, G8, G10 |
-| em paralelo | Seta/Linx: produto, versão, API/export; carga diária provisória | G1 |
-| Semana 4+ | Conector Linx incremental em staging, reconciliado | G1 |
+| Semana 2–3 | Carga diária do export do Linx para o Supabase; bot lê os dados novos | G1 |
+| Quando a Seta liberar | Trocar a carga por arquivo pela API, sem mexer no bot | G1 |
 
 ---
 
@@ -292,9 +322,11 @@ filas e workers simulados, canários de escrita) até G1–G6 estarem entregues.
 
 ---
 
-## 7. Checklist da VPS (rode e me mande a saída)
+## 7. Checklist da VPS
 
-Todos os comandos são só leitura e não mostram conteúdo de mensagem nem segredo.
+Quem tem acesso SSH à VPS (usuário `hermesadmin`) roda estes comandos e manda
+a saída. Todos são só leitura e não mostram conteúdo de mensagem nem segredo.
+Se ninguém souber quem tem esse acesso, isso já é um achado: ver seção 8.
 
 ```bash
 # containers e saúde
@@ -330,12 +362,28 @@ echo | openssl s_client -connect hermes-staging.grupoerick.tech:443 -servername 
 
 ---
 
-## 8. O que preciso de você
+## 8. Próximos passos que dependem de você
 
-1. **A v1 ainda está no Railway e alguém usa?** Isso decide S1–S4.
-2. **Linx da Seta:** nome/versão do produto, contato técnico e se existe
-   exportação (relatório, CSV, API).
-3. **Saída do checklist da VPS** (seção 7).
-4. **Saída do script SQL** (seção 6), ou acesso aos projetos
-   `yxmdrrwqxwzsdgcgskrm` e `asceucchdnuoaqgdjbtg` no conector Supabase.
-5. **Prioridade:** confirmar o plano da seção 5.
+Itens 1 e 2 respondidos (v1 fora do Railway; Linx sem API). Os
+itens 3 e 4 ficaram como "não sei". Isso é, por si só, um achado de
+operação: **o Hermes roda numa VPS e em três bancos que hoje ninguém na
+empresa sabe inspecionar.** Se a pessoa que montou cair fora, o bot fica sem
+dono técnico. Caminhos, do mais simples ao mais completo:
+
+1. **Supabase (resolve o item 4 sem terminal):** em
+   https://claude.ai/customize/connectors, reconectar o Supabase dando acesso
+   à organização onde estão os projetos `yxmdrrwqxwzsdgcgskrm` (dados das
+   lojas) e `asceucchdnuoaqgdjbtg` (hermes-brain). Depois abrir uma sessão
+   nova: eu rodo o script de leitura e audito RLS, frescor e permissões
+   diretamente.
+2. **VPS (item 3):** descobrir quem tem o acesso SSH (usuário `hermesadmin`)
+   e quem paga a VPS. Essa pessoa roda o checklist da seção 7. Uma
+   alternativa é instalar o Claude Code na VPS e ligar o Remote Control
+   (`claude remote-control` na pasta do projeto); aí uma sessão como esta
+   pode rodar os comandos com a sua aprovação. Isso dá acesso de terminal ao
+   servidor, então decida com cuidado.
+3. **Linx:** pedir à loja um export de **um dia** de vendas, contas a
+   receber e compras, no formato que o Linx gerar (Excel ou CSV), e o
+   nome/versão do Linx.
+4. **Prioridade:** confirmar o plano da seção 5. A semana 1 não depende de
+   nenhum dos itens acima.
