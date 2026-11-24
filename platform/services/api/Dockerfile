@@ -1,5 +1,5 @@
 # Hermes Core — API (scaffold).
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
