@@ -209,3 +209,27 @@ test('prune and reset operate only on the injected memory instance', () => {
   assert.equal(first.getPendingConfirmation('confirm_prune'), null);
   assert.equal(second.getPendingConfirmation('confirm_second', beforeExpiration).status, 'pending');
 });
+
+test('memory persistence is bounded and evicts the oldest confirmations first', () => {
+  const persistence = createMemoryConfirmationPersistence({ maxRecords: 3 });
+  for (const id of ['a', 'b', 'c', 'd', 'e']) {
+    persistence.create(record({ confirmation_id: 'confirm_' + id }));
+  }
+  assert.deepEqual(persistence.list().map((r) => r.confirmation_id),
+    ['confirm_c', 'confirm_d', 'confirm_e']);
+  assert.equal(persistence.get('confirm_a'), null);
+
+  // An evicted confirmation behaves as not_found in the store, never as approved.
+  const store = createConfirmationStore({ persistence });
+  assert.equal(store.resolvePendingConfirmation('confirm_a', 'approved', new Date('2026-01-01T00:00:00.000Z')), null);
+  assert.equal(store.getPendingConfirmation('confirm_e', new Date('2026-01-01T00:00:00.000Z')).status, 'pending');
+});
+
+test('memory persistence keeps the default bound and rejects invalid bounds', () => {
+  const { DEFAULT_MAX_RECORDS } = require('../src/core/memory-confirmation-persistence');
+  assert.equal(DEFAULT_MAX_RECORDS, 10_000);
+  for (const maxRecords of [0, -1, 1.5, Number.NaN, '10']) {
+    assert.throws(() => createMemoryConfirmationPersistence({ maxRecords }),
+      /confirmation_memory_max_records_invalid/);
+  }
+});

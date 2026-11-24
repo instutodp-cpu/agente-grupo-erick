@@ -1,16 +1,31 @@
 'use strict';
 
+// Upper bound for in-memory confirmations. POST /message needs no identity,
+// so an unbounded Map lets any caller grow the process until it crashes,
+// taking down the read pilots served by the same process. Confirmations
+// expire after minutes, so the oldest entries are evicted first; an evicted
+// confirmation reads as not_found and still never executes anything.
+const DEFAULT_MAX_RECORDS = 10_000;
+
 function cloneRecord(record) {
   return record ? { ...record } : null;
 }
 
-function createMemoryConfirmationPersistence() {
+function createMemoryConfirmationPersistence({ maxRecords = DEFAULT_MAX_RECORDS } = {}) {
+  if (!Number.isSafeInteger(maxRecords) || maxRecords < 1) {
+    throw new Error('confirmation_memory_max_records_invalid');
+  }
   const records = new Map();
 
   return Object.freeze({
     create(record) {
       const stored = cloneRecord(record);
+      // Re-inserting keeps Map order equal to creation order for eviction.
+      records.delete(stored.confirmation_id);
       records.set(stored.confirmation_id, stored);
+      while (records.size > maxRecords) {
+        records.delete(records.keys().next().value);
+      }
       return cloneRecord(stored);
     },
 
@@ -43,4 +58,4 @@ function createMemoryConfirmationPersistence() {
   });
 }
 
-module.exports = { createMemoryConfirmationPersistence };
+module.exports = { createMemoryConfirmationPersistence, DEFAULT_MAX_RECORDS };
