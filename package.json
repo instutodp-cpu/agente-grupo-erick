@@ -1,10 +1,8 @@
 {
   "name": "agente-grupo-erick",
   "version": "1.0.0",
-  "description": "Agente de gestão do Grupo Erick",
-  "main": "server.js",
+  "description": "Hermes Grupo Erick: módulos de domínio, simulações e testes da raiz",
   "scripts": {
-    "start": "node server.js",
     "test": "node --test",
     "validate:templates": "node scripts/validate-templates.js",
     "validate:marketing": "node scripts/validate-marketing-artifacts.js",
@@ -92,9 +90,7 @@
     "simulate:marketing:canary-outcome": "node scripts/marketing-canary-outcome-sim.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
     "pg": "^8.11.3",
-    "node-fetch": "^2.7.0",
     "dotenv": "^16.3.1"
   }
 }
