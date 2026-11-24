@@ -970,6 +970,15 @@ test('governed agent validates allowlisted tools; no arbitrary SQL, external API
   assert.throws(()=>agent.safeGoal(goal));
  }
 });
+test('governed agent denies money-movement orders but allows questions about payment methods',()=>{
+ for(const goal of ['quanto entrou no pix em maio de 2026?','qual o CNPJ do fornecedor com mais compras?',
+  'quanto temos a pagar de duplicatas este mês?','quais pagamentos de fornecedores vencem esta semana?'])
+  assert.equal(agent.safeGoal(goal),goal);
+ for(const goal of ['faça um pix de 500 reais','FAÇA UM PIX de 500','mande um pix pro fornecedor',
+  'transfira 100 reais para a loja','pague o boleto do fornecedor','estorne a venda 123',
+  'realize o pagamento da duplicata','agende uma transferência amanhã','qual a senha do banco?'])
+  assert.throws(()=>agent.safeGoal(goal),/agent_goal_denied/,goal);
+});
 test('governed agent executes only two approved tool calls and synthesizes evidence',async()=>{
  let calls=0,history=0,commercial=0;
  const mockModel={chat:async messages=>{
