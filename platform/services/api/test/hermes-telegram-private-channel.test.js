@@ -970,6 +970,15 @@ test('governed agent validates allowlisted tools; no arbitrary SQL, external API
   assert.throws(()=>agent.safeGoal(goal));
  }
 });
+test('governed agent denies money-movement orders but allows questions about payment methods',()=>{
+ for(const goal of ['quanto entrou no pix em maio de 2026?','qual o CNPJ do fornecedor com mais compras?',
+  'quanto temos a pagar de duplicatas este mês?','quais pagamentos de fornecedores vencem esta semana?'])
+  assert.equal(agent.safeGoal(goal),goal);
+ for(const goal of ['faça um pix de 500 reais','FAÇA UM PIX de 500','mande um pix pro fornecedor',
+  'transfira 100 reais para a loja','pague o boleto do fornecedor','estorne a venda 123',
+  'realize o pagamento da duplicata','agende uma transferência amanhã','qual a senha do banco?'])
+  assert.throws(()=>agent.safeGoal(goal),/agent_goal_denied/,goal);
+});
 test('governed agent executes only two approved tool calls and synthesizes evidence',async()=>{
  let calls=0,history=0,commercial=0;
  const mockModel={chat:async messages=>{
@@ -2581,4 +2590,167 @@ test('Telegram poll retry uses capped backoff, resets after success and halts on
   sleep:async ms=>delays.push(ms)
  }),/telegram_provider_auth_denied/);
  assert.deepEqual(delays,[1000,2000,4000,8000,16000,30000,30000,30000,30000]);
+});
+test('daily limits keep pilot defaults and accept only bounded operator overrides',()=>{
+ assert.deepEqual({...runner.dailyLimits({})},{agent_turns:4,openrouter_calls:8,
+  history_queries:24,history_legacy_queries:8,brain_reads:12});
+ const raised=runner.dailyLimits({HERMES_AGENT_DAILY_TURNS:'20',HERMES_HISTORY_DAILY_QUERIES:'80',
+  HERMES_BRAIN_DAILY_READS:'30'});
+ assert.equal(raised.agent_turns,20);assert.equal(raised.history_queries,80);
+ assert.equal(raised.brain_reads,30);assert.equal(raised.openrouter_calls,8);
+ for(const bad of [{HERMES_AGENT_DAILY_TURNS:'0'},{HERMES_AGENT_DAILY_TURNS:'41'},
+  {HERMES_AGENT_DAILY_TURNS:'abc'},{HERMES_AGENT_DAILY_TURNS:'1e2'},{HERMES_AGENT_DAILY_TURNS:' 5'},
+  {HERMES_HISTORY_DAILY_QUERIES:'201'},{HERMES_BRAIN_DAILY_READS:'-1'},
+  {HERMES_HISTORY_DAILY_QUERIES:'10',HERMES_HISTORY_LEGACY_DAILY_QUERIES:'20'}])
+  assert.throws(()=>runner.dailyLimits(bad),/daily_limit_invalid/,JSON.stringify(bad));
+});
+test('configured history limit is enforced end to end, default limit unchanged',async()=>{
+ const text='Compare as taxas de cancelamento de janeiro a maio de 2025 e 2026 do Grupo Erick';
+ const clock=()=>Date.parse('2026-10-22T20:30:00Z');
+ const fixture={tenant_id:'grupo_erick',mode:'online_aggregate',
+  source:analyst.SOURCE,at:new Date(clock()).toISOString(),
+  plan:{tenant_id:'grupo_erick',template:'compare',period:'2025',other_period:'2026',metric:'cancelled',store:null},
+  rows:[{label:'2025',records:21940,cancelled:238,amount:2730133.04,last_day:'2025-05-31'},
+   {label:'2026',records:24148,cancelled:623,amount:2956645.04,last_day:'2026-05-31'}]};
+ const run=async limits=>{
+  const state=dir();fs.chmodSync(state,0o700);
+  runner.saveState(state,'owner.json',{owner_id:700});
+  runner.saveState(state,'history-live-budget.json',{date:'2026-10-22',count:24});
+  const responses=[],reads=[];
+  try{
+   await runner.pollOnce({stateDir:state,clock,liveEnabled:true,
+    ...(limits?{limits}:{}),
+    agentModel:{chat:async()=>{throw Error('LLM_MUST_NOT_RUN')}},
+    query:async()=>{throw Error('OTHER_DOMAIN_DENIED')},
+    readLive:async arg=>{reads.push(arg);return fixture},
+    api:async(method,payload)=>{
+     if(method==='getUpdates')return [update(350001,700,text)];
+     if(method==='sendMessage')responses.push(payload.text);
+    }});
+   return {responses,reads,budget:runner.loadState(state,'history-live-budget.json')};
+  }finally{fs.rmSync(state,{recursive:true,force:true})}
+ };
+ const blocked=await run(null);
+ assert.equal(blocked.reads.length,0);
+ assert.match(blocked.responses[0],/Limite diário/);
+ assert.equal(blocked.budget.count,24);
+ const allowed=await run(runner.dailyLimits({HERMES_HISTORY_DAILY_QUERIES:'30'}));
+ assert.equal(allowed.reads.length,1);
+ assert.equal(allowed.budget.count,25);
+ assert.ok(allowed.responses[0].includes('21.940 registros'));
+});
+test('quota message reports the configured number of daily analyses',async()=>{
+ const sent=[];
+ await core.processUpdate({update:update(360001,700,'analise os riscos de vendas e me dê recomendações'),
+  ownerId:700,agentEnabled:true,agentDailyTurns:20,query:async()=>{},
+  send:async(_id,text)=>sent.push(text),
+  readAgent:async()=>{throw Error('agent_daily_quota')},
+  readGovernedFallback:async()=>{throw Error('no_fallback')}});
+ assert.match(sent[0],/limite privado de 20 análises com Codex/);
+});
+test('owner invites a read-only member from the bot; invite is single-use and cannot bind an owner',async()=>{
+ const code='inviteCode12',t=Date.parse('2026-11-24T12:00:00Z');
+ const saved=[],members=[],sent=[];
+ const send=async(id,text)=>sent.push({id,text});
+ const r1=await core.processUpdate({update:update(370001,700,'/convidar'),ownerId:700,clock:()=>t,
+  randomCode:()=>code,send,query:async()=>{},savePairing:async p=>saved.push(p)});
+ assert.equal(r1.intent,'access_management');
+ assert.equal(saved[0].purpose,'member');
+ assert.equal(saved[0].expires_at,t+10*60*1000);
+ assert.equal(saved[0].sha256,createHash('sha256').update(code).digest('hex'));
+ assert.match(sent[0].text,/\/vincular inviteCode12/);
+ const invite=saved[0];
+ // A member invite never binds an owner, even if no owner exists.
+ assert.equal((await core.processUpdate({update:update(370002,900,'/vincular '+code),ownerId:null,
+  pairing:invite,clock:()=>t,send,query:async()=>{},savePairing:async()=>{},
+  saveOwner:async()=>{throw Error('OWNER_MUST_NOT_BIND')}})).kind,'pair_denied');
+ // Stranger: plain text is ignored silently; a wrong code burns an attempt.
+ const before=sent.length;
+ assert.equal((await core.processUpdate({update:update(370003,800,'quanto vendemos?'),ownerId:700,
+  pairing:invite,clock:()=>t,send,query:async()=>{}})).kind,'unauthorized');
+ assert.equal(sent.length,before);
+ const burned=[];
+ assert.equal((await core.processUpdate({update:update(370004,800,'/vincular wrongCode123'),ownerId:700,
+  pairing:invite,clock:()=>t,send,query:async()=>{},savePairing:async p=>burned.push(p)})).kind,'pair_denied');
+ assert.equal(burned[0].attempts,1);
+ // Correct code within 10 minutes: member added, invite burned first.
+ const order=[];
+ const added=await core.processUpdate({update:update(370005,800,'/vincular '+code),ownerId:700,
+  pairing:invite,clock:()=>t+60000,send,query:async()=>{},
+  savePairing:async p=>order.push(['burn',p.attempts]),saveMember:async id=>order.push(['member',id])});
+ assert.equal(added.kind,'member_added');
+ assert.deepEqual(order,[['burn',5],['member',800]]);
+ // Expired invite is refused.
+ assert.equal((await core.processUpdate({update:update(370006,801,'/vincular '+code),ownerId:700,
+  pairing:invite,clock:()=>t+11*60000,send,query:async()=>{},savePairing:async()=>{},
+  saveMember:async()=>{throw Error('EXPIRED_MUST_NOT_JOIN')}})).kind,'pair_denied');
+});
+test('members read but never manage access or owner decisions; capacity is bounded',async()=>{
+ const sent=[];const send=async(id,text)=>sent.push({id,text});
+ const base={ownerId:700,memberIds:[800],clock:()=>now,send,query:async()=>{},
+  savePairing:async()=>{throw Error('MEMBER_MUST_NOT_INVITE')},
+  removeMember:async()=>{throw Error('MEMBER_MUST_NOT_REMOVE')},
+  readDecisions:async()=>{throw Error('MEMBER_MUST_NOT_READ_DECISIONS')}};
+ for(const text of ['/convidar','/membros','/remover 700','/decisao propor x | y | z','/decisoes']){
+  const r=await core.processUpdate({...base,update:update(380000+sent.length,800,text)});
+  assert.equal(r.intent,'access_owner_only',text);
+  assert.match(sent.at(-1).text,/Somente o dono/);
+ }
+ const help=await core.processUpdate({...base,update:update(380100,800,'/ajuda')});
+ assert.equal(help.intent,'help');assert.equal(sent.at(-1).id,800);
+ // Owner sees members and removes one.
+ const removed=[];
+ await core.processUpdate({...base,update:update(380200,700,'/membros')});
+ assert.match(sent.at(-1).text,/Membros: 800/);
+ await core.processUpdate({...base,removeMember:async id=>removed.push(id),update:update(380201,700,'/remover 800')});
+ assert.deepEqual(removed,[800]);
+ await core.processUpdate({...base,update:update(380202,700,'/remover 999')});
+ assert.match(sent.at(-1).text,/não encontrado/);
+ // Full: no new invite, and a valid code cannot exceed the bound.
+ const full={...base,memberIds:[801,802,803]};
+ await core.processUpdate({...full,update:update(380300,700,'/convidar')});
+ assert.match(sent.at(-1).text,/Limite de 3/);
+ const invite={sha256:createHash('sha256').update('inviteCode12').digest('hex'),
+  expires_at:now+60000,attempts:0,purpose:'member'};
+ assert.equal((await core.processUpdate({...full,pairing:invite,savePairing:async()=>{},
+  saveMember:async()=>{throw Error('FULL_MUST_NOT_JOIN')},
+  update:update(380301,804,'/vincular inviteCode12')})).kind,'pair_denied');
+});
+test('runner stores members durably, keeps follow-up context per person and fails closed on corrupt state',async()=>{
+ const state=dir();fs.chmodSync(state,0o700);
+ runner.saveState(state,'owner.json',{owner_id:700});
+ const sent=[];let next=390000;
+ const say=async(user,text)=>runner.pollOnce({stateDir:state,clock:()=>now,query:async()=>{},
+  api:async(method,payload)=>{
+   if(method==='getUpdates')return [update(next++,user,text)];
+   if(method==='sendMessage')sent.push({id:payload.chat_id,text:payload.text});
+  }});
+ try{
+  await say(700,'/convidar');
+  const code=sent.at(-1).text.match(/\/vincular ([a-zA-Z0-9_-]{12})/)[1];
+  await say(800,'/vincular '+code);
+  assert.match(sent.at(-1).text,/Acesso liberado/);
+  assert.deepEqual(runner.loadMembers(state,700),[800]);
+  assert.equal(fs.statSync(path.join(state,'members.json')).mode&0o777,0o600);
+  // The same code cannot be reused by a third person.
+  const before=sent.length;
+  await say(801,'/vincular '+code);
+  assert.equal(sent.length,before);
+  assert.deepEqual(runner.loadMembers(state,700),[800]);
+  await say(800,'/ajuda');
+  assert.equal(sent.at(-1).id,800);
+  assert.equal(runner.analystContextFile(700,700),'history-analyst-context.json');
+  assert.equal(runner.analystContextFile(700,800),'history-analyst-context-800.json');
+  assert.throws(()=>runner.analystContextFile(700,-1),/analyst_context_user_invalid/);
+  const audit=fs.readFileSync(path.join(state,'audit.jsonl'),'utf8');
+  assert.match(audit,/"event":"member_added","count":1/);
+  assert.doesNotMatch(audit,new RegExp(code));
+  await say(700,'/remover 800');
+  assert.deepEqual(runner.loadMembers(state,700),[]);
+  // Corrupt member state denies members but keeps the owner working.
+  runner.saveState(state,'members.json',{version:1,members:[{user_id:700}]});
+  assert.deepEqual(runner.loadMembers(state,700),[]);
+  await say(700,'/ajuda');
+  assert.equal(sent.at(-1).id,700);
+ }finally{fs.rmSync(state,{recursive:true,force:true})}
 });

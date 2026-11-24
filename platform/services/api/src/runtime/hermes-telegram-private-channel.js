@@ -1,6 +1,10 @@
 'use strict';
 // Hermes Telegram: private owner-only intent gateway. No generic AI/tool execution.
-const {createHash,timingSafeEqual}=require('node:crypto');
+const {createHash,timingSafeEqual,randomBytes}=require('node:crypto');
+// Read-only members invited by the owner from inside the bot, so a second
+// person can use Hermes without anyone touching the VPS. Members never
+// invite, remove, or write owner decisions.
+const MAX_MEMBERS=3,INVITE_TTL_MS=10*60*1000;
 const {parseSalesCommand,historicalLiveReply}=require('./hermes-softcom-live-channel');
 const analyst=require('./hermes-analyst-templates');
 const governed=require('./hermes-governed-agent');
@@ -25,6 +29,7 @@ const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
  'Memória de decisões: /decisao (propor, confirmar, cancelar) e /decisoes.\n'+
  'Segundo cérebro central: /cerebro TERMO (somente quando conexão RLS autorizada).\n'+
  'Métricas privadas de IA: /economia. Diagnóstico: /diagnostico, /diagnostico lojas, /diagnostico cruzamento. Alertas: /alertas historicos.\n'+
+ 'Acesso de outras pessoas (somente o dono): /convidar, /membros, /remover ID.\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const num=new Intl.NumberFormat('pt-BR');
@@ -312,7 +317,10 @@ function hermesReply(intent,x){
  }
  throw Error('intent_not_allowed');
 }
-async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.now(),
+async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,clock=()=>Date.now(),
+ agentDailyTurns=4,randomCode=()=>randomBytes(9).toString('base64url'),
+ saveMember=async()=>{throw Error('member_store_unavailable')},
+ removeMember=async()=>{throw Error('member_store_unavailable')},
  send,saveOwner,savePairing,query,
  readCache=async()=>null,writeCache=async()=>{},readHistory=async()=>null,
  readLive=async()=>null,
@@ -332,7 +340,8 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
   }
   const pair=msg.text.match(/^\/vincular\s+([a-zA-Z0-9_-]{12})$/);
   if(!pair)return {kind:'unpaired'};
-  if(!pairValid(pair[1],pairing,clock())){
+  // A member invite can never bind the owner.
+  if(pairing?.purpose==='member'||!pairValid(pair[1],pairing,clock())){
    if(pairing&&pairing.attempts<5&&pairing.expires_at>=clock())
     await savePairing({...pairing,attempts:pairing.attempts+1});
    return {kind:'pair_denied'};
@@ -341,7 +350,65 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
   await send(msg.userId,'✅ Conta privada vinculada. Envie /ajuda, /compras ou /lotoia.');
   return {kind:'paired'};
  }
- if(msg.userId!==ownerId)return {kind:'unauthorized'};
+ const members=Array.isArray(memberIds)?memberIds.filter(id=>
+  Number.isSafeInteger(id)&&id>0&&id!==ownerId).slice(0,MAX_MEMBERS):[];
+ const isOwner=msg.userId===ownerId;
+ if(!isOwner&&!members.includes(msg.userId)){
+  // Strangers get no reply, except a well-formed claim of a member invite.
+  const join=msg.text.match(/^\/vincular\s+([a-zA-Z0-9_-]{12})$/);
+  if(!join||pairing?.purpose!=='member')return {kind:'unauthorized'};
+  if(members.length>=MAX_MEMBERS||!pairValid(join[1],pairing,clock())){
+   if(pairing.attempts<5&&pairing.expires_at>=clock())
+    await savePairing({...pairing,attempts:pairing.attempts+1});
+   return {kind:'pair_denied'};
+  }
+  // Single use: burn the invite before granting access.
+  await savePairing({...pairing,attempts:5});
+  await saveMember(msg.userId);
+  await send(msg.userId,'✅ Acesso liberado ao Hermes Grupo Erick, somente leitura. Envie /ajuda para ver o que posso responder.');
+  return {kind:'member_added'};
+ }
+ if(msg.text==='/convidar'||msg.text==='/membros'||/^\/remover(?:\s|$)/.test(msg.text)){
+  if(!isOwner){
+   await send(msg.userId,'Somente o dono gerencia quem acessa o Hermes.');
+   return {kind:'answered',intent:'access_owner_only'};
+  }
+  let reply;
+  try{
+   if(msg.text==='/convidar'){
+    if(members.length>=MAX_MEMBERS){
+     reply='Limite de '+MAX_MEMBERS+' pessoas além de você atingido. Use /membros e /remover ID antes de convidar outra.';
+    }else{
+     const code=randomCode();
+     if(typeof code!=='string'||!/^[a-zA-Z0-9_-]{12}$/.test(code))throw Error('invite_code_invalid');
+     await savePairing({sha256:createHash('sha256').update(code).digest('hex'),
+      expires_at:clock()+INVITE_TTL_MS,attempts:0,purpose:'member'});
+     reply='🔑 Convite de uso único, válido por 10 minutos:\n/vincular '+code+
+      '\n\nA pessoa abre uma conversa privada com o bot e envia essa linha. Quem enviar primeiro ganha acesso de leitura. Convites, remoções e decisões continuam só com você.';
+    }
+   }else if(msg.text==='/membros'){
+    reply='👥 Acesso ao Hermes\n• Dono: '+ownerId+'\n• Membros: '+
+     (members.length?members.join(', '):'nenhum')+'\nPara remover: /remover ID';
+   }else{
+    const target=msg.text.match(/^\/remover\s+([0-9]{1,16})$/);
+    const id=target?Number(target[1]):null;
+    if(!Number.isSafeInteger(id)||!members.includes(id)){
+     reply='Membro não encontrado. Use /membros para ver os IDs.';
+    }else{
+     await removeMember(id);
+     reply='Acesso removido para '+id+'.';
+    }
+   }
+  }catch{
+   reply='Não consegui alterar o acesso agora. Nada foi mudado.';
+  }
+  await send(msg.userId,reply);
+  return {kind:'answered',intent:'access_management'};
+ }
+ if(!isOwner&&ownerDecisions.isCommand(msg.text)){
+  await send(msg.userId,'Somente o dono registra ou consulta decisões.');
+  return {kind:'answered',intent:'access_owner_only'};
+ }
  if(msg.text==='/cerebro'){
   await send(msg.userId,'🧠 Consulte o segundo cérebro central com /cerebro TERMO. Exemplo: /cerebro conciliação. Somente fontes aprovadas e ainda válidas.');
   return {kind:'answered',intent:'brain_help',source:'local_instruction'};
@@ -478,7 +545,8 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  // business evidence and produce recommendations with fresh verified tools.
  // Direct numeric questions and slash commands retain fixed, cheaper routes.
  const useAgent=agentEnabled&&advisoryRequest(msg.text);
- const previous=useAgent?null:await readAnalystContext();
+ // Follow-up context ("e em fevereiro?") is per person, never shared.
+ const previous=useAgent?null:await readAnalystContext(msg.userId);
  const plan=useAgent?null:analyst.planQuestion(msg.text,previous);
  const intent=useAgent?'unknown':plan?'business_analyst':intentFor(msg.text);
  if(intent==='help'){await send(msg.userId,HELP);return {kind:'answered',intent};}
@@ -509,7 +577,7 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
      failureCode=code;
     }catch{
      response=code==='agent_daily_quota'?
-      'O limite privado de 4 análises com Codex por dia (UTC) foi atingido. Nenhuma nova chamada foi feita. As consultas históricas numéricas continuam sujeitas à quota própria.':
+      'O limite privado de '+agentDailyTurns+' análises com Codex por dia (UTC) foi atingido. Nenhuma nova chamada foi feita. As consultas históricas numéricas continuam sujeitas à quota própria.':
       'A análise com IA não pôde ser concluída e não foi possível validar memórias para uma leitura alternativa. Nenhuma ação foi executada.';
      failureCode=code;
     }
@@ -532,7 +600,7 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
    }else{
     response=analyst.reply(data,plan);
     if(data.cached===true){cache='hit';response+='\n\n⏱️ Resposta reutilizada de cache validado ('+new Date(data.at).toLocaleString('pt-BR',{timeZone:'America/Recife'})+').';}
-    await writeAnalystContext({tenant_id:'grupo_erick',template:plan.template,metric:plan.metric,period:plan.period,other_period:plan.other_period,store:plan.store});
+    await writeAnalystContext({tenant_id:'grupo_erick',template:plan.template,metric:plan.metric,period:plan.period,other_period:plan.other_period,store:plan.store},msg.userId);
    }
   }catch{
    response='Não consegui validar essa análise no banco. Não vou apresentar números presumidos.';
@@ -564,7 +632,9 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
  let response,cacheStatus=null;
  try{
   const isDomain=intent==='compras'||intent==='lotoia';
-  const cached=isDomain?verifiedCache(await readCache(intent),msg.userId,intent,clock()):null;
+  // The validated domain cache is tenant data bound to the owner's account;
+  // authorized members reuse it instead of spending the shared quota again.
+  const cached=isDomain?verifiedCache(await readCache(intent),ownerId,intent,clock()):null;
   // Work tracking must query current recorded events; old financial cache is
   // safe only as a visibly dated fallback when the shared quota runs out.
   const freshWork=/^\/pendencias(?:@\w+)?$/i.test(msg.text.trim());
@@ -583,7 +653,7 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
   }else{
    response=hermesReply(intent,data);
    if(isDomain){
-    const record={owner_id:msg.userId,tenant_id:'grupo_erick',intent,at:clock(),reply:response};
+    const record={owner_id:ownerId,tenant_id:'grupo_erick',intent,at:clock(),reply:response};
     if(Buffer.byteLength(JSON.stringify(record),'utf8')<=2048){
      try{await writeCache(intent,record);cacheStatus='stored';}
      catch{cacheStatus='store_failed';}

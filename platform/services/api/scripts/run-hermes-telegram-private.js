@@ -18,6 +18,33 @@ const answerCache=require('../src/runtime/hermes-verified-answer-cache');
 const finops=require('../src/runtime/hermes-inference-finops');
 const {hermesReply}=require('../src/runtime/hermes-telegram-private-channel');
 const STATE='/var/lib/hermes-telegram';
+// Daily limits per UTC day. Defaults keep the original pilot behaviour; an
+// operator raises them through environment variables, never above `max`.
+// Invalid values fail closed at startup instead of silently granting more.
+const LIMIT_SPECS=Object.freeze({
+ agent_turns:{env:'HERMES_AGENT_DAILY_TURNS',default:4,max:40},
+ openrouter_calls:{env:'HERMES_OPENROUTER_DAILY_CALLS',default:8,max:40},
+ history_queries:{env:'HERMES_HISTORY_DAILY_QUERIES',default:24,max:200},
+ history_legacy_queries:{env:'HERMES_HISTORY_LEGACY_DAILY_QUERIES',default:8,max:200},
+ brain_reads:{env:'HERMES_BRAIN_DAILY_READS',default:12,max:60}
+});
+function dailyLimits(environment={}){
+ const out={};
+ for(const [key,spec] of Object.entries(LIMIT_SPECS)){
+  const raw=environment[spec.env];
+  if(raw===undefined||raw===''){out[key]=spec.default;continue;}
+  if(typeof raw!=='string'||!/^[1-9][0-9]{0,3}$/.test(raw)||Number(raw)>spec.max)
+   throw Error('daily_limit_invalid');
+  out[key]=Number(raw);
+ }
+ if(out.history_legacy_queries>out.history_queries)throw Error('daily_limit_invalid');
+ return Object.freeze(out);
+}
+const DEFAULT_LIMITS=dailyLimits({});
+// Stored counters are sanity-checked against the hard maximum, so lowering a
+// limit mid-day blocks further calls instead of reporting corrupt state.
+const COUNTER_MAX=Object.freeze(Object.fromEntries(
+ Object.entries(LIMIT_SPECS).map(([k,s])=>[k,s.max])));
 const TELEGRAM_ORIGIN='https://api.telegram.org';
 const HERMES_ORIGIN='https://hermes-staging.grupoerick.tech';
 function readSecret(file){
@@ -76,6 +103,44 @@ function audit(dir,event){
   fs.constants.O_NOFOLLOW,0o600);
  try{fs.writeFileSync(fd,content+'\n');fs.fsyncSync(fd);}
  finally{fs.closeSync(fd);}
+}
+// Read-only members invited by the owner. A corrupt file denies every member
+// (fail closed) but keeps the owner working; it never stops the bot.
+const MAX_MEMBERS=3;
+function loadMembers(dir,ownerId){
+ let data;
+ try{data=loadState(dir,'members.json');}catch{return [];}
+ if(data===null)return [];
+ if(!data||data.version!==1||!Array.isArray(data.members)||
+  data.members.length>MAX_MEMBERS)return [];
+ const ids=data.members.map(m=>m?.user_id);
+ if(ids.some(id=>!Number.isSafeInteger(id)||id<=0||id===ownerId)||
+  new Set(ids).size!==ids.length)return [];
+ return ids;
+}
+function addMember(dir,ownerId,userId,clock){
+ if(!Number.isSafeInteger(userId)||userId<=0||userId===ownerId)
+  throw Error('member_invalid');
+ const ids=loadMembers(dir,ownerId);
+ if(ids.includes(userId))return ids;
+ if(ids.length>=MAX_MEMBERS)throw Error('members_full');
+ const previous=loadState(dir,'members.json');
+ const kept=(previous?.members||[]).filter(m=>ids.includes(m.user_id));
+ saveState(dir,'members.json',{version:1,
+  members:[...kept,{user_id:userId,bound_at:clock()}]});
+ audit(dir,{at:new Date(clock()).toISOString(),event:'member_added',count:ids.length+1});
+ return [...ids,userId];
+}
+function dropMember(dir,ownerId,userId,clock){
+ const ids=loadMembers(dir,ownerId);
+ const previous=loadState(dir,'members.json');
+ const kept=(previous?.members||[]).filter(m=>ids.includes(m.user_id)&&m.user_id!==userId);
+ saveState(dir,'members.json',{version:1,members:kept});
+ audit(dir,{at:new Date(clock()).toISOString(),event:'member_removed',count:kept.length});
+}
+function analystContextFile(ownerId,userId){
+ if(!Number.isSafeInteger(userId)||userId<=0)throw Error('analyst_context_user_invalid');
+ return userId===ownerId?'history-analyst-context.json':'history-analyst-context-'+userId+'.json';
 }
 async function smallJSON(response,maxBytes=65536){
  if(!response?.body||Number(response.headers?.get?.('content-length')||0)>maxBytes)
@@ -178,7 +243,8 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
 async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
  readLive=async()=>{throw Error('history_live_disabled')},liveEnabled=false,
  agentModel=null,autoMemoryEnabled=false,secondaryProvider=null,
- brainLive=brainReader.createReader({HERMES_BRAIN_LIVE_ENABLED:'false'})}){
+ brainLive=brainReader.createReader({HERMES_BRAIN_LIVE_ENABLED:'false'}),
+ limits=DEFAULT_LIMITS}){
  checkStateDirectory(stateDir);
  const offsetRecord=loadState(stateDir,'offset.json');
  const offset=offsetRecord?.offset??0;
@@ -212,10 +278,10 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
   const today=new Date(clock()).toISOString().slice(0,10);
   const record=loadState(stateDir,'brain-read-budget.json');
   if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
-    !Number.isInteger(record.count)||record.count<0||record.count>12))
+    !Number.isInteger(record.count)||record.count<0||record.count>COUNTER_MAX.brain_reads))
     throw Error('brain_read_budget_corrupt');
   const used=record?.date===today?record.count:0;
-  if(used>=12)throw Error('brain_read_budget_exhausted');
+  if(used>=limits.brain_reads)throw Error('brain_read_budget_exhausted');
   saveState(stateDir,'brain-read-budget.json',{date:today,count:used+1});
   return brainLive.query(term);
  };
@@ -228,13 +294,17 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
    event:'ingress',update_id:item.update_id});
   const owner=loadState(stateDir,'owner.json');
   const pairing=loadState(stateDir,'pairing.json');
+  const ownerId=owner?.owner_id??null;
+  const memberIds=ownerId===null?[]:loadMembers(stateDir,ownerId);
   // Claim an update before outbound queries. A failed reply will not trigger
   // a repeated provider read on restart.
   current=item.update_id+1;
   saveState(stateDir,'offset.json',{offset:current});
   const result=await processUpdate({
-   update:item,ownerId:owner?.owner_id??null,pairing,
-   clock,query,
+   update:item,ownerId,memberIds,pairing,
+   clock,query,agentDailyTurns:limits.agent_turns,
+   saveMember:id=>addMember(stateDir,ownerId,id,clock),
+   removeMember:id=>dropMember(stateDir,ownerId,id,clock),
    readFinops:()=>finops.validate(loadState(stateDir,'ai-finops-daily.json')),
    readBrain:queryBrainLimited,
    readAutocurated:()=>autoMemoryEnabled?
@@ -257,9 +327,9 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     const record=loadState(stateDir,'history-live-budget.json');
     if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
       !Number.isInteger(record.count)||record.count<0||
-      record.count>24))throw Error('history_live_budget_invalid');
+      record.count>COUNTER_MAX.history_queries))throw Error('history_live_budget_invalid');
     const count=record?.date===today?record.count:0;
-    const cap=params?.shape==='analyst'?24:8;
+    const cap=params?.shape==='analyst'?limits.history_queries:limits.history_legacy_queries;
     if(count>=cap)return {denied_status:'history_budget_exhausted'};
     // Claim before hitting network; never retry reads due to failed writes/crashes.
     saveState(stateDir,'history-live-budget.json',{date:today,count:count+1});
@@ -277,7 +347,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     const today=new Date(clock()).toISOString().slice(0,10);
     const budget=loadState(stateDir,'agent-llm-budget.json');
     if(budget&&(!/^20\d{2}-\d{2}-\d{2}$/.test(budget.date)||
-      !Number.isInteger(budget.turns)||budget.turns<0||budget.turns>4))
+      !Number.isInteger(budget.turns)||budget.turns<0||budget.turns>COUNTER_MAX.agent_turns))
      throw Error('agent_llm_budget_invalid');
     const turns=budget?.date===today?budget.turns:0;
     // Reserve the daily turn immediately BEFORE the FIRST actual model call.
@@ -286,7 +356,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     const secondary=secondaryProvider?.forTask(goal)||null;
     // Stay on OpenRouter after first Codex fail within this question.
     // The fallback cannot grant tool permissions or reset a budget.
-    let reservedPrimary=false,useSecondary=turns>=4;
+    let reservedPrimary=false,useSecondary=turns>=limits.agent_turns;
     let callsThisTask=0;
     // Count each actual provider request separately. A Codex failure followed
     // by OpenRouter success is TWO calls, not one successful call.
@@ -330,10 +400,10 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
      if(!secondary)throw Error('agent_daily_quota');
      const previous=loadState(stateDir,'agent-openrouter-budget.json');
      if(previous&&(!/^20\d{2}-\d{2}-\d{2}$/.test(previous.date)||
-      !Number.isInteger(previous.count)||previous.count<0||previous.count>8))
+      !Number.isInteger(previous.count)||previous.count<0||previous.count>COUNTER_MAX.openrouter_calls))
       throw Error('openrouter_budget_invalid');
      const used=previous?.date===today?previous.count:0;
-     if(used>=8)throw Error('openrouter_daily_quota');
+     if(used>=limits.openrouter_calls)throw Error('openrouter_daily_quota');
      saveState(stateDir,'agent-openrouter-budget.json',{date:today,count:used+1});
      return callProvider('openrouter_auto',()=>secondary.chat(...args));
     }};
@@ -374,10 +444,10 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
      readHistory:async plan=>{
       const record=loadState(stateDir,'history-live-budget.json');
       if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
-        !Number.isInteger(record.count)||record.count<0||record.count>24))
+        !Number.isInteger(record.count)||record.count<0||record.count>COUNTER_MAX.history_queries))
        throw Error('agent_history_budget_invalid');
       const n=record?.date===today?record.count:0;
-      if(n>=24)throw Error('agent_history_quota');
+      if(n>=limits.history_queries)throw Error('agent_history_quota');
       saveState(stateDir,'history-live-budget.json',{date:today,count:n+1});
       const data=await readLive({shape:'analyst',tenant_id:'grupo_erick',plan});
       // Only aggregated, source-checked evidence is remembered. Never write
@@ -396,8 +466,8 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
      }
     });
    },
-   readAnalystContext:()=>loadState(stateDir,'history-analyst-context.json'),
-   writeAnalystContext:ctx=>saveState(stateDir,'history-analyst-context.json',ctx),
+   readAnalystContext:userId=>loadState(stateDir,analystContextFile(ownerId,userId)),
+   writeAnalystContext:(ctx,userId)=>saveState(stateDir,analystContextFile(ownerId,userId),ctx),
    readAnalyst:async plan=>{
     if(!liveEnabled)throw Error('history_live_disabled');
     analyst.validate(plan);
@@ -413,9 +483,9 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
      const today=new Date(clock()).toISOString().slice(0,10);
      const budget=loadState(stateDir,'history-live-budget.json');
      if(budget&&(!/^20\d{2}-\d{2}-\d{2}$/.test(budget.date)||
-       !Number.isInteger(budget.count)||budget.count<0||budget.count>24))throw Error('history_live_budget_invalid');
+       !Number.isInteger(budget.count)||budget.count<0||budget.count>COUNTER_MAX.history_queries))throw Error('history_live_budget_invalid');
      const count=budget?.date===today?budget.count:0;
-     if(count>=24)return {denied_status:'history_budget_exhausted'};
+     if(count>=limits.history_queries)return {denied_status:'history_budget_exhausted'};
      saveState(stateDir,'history-live-budget.json',{date:today,count:count+1});
      return readLive({shape:'analyst',tenant_id:'grupo_erick',plan});
     })();
@@ -522,6 +592,7 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
   environment.HERMES_EXECUTION_KILL_SWITCH!=='true'||
   environment.HERMES_MISSION_INGRESS_ENABLED!=='false')
   throw Error('telegram_channel_disabled');
+ const limits=dailyLimits(environment);
  const dir=environment.HERMES_TELEGRAM_STATE_DIR||STATE;
  checkStateDirectory(dir);
  const botToken=readSecret(environment.HERMES_TELEGRAM_TOKEN_FILE);
@@ -565,7 +636,7 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  await resilientTelegramPolling({
   poll:()=>pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,secondaryProvider,
    liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true',brainLive,
-   autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true'}),
+   autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true',limits}),
   onRecovery:({code,consecutive_failures,delay_ms})=>audit(dir,{
    at:new Date(clock()).toISOString(),event:'telegram_poll_retry',
    code,consecutive_failures,delay_ms
@@ -576,6 +647,6 @@ if(require.main===module){
  runForever().catch(()=>{console.error('hermes_telegram_channel_stopped_fail_closed');
   process.exitCode=1;});
 }
-module.exports={checkStateDirectory,readSecret,loadState,saveState,audit,
+module.exports={LIMIT_SPECS,dailyLimits,loadMembers,addMember,dropMember,analystContextFile,checkStateDirectory,readSecret,loadState,saveState,audit,
  smallJSON,telegramClient,hermesClient,createLiveQuery,pollOnce,runForever,
  isRecoverableTelegramError,resilientTelegramPolling};

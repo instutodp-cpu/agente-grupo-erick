@@ -91,7 +91,7 @@ const c=new Client({host:"aws-1-sa-east-1.pooler.supabase.com",port:5432,
 (async()=>{
  await c.connect();
  const x=(await c.query("SELECT current_user AS role, COALESCE(SUM(registered),0)::bigint AS n FROM hermes_history.daily_sales_v1")).rows[0];
- if(x.role!=="hermes_history_login"||Number(x.n)!==25482)throw Error("history_integrity");
+ if(x.role!=="hermes_history_login"||!Number.isSafeInteger(Number(x.n))||Number(x.n)<25482)throw Error("history_integrity");
  console.log("DATABASE_CHECK_OK");
 })().catch(()=>{console.error("DATABASE_CHECK_FAILED");process.exitCode=1})
  .finally(()=>c.end().catch(()=>{}));'

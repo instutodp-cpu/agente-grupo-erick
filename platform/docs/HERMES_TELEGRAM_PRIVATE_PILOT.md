@@ -16,6 +16,26 @@ Não há interpretação livre de comandos, escrita operacional, disparo a funci
 
 Somente mensagens de **chat privado** com `from.id === chat.id`, **não encaminhadas** e enviadas por usuário não-bot podem acessar as rotas; nenhum grupo ou canal. A primeira pessoa autorizada vincula seu Telegram com `/vincular CÓDIGO`, usando um código aleatório de 12 caracteres gerado **localmente na VPS**, válido por 15 minutos, hash SHA-256 salvo mode0600 e máximo de 5 erros. A identidade autorizada é imutável para o runtime: mudança de proprietário exige procedimento administrativo explícito; nunca aceitar proprietário por texto livre.
 
+### Membros somente leitura (até 3 além do dono)
+
+O dono pode dar acesso de leitura a outras pessoas sem mexer na VPS:
+
+1. O dono envia `/convidar`. O bot responde com `/vincular CÓDIGO`: código
+   aleatório de 12 caracteres, de **uso único**, válido por **10 minutos**,
+   salvo só como hash SHA-256 em `pairing.json` com `purpose: "member"`.
+2. A pessoa abre uma conversa privada com o bot e envia essa linha. O convite é
+   queimado **antes** de o acesso ser concedido; um código errado consome uma
+   das 5 tentativas.
+3. `/membros` lista os IDs; `/remover ID` revoga o acesso.
+
+Regras: um convite de membro **nunca** vincula o dono. Membros não convidam,
+não removem e não usam `/decisao` nem `/decisoes`. O contexto de perguntas de
+continuação ("e em fevereiro?") é separado por pessoa; o cache validado de
+Compras e LotoIA é compartilhado, para não gastar a cota duas vezes. Membros
+ficam em `members.json` (mode0600). Se o arquivo estiver inválido, todos os
+membros perdem acesso e o dono continua funcionando; a auditoria registra só a
+contagem, nunca IDs ou códigos.
+
 O token oficial do bot é secreto e não pode ser enviado por chat, issue, commit ou log. Guardar somente no arquivo protegido `/home/hermesadmin/.hermes-telegram/secret/token` mode0600 e montar read-only no contêiner. O bearer machine existente do Hermes também é montado read-only, nunca impresso, compartilhado ou copiado para o bot Telegram. Usar uma pasta de estado mode0700 com `owner.json`, `pairing.json`, `offset.json`, `audit.jsonl` mode0600.
 
 O canal é fail-closed sem `HERMES_TELEGRAM_ENABLED=true`, `HERMES_DEPLOYMENT_STAGE=staging`, execução desativada, kill switch habilitado, ingresso de missões desativado, token válido e arquivos protegidos. O polling nunca recupera conversas de terceiros; recebe apenas novas mensagens ao próprio bot. O ledger escreve apenas update IDs e intenções aprovadas, **nunca o texto bruto**. O cursor de update é persistido **antes** da consulta de leitura: uma falha na entrega da resposta do Telegram não repete automaticamente a consulta nem consome a cota duas vezes. Uma resposta perdida pode ser solicitada de novo pelo usuário.
@@ -53,6 +73,27 @@ Depois de 6 horas o bot tenta atualizar pelo leitor oficial. Se o limite tiver s
 O cache é separado por domínio e vinculado ao `owner_id` Telegram e ao tenant `grupo_erick`; os arquivos `cache-compras.json` e `cache-lotoia.json` residem no diretório privado existente (0700), com permissão 0600. Somente o texto resumido previamente validado é guardado (nunca token ou payload bruto). Auditoria registra apenas sucesso, cache ou fallback, sem valores financeiros. Leitura de outro usuário, tenant ou registro expirado é recusada.
 
 **Ativação:** a alteração nesta PR não implanta a VPS automaticamente. Validar CI e fazer implantação segura no poller único já vinculado, preservando token, proprietário e cursor; o cache inicia vazio e só ganha conteúdo na próxima consulta real bem-sucedida. A retenção lógica máxima da resposta é de 24 horas; exclusão física periódica dos arquivos cache deve integrar a governança LGPD. Não remover auditoria para liberar quota.
+
+### Limites diários configuráveis do bot (UTC)
+
+Os limites do próprio bot são lidos de variáveis de ambiente na partida. Sem
+a variável, vale o padrão (o comportamento original do piloto). Valor fora do
+intervalo ou malformado faz o bot **não iniciar** (falha fechada), em vez de
+conceder mais uso em silêncio.
+
+| Variável | Padrão | Máximo | O que limita |
+| --- | --- | --- | --- |
+| `HERMES_AGENT_DAILY_TURNS` | 4 | 40 | Análises com IA (Codex) por dia |
+| `HERMES_OPENROUTER_DAILY_CALLS` | 8 | 40 | Chamadas de reserva via OpenRouter |
+| `HERMES_HISTORY_DAILY_QUERIES` | 24 | 200 | Consultas ao histórico (analista e agente) |
+| `HERMES_HISTORY_LEGACY_DAILY_QUERIES` | 8 | 200 | Consultas no formato antigo (`/vendas`), nunca acima do anterior |
+| `HERMES_BRAIN_DAILY_READS` | 12 | 60 | Leituras do segundo cérebro |
+
+Para ativar, acrescente `-e VARIAVEL=valor` ao `docker run` do bot no script de
+deploy. Baixar um limite no meio do dia bloqueia novas chamadas até a virada
+do dia UTC; os contadores já gravados continuam válidos. O limite de 12
+leituras por 24 horas do leitor Hermes (Compras, LotoIA) é outro, do serviço
+da API, e não muda com estas variáveis.
 
 ## Segundo cérebro — próximo marco, não presumir implementado
 

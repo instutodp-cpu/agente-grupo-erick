@@ -7,9 +7,15 @@ const ownerDecisions=require('./hermes-owner-decision-memory');
 const economy=require('./hermes-inference-economy-router');
 const answerCache=require('./hermes-verified-answer-cache');
 const MAX_STEPS=3;
-const DENIED=/\b(cpf|cnpj|senha|password|token|segredo|pix|transferir|deletar|apagar|editar banco|sql|shell|terminal|merge|publicar|enviar mensagem)\b/i;
+// Personal data, credentials and system access stay denied by keyword.
+const DENIED=/\b(cpf|senha|password|token|segredo|deletar|apagar|editar banco|sql|shell|terminal|merge|publicar|enviar mensagem)\b/i;
+// Money movement is denied as an ACTION, not because a payment method is
+// mentioned: "quanto entrou no pix?" is a question, "faça um pix" is an order.
+// "a pagar" stays allowed: it names payables, not a request to pay.
+const MONEY_ACTION_DENIED=/\b(transferir|transfira|transfere|pague|paguem|estorne|estornar|(?:fa[cç]a|fazer|mande|mandar|envie|enviar|realize|realizar|agende|agendar)\s+(?:um\s+|uma\s+|o\s+|a\s+)?(?:pix|ted|doc|transfer[eê]ncia|pagamento))(?![\wÀ-ÿ])/i;
 function safeGoal(text){
  if(typeof text!=='string'||text.length<8||text.length>600||DENIED.test(text)||
+  MONEY_ACTION_DENIED.test(text)||
   /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(text))throw Error('agent_goal_denied');
  return text.trim();
 }

@@ -28,6 +28,20 @@ As mudanças de S1–S6 vão numa PR única a partir de
 `claude/admiring-ptolemy-47dhk9`, com um commit por item. O próximo deploy na
 VPS vai baixar a imagem `node:22-alpine`.
 
+### Semana 2 executada (24/11)
+
+| Item | O que foi feito |
+| --- | --- |
+| G7 | O agente nega **ordens** de movimentar dinheiro (faça um pix, transfira, pague, estorne) e não mais perguntas que citam pix ou CNPJ. CPF, senhas, SQL e acesso ao sistema seguem negados |
+| G2 | Limites diários por variável de ambiente, com o padrão antigo e teto máximo; valor inválido impede o bot de iniciar |
+| G4 | `/convidar` gera convite de uso único (10 min) para até 3 membros somente leitura; `/membros` e `/remover ID`. Membros não gerenciam acesso nem decisões |
+| G9 | A checagem de deploy aceita histórico maior que 25482 registros; só bloqueia se diminuir ou vier inválido |
+| G3, G5 | **Bloqueados pelo banco.** O bot lê a view `monthly_commercial_2025_2026_v1`, que só tem 2025–2026; inadimplência exige view nova. As views de `hermes_history` **não estão versionadas no repositório**: o script SQL (blocos 10 e 11) extrai as definições para começar |
+
+Nada disso chega ao Telegram até alguém fazer o deploy na VPS. Para ativar as
+cotas maiores, o deploy precisa incluir as variáveis novas (ver
+`platform/docs/HERMES_TELEGRAM_PRIVATE_PILOT.md`).
+
 ### Respostas do proprietário (24/11)
 
 1. **A v1 não está mais no Railway.** *(confirmado)* Os achados S1–S4, todos

@@ -1,6 +1,6 @@
 -- Auditoria somente leitura do projeto Supabase de dados das lojas
 -- (yxmdrrwqxwzsdgcgskrm: softcom_import, views public, hermes_history).
--- Blocos 1–8 rodam nele; o bloco 9 roda no projeto hermes-brain.
+-- Blocos 1–8, 10 e 11 rodam nele; o bloco 9 roda no projeto hermes-brain.
 --
 -- Como usar: Supabase Dashboard -> SQL Editor -> cole e rode bloco a bloco.
 -- Tudo aqui é SELECT. Nenhuma linha altera dados, schema ou permissões.
@@ -88,3 +88,22 @@ SELECT status,
   FROM hermes_brain.memory_items
  GROUP BY status
  ORDER BY 1;
+
+-- 10) Definição das views usadas pelo bot (projeto das lojas).
+--     Elas foram criadas direto no banco e não estão versionadas no
+--     repositório. Salve o resultado em platform/migrations/ antes de criar
+--     as próximas (histórico desde 2011, inadimplência por loja).
+SELECT n.nspname AS schema, c.relname AS view,
+       pg_get_viewdef(c.oid, true) AS definicao
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+ WHERE c.relkind IN ('v', 'm')
+   AND n.nspname = 'hermes_history'
+ ORDER BY 2;
+
+-- 11) Quem pode ler hermes_history (o bot usa hermes_history_login).
+SELECT grantee, table_name, string_agg(privilege_type, ',') AS privilegios
+  FROM information_schema.role_table_grants
+ WHERE table_schema = 'hermes_history'
+ GROUP BY 1, 2
+ ORDER BY 2, 1;
