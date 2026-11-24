@@ -51,6 +51,12 @@ test('document creates an obligation but never implies payment', () => {
   assert.equal(payable.paymentChannel, null);
 });
 
+test('obligation accepts numeric amount in cents contract', () => {
+  const payable = createObligation({ ...payableBase, originalAmountCents: 12345 });
+  assert.equal(payable.originalAmountCents, 12345);
+  assert.equal(payable.outstandingCents, 12345);
+});
+
 test('obligation is deeply immutable and rejects invalid dates and money', () => {
   const evidenceIds = ['e1'];
   const payable = createObligation({ ...payableBase, evidenceIds });
@@ -192,7 +198,7 @@ test('collection preparation is overdue-only and human-bound', () => {
   const prepared = prepareCollectionCase({
     collectionCaseId: 'case-1',
     obligation: receivable,
-    asOf: '2026-11-20'
+    asOf: '2026-11-05'
   });
   assert.equal(prepared.agingBucket, '1_30');
   assert.equal(prepared.authority, 'PREPARE');

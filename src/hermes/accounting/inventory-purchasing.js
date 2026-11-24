@@ -62,7 +62,7 @@ function requireInteger(value, field, nonNegative = false) {
 
 function requireIsoDate(value, field) {
   required(value, field);
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new Error(field + ' must be an ISO date');
   }
   const parts = value.split('-').map(Number);
