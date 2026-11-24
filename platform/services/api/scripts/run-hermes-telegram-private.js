@@ -104,6 +104,44 @@ function audit(dir,event){
  try{fs.writeFileSync(fd,content+'\n');fs.fsyncSync(fd);}
  finally{fs.closeSync(fd);}
 }
+// Read-only members invited by the owner. A corrupt file denies every member
+// (fail closed) but keeps the owner working; it never stops the bot.
+const MAX_MEMBERS=3;
+function loadMembers(dir,ownerId){
+ let data;
+ try{data=loadState(dir,'members.json');}catch{return [];}
+ if(data===null)return [];
+ if(!data||data.version!==1||!Array.isArray(data.members)||
+  data.members.length>MAX_MEMBERS)return [];
+ const ids=data.members.map(m=>m?.user_id);
+ if(ids.some(id=>!Number.isSafeInteger(id)||id<=0||id===ownerId)||
+  new Set(ids).size!==ids.length)return [];
+ return ids;
+}
+function addMember(dir,ownerId,userId,clock){
+ if(!Number.isSafeInteger(userId)||userId<=0||userId===ownerId)
+  throw Error('member_invalid');
+ const ids=loadMembers(dir,ownerId);
+ if(ids.includes(userId))return ids;
+ if(ids.length>=MAX_MEMBERS)throw Error('members_full');
+ const previous=loadState(dir,'members.json');
+ const kept=(previous?.members||[]).filter(m=>ids.includes(m.user_id));
+ saveState(dir,'members.json',{version:1,
+  members:[...kept,{user_id:userId,bound_at:clock()}]});
+ audit(dir,{at:new Date(clock()).toISOString(),event:'member_added',count:ids.length+1});
+ return [...ids,userId];
+}
+function dropMember(dir,ownerId,userId,clock){
+ const ids=loadMembers(dir,ownerId);
+ const previous=loadState(dir,'members.json');
+ const kept=(previous?.members||[]).filter(m=>ids.includes(m.user_id)&&m.user_id!==userId);
+ saveState(dir,'members.json',{version:1,members:kept});
+ audit(dir,{at:new Date(clock()).toISOString(),event:'member_removed',count:kept.length});
+}
+function analystContextFile(ownerId,userId){
+ if(!Number.isSafeInteger(userId)||userId<=0)throw Error('analyst_context_user_invalid');
+ return userId===ownerId?'history-analyst-context.json':'history-analyst-context-'+userId+'.json';
+}
 async function smallJSON(response,maxBytes=65536){
  if(!response?.body||Number(response.headers?.get?.('content-length')||0)>maxBytes)
   throw Error('response_size_denied');
@@ -256,13 +294,17 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
    event:'ingress',update_id:item.update_id});
   const owner=loadState(stateDir,'owner.json');
   const pairing=loadState(stateDir,'pairing.json');
+  const ownerId=owner?.owner_id??null;
+  const memberIds=ownerId===null?[]:loadMembers(stateDir,ownerId);
   // Claim an update before outbound queries. A failed reply will not trigger
   // a repeated provider read on restart.
   current=item.update_id+1;
   saveState(stateDir,'offset.json',{offset:current});
   const result=await processUpdate({
-   update:item,ownerId:owner?.owner_id??null,pairing,
+   update:item,ownerId,memberIds,pairing,
    clock,query,agentDailyTurns:limits.agent_turns,
+   saveMember:id=>addMember(stateDir,ownerId,id,clock),
+   removeMember:id=>dropMember(stateDir,ownerId,id,clock),
    readFinops:()=>finops.validate(loadState(stateDir,'ai-finops-daily.json')),
    readBrain:queryBrainLimited,
    readAutocurated:()=>autoMemoryEnabled?
@@ -424,8 +466,8 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
      }
     });
    },
-   readAnalystContext:()=>loadState(stateDir,'history-analyst-context.json'),
-   writeAnalystContext:ctx=>saveState(stateDir,'history-analyst-context.json',ctx),
+   readAnalystContext:userId=>loadState(stateDir,analystContextFile(ownerId,userId)),
+   writeAnalystContext:(ctx,userId)=>saveState(stateDir,analystContextFile(ownerId,userId),ctx),
    readAnalyst:async plan=>{
     if(!liveEnabled)throw Error('history_live_disabled');
     analyst.validate(plan);
@@ -605,6 +647,6 @@ if(require.main===module){
  runForever().catch(()=>{console.error('hermes_telegram_channel_stopped_fail_closed');
   process.exitCode=1;});
 }
-module.exports={LIMIT_SPECS,dailyLimits,checkStateDirectory,readSecret,loadState,saveState,audit,
+module.exports={LIMIT_SPECS,dailyLimits,loadMembers,addMember,dropMember,analystContextFile,checkStateDirectory,readSecret,loadState,saveState,audit,
  smallJSON,telegramClient,hermesClient,createLiveQuery,pollOnce,runForever,
  isRecoverableTelegramError,resilientTelegramPolling};

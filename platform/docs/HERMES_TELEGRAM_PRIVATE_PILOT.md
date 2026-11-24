@@ -16,6 +16,26 @@ Não há interpretação livre de comandos, escrita operacional, disparo a funci
 
 Somente mensagens de **chat privado** com `from.id === chat.id`, **não encaminhadas** e enviadas por usuário não-bot podem acessar as rotas; nenhum grupo ou canal. A primeira pessoa autorizada vincula seu Telegram com `/vincular CÓDIGO`, usando um código aleatório de 12 caracteres gerado **localmente na VPS**, válido por 15 minutos, hash SHA-256 salvo mode0600 e máximo de 5 erros. A identidade autorizada é imutável para o runtime: mudança de proprietário exige procedimento administrativo explícito; nunca aceitar proprietário por texto livre.
 
+### Membros somente leitura (até 3 além do dono)
+
+O dono pode dar acesso de leitura a outras pessoas sem mexer na VPS:
+
+1. O dono envia `/convidar`. O bot responde com `/vincular CÓDIGO`: código
+   aleatório de 12 caracteres, de **uso único**, válido por **10 minutos**,
+   salvo só como hash SHA-256 em `pairing.json` com `purpose: "member"`.
+2. A pessoa abre uma conversa privada com o bot e envia essa linha. O convite é
+   queimado **antes** de o acesso ser concedido; um código errado consome uma
+   das 5 tentativas.
+3. `/membros` lista os IDs; `/remover ID` revoga o acesso.
+
+Regras: um convite de membro **nunca** vincula o dono. Membros não convidam,
+não removem e não usam `/decisao` nem `/decisoes`. O contexto de perguntas de
+continuação ("e em fevereiro?") é separado por pessoa; o cache validado de
+Compras e LotoIA é compartilhado, para não gastar a cota duas vezes. Membros
+ficam em `members.json` (mode0600). Se o arquivo estiver inválido, todos os
+membros perdem acesso e o dono continua funcionando; a auditoria registra só a
+contagem, nunca IDs ou códigos.
+
 O token oficial do bot é secreto e não pode ser enviado por chat, issue, commit ou log. Guardar somente no arquivo protegido `/home/hermesadmin/.hermes-telegram/secret/token` mode0600 e montar read-only no contêiner. O bearer machine existente do Hermes também é montado read-only, nunca impresso, compartilhado ou copiado para o bot Telegram. Usar uma pasta de estado mode0700 com `owner.json`, `pairing.json`, `offset.json`, `audit.jsonl` mode0600.
 
 O canal é fail-closed sem `HERMES_TELEGRAM_ENABLED=true`, `HERMES_DEPLOYMENT_STAGE=staging`, execução desativada, kill switch habilitado, ingresso de missões desativado, token válido e arquivos protegidos. O polling nunca recupera conversas de terceiros; recebe apenas novas mensagens ao próprio bot. O ledger escreve apenas update IDs e intenções aprovadas, **nunca o texto bruto**. O cursor de update é persistido **antes** da consulta de leitura: uma falha na entrega da resposta do Telegram não repete automaticamente a consulta nem consome a cota duas vezes. Uma resposta perdida pode ser solicitada de novo pelo usuário.
