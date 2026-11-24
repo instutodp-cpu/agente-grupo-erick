@@ -313,6 +313,7 @@ function hermesReply(intent,x){
  throw Error('intent_not_allowed');
 }
 async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.now(),
+ agentDailyTurns=4,
  send,saveOwner,savePairing,query,
  readCache=async()=>null,writeCache=async()=>{},readHistory=async()=>null,
  readLive=async()=>null,
@@ -509,7 +510,7 @@ async function processUpdate({update,ownerId=null,pairing=null,clock=()=>Date.no
      failureCode=code;
     }catch{
      response=code==='agent_daily_quota'?
-      'O limite privado de 4 análises com Codex por dia (UTC) foi atingido. Nenhuma nova chamada foi feita. As consultas históricas numéricas continuam sujeitas à quota própria.':
+      'O limite privado de '+agentDailyTurns+' análises com Codex por dia (UTC) foi atingido. Nenhuma nova chamada foi feita. As consultas históricas numéricas continuam sujeitas à quota própria.':
       'A análise com IA não pôde ser concluída e não foi possível validar memórias para uma leitura alternativa. Nenhuma ação foi executada.';
      failureCode=code;
     }

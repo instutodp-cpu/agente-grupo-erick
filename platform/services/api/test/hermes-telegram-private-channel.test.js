@@ -2591,3 +2591,60 @@ test('Telegram poll retry uses capped backoff, resets after success and halts on
  }),/telegram_provider_auth_denied/);
  assert.deepEqual(delays,[1000,2000,4000,8000,16000,30000,30000,30000,30000]);
 });
+test('daily limits keep pilot defaults and accept only bounded operator overrides',()=>{
+ assert.deepEqual({...runner.dailyLimits({})},{agent_turns:4,openrouter_calls:8,
+  history_queries:24,history_legacy_queries:8,brain_reads:12});
+ const raised=runner.dailyLimits({HERMES_AGENT_DAILY_TURNS:'20',HERMES_HISTORY_DAILY_QUERIES:'80',
+  HERMES_BRAIN_DAILY_READS:'30'});
+ assert.equal(raised.agent_turns,20);assert.equal(raised.history_queries,80);
+ assert.equal(raised.brain_reads,30);assert.equal(raised.openrouter_calls,8);
+ for(const bad of [{HERMES_AGENT_DAILY_TURNS:'0'},{HERMES_AGENT_DAILY_TURNS:'41'},
+  {HERMES_AGENT_DAILY_TURNS:'abc'},{HERMES_AGENT_DAILY_TURNS:'1e2'},{HERMES_AGENT_DAILY_TURNS:' 5'},
+  {HERMES_HISTORY_DAILY_QUERIES:'201'},{HERMES_BRAIN_DAILY_READS:'-1'},
+  {HERMES_HISTORY_DAILY_QUERIES:'10',HERMES_HISTORY_LEGACY_DAILY_QUERIES:'20'}])
+  assert.throws(()=>runner.dailyLimits(bad),/daily_limit_invalid/,JSON.stringify(bad));
+});
+test('configured history limit is enforced end to end, default limit unchanged',async()=>{
+ const text='Compare as taxas de cancelamento de janeiro a maio de 2025 e 2026 do Grupo Erick';
+ const clock=()=>Date.parse('2026-10-22T20:30:00Z');
+ const fixture={tenant_id:'grupo_erick',mode:'online_aggregate',
+  source:analyst.SOURCE,at:new Date(clock()).toISOString(),
+  plan:{tenant_id:'grupo_erick',template:'compare',period:'2025',other_period:'2026',metric:'cancelled',store:null},
+  rows:[{label:'2025',records:21940,cancelled:238,amount:2730133.04,last_day:'2025-05-31'},
+   {label:'2026',records:24148,cancelled:623,amount:2956645.04,last_day:'2026-05-31'}]};
+ const run=async limits=>{
+  const state=dir();fs.chmodSync(state,0o700);
+  runner.saveState(state,'owner.json',{owner_id:700});
+  runner.saveState(state,'history-live-budget.json',{date:'2026-10-22',count:24});
+  const responses=[],reads=[];
+  try{
+   await runner.pollOnce({stateDir:state,clock,liveEnabled:true,
+    ...(limits?{limits}:{}),
+    agentModel:{chat:async()=>{throw Error('LLM_MUST_NOT_RUN')}},
+    query:async()=>{throw Error('OTHER_DOMAIN_DENIED')},
+    readLive:async arg=>{reads.push(arg);return fixture},
+    api:async(method,payload)=>{
+     if(method==='getUpdates')return [update(350001,700,text)];
+     if(method==='sendMessage')responses.push(payload.text);
+    }});
+   return {responses,reads,budget:runner.loadState(state,'history-live-budget.json')};
+  }finally{fs.rmSync(state,{recursive:true,force:true})}
+ };
+ const blocked=await run(null);
+ assert.equal(blocked.reads.length,0);
+ assert.match(blocked.responses[0],/Limite diário/);
+ assert.equal(blocked.budget.count,24);
+ const allowed=await run(runner.dailyLimits({HERMES_HISTORY_DAILY_QUERIES:'30'}));
+ assert.equal(allowed.reads.length,1);
+ assert.equal(allowed.budget.count,25);
+ assert.ok(allowed.responses[0].includes('21.940 registros'));
+});
+test('quota message reports the configured number of daily analyses',async()=>{
+ const sent=[];
+ await core.processUpdate({update:update(360001,700,'analise os riscos de vendas e me dê recomendações'),
+  ownerId:700,agentEnabled:true,agentDailyTurns:20,query:async()=>{},
+  send:async(_id,text)=>sent.push(text),
+  readAgent:async()=>{throw Error('agent_daily_quota')},
+  readGovernedFallback:async()=>{throw Error('no_fallback')}});
+ assert.match(sent[0],/limite privado de 20 análises com Codex/);
+});

@@ -54,6 +54,27 @@ O cache é separado por domínio e vinculado ao `owner_id` Telegram e ao tenant 
 
 **Ativação:** a alteração nesta PR não implanta a VPS automaticamente. Validar CI e fazer implantação segura no poller único já vinculado, preservando token, proprietário e cursor; o cache inicia vazio e só ganha conteúdo na próxima consulta real bem-sucedida. A retenção lógica máxima da resposta é de 24 horas; exclusão física periódica dos arquivos cache deve integrar a governança LGPD. Não remover auditoria para liberar quota.
 
+### Limites diários configuráveis do bot (UTC)
+
+Os limites do próprio bot são lidos de variáveis de ambiente na partida. Sem
+a variável, vale o padrão (o comportamento original do piloto). Valor fora do
+intervalo ou malformado faz o bot **não iniciar** (falha fechada), em vez de
+conceder mais uso em silêncio.
+
+| Variável | Padrão | Máximo | O que limita |
+| --- | --- | --- | --- |
+| `HERMES_AGENT_DAILY_TURNS` | 4 | 40 | Análises com IA (Codex) por dia |
+| `HERMES_OPENROUTER_DAILY_CALLS` | 8 | 40 | Chamadas de reserva via OpenRouter |
+| `HERMES_HISTORY_DAILY_QUERIES` | 24 | 200 | Consultas ao histórico (analista e agente) |
+| `HERMES_HISTORY_LEGACY_DAILY_QUERIES` | 8 | 200 | Consultas no formato antigo (`/vendas`), nunca acima do anterior |
+| `HERMES_BRAIN_DAILY_READS` | 12 | 60 | Leituras do segundo cérebro |
+
+Para ativar, acrescente `-e VARIAVEL=valor` ao `docker run` do bot no script de
+deploy. Baixar um limite no meio do dia bloqueia novas chamadas até a virada
+do dia UTC; os contadores já gravados continuam válidos. O limite de 12
+leituras por 24 horas do leitor Hermes (Compras, LotoIA) é outro, do serviço
+da API, e não muda com estas variáveis.
+
 ## Segundo cérebro — próximo marco, não presumir implementado
 
 O contrato `SECOND_BRAIN_INBOX_CONTRACT.md` atualmente é declarativo. ChatGPT e Claude requerem importação autorizada de exportações; histórico pessoal de WhatsApp não pode ser tratado como automaticamente acessível pela API do WhatsApp Business. Ingestão real precisa de armazenamento e busca, segregação de contexto pessoal/empresarial, controle por pessoa, retenção, revogação de consentimento e origem citável. **Não confundir o canal conversável com segundo cérebro pronto.**
