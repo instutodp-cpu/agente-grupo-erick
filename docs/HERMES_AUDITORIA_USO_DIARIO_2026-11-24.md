@@ -14,6 +14,20 @@ Legenda: **observado** = conferi no código, nos testes ou na API ·
 **confirmado** = informado pelo proprietário · **não verificado** = depende
 da VPS ou de um banco que não acessei.
 
+### Semana 1 executada (24/11, com aprovação do proprietário)
+
+| Item | O que foi feito |
+| --- | --- |
+| Q1 | PR #580 mergeada no `main` (`ccafa05`): os 38 testes passam e a suíte da raiz roda no CI. Raiz agora: 745/745 |
+| S1–S4 | v1 aposentada: `server.js`, `public/`, Express e node-fetch removidos; `npm audit` da raiz: 0 vulnerabilidades |
+| S5 | Imagens Docker e todos os jobs de CI em Node 22 |
+| S6 | Store de confirmações em memória limitado a 10 mil registros (antes, sem limite) |
+| Q2 | 13 PRs substituídas fechadas com comentário apontando o substituto |
+
+As mudanças de S1–S6 vão numa PR única a partir de
+`claude/admiring-ptolemy-47dhk9`, com um commit por item. O próximo deploy na
+VPS vai baixar a imagem `node:22-alpine`.
+
 ### Respostas do proprietário (24/11)
 
 1. **A v1 não está mais no Railway.** *(confirmado)* Os achados S1–S4, todos
