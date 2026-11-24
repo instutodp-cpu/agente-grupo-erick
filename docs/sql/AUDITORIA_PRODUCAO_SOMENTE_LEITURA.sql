@@ -1,5 +1,6 @@
--- Auditoria somente leitura do projeto Supabase de produção do Hermes
--- (projeto citado no código: yxmdrrwqxwzsdgcgskrm).
+-- Auditoria somente leitura do projeto Supabase de dados das lojas
+-- (yxmdrrwqxwzsdgcgskrm: softcom_import, views public, hermes_history).
+-- Blocos 1–8 rodam nele; o bloco 9 roda no projeto hermes-brain.
 --
 -- Como usar: Supabase Dashboard -> SQL Editor -> cole e rode bloco a bloco.
 -- Tudo aqui é SELECT. Nenhuma linha altera dados, schema ou permissões.
@@ -76,7 +77,10 @@ SELECT n.nspname AS schema, c.relname AS tabela,
  ORDER BY pg_total_relation_size(c.oid) DESC
  LIMIT 20;
 
--- 9) Segundo cérebro: quantos itens aprovados e quantos já expiraram?
+-- 9) Segundo cérebro. ATENÇÃO: o schema hermes_brain fica em OUTRO projeto,
+--    "hermes-brain" (asceucchdnuoaqgdjbtg). Rode este bloco no SQL Editor
+--    daquele projeto, não no de dados das lojas.
+--    Quantos itens aprovados e quantos já expiraram?
 SELECT status,
        count(*) AS itens,
        count(*) FILTER (WHERE expires_at <= now()) AS expirados,
