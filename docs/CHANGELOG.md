@@ -1,5 +1,25 @@
 # CHANGELOG.md
 
+## 2026-11-25 — Semana 3: operação diária do bot e preparação do Linx
+
+### Adicionado
+
+- Resumo matinal no próprio bot (07:30 Recife, desligado por padrão), com
+  atualidade do histórico, fila de Compras e LotoIA, sem IA, uma vez por dia.
+- Linha "Dados até DD/MM/AAAA (N dias atrás)" nas respostas do analista e do
+  agente, derivada do `MAX(last_day)` da view inteira.
+- `scripts/hermes-telegram-ops.js`: vigia (heartbeat, URLs de saúde, ponte
+  Codex, disco, backup, resumo) com alertas ao dono e ping externo opcional;
+  backup verificado com retenção; restauração com recusa se o bot estiver ativo.
+  Unidades systemd em `platform/services/api/deploy/systemd/`.
+- Transporte `FILE_EXPORT` do adaptador `seta_read_v1` para exportações do Linx:
+  plano incremental sem gravação, mapeamento revisado por layout e empresa.
+
+### Alterado
+
+- Membros do bot deixam de acessar `/cerebro`, `/memorias` e qualquer memória
+  do dono (decisões, memória automática, cérebro) nas respostas e no agente.
+
 ## 2026-11-24 — Aposentadoria do chat web v1
 
 ### Removido

@@ -29,7 +29,11 @@ O dono pode dar acesso de leitura a outras pessoas sem mexer na VPS:
 3. `/membros` lista os IDs; `/remover ID` revoga o acesso.
 
 Regras: um convite de membro **nunca** vincula o dono. Membros não convidam,
-não removem e não usam `/decisao` nem `/decisoes`. O contexto de perguntas de
+não removem e não usam `/decisao` nem `/decisoes`. Membros também não acessam
+`/cerebro` (itens `owner_only`, memória pessoal) nem `/memorias`; o agente com
+IA roda para eles sem decisões, memória automática ou cérebro, e
+`/diagnostico` e `/alertas` mostram "visível somente ao dono" no lugar da
+decisão. Tabela completa em `HERMES_TELEGRAM_OPERATIONS_RUNBOOK.md` §3. O contexto de perguntas de
 continuação ("e em fevereiro?") é separado por pessoa; o cache validado de
 Compras e LotoIA é compartilhado, para não gastar a cota duas vezes. Membros
 ficam em `members.json` (mode0600). Se o arquivo estiver inválido, todos os
@@ -94,6 +98,12 @@ deploy. Baixar um limite no meio do dia bloqueia novas chamadas até a virada
 do dia UTC; os contadores já gravados continuam válidos. O limite de 12
 leituras por 24 horas do leitor Hermes (Compras, LotoIA) é outro, do serviço
 da API, e não muda com estas variáveis.
+
+### Resumo matinal, atualidade, vigia e backup
+
+Ver `HERMES_TELEGRAM_OPERATIONS_RUNBOOK.md`: resumo diário às 07:30 de Recife
+(desligado até `HERMES_MORNING_BRIEF_ENABLED=true`), linha "Dados até" nas
+respostas, vigia com alertas e ping externo, backup diário com restauração.
 
 ## Segundo cérebro — próximo marco, não presumir implementado
 

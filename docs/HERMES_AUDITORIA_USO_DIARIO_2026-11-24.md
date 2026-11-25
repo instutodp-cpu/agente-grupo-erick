@@ -42,6 +42,20 @@ Nada disso chega ao Telegram até alguém fazer o deploy na VPS. Para ativar as
 cotas maiores, o deploy precisa incluir as variáveis novas (ver
 `platform/docs/HERMES_TELEGRAM_PRIVATE_PILOT.md`).
 
+### Semana 3 preparada (25/11, PR sem merge, sem deploy)
+
+| Frente | Entrega |
+| --- | --- |
+| Resumo matinal | No próprio bot, 07:30 Recife, configurável, uma vez por dia, sem IA (G6) |
+| Monitoramento | Vigia no host a cada 5 min com alertas ao dono e ping externo opcional (G10) |
+| Backup | Diário, verificado, retenção de 14 dias, restauração documentada (G8) |
+| Atualidade | "Dados até …" em toda resposta de histórico, derivado da própria fonte |
+| Membros | Achado e corrigido: na semana 2, membros podiam usar `/cerebro` (memória pessoal `owner_only`) e viam decisões do dono em `/diagnostico`, `/alertas` e no agente |
+| Linx | Transporte por arquivo do adaptador `seta_read_v1` existente, plano incremental sem gravação (G1, preparação) |
+
+Detalhes, implantação e critérios de aceite em
+`platform/docs/HERMES_TELEGRAM_OPERATIONS_RUNBOOK.md`.
+
 ### Respostas do proprietário (24/11)
 
 1. **A v1 não está mais no Railway.** *(confirmado)* Os achados S1–S4, todos
