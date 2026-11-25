@@ -17,6 +17,7 @@ const ownerDecisions=require('../src/runtime/hermes-owner-decision-memory');
 const answerCache=require('../src/runtime/hermes-verified-answer-cache');
 const finops=require('../src/runtime/hermes-inference-finops');
 const {hermesReply}=require('../src/runtime/hermes-telegram-private-channel');
+const morningBrief=require('../src/runtime/hermes-morning-brief');
 const STATE='/var/lib/hermes-telegram';
 // Daily limits per UTC day. Defaults keep the original pilot behaviour; an
 // operator raises them through environment variables, never above `max`.
@@ -240,11 +241,75 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
   }finally{await client.end().catch(()=>{});}
  };
 }
+// Claims one history query from the shared daily budget, or returns false.
+function claimHistoryQuery(stateDir,now,limit){
+ const today=new Date(now).toISOString().slice(0,10);
+ const record=loadState(stateDir,'history-live-budget.json');
+ if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
+   !Number.isInteger(record.count)||record.count<0||record.count>COUNTER_MAX.history_queries))
+  throw Error('history_live_budget_invalid');
+ const count=record?.date===today?record.count:0;
+ if(count>=limit)return false;
+ saveState(stateDir,'history-live-budget.json',{date:today,count:count+1});
+ return true;
+}
+// Morning brief. The day is claimed before any read or send, so a crash never
+// sends twice; a day left "claimed", "failed" or "missed" is what the watchdog
+// reports. Same quotas as interactive use; no LLM call.
+async function runMorningBrief({stateDir,api,query,readLive,liveEnabled,clock,cfg,limits}){
+ const now=clock();
+ const state=loadState(stateDir,'morning-brief.json');
+ const check=morningBrief.due({now,cfg,state});
+ if(check.reason==='missed_window'){
+  saveState(stateDir,'morning-brief.json',{day:check.day,status:'missed',at:now});
+  audit(stateDir,{at:new Date(now).toISOString(),event:'morning_brief',status:'missed'});
+  return 'missed';
+ }
+ if(!check.due)return check.reason;
+ const ownerId=loadState(stateDir,'owner.json')?.owner_id??null;
+ if(!Number.isSafeInteger(ownerId))return 'no_owner';
+ saveState(stateDir,'morning-brief.json',{day:check.day,status:'claimed',at:now});
+ const sections={};
+ let ok=0;
+ if(cfg.sections.includes('freshness')&&liveEnabled){
+  try{
+   const plan=morningBrief.freshnessPlan(now,analyst.isPeriod);
+   if(plan&&claimHistoryQuery(stateDir,now,limits.history_queries)){
+    const data=await readLive({shape:'analyst',tenant_id:'grupo_erick',plan});
+    analyst.reply(data,plan); // same validation as an interactive answer
+    const fresh=morningBrief.freshness.describe(
+     morningBrief.freshness.latestDay(data.rows.map(r=>r.source_last_day)),now);
+    if(fresh){sections.freshness=fresh;ok++;}
+   }
+  }catch{} // the section says "não verificada" instead of guessing
+ }
+ for(const intent of ['prioridades','lotoia']){
+  if(!cfg.sections.includes(intent))continue;
+  try{
+   const data=await query(intent,ROUTES[intent]);
+   if(!data?.denied_status){sections[intent]=hermesReply(intent,data);ok++;}
+  }catch{}
+ }
+ const text=morningBrief.compose({day:check.day,cfg,sections});
+ const recipients=[ownerId,...(cfg.recipients==='owner_and_members'?
+  loadMembers(stateDir,ownerId):[])];
+ let sent=0;
+ for(const id of recipients){
+  try{await api('sendMessage',{chat_id:id,text,disable_web_page_preview:true});sent++;}
+  catch{}
+ }
+ const status=sent?'sent':'failed';
+ saveState(stateDir,'morning-brief.json',{day:check.day,status,at:clock(),
+  recipients:sent,sections_ok:ok});
+ audit(stateDir,{at:new Date(clock()).toISOString(),event:'morning_brief',status,
+  recipients:sent,sections_ok:ok});
+ return status;
+}
 async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
  readLive=async()=>{throw Error('history_live_disabled')},liveEnabled=false,
  agentModel=null,autoMemoryEnabled=false,secondaryProvider=null,
  brainLive=brainReader.createReader({HERMES_BRAIN_LIVE_ENABLED:'false'}),
- limits=DEFAULT_LIMITS}){
+ limits=DEFAULT_LIMITS,morningBriefConfig=null}){
  checkStateDirectory(stateDir);
  const offsetRecord=loadState(stateDir,'offset.json');
  const offset=offsetRecord?.offset??0;
@@ -558,6 +623,19 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     {llm_calls:result.llm_calls,planning_policy:result.planning_policy}: {})});
   handled++;
  }
+ if(morningBriefConfig?.enabled){
+  try{
+   await runMorningBrief({stateDir,api,query,readLive,liveEnabled,clock,
+    cfg:morningBriefConfig,limits});
+  }catch{
+   // Never let the brief stop polling; record the failure for the watchdog.
+   try{
+    const s=loadState(stateDir,'morning-brief.json');
+    if(s?.status==='claimed')saveState(stateDir,'morning-brief.json',{...s,status:'failed'});
+    audit(stateDir,{at:new Date(clock()).toISOString(),event:'morning_brief',status:'failed'});
+   }catch{}
+  }
+ }
  return {handled,next_offset:current};
 }
 // Retry only recoverable Telegram transport failures. A claimed update offset
@@ -596,6 +674,7 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
   environment.HERMES_MISSION_INGRESS_ENABLED!=='false')
   throw Error('telegram_channel_disabled');
  const limits=dailyLimits(environment);
+ const briefConfig=morningBrief.config(environment);
  const dir=environment.HERMES_TELEGRAM_STATE_DIR||STATE;
  checkStateDirectory(dir);
  const botToken=readSecret(environment.HERMES_TELEGRAM_TOKEN_FILE);
@@ -639,7 +718,8 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  await resilientTelegramPolling({
   poll:()=>pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,secondaryProvider,
    liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true',brainLive,
-   autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true',limits}),
+   autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true',limits,
+   morningBriefConfig:briefConfig}),
   onRecovery:({code,consecutive_failures,delay_ms})=>audit(dir,{
    at:new Date(clock()).toISOString(),event:'telegram_poll_retry',
    code,consecutive_failures,delay_ms
@@ -650,6 +730,6 @@ if(require.main===module){
  runForever().catch(()=>{console.error('hermes_telegram_channel_stopped_fail_closed');
   process.exitCode=1;});
 }
-module.exports={LIMIT_SPECS,dailyLimits,loadMembers,addMember,dropMember,analystContextFile,checkStateDirectory,readSecret,loadState,saveState,audit,
+module.exports={LIMIT_SPECS,dailyLimits,runMorningBrief,claimHistoryQuery,loadMembers,addMember,dropMember,analystContextFile,checkStateDirectory,readSecret,loadState,saveState,audit,
  smallJSON,telegramClient,hermesClient,createLiveQuery,pollOnce,runForever,
  isRecoverableTelegramError,resilientTelegramPolling};
