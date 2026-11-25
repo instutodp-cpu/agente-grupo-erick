@@ -1,47 +1,58 @@
 'use strict';
 // Governed, reusable business query templates. Text never reaches SQL.
 const freshness=require('./hermes-data-freshness');
+const coverage=require('./hermes-history-coverage');
 const TENANT='grupo_erick';
 const SOURCE='hermes_history.monthly_commercial_2025_2026_v1';
 const PRODUCT_SOURCE='hermes_history.monthly_product_activity_v1';
 const STORES=['CALCADOS','SIRINHAEM','MAGAZINE','SPORTS-(DESATIVADO)','ERICK SPORTS','VARIEDADES'];
 const MONTHS={janeiro:1,fevereiro:2,marco:3,abril:4,maio:5,junho:6,julho:7,agosto:8,setembro:9,outubro:10,novembro:11,dezembro:12};
 const normalize=t=>t.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
-const isPeriod=p=>typeof p==='string'&&/^(2025-(0[1-9]|1[0-2])|2026-0[1-6]|202[56])$/.test(p);
-function periodsOf(text){
+const METRICS=['records','cancelled','money','ticket'];
+// Period FORMAT (a year or a month, from 2000 on). Whether the source holds
+// it is a separate check against the coverage read from the source.
+const isPeriodFormat=p=>typeof p==='string'&&(/^20[0-9]{2}$/.test(p)||coverage.validMonth(p));
+const sales=c=>coverage.scopeOf(c,'commercial');
+const productScope=c=>coverage.scopeOf(c,'products');
+const isPeriod=(p,c)=>isPeriodFormat(p)&&coverage.accepts(sales(c),p);
+const YEAR='(20[0-9]{2})';
+function periodsOf(text,c){
  const out=[],add=p=>{if(!out.includes(p))out.push(p)};
- for(const x of text.matchAll(/\b(202[56])-(0[1-9]|1[0-2])\b/g))add(x[1]+'-'+x[2]);
- for(const x of text.matchAll(/\b(0?[1-9]|1[0-2])\/(202[56])\b/g))add(x[2]+'-'+x[1].padStart(2,'0'));
- for(const x of text.matchAll(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+(?:(?:de|do|em)\s+)?(202[56])\b/g))add(x[2]+'-'+String(MONTHS[x[1]]).padStart(2,'0'));
+ for(const x of text.matchAll(new RegExp('\\b'+YEAR+'-(0[1-9]|1[0-2])\\b','g')))add(x[1]+'-'+x[2]);
+ for(const x of text.matchAll(new RegExp('\\b(0?[1-9]|1[0-2])\\/'+YEAR+'\\b','g')))add(x[2]+'-'+x[1].padStart(2,'0'));
+ for(const x of text.matchAll(new RegExp('\\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\\s+(?:(?:de|do|em)\\s+)?'+YEAR+'\\b','g')))add(x[2]+'-'+String(MONTHS[x[1]]).padStart(2,'0'));
  const m=text.match(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/);
- const years=[...new Set([...text.matchAll(/\b202[56]\b/g)].map(x=>x[0]))];
+ const years=[...new Set([...text.matchAll(/\b20[0-9]{2}\b/g)].map(x=>x[0]))];
  if(m&&years.length===2)for(const y of years)add(y+'-'+String(MONTHS[m[1]]).padStart(2,'0'));
  if(out.length===0&&m&&years.length===1)add(years[0]+'-'+String(MONTHS[m[1]]).padStart(2,'0'));
  if(out.length===0&&years.length===1)add(years[0]);
- if(out.length===0&&m&&years.length===0)
-  add('2026-'+String(MONTHS[m[1]]).padStart(2,'0')); // Last year covered by the imported database.
+ if(out.length===0&&m&&years.length===0){
+  // No year: the most recent such month the source holds.
+  const mm=String(MONTHS[m[1]]).padStart(2,'0'),y=coverage.yearForMonth(sales(c),mm);
+  if(y)add(y+'-'+mm);
+ }
  if(out.length===0&&years.length===2)for(const y of years)add(y);
  return out;
 }
-function safeContext(x){
+function safeContext(x,c){
  if(!x||x.tenant_id!==TENANT||!['period','compare','stores','products'].includes(x.template)||
-  !isPeriod(x.period)||!['records','cancelled','money'].includes(x.metric)||
+  !isPeriod(x.period,c)||!METRICS.includes(x.metric)||
   x.store!=null&&!STORES.includes(x.store))return null;
- if(x.template==='compare'&&(!isPeriod(x.other_period)||x.other_period.length!==x.period.length||
+ if(x.template==='compare'&&(!isPeriod(x.other_period,c)||x.other_period.length!==x.period.length||
    x.other_period===x.period))return null;
  if(x.template!=='compare'&&x.other_period!=null)return null;
- if(x.template==='products'&&(!x.period.startsWith('2026')||x.store))return null;
+ if(x.template==='products'&&(!coverage.accepts(productScope(c),x.period)||x.store||x.metric==='ticket'))return null;
  if(x.template==='stores'&&x.store)return null;
  return {tenant_id:TENANT,template:x.template,period:x.period,other_period:x.other_period||null,
   metric:x.metric,store:x.store||null};
 }
-function planQuestion(text,context=null){
+function planQuestion(text,context=null,c=coverage.BASELINE){
  if(typeof text!=='string'||text.length>600||text.trim().length<2)return null;
- const q=normalize(text),prior=safeContext(context);
+ const q=normalize(text),prior=safeContext(context,c);
  if(/^\/|(\b(cpf|cnpj|senha|token|pix|transferencia|deletar|apagar|publicar|pagar)\b)/.test(q))return null;
  const follow=/^(e\b|mas\b|agora\b|compare\b|comparando\b)/.test(q);
- if(!/\b(venda|vendas|vendeu|vendemos|vendido|vendidos|faturamento|faturou|valor|receita|canceladas|cancelados|loja|lojas|produto|produtos|mercadoria|mercadorias|compare|comparar|comparacao|comparando|diferenca|mais|quanto|quantas|qual|quais|registros|evolucao|cresceu|crescimento|total)\b/.test(q)&&!(prior&&follow))return null;
- let periods=periodsOf(q);
+ if(!/\b(venda|vendas|vendeu|vendemos|vendido|vendidos|faturamento|faturou|valor|receita|canceladas|cancelados|loja|lojas|produto|produtos|mercadoria|mercadorias|compare|comparar|comparacao|comparando|diferenca|mais|quanto|quantas|qual|quais|registros|evolucao|cresceu|crescimento|total|ticket)\b/.test(q)&&!(prior&&follow))return null;
+ let periods=periodsOf(q,c);
  if(!periods.length&&prior&&follow){
   const named=q.match(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/);
   const oldYear=/\b(ano passado|ano anterior)\b/.test(q);
@@ -49,16 +60,20 @@ function planQuestion(text,context=null){
   periods=[named?year+'-'+String(MONTHS[named[1]]).padStart(2,'0'):prior.period];
  }
  if(prior&&follow&&periods.length===1&&periods[0].length===4&&prior.period.length===7)periods=[periods[0]+prior.period.slice(4)];
- if(!periods.length||periods.some(p=>!isPeriod(p))||periods.length>2)return null;
- let metric=/\bcancelad(as|os|a|o)\b/.test(q)?'cancelled':
+ if(!periods.length||periods.some(p=>!isPeriod(p,c))||periods.length>2)return null;
+ let metric=/\bticket\b/.test(q)?'ticket':/\bcancelad(as|os|a|o)\b/.test(q)?'cancelled':
   /\b(faturamento|faturou|receita|valor|dinheiro|reais)\b|\bquanto\s+(vendeu|vendemos|venderam)\b|\b(vendeu|vendemos)\s+quanto\b/.test(q)?'money':'records';
- if(follow&&prior&&!/\b(cancelad|faturamento|faturou|receita|valor|quanto|registros|quantas)\b/.test(q))metric=prior.metric;
+ if(follow&&prior&&!/\b(cancelad|faturamento|faturou|receita|valor|quanto|registros|quantas|ticket)\b/.test(q))metric=prior.metric;
  const compare=/\b(compare|comparar|comparacao|comparando|diferenca|versus|vs|cresceu|crescimento|evolucao)\b/.test(q);
  if(compare&&periods.length===1&&prior&&prior.period!==periods[0])periods=[prior.period,periods[0]];
- if(compare&&periods.length===1&&periods[0].startsWith('2026-'))periods=['2025-'+periods[0].slice(5),periods[0]];
+ if(compare&&periods.length===1&&periods[0].length===7){
+  // "compare março de 2026": the same month one year earlier, if held.
+  const before=(Number(periods[0].slice(0,4))-1)+periods[0].slice(4);
+  if(isPeriod(before,c))periods=[before,periods[0]];
+ }
  const product=/\b(produto|produtos|mercadoria|mercadorias)\b/.test(q);
  const storeWord=/\b(loja|lojas)\b/.test(q);
- const explicitBusinessMetric=/\b(venda|vendas|vendeu|vendemos|vendido|vendidos|faturamento|faturou|valor|receita|canceladas|cancelados|registros|quantas)\b/.test(q);
+ const explicitBusinessMetric=/\b(venda|vendas|vendeu|vendemos|vendido|vendidos|faturamento|faturou|valor|receita|canceladas|cancelados|registros|quantas|ticket)\b/.test(q);
  // A dimensionless follow-up inherits the previous subject, not merely its metric.
  const inheritTopic=Boolean(follow&&prior&&!product&&!storeWord&&!explicitBusinessMetric&&
   !/^(compare|comparando)\b/.test(q));
@@ -74,22 +89,40 @@ function planQuestion(text,context=null){
   inheritTopic&&['products','stores','compare'].includes(prior.template)?prior.template:
   periods.length===2||compare?'compare':'period';
  if(template==='compare'&&(periods.length!==2||periods[0].length!==periods[1].length||periods[0]===periods[1]))return null;
- if(template==='products'&&(!periods[0].startsWith('2026')||periods.length!==1||store))return null;
+ if(template==='products'&&(!coverage.accepts(productScope(c),periods[0])||periods.length!==1||store||metric==='ticket'))return null;
  if(template!=='compare'&&periods.length!==1)return null;
  if(storeWord&&!store&&!storeRanking&&/\b(barreiros|erick|sports|magazine|variedades|calcados|sirinhaem)\b/.test(q))return null;
  return Object.freeze({tenant_id:TENANT,template,period:periods[0],other_period:template==='compare'?periods[1]:null,metric,store});
 }
-function validate(p){
+// Shape only: what any stored or returned plan must look like.
+function validateShape(p){
  if(!p||p.tenant_id!==TENANT||!['period','compare','stores','products'].includes(p.template)||
-   !isPeriod(p.period)||!['records','cancelled','money'].includes(p.metric)||
+   !isPeriodFormat(p.period)||!METRICS.includes(p.metric)||
    p.store!=null&&!STORES.includes(p.store))throw Error('analyst_plan_denied');
- if(p.template==='compare'?(!isPeriod(p.other_period)||p.other_period.length!==p.period.length||p.other_period===p.period):p.other_period!=null)throw Error('analyst_comparison_denied');
- if(p.template==='products'&&(!p.period.startsWith('2026')||p.store))throw Error('analyst_products_denied');
+ if(p.template==='compare'?(!isPeriodFormat(p.other_period)||p.other_period.length!==p.period.length||p.other_period===p.period):p.other_period!=null)throw Error('analyst_comparison_denied');
+ if(p.template==='products'&&(p.store||p.metric==='ticket'))throw Error('analyst_products_denied');
  if(p.template==='stores'&&p.store)throw Error('analyst_stores_denied');
- // 2026-06 only covers eight days; do not claim June YoY equivalence.
- if(p.template==='compare'&&[p.period,p.other_period].includes('2026-06'))
-  throw Error('analyst_partial_month_comparison_denied');
  return p;
+}
+// Shape plus coverage: every period must be held by the source, a partial
+// month is never compared as if complete, and year against year needs
+// months complete in both years.
+function validate(p,c=coverage.BASELINE){
+ validateShape(p);
+ if(!isPeriod(p.period,c)||p.template==='compare'&&!isPeriod(p.other_period,c))
+  throw Error('analyst_period_not_covered');
+ if(p.template==='products'&&!coverage.accepts(productScope(c),p.period))throw Error('analyst_products_denied');
+ if(p.template==='compare'){
+  if(p.period.length===7&&[p.period,p.other_period].some(x=>coverage.isPartial(sales(c),x)))
+   throw Error('analyst_partial_month_comparison_denied');
+  if(p.period.length===4&&!coverage.yearWindow(sales(c),p.period,p.other_period))
+   throw Error('analyst_year_window_empty');
+ }
+ return p;
+}
+const WINDOW=/^(0[1-9]|1[0-2])$/;
+function compareWindow(p,c){
+ return p.template==='compare'&&p.period.length===4?coverage.yearWindow(sales(c),p.period,p.other_period):null;
 }
 const matchPeriod='(month=$1::text OR (length($1::text)=4 AND LEFT(month,4)=$1::text))';
 // source_last_day is the freshness of the WHOLE view (same view, read-only),
@@ -106,13 +139,16 @@ const SQL=Object.freeze({
  compare:'SELECT CASE WHEN length($1::text)=4 THEN LEFT(month,4) ELSE month END AS label,'+agg+','+scopeDay('$3::text')+
    ' FROM '+SOURCE+' WHERE (month IN ($1::text,$2::text) OR (length($1::text)=4 AND LEFT(month,4) IN ($1::text,$2::text)))'+
    ' AND ($3::text IS NULL OR raw_store=$3::text)'+
-   // Year-vs-year means Jan-May 2025 vs Jan-May 2026. June 2026 is partial;
-   // use only FULL overlapping months, never a misleading annual comparison.
-   " AND (length($1::text)<>4 OR RIGHT(month,2) BETWEEN '01' AND '05')"+
+   // Year against year: only the months complete in BOTH years ($4..$5,
+   // derived from the source coverage), never a misleading annual total.
+   ' AND (length($1::text)<>4 OR RIGHT(month,2) BETWEEN $4::text AND $5::text)'+
    ' GROUP BY 1 ORDER BY 1 LIMIT 2',
  stores:'SELECT o.raw_store AS label,'+agg+','+scopeDay('o.raw_store')+' FROM '+SOURCE+' o WHERE '+matchPeriod+' GROUP BY o.raw_store ORDER BY o.raw_store LIMIT 6',
  products:'SELECT product_code,MIN(product_label) AS product_label,SUM(not_marked_cancelled)::bigint AS item_records'+
-   ' FROM '+PRODUCT_SOURCE+' WHERE '+matchPeriod+' GROUP BY product_code ORDER BY item_records DESC,product_code ASC LIMIT 5'
+   ' FROM '+PRODUCT_SOURCE+' WHERE '+matchPeriod+' GROUP BY product_code ORDER BY item_records DESC,product_code ASC LIMIT 5',
+ // What the sources hold: first/last month and the last day with sales.
+ coverage:"SELECT 'commercial' AS scope,MIN(month) AS first_month,MAX(month) AS last_month,MAX(last_day) AS last_day FROM "+SOURCE+
+   " UNION ALL SELECT 'products',MIN(month),MAX(month),NULL FROM "+PRODUCT_SOURCE
 });
 function integer(n){
  if(!/^(0|[1-9][0-9]{0,8})$/.test(String(n)))throw Error('analyst_invalid_integer');
@@ -122,12 +158,7 @@ function money(n){
  if(!/^[0-9]{1,13}(\.[0-9]{1,2})?$/.test(String(n)))throw Error('analyst_invalid_amount');
  return Number(n);
 }
-function validImportedDay(day){
- if(typeof day!=='string'||!/^202[56]-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$/.test(day))
-  return false;
- const parsed=new Date(day+'T00:00:00.000Z');
- return Number.isFinite(parsed.getTime())&&parsed.toISOString().slice(0,10)===day;
-}
+const validImportedDay=day=>coverage.validDay(day)&&day>=coverage.MIN_MONTH;
 function row(r,template){
  if(!r||typeof r!=='object')throw Error('analyst_bad_row');
  if(template==='products'){
@@ -141,7 +172,7 @@ function row(r,template){
  // a ranking must never display an inconsistent source aggregate.
  if(integer(r.noncancelled)!==o.records-o.cancelled)throw Error('analyst_counts_invalid');
  if(template!=='period'){
-  if(template==='stores'?!STORES.includes(r.label):!isPeriod(r.label))throw Error('analyst_label_invalid');
+  if(template==='stores'?!STORES.includes(r.label):!isPeriodFormat(r.label))throw Error('analyst_label_invalid');
   o.label=r.label;
  }
  for(const key of ['source_last_day','scope_last_day']){
@@ -151,10 +182,12 @@ function row(r,template){
  }
  return o;
 }
-async function execute(client,params,now=()=>new Date()){
- const p=validate(params);
+async function execute(client,params,now=()=>new Date(),c=coverage.BASELINE){
+ const p=validate(params,c);
  if(typeof client?.query!=='function')throw Error('analyst_no_client');
- const values=p.template==='compare'?[p.period,p.other_period,p.store]:p.template==='period'?[p.period,p.store]:[p.period];
+ const window=compareWindow(p,c);
+ const values=p.template==='compare'?[p.period,p.other_period,p.store,window?.from||'01',window?.to||'12']:
+  p.template==='period'?[p.period,p.store]:[p.period];
  const res=await client.query({text:SQL[p.template],values,query_timeout:5000});
  const max=p.template==='compare'?2:p.template==='stores'?6:p.template==='products'?5:1;
  if(!Array.isArray(res?.rows)||res.rows.length>max||p.template==='period'&&res.rows.length!==1)throw Error('analyst_cardinality_denied');
@@ -166,15 +199,54 @@ async function execute(client,params,now=()=>new Date()){
  }
  if(p.template==='compare'&&rows.some(r=>r.label!==p.period&&r.label!==p.other_period))throw Error('analyst_extra_period');
  const at=now();if(!(at instanceof Date)||!Number.isFinite(at.getTime()))throw Error('analyst_time_invalid');
- return {tenant_id:TENANT,mode:'online_aggregate',source:p.template==='products'?PRODUCT_SOURCE:SOURCE,at:at.toISOString(),plan:p,rows};
+ return {tenant_id:TENANT,mode:'online_aggregate',source:p.template==='products'?PRODUCT_SOURCE:SOURCE,
+  at:at.toISOString(),plan:p,rows,...(window?{window}:{})};
+}
+// Reads what the sources hold. One bounded query, no parameters.
+async function readCoverage(client,now=()=>Date.now()){
+ if(typeof client?.query!=='function')throw Error('analyst_no_client');
+ const res=await client.query({text:SQL.coverage,values:[],query_timeout:5000});
+ return coverage.fromRows(res?.rows,now());
 }
 const nf=new Intl.NumberFormat('pt-BR');
 const mf=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
-const measure=(r,m)=>m==='cancelled'?r.cancelled:m==='money'?r.amount:r.records;
-const f=(n,m)=>m==='money'?mf.format(n):nf.format(n);
-const label=m=>m==='cancelled'?'registros marcados como cancelados':m==='money'?'soma importada de valor_pago (não cancelados)':'registros de vendas';
-function reply(data,requested){
- const p=validate(requested);
+// Ticket médio = valor_pago importado ÷ registros não cancelados (null when
+// there is no non-cancelled record: never a division by zero shown as 0).
+const ticketOf=r=>r.records-r.cancelled>0?Math.round(r.amount/(r.records-r.cancelled)*100)/100:null;
+const measure=(r,m)=>m==='cancelled'?r.cancelled:m==='money'?r.amount:m==='ticket'?ticketOf(r):r.records;
+const f=(n,m)=>n===null?'indefinido (sem registros não cancelados)':m==='money'||m==='ticket'?mf.format(n):nf.format(n);
+const label=m=>m==='cancelled'?'registros marcados como cancelados':m==='money'?'soma importada de valor_pago (não cancelados)':
+ m==='ticket'?'ticket médio (valor_pago importado ÷ registros não cancelados)':'registros de vendas';
+const dayLabel=d=>d.slice(8,10)+'/'+d.slice(5,7)+'/'+d.slice(0,4);
+// What part of each asked period the source really holds, from the source's
+// own last day (commercial) or the coverage read from the source (products).
+function coverageNotes(p,data,sourceDay,c){
+ const notes=[];
+ if(p.template==='products'){
+  const scope=productScope(c);
+  if(coverage.isPartial(scope,p.period))
+   notes.push('⚠️ Período parcial na fonte de produtos (cobertura: '+coverage.describe(scope)+').');
+  return notes;
+ }
+ // Without the source's own day (older evidence), the last verified
+ // coverage still flags a partial period: never silence the warning.
+ if(!coverage.validDay(sourceDay))sourceDay=sales(c).last_day;
+ if(!coverage.validDay(sourceDay))return notes;
+ const month=sourceDay.slice(0,7),closed=sourceDay===coverage.monthEnd(month);
+ if(data.window){
+  if(data.window.from!=='01'||data.window.to!=='12')
+   notes.push('⚠️ Dados até '+dayLabel(sourceDay)+'; a comparação usa apenas '+
+    coverage.windowText(data.window)+' completos nos dois anos.');
+  return notes;
+ }
+ for(const x of [p.period,p.other_period].filter(Boolean)){
+  const partial=x.length===7?x===month&&!closed:x===month.slice(0,4)&&!(closed&&month.endsWith('-12'));
+  if(partial)notes.push('⚠️ '+(x.length===7?coverage.label(x):x)+' é parcial: dados só até '+dayLabel(sourceDay)+'.');
+ }
+ return notes;
+}
+function reply(data,requested,c=coverage.BASELINE){
+ const p=validateShape(requested);
  if(!data||data.tenant_id!==TENANT||data.mode!=='online_aggregate'||
  data.source!==(p.template==='products'?PRODUCT_SOURCE:SOURCE)||
  !data.plan||data.plan.tenant_id!==TENANT||
@@ -185,6 +257,11 @@ function reply(data,requested){
   p.template==='products'?5:1)||
  typeof data.at!=='string'||!Number.isFinite(Date.parse(data.at)))
  throw Error('analyst_reply_denied');
+ // A year comparison must say which months it compared; nothing else may.
+ const yearCompare=p.template==='compare'&&p.period.length===4;
+ if(yearCompare?!data.window||!WINDOW.test(data.window.from)||!WINDOW.test(data.window.to)||
+   data.window.from>data.window.to||Object.keys(data.window).length!==2:data.window!==undefined)
+  throw Error('analyst_reply_denied');
  // Cached or injected evidence must not introduce duplicate/foreign dimensions.
  const seenEvidence=new Set();
  for(const r of data.rows){
@@ -241,14 +318,16 @@ function reply(data,requested){
  }else if(p.template==='compare'){
   const map=new Map(data.rows.map(r=>[r.label,r]));const a=map.get(p.period),b=map.get(p.other_period);
   if(!a||!b)throw Error('analyst_comparison_missing');
-  const x=measure(a,p.metric),y=measure(b,p.metric),delta=y-x;
-  const pct=x===0?'indefinida':new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:1}).format(delta/x);
-  if(p.period.length===4)
-   lines.push('📅 Cobertura equivalente: janeiro a maio de cada ano (meses completos).');
+  const x=measure(a,p.metric),y=measure(b,p.metric);
+  const delta=x===null||y===null?null:Math.round((y-x)*100)/100;
+  const pct=delta===null||x===0?'indefinida':new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:1}).format(delta/x);
+  const span=yearCompare?' ('+coverage.windowText(data.window)+')':'';
+  if(yearCompare)
+   lines.push('📅 Cobertura equivalente: '+coverage.windowText(data.window)+' de cada ano (meses completos).');
   lines.push('Comparação — '+label(p.metric)+':',
-   '• '+p.period+(p.period.length===4?' (jan-mai)':'')+': '+f(x,p.metric),
-   '• '+p.other_period+(p.other_period.length===4?' (jan-mai)':'')+': '+f(y,p.metric),
-   '• Diferença: '+(delta>0?'+':'')+f(delta,p.metric)+' ('+pct+')');
+   '• '+p.period+span+': '+f(x,p.metric),
+   '• '+p.other_period+span+': '+f(y,p.metric),
+   '• Diferença: '+(delta===null?'indefinida':(delta>0?'+':'')+f(delta,p.metric))+' ('+pct+')');
   if(p.metric==='cancelled'){
    // The verified aggregate always provides both the numerator and the base.
    // Never claim that a cancellation rate cannot be calculated when both exist.
@@ -268,7 +347,8 @@ function reply(data,requested){
    lines.push('⚠️ Taxa sobre cabeçalhos importados marcados como cancelados; não mede perda financeira.');
   }
  }else if(p.template==='stores'){
-  const sorted=[...data.rows].sort((a,b)=>measure(b,p.metric)-measure(a,p.metric)||a.label.localeCompare(b.label));
+  const rank=r=>measure(r,p.metric)??-1; // undefined tickets go last
+  const sorted=[...data.rows].sort((a,b)=>rank(b)-rank(a)||a.label.localeCompare(b.label));
   lines.push('Ranking das lojas por '+label(p.metric)+' — '+p.period+':');
   for(const r of sorted)lines.push('• '+r.label+': '+f(measure(r,p.metric),p.metric)+behindNote(r));
   if(sorted.some(r=>behindNote(r)))
@@ -280,14 +360,15 @@ function reply(data,requested){
    '• '+label(p.metric)+': '+f(measure(r,p.metric),p.metric));
   if(p.metric!=='records')lines.push('• Total de registros: '+nf.format(r.records));
   if(p.metric!=='cancelled')lines.push('• Marcados como cancelados: '+nf.format(r.cancelled));
+  if(p.metric==='ticket')lines.push('• Soma importada de valor_pago (não cancelados): '+mf.format(r.amount));
  }
- if(p.metric==='money'&&p.template!=='products')
+ if((p.metric==='money'||p.metric==='ticket')&&p.template!=='products')
   lines.push('⚠️ valor_pago é um campo importado do Softcom; não é faturamento líquido, caixa recebido ou DRE conciliada.');
- if(p.template==='compare'&&p.period.length===4)
-  lines.push('⚠️ Histórico 2026 termina em 08/06; esta comparação utiliza apenas janeiro–maio completos nos dois anos.');
- else if(p.period==='2026'||p.period==='2026-06'||p.other_period==='2026'||p.other_period==='2026-06')
-  lines.push('⚠️ Histórico 2026 disponível somente até 08/06; junho é parcial.');
+ if(p.metric==='ticket')
+  lines.push('⚠️ Ticket por registro de venda importado (cabeçalho), não por cliente nem por item.');
+ lines.push(...coverageNotes(p,data,sourceDay,c));
  lines.push('Somente leitura. Sem dados pessoais.');
  return lines.join('\n');
 }
-module.exports={TENANT,SOURCE,PRODUCT_SOURCE,STORES,normalize,isPeriod,periodsOf,safeContext,planQuestion,validate,SQL,execute,reply};
+module.exports={TENANT,SOURCE,PRODUCT_SOURCE,STORES,METRICS,normalize,isPeriod,isPeriodFormat,periodsOf,
+ safeContext,planQuestion,validateShape,validate,compareWindow,SQL,execute,readCoverage,reply};

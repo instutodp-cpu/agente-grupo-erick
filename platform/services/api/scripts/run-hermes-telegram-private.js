@@ -7,6 +7,7 @@ const {TextDecoder}=require('node:util');
 const {processUpdate,ROUTES}=require('../src/runtime/hermes-telegram-private-channel');
 const {readHistoricalSales}=require('../src/runtime/hermes-softcom-live-reader');
 const analyst=require('../src/runtime/hermes-analyst-templates');
+const coverageModel=require('../src/runtime/hermes-history-coverage');
 const governed=require('../src/runtime/hermes-governed-agent');
 const businessMemory=require('../src/runtime/hermes-business-evidence-memory');
 const autoMemory=require('../src/runtime/hermes-automemory-curator');
@@ -236,7 +237,8 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
   try{
    await client.connect();
    return params?.shape==='analyst'?
-    await analyst.execute(client,params.plan):
+    await analyst.execute(client,params.plan,undefined,params.coverage||undefined):
+    params?.shape==='coverage'?await analyst.readCoverage(client):
     await readHistoricalSales(client,params);
   }finally{await client.end().catch(()=>{});}
  };
@@ -253,11 +255,49 @@ function claimHistoryQuery(stateDir,now,limit){
  saveState(stateDir,'history-live-budget.json',{date:today,count:count+1});
  return true;
 }
+// What the history sources hold (first/last month, last day), read from the
+// source by the main loop, never inside a message: one bounded metadata query
+// per day after a success, a retry after 6 h on failure, outside the
+// question quota. It is kept in history-coverage.json; a stored reading up to
+// 7 days old survives a failed refresh, then the last verified coverage
+// applies, so periods beyond what was verified stay refused (fail closed).
+const COVERAGE_REFRESH_MS=24*3600000,COVERAGE_RETRY_MS=6*3600000,COVERAGE_MAX_AGE_MS=7*24*3600000;
+function storedCoverage(stateDir,now){
+ try{
+  const saved=loadState(stateDir,'history-coverage.json');
+  const c=saved?coverageModel.validate(saved,now):null;
+  const age=c?now-Date.parse(c.read_at):Infinity;
+  return c&&age>=0&&age<COVERAGE_MAX_AGE_MS?{coverage:c,age}:null;
+ }catch{return null;}
+}
+function createCoverageKeeper({stateDir,readLive,liveEnabled,clock}){
+ let nextAttempt=0;
+ return {async current(){
+  const now=clock();
+  const stored=storedCoverage(stateDir,now);
+  if(stored&&stored.age<COVERAGE_REFRESH_MS)return stored.coverage;
+  if(liveEnabled&&now>=nextAttempt){
+   nextAttempt=now+COVERAGE_RETRY_MS;
+   try{
+    const fresh=coverageModel.validate(await readLive({shape:'coverage',tenant_id:'grupo_erick'}),now);
+    saveState(stateDir,'history-coverage.json',fresh);
+    audit(stateDir,{at:new Date(now).toISOString(),event:'history_coverage',
+     first_month:fresh.commercial.first_month,last_month:fresh.commercial.last_month});
+    nextAttempt=now+COVERAGE_REFRESH_MS;
+    return fresh;
+   }catch{
+    try{audit(stateDir,{at:new Date(now).toISOString(),event:'history_coverage',status:'failed'});}catch{}
+   }
+  }
+  return stored?.coverage||coverageModel.BASELINE;
+ }};
+}
 // Morning brief. The day is claimed before any read or send and each
 // recipient is recorded before and after its send, so a crash or restart
 // never sends twice; anything but "sent" for today is what the watchdog
 // reports. Same quotas as interactive use; no LLM call.
-async function runMorningBrief({stateDir,api,query,readLive,liveEnabled,clock,cfg,limits}){
+async function runMorningBrief({stateDir,api,query,readLive,liveEnabled,clock,cfg,limits,
+ coverage=coverageModel.BASELINE}){
  const now=clock();
  const state=loadState(stateDir,'morning-brief.json');
  const check=morningBrief.due({now,cfg,state});
@@ -274,10 +314,10 @@ async function runMorningBrief({stateDir,api,query,readLive,liveEnabled,clock,cf
  let ok=0;
  if(cfg.sections.includes('freshness')&&liveEnabled){
   try{
-   const plan=morningBrief.freshnessPlan(now,analyst.isPeriod);
+   const plan=morningBrief.freshnessPlan(now,p=>analyst.isPeriod(p,coverage));
    if(plan&&claimHistoryQuery(stateDir,now,limits.history_queries)){
-    const data=await readLive({shape:'analyst',tenant_id:'grupo_erick',plan});
-    analyst.reply(data,plan); // same validation as an interactive answer
+    const data=await readLive({shape:'analyst',tenant_id:'grupo_erick',plan,coverage});
+    analyst.reply(data,plan,coverage); // same validation as an interactive answer
     const fresh=morningBrief.freshness.describe(
      morningBrief.freshness.latestDay(data.rows.map(r=>r.source_last_day)),now);
     if(fresh){sections.freshness=fresh;ok++;}
@@ -323,7 +363,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
  readLive=async()=>{throw Error('history_live_disabled')},liveEnabled=false,
  agentModel=null,autoMemoryEnabled=false,secondaryProvider=null,
  brainLive=brainReader.createReader({HERMES_BRAIN_LIVE_ENABLED:'false'}),
- limits=DEFAULT_LIMITS,morningBriefConfig=null}){
+ limits=DEFAULT_LIMITS,morningBriefConfig=null,historyCoverage=coverageModel.BASELINE}){
  checkStateDirectory(stateDir);
  const offsetRecord=loadState(stateDir,'offset.json');
  const offset=offsetRecord?.offset??0;
@@ -364,6 +404,9 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
   saveState(stateDir,'brain-read-budget.json',{date:today,count:used+1});
   return brainLive.query(term);
  };
+ // Periods follow what the source holds (validated by the coverage keeper).
+ const coverage=historyCoverage===coverageModel.BASELINE?historyCoverage:
+  coverageModel.validate(historyCoverage,clock());
  let current=offset,handled=0;
  for(const item of updates){
   if(!Number.isSafeInteger(item?.update_id)||item.update_id<current)
@@ -380,7 +423,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
   current=item.update_id+1;
   saveState(stateDir,'offset.json',{offset:current});
   const result=await processUpdate({
-   update:item,ownerId,memberIds,pairing,
+   update:item,ownerId,memberIds,pairing,historyCoverage:coverage,
    clock,query,agentDailyTurns:limits.agent_turns,
    saveMember:id=>addMember(stateDir,ownerId,id,clock),
    removeMember:id=>dropMember(stateDir,ownerId,id,clock),
@@ -489,7 +532,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
      return callProvider('openrouter_auto',()=>secondary.chat(...args));
     }};
     return governed.runTurn({
-     goal,model:meteredModel,clock,
+     goal,model:meteredModel,clock,coverage,
      readCachedAnswer:key=>answerCache.lookup(
       loadState(stateDir,'agent-answer-cache.json'),key,clock()),
      writeCachedAnswer:(key,answer)=>{
@@ -498,7 +541,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
       saveState(stateDir,'agent-answer-cache.json',next);
      },
      readBusinessContext:question=>businessMemory.context(
-      loadState(stateDir,'business-evidence-memory.json'),question,clock()),
+      loadState(stateDir,'business-evidence-memory.json'),question,clock(),coverage),
      readDecisionContext:question=>ownerAudience?ownerDecisions.context(
       loadState(stateDir,'owner-decisions.json'),question,clock()):'[]',
      readAutoMemoryContext:question=>ownerAudience&&autoMemoryEnabled?
@@ -531,12 +574,12 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
       const n=record?.date===today?record.count:0;
       if(n>=limits.history_queries)throw Error('agent_history_quota');
       saveState(stateDir,'history-live-budget.json',{date:today,count:n+1});
-      const data=await readLive({shape:'analyst',tenant_id:'grupo_erick',plan});
+      const data=await readLive({shape:'analyst',tenant_id:'grupo_erick',plan,coverage});
       // Only aggregated, source-checked evidence is remembered. Never write
       // Telegram message bodies, model recommendations or personal data.
       try{
        const existing=loadState(stateDir,'business-evidence-memory.json');
-       const updated=businessMemory.observe(existing,data,plan,clock());
+       const updated=businessMemory.observe(existing,data,plan,clock(),coverage);
        saveState(stateDir,'business-evidence-memory.json',updated);
       }catch{} // optional memory; valid SQL result remains authoritative
       return data;
@@ -552,14 +595,16 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
    writeAnalystContext:(ctx,userId)=>saveState(stateDir,analystContextFile(ownerId,userId),ctx),
    readAnalyst:async plan=>{
     if(!liveEnabled)throw Error('history_live_disabled');
-    analyst.validate(plan);
+    analyst.validate(plan,coverage);
     const hash=require('node:crypto').createHash('sha256').update(JSON.stringify(plan)).digest('hex').slice(0,24);
     const saved=loadState(stateDir,'history-analyst-cache.json');
     if(saved&&(!Array.isArray(saved.entries)||saved.entries.length>30))throw Error('analyst_cache_invalid');
     const hit=saved?.entries?.find(x=>x.key===hash);
     if(hit&&Number.isSafeInteger(hit.at)&&clock()-hit.at>=0&&clock()-hit.at<=6*3600000){
-     analyst.reply(hit.data,plan);
-     return {...hit.data,cached:true};
+     // A cached entry from an older contract is ignored, never trusted.
+     let valid=true;
+     try{analyst.reply(hit.data,plan,coverage);}catch{valid=false;}
+     if(valid)return {...hit.data,cached:true};
     }
     const data=await (async()=>{
      const today=new Date(clock()).toISOString().slice(0,10);
@@ -569,10 +614,10 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
      const count=budget?.date===today?budget.count:0;
      if(count>=limits.history_queries)return {denied_status:'history_budget_exhausted'};
      saveState(stateDir,'history-live-budget.json',{date:today,count:count+1});
-     return readLive({shape:'analyst',tenant_id:'grupo_erick',plan});
+     return readLive({shape:'analyst',tenant_id:'grupo_erick',plan,coverage});
     })();
     if(data.denied_status)return data;
-    analyst.reply(data,plan);
+    analyst.reply(data,plan,coverage);
     const entries=(saved?.entries||[]).filter(x=>x.key!==hash&&Number.isSafeInteger(x.at)&&clock()-x.at<=6*3600000).slice(-19);
     entries.push({key:hash,at:clock(),data});
     while(entries.length>1&&Buffer.byteLength(JSON.stringify({entries}),'utf8')>15000)
@@ -640,7 +685,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
  if(morningBriefConfig?.enabled){
   try{
    await runMorningBrief({stateDir,api,query,readLive,liveEnabled,clock,
-    cfg:morningBriefConfig,limits});
+    cfg:morningBriefConfig,limits,coverage});
   }catch{
    // Never let the brief stop polling; record the failure for the watchdog.
    // A send cut short stays "unknown": it is reported, never retried.
@@ -736,11 +781,13 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  if(hook?.url)throw Error('telegram_webhook_conflict');
  audit(dir,{at:new Date(clock()).toISOString(),event:'gateway_started',
   stage:'staging',writes_enabled:false});
+ const liveEnabled=environment.HERMES_HISTORY_LIVE_ENABLED==='true';
+ const coverageKeeper=createCoverageKeeper({stateDir:dir,readLive,liveEnabled,clock});
  await resilientTelegramPolling({
-  poll:()=>pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,secondaryProvider,
-   liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true',brainLive,
+  poll:async()=>pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,secondaryProvider,
+   liveEnabled,brainLive,
    autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true',limits,
-   morningBriefConfig:briefConfig}),
+   morningBriefConfig:briefConfig,historyCoverage:await coverageKeeper.current()}),
   onRecovery:({code,consecutive_failures,delay_ms})=>audit(dir,{
    at:new Date(clock()).toISOString(),event:'telegram_poll_retry',
    code,consecutive_failures,delay_ms
@@ -751,6 +798,6 @@ if(require.main===module){
  runForever().catch(()=>{console.error('hermes_telegram_channel_stopped_fail_closed');
   process.exitCode=1;});
 }
-module.exports={LIMIT_SPECS,dailyLimits,runMorningBrief,claimHistoryQuery,loadMembers,addMember,dropMember,analystContextFile,checkStateDirectory,readSecret,loadState,saveState,audit,
+module.exports={LIMIT_SPECS,dailyLimits,runMorningBrief,claimHistoryQuery,createCoverageKeeper,storedCoverage,loadMembers,addMember,dropMember,analystContextFile,checkStateDirectory,readSecret,loadState,saveState,audit,
  smallJSON,telegramClient,hermesClient,createLiveQuery,pollOnce,runForever,
  isRecoverableTelegramError,resilientTelegramPolling};
