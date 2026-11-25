@@ -1,10 +1,10 @@
 [Unit]
-Description=Run the Hermes Telegram watchdog every 5 minutes
+Description=Run the Hermes Telegram watchdog every 2 minutes
 
 [Timer]
 OnBootSec=3min
-OnUnitActiveSec=5min
-AccuracySec=30s
+OnUnitActiveSec=2min
+AccuracySec=15s
 Persistent=true
 
 [Install]

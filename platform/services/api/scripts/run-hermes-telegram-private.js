@@ -253,8 +253,9 @@ function claimHistoryQuery(stateDir,now,limit){
  saveState(stateDir,'history-live-budget.json',{date:today,count:count+1});
  return true;
 }
-// Morning brief. The day is claimed before any read or send, so a crash never
-// sends twice; a day left "claimed", "failed" or "missed" is what the watchdog
+// Morning brief. The day is claimed before any read or send and each
+// recipient is recorded before and after its send, so a crash or restart
+// never sends twice; anything but "sent" for today is what the watchdog
 // reports. Same quotas as interactive use; no LLM call.
 async function runMorningBrief({stateDir,api,query,readLive,liveEnabled,clock,cfg,limits}){
  const now=clock();
@@ -293,17 +294,30 @@ async function runMorningBrief({stateDir,api,query,readLive,liveEnabled,clock,cf
  const text=morningBrief.compose({day:check.day,cfg,sections});
  const recipients=[ownerId,...(cfg.recipients==='owner_and_members'?
   loadMembers(stateDir,ownerId):[])];
- let sent=0;
+ // One ledger entry per recipient, written before and after each send. Each
+ // recipient gets at most one attempt per day: a timeout ("unknown") may
+ // have been delivered, so nothing is ever resent automatically.
+ const deliveries=Object.fromEntries(recipients.map(id=>[String(id),'pending']));
+ const record=()=>({day:check.day,status:morningBrief.deliveryStatus(deliveries),at:clock(),
+  deliveries:{...deliveries},sections_ok:ok});
+ saveState(stateDir,'morning-brief.json',{...record(),status:'sending'});
  for(const id of recipients){
-  try{await api('sendMessage',{chat_id:id,text,disable_web_page_preview:true});sent++;}
-  catch{}
+  deliveries[String(id)]='attempted';
+  saveState(stateDir,'morning-brief.json',{...record(),status:'sending'});
+  try{
+   await api('sendMessage',{chat_id:id,text,disable_web_page_preview:true});
+   deliveries[String(id)]='sent';
+  }catch(error){
+   deliveries[String(id)]=error?.message==='telegram_provider_transport_unavailable'?
+    'unknown':'failed';
+  }
  }
- const status=sent?'sent':'failed';
- saveState(stateDir,'morning-brief.json',{day:check.day,status,at:clock(),
-  recipients:sent,sections_ok:ok});
- audit(stateDir,{at:new Date(clock()).toISOString(),event:'morning_brief',status,
-  recipients:sent,sections_ok:ok});
- return status;
+ const final=record();
+ saveState(stateDir,'morning-brief.json',final);
+ const counts=morningBrief.deliveryCounts(deliveries);
+ audit(stateDir,{at:new Date(clock()).toISOString(),event:'morning_brief',
+  status:final.status,...counts,sections_ok:ok});
+ return final.status;
 }
 async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
  readLive=async()=>{throw Error('history_live_disabled')},liveEnabled=false,
@@ -629,10 +643,17 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     cfg:morningBriefConfig,limits});
   }catch{
    // Never let the brief stop polling; record the failure for the watchdog.
+   // A send cut short stays "unknown": it is reported, never retried.
    try{
     const s=loadState(stateDir,'morning-brief.json');
-    if(s?.status==='claimed')saveState(stateDir,'morning-brief.json',{...s,status:'failed'});
-    audit(stateDir,{at:new Date(clock()).toISOString(),event:'morning_brief',status:'failed'});
+    if(s?.status==='claimed'||s?.status==='sending'){
+     const deliveries=Object.fromEntries(Object.entries(s.deliveries||{})
+      .map(([id,v])=>[id,v==='attempted'?'unknown':v]));
+     const status=s.status==='claimed'?'failed':morningBrief.deliveryStatus(deliveries);
+     saveState(stateDir,'morning-brief.json',{...s,status,deliveries});
+     audit(stateDir,{at:new Date(clock()).toISOString(),event:'morning_brief',status,
+      ...morningBrief.deliveryCounts(deliveries)});
+    }
    }catch{}
   }
  }

@@ -97,16 +97,20 @@ const matchPeriod='(month=$1::text OR (length($1::text)=4 AND LEFT(month,4)=$1::
 const agg='SUM(registered)::bigint AS records,SUM(cancelled)::bigint AS cancelled,'+
  'SUM(noncancelled)::bigint AS noncancelled,SUM(valor_pago_noncancelled_sum)::numeric(18,2) AS amount,MAX(last_day) AS last_day,'+
  '(SELECT MAX(last_day) FROM '+SOURCE+') AS source_last_day';
+// scope_last_day is the queried store's own last day in the whole view (NULL
+// when no store was asked or the store has no rows): it is shown next to the
+// source's, so a store that stopped sending never looks current.
+const scopeDay=ref=>'(SELECT MAX(s.last_day) FROM '+SOURCE+' s WHERE s.raw_store='+ref+') AS scope_last_day';
 const SQL=Object.freeze({
- period:'SELECT '+agg+' FROM '+SOURCE+' WHERE '+matchPeriod+' AND ($2::text IS NULL OR raw_store=$2::text)',
- compare:'SELECT CASE WHEN length($1::text)=4 THEN LEFT(month,4) ELSE month END AS label,'+agg+
+ period:'SELECT '+agg+','+scopeDay('$2::text')+' FROM '+SOURCE+' WHERE '+matchPeriod+' AND ($2::text IS NULL OR raw_store=$2::text)',
+ compare:'SELECT CASE WHEN length($1::text)=4 THEN LEFT(month,4) ELSE month END AS label,'+agg+','+scopeDay('$3::text')+
    ' FROM '+SOURCE+' WHERE (month IN ($1::text,$2::text) OR (length($1::text)=4 AND LEFT(month,4) IN ($1::text,$2::text)))'+
    ' AND ($3::text IS NULL OR raw_store=$3::text)'+
    // Year-vs-year means Jan-May 2025 vs Jan-May 2026. June 2026 is partial;
    // use only FULL overlapping months, never a misleading annual comparison.
    " AND (length($1::text)<>4 OR RIGHT(month,2) BETWEEN '01' AND '05')"+
    ' GROUP BY 1 ORDER BY 1 LIMIT 2',
- stores:'SELECT raw_store AS label,'+agg+' FROM '+SOURCE+' WHERE '+matchPeriod+' GROUP BY raw_store ORDER BY raw_store LIMIT 6',
+ stores:'SELECT o.raw_store AS label,'+agg+','+scopeDay('o.raw_store')+' FROM '+SOURCE+' o WHERE '+matchPeriod+' GROUP BY o.raw_store ORDER BY o.raw_store LIMIT 6',
  products:'SELECT product_code,MIN(product_label) AS product_label,SUM(not_marked_cancelled)::bigint AS item_records'+
    ' FROM '+PRODUCT_SOURCE+' WHERE '+matchPeriod+' GROUP BY product_code ORDER BY item_records DESC,product_code ASC LIMIT 5'
 });
@@ -140,10 +144,10 @@ function row(r,template){
   if(template==='stores'?!STORES.includes(r.label):!isPeriod(r.label))throw Error('analyst_label_invalid');
   o.label=r.label;
  }
- if(r.source_last_day!==undefined){
-  if(r.source_last_day!==null&&!freshness.validDay(r.source_last_day))
-   throw Error('analyst_source_day_invalid');
-  o.source_last_day=r.source_last_day;
+ for(const key of ['source_last_day','scope_last_day']){
+  if(r[key]===undefined)continue;
+  if(r[key]!==null&&!freshness.validDay(r[key]))throw Error('analyst_source_day_invalid');
+  o[key]=r[key];
  }
  return o;
 }
@@ -202,18 +206,34 @@ function reply(data,requested){
      r.cancelled>r.records||typeof r.amount!=='number'||
      !Number.isFinite(r.amount)||r.amount<0||
      r.last_day!==null&&!validImportedDay(r.last_day)||
-     r.source_last_day!==undefined&&r.source_last_day!==null&&
-     !freshness.validDay(r.source_last_day))
+     ['source_last_day','scope_last_day'].some(k=>r[k]!==undefined&&r[k]!==null&&
+      !freshness.validDay(r[k])))
    throw Error('analyst_reply_denied');
  }
  const lines=['📊 Hermes — análise histórica Grupo Erick',
   'Fonte: Supabase / '+data.source,
   'Consultado em: '+new Date(data.at).toLocaleString('pt-BR',{timeZone:'America/Recife',hour12:false})];
+ const at=Date.parse(data.at);
+ const sourceDay=p.template==='products'?null:
+  freshness.latestDay(data.rows.map(r=>r.source_last_day));
  if(p.template!=='products'){
-  const fresh=freshness.describe(
-   freshness.latestDay(data.rows.map(r=>r.source_last_day)),Date.parse(data.at));
-  lines.push(fresh?fresh.text:'Atualidade da fonte: não informada nesta consulta');
+  const fresh=freshness.describe(sourceDay,at);
+  lines.push(fresh?(p.store?'Fonte geral: ':'')+fresh.text:'Atualidade da fonte: não informada nesta consulta');
+  if(p.store){
+   // All rows of one store carry the same scope day; any row may be absent.
+   const days=data.rows.map(r=>r.scope_last_day);
+   const known=days.filter(d=>d!==undefined);
+   const storeDay=known.length?(known.some(d=>d!==null)?
+    freshness.latestDay(known):null):undefined;
+   lines.push(freshness.storeLine(p.store,storeDay,sourceDay,at));
+  }
  }
+ // A ranked store whose own data ends before the source is marked inline.
+ const behindNote=r=>{
+  if(r.scope_last_day===undefined||!freshness.validDay(sourceDay))return '';
+  if(r.scope_last_day===null)return ' (sem data registrada)';
+  return r.scope_last_day<sourceDay?' (dados até '+freshness.shownDay(r.scope_last_day)+')':'';
+ };
  if(p.template==='products'){
   lines.push('Produtos por registros de itens não cancelados — '+p.period+':');
   for(const r of data.rows)lines.push('• '+r.name+' (cód. '+r.code+'): '+nf.format(r.items));
@@ -250,7 +270,9 @@ function reply(data,requested){
  }else if(p.template==='stores'){
   const sorted=[...data.rows].sort((a,b)=>measure(b,p.metric)-measure(a,p.metric)||a.label.localeCompare(b.label));
   lines.push('Ranking das lojas por '+label(p.metric)+' — '+p.period+':');
-  for(const r of sorted)lines.push('• '+r.label+': '+f(measure(r,p.metric),p.metric));
+  for(const r of sorted)lines.push('• '+r.label+': '+f(measure(r,p.metric),p.metric)+behindNote(r));
+  if(sorted.some(r=>behindNote(r)))
+   lines.push('⚠️ Lojas marcadas com data própria têm dados mais antigos que a fonte.');
   lines.push('Códigos de lojas ainda não conciliados; ERICK SPORTS e SPORTS-(DESATIVADO) são distintos.');
  }else{
   const r=data.rows[0];if(!r)throw Error('analyst_total_missing');

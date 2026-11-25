@@ -60,6 +60,22 @@ function freshnessPlan(now,isPeriod){
  }
  return null;
 }
+// Per-recipient outcome of one day's brief: "sent" only when every recipient
+// got it, "partial" when some did, "failed" when none did. "unknown" (a send
+// cut by a timeout) counts as not delivered but is never retried.
+const DELIVERY_VALUES=Object.freeze(['pending','attempted','sent','failed','unknown']);
+function deliveryStatus(deliveries){
+ const values=Object.values(deliveries||{});
+ if(!values.length||values.some(v=>!DELIVERY_VALUES.includes(v)))return 'failed';
+ const sent=values.filter(v=>v==='sent').length;
+ return sent===values.length?'sent':sent>0?'partial':'failed';
+}
+function deliveryCounts(deliveries){
+ const values=Object.values(deliveries||{});
+ return {recipients:values.length,sent:values.filter(v=>v==='sent').length,
+  failed:values.filter(v=>v==='failed').length,
+  unknown:values.filter(v=>v==='unknown'||v==='attempted').length};
+}
 const DAY_LABEL=day=>day.slice(8,10)+'/'+day.slice(5,7)+'/'+day.slice(0,4);
 // sections: {freshness:{text}|null, prioridades:string|null, lotoia:string|null}
 function compose({day,cfg,sections={},now}){
@@ -90,5 +106,5 @@ function compose({day,cfg,sections={},now}){
  if(text.length>MAX_TEXT)throw Error('morning_brief_too_long');
  return text;
 }
-module.exports={SECTIONS,RECIPIENTS,DEFAULTS,LATE_WINDOW_MINUTES,MAX_TEXT,
- config,localClock,due,freshnessPlan,compose,freshness};
+module.exports={SECTIONS,RECIPIENTS,DEFAULTS,LATE_WINDOW_MINUTES,MAX_TEXT,DELIVERY_VALUES,
+ config,localClock,due,freshnessPlan,compose,deliveryStatus,deliveryCounts,freshness};

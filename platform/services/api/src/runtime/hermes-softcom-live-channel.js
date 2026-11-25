@@ -74,9 +74,18 @@ function historicalLiveReply(data,requested){
   if(!r||!Number.isSafeInteger(r.registered)||!Number.isSafeInteger(r.marked_cancelled)||
    r.registered<0||r.marked_cancelled<0||r.marked_cancelled>r.registered)
    throw Error('historical_live_total_invalid');
+  if(r.last_day!==undefined&&r.last_day!==null&&
+   (typeof r.last_day!=='string'||!/^2026-0[1-6]-[0-3][0-9]$/.test(r.last_day)))
+   throw Error('historical_live_total_invalid');
   header.push('Registros: '+number.format(r.registered),
    'Marcados como cancelados: '+number.format(r.marked_cancelled),
    'Não marcados como cancelados: '+number.format(r.registered-r.marked_cancelled));
+  // The last day of THIS filter (month and store), not of the whole source:
+  // a store that stopped sending shows its own last day here.
+  if(r.last_day!==undefined)
+   header.push(r.last_day===null?'⚠️ Nenhum registro neste filtro.':
+    'Último dia com registro neste filtro'+(requested.store?' (loja '+requested.store+')':'')+': '+
+    r.last_day.slice(8,10)+'/'+r.last_day.slice(5,7)+'/'+r.last_day.slice(0,4));
  }else{
   const validLabels=data.shape==='months'?MONTHS:STORES;
   const seen=new Set();

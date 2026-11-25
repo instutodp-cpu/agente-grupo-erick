@@ -9,8 +9,10 @@ const path=require('node:path');
 const zlib=require('node:zlib');
 const http=require('node:http');
 const crypto=require('node:crypto');
+const {execFile}=require('node:child_process');
 const runner=require('./run-hermes-telegram-private');
 const morningBrief=require('../src/runtime/hermes-morning-brief');
+const ownerDecisions=require('../src/runtime/hermes-owner-decision-memory');
 
 const HOME='/home/hermesadmin/.hermes-telegram';
 const BACKUP_PREFIX='hermes-telegram-state-';
@@ -19,8 +21,24 @@ const BACKUP_FORMAT='hermes-telegram-state-backup-v1';
 const MAX_FILE_BYTES=10*1024*1024;
 const MAX_BUNDLE_BYTES=50*1024*1024;
 const MIN_KEPT_BACKUPS=3;
-const RECENT_HEARTBEAT_MS=120000;
+// Heartbeat must stay unchanged this long before a restore: as long as the
+// watchdog's own "bot stopped" limit, beyond the bot's normal gaps (12 s long
+// poll, up to 30 s Telegram backoff, an AI turn of up to ~90 s per call).
+// A second guard only: the container check is the primary proof.
+const RESTORE_QUIET_MS=150000;
 const REALERT_MS=6*3600000;
+// Access-control state is never brought back from an old backup: a removed
+// member or a revoked owner would silently regain access. pairing.json holds
+// one-time invites; members are re-invited with /convidar after a restore.
+const ACCESS_FILES=Object.freeze(['owner.json','members.json','pairing.json']);
+// Ledgers of what already happened (quotas, cursor, brief deliveries) never
+// move backwards: an old copy would refill today's quotas or resend today's
+// brief. The current file wins; the backup copy fills only a missing one.
+// heartbeat.json is runtime liveness, never restored.
+const LEDGER_FILES=Object.freeze(['offset.json','morning-brief.json','agent-llm-budget.json',
+ 'agent-openrouter-budget.json','brain-read-budget.json','history-live-budget.json',
+ 'auto-memory-day.json','ai-finops-daily.json']);
+const SNAPSHOT_ATTEMPTS=3;
 const SAFE_NAME=/^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}$/;
 
 function intEnv(env,name,def,min,max){
@@ -41,7 +59,12 @@ function httpsUrl(value){
  if(u.protocol!=='https:'||u.username||u.password)throw Error('ops_config_invalid');
  return u.toString();
 }
+function containerPrefix(value){
+ if(!/^[a-z0-9][a-z0-9_.-]{2,63}$/.test(value))throw Error('ops_config_invalid');
+ return value;
+}
 function config(env=process.env){
+ if(env.HERMES_WATCHDOG_PING_URL)throw Error('ops_ping_url_must_be_secret_file');
  const urls=(env.HERMES_WATCHDOG_HEALTH_URLS||'').split(',').map(s=>s.trim()).filter(Boolean);
  if(urls.length>5)throw Error('ops_config_invalid');
  const deadline=env.HERMES_WATCHDOG_BRIEF_DEADLINE||null;
@@ -54,13 +77,16 @@ function config(env=process.env){
   stateDir:absDir(env,'HERMES_TELEGRAM_STATE_DIR',HOME+'/state'),
   tokenFile:env.HERMES_TELEGRAM_TOKEN_FILE||HOME+'/secret/token',
   watchdogDir:absDir(env,'HERMES_WATCHDOG_STATE_DIR',HOME+'/watchdog'),
-  heartbeatMaxMs:intEnv(env,'HERMES_WATCHDOG_HEARTBEAT_MAX_SECONDS',180,60,3600)*1000,
+  heartbeatMaxMs:intEnv(env,'HERMES_WATCHDOG_HEARTBEAT_MAX_SECONDS',150,60,3600)*1000,
   healthUrls:Object.freeze(urls.map(httpsUrl)),
   diskMinFreePercent:intEnv(env,'HERMES_WATCHDOG_DISK_MIN_FREE_PERCENT',10,1,50),
   backupMaxMs:intEnv(env,'HERMES_WATCHDOG_BACKUP_MAX_HOURS',26,2,240)*3600000,
   briefDeadline:deadline,
   codexSocket:socket,
-  pingUrl:env.HERMES_WATCHDOG_PING_URL?httpsUrl(env.HERMES_WATCHDOG_PING_URL):null,
+  // The dead-man URL lets anyone report "healthy": it is a secret, read from
+  // a 0600 file at run time and never accepted in the environment file.
+  pingUrlFile:env.HERMES_WATCHDOG_PING_URL_FILE?absDir(env,'HERMES_WATCHDOG_PING_URL_FILE',null):null,
+  containerPrefix:containerPrefix(env.HERMES_TELEGRAM_CONTAINER_PREFIX||'hermes-telegram-private-'),
   backupDir:absDir(env,'HERMES_BACKUP_DIR',HOME+'/backups'),
   copyDir:env.HERMES_BACKUP_COPY_DIR?absDir(env,'HERMES_BACKUP_COPY_DIR',null):null,
   retentionDays:intEnv(env,'HERMES_BACKUP_RETENTION_DAYS',14,1,90)
@@ -94,6 +120,15 @@ function newestBackupAge(dir,now){
   if(newest===null||t>newest)newest=t;
  }
  return newest===null?null:now-newest;
+}
+// "partial (1 enviado, 1 em dúvida)": counts only, never recipient ids.
+function briefOutcome(state,day){
+ if(!state||state.day!==day)return 'sem registro';
+ const counts={};
+ for(const v of Object.values(state.deliveries||{}))counts[v]=(counts[v]||0)+1;
+ const label={sent:'enviado',failed:'falhou',unknown:'em dúvida',attempted:'em dúvida',pending:'pendente'};
+ const parts=Object.entries(counts).map(([k,n])=>n+' '+(label[k]||k));
+ return state.status+(parts.length?' ('+parts.join(', ')+')':'');
 }
 async function runChecks(cfg,{now,fetchImpl=globalThis.fetch,statfs=fs.statfsSync,
  probeSocket=socketStatus}){
@@ -130,7 +165,7 @@ async function runChecks(cfg,{now,fetchImpl=globalThis.fetch,statfs=fs.statfsSyn
    let state=null;
    try{state=runner.loadState(cfg.stateDir,'morning-brief.json');}catch{}
    const sent=state?.day===local.day&&state.status==='sent';
-   add('morning_brief',sent,sent?'enviado hoje':'não enviado hoje ('+(state?.day===local.day?state.status:'sem registro')+')');
+   add('morning_brief',sent,sent?'enviado hoje a todos':'não entregue a todos hoje ('+briefOutcome(state,local.day)+')');
   }
  }
  return checks;
@@ -163,9 +198,15 @@ function alertText(failing,recovered){
  return lines.join('\n');
 }
 async function watchdog(cfg,{now=Date.now(),fetchImpl=globalThis.fetch,statfs,probeSocket,
- api=null}={}){
+ api=null,readSecret=runner.readSecret}={}){
  ensurePrivateDir(cfg.watchdogDir);
+ let pingUrl=null,pingReadable=true;
+ if(cfg.pingUrlFile){
+  try{pingUrl=httpsUrl(readSecret(cfg.pingUrlFile));}catch{pingReadable=false;}
+ }
  const checks=await runChecks(cfg,{now,fetchImpl,statfs,probeSocket});
+ if(cfg.pingUrlFile)checks.push({name:'external_ping_config',ok:pingReadable,
+  detail:pingReadable?'ok':'arquivo secreto da URL ilegível ou inválido'});
  let previous=null;
  try{previous=runner.loadState(cfg.watchdogDir,'watchdog.json');}catch{}
  const {next,failing,recovered}=transition(previous,checks,now);
@@ -191,7 +232,7 @@ async function watchdog(cfg,{now=Date.now(),fetchImpl=globalThis.fetch,statfs,pr
  let pinged=false;
  // Dead-man switch: an external monitor alerts when these pings stop, which
  // also covers a VPS that is down or a Telegram API that is unreachable.
- if(healthy&&cfg.pingUrl)pinged=(await fetchStatus(fetchImpl,cfg.pingUrl))===200;
+ if(healthy&&pingUrl)pinged=(await fetchStatus(fetchImpl,pingUrl))===200;
  return {healthy,checks:checks.map(c=>({name:c.name,ok:c.ok})),
   alerted:failing.map(c=>c.name),recovered:recovered.map(c=>c.name),notified,pinged};
 }
@@ -208,12 +249,65 @@ function readStateFiles(stateDir){
   const st=fs.lstatSync(full);
   if(!st.isFile())continue; // no symlinks, no subdirectories
   if(!SAFE_NAME.test(name)||st.size>MAX_FILE_BYTES)throw Error('backup_file_denied');
-  const content=fs.readFileSync(full);
+  let content=fs.readFileSync(full);
+  // An append-only log may be caught mid-line: keep complete lines only.
+  if(name.endsWith('.jsonl')){
+   const last=content.lastIndexOf(0x0a);
+   content=last<0?Buffer.alloc(0):content.subarray(0,last+1);
+  }
   total+=content.length;
   if(total>MAX_BUNDLE_BYTES)throw Error('backup_too_large');
-  files.push({name,size:content.length,sha256:sha256(content),content_base64:content.toString('base64')});
+  files.push({name,size:content.length,sha256:sha256(content),content});
  }
  return files;
+}
+// The bot writes every JSON file by temp+rename, so each read is whole. Two
+// identical passes prove no file changed in between: the set is one real
+// moment of the state, even with the bot running.
+function snapshotState(stateDir,{attempts=SNAPSHOT_ATTEMPTS,read=readStateFiles}={}){
+ const key=list=>list.map(f=>f.name+':'+f.sha256).join('|');
+ for(let attempt=1;attempt<=attempts;attempt++){
+  const first=read(stateDir);
+  const second=read(stateDir);
+  if(key(first)===key(second))return {files:second,attempt};
+ }
+ throw Error('backup_state_unstable');
+}
+// Critical state must be valid before it becomes a restore point; anything
+// else must at least be well-formed JSON. Invalid state fails the backup
+// (the watchdog then reports a stale backup) instead of archiving garbage.
+function validateCritical(name,value,ownerId,now){
+ if(name==='owner.json'){
+  if(!Number.isSafeInteger(value?.owner_id)||value.owner_id<=0)throw Error('invalid');
+ }else if(name==='members.json'){
+  const ids=Array.isArray(value?.members)?value.members.map(m=>m?.user_id):null;
+  if(value?.version!==1||!ids||ids.length>3||new Set(ids).size!==ids.length||
+   ids.some(id=>!Number.isSafeInteger(id)||id<=0||id===ownerId))throw Error('invalid');
+ }else if(name==='offset.json'){
+  if(!Number.isSafeInteger(value?.offset)||value.offset<0)throw Error('invalid');
+ }else if(name==='owner-decisions.json'){
+  ownerDecisions.validateStore(value,now);
+ }else if(name==='morning-brief.json'){
+  if(!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value?.day||'')||typeof value.status!=='string')
+   throw Error('invalid');
+ }
+}
+function validateSnapshot(files,now){
+ const json=new Map();
+ const invalid=[];
+ for(const f of files){
+  if(!f.name.endsWith('.json'))continue;
+  try{json.set(f.name,JSON.parse(f.content.toString('utf8')));}catch{invalid.push(f.name);}
+ }
+ const ownerId=json.get('owner.json')?.owner_id??null;
+ for(const [name,value] of json){
+  try{validateCritical(name,value,ownerId,now);}catch{invalid.push(name);}
+ }
+ if(invalid.length){
+  const error=Error('backup_state_invalid');
+  error.files=[...new Set(invalid)].sort();
+  throw error;
+ }
 }
 function writeExclusive(file,data){
  const fd=fs.openSync(file,fs.constants.O_WRONLY|fs.constants.O_CREAT|
@@ -256,13 +350,16 @@ function prune(dir,now,retentionDays){
  return removed;
 }
 function backup(cfg,{now=Date.now()}={}){
- const files=readStateFiles(cfg.stateDir);
+ const {files,attempt}=snapshotState(cfg.stateDir);
+ validateSnapshot(files,now);
  const bundle={format:BACKUP_FORMAT,created_at:new Date(now).toISOString(),
-  source:'telegram_state',files};
+  source:'telegram_state',consistency:{double_read:true,attempt,validated:true},
+  files:files.map(f=>({name:f.name,size:f.size,sha256:f.sha256,
+   content_base64:f.content.toString('base64')}))};
  const data=zlib.gzipSync(Buffer.from(JSON.stringify(bundle)),{level:9});
  const name=BACKUP_PREFIX+stamp(now)+BACKUP_SUFFIX;
  const targets=[cfg.backupDir,...(cfg.copyDir?[cfg.copyDir]:[])];
- const result={file:name,files:files.length,bytes:data.length,copies:0,pruned:0};
+ const result={file:name,files:files.length,bytes:data.length,snapshot_attempt:attempt,copies:0,pruned:0};
  for(const dir of targets){
   ensurePrivateDir(dir);
   const file=path.join(dir,name);
@@ -273,16 +370,67 @@ function backup(cfg,{now=Date.now()}={}){
  }
  return result;
 }
-function restore(file,targetDir,{now=Date.now(),force=false}={}){
+const runFile=require('node:util').promisify(execFile);
+async function dockerRunningNames(){
+ const {stdout}=await runFile('docker',['ps','--format','{{.Names}}'],{timeout:15000,maxBuffer:1024*1024});
+ return stdout.split('\n').map(s=>s.trim()).filter(Boolean);
+}
+function heartbeatFingerprint(dir){
+ const file=path.join(dir,'heartbeat.json');
+ try{
+  const st=fs.lstatSync(file);
+  return st.mtimeMs+':'+st.size+':'+sha256(fs.readFileSync(file));
+ }catch(error){
+  if(error.code==='ENOENT')return 'absent';
+  throw error;
+ }
+}
+// An old heartbeat proves nothing (a bot without Telegram stops beating but
+// keeps running). Both must hold: no running bot container, and the
+// heartbeat file unchanged for longer than the bot's longest normal gap.
+async function assertBotStopped(targetDir,{containerPrefix='hermes-telegram-private-',
+ dockerCheck=true,listRunning=dockerRunningNames,quietMs=RESTORE_QUIET_MS,
+ sleep=ms=>new Promise(r=>setTimeout(r,ms))}={}){
+ if(dockerCheck){
+  let names;
+  try{names=await listRunning();}catch{throw Error('restore_runtime_unverifiable');}
+  if(!Array.isArray(names))throw Error('restore_runtime_unverifiable');
+  if(names.some(n=>n.startsWith(containerPrefix)))throw Error('restore_bot_running');
+ }
+ const before=heartbeatFingerprint(targetDir);
+ await sleep(quietMs);
+ if(heartbeatFingerprint(targetDir)!==before)throw Error('restore_bot_running');
+}
+// Restores data, never access: owner.json, members.json and pairing.json are
+// skipped (the current owner and members stay as they are); the owner is
+// written only into an empty target with an explicit restoreOwner; per-person
+// context files are restored only for current members; ledgers keep the
+// current copy (LEDGER_FILES).
+async function restore(file,targetDir,{restoreOwner=false,...stopOptions}={}){
  const {created_at,files}=decodeBundle(fs.readFileSync(file));
  runner.checkStateDirectory(targetDir);
- if(!force){
-  let hb=null;
-  try{hb=runner.loadState(targetDir,'heartbeat.json');}catch{}
-  if(hb&&Number.isSafeInteger(hb.at)&&now-hb.at>=0&&now-hb.at<RECENT_HEARTBEAT_MS)
-   throw Error('restore_bot_running');
- }
+ await assertBotStopped(targetDir,stopOptions);
+ let currentOwner=null;
+ try{currentOwner=runner.loadState(targetDir,'owner.json')?.owner_id??null;}
+ catch{throw Error('restore_target_owner_unreadable');}
+ const currentMembers=currentOwner===null?[]:runner.loadMembers(targetDir,currentOwner);
+ const write=[],skipped=[],ledgersKept=[];
+ let owner=currentOwner===null?'not_restored':'kept_current';
  for(const f of files){
+  if(f.name==='owner.json'&&currentOwner===null&&restoreOwner){
+   write.push(f);owner='restored';continue;
+  }
+  const context=f.name.match(/^history-analyst-context-([0-9]{1,16})\.json$/);
+  if(ACCESS_FILES.includes(f.name)||f.name==='heartbeat.json'||
+   (context&&!currentMembers.includes(Number(context[1])))){
+   skipped.push(f.name);continue;
+  }
+  if(LEDGER_FILES.includes(f.name)&&fs.existsSync(path.join(targetDir,f.name))){
+   ledgersKept.push(f.name);continue;
+  }
+  write.push(f);
+ }
+ for(const f of write){
   const temp=path.join(targetDir,'.'+f.name+'.restore');
   try{fs.unlinkSync(temp);}catch{}
   writeExclusive(temp,f.content);
@@ -290,9 +438,12 @@ function restore(file,targetDir,{now=Date.now(),force=false}={}){
  }
  const dirFd=fs.openSync(targetDir,fs.constants.O_RDONLY);
  try{fs.fsyncSync(dirFd);}finally{fs.closeSync(dirFd);}
- const restored=new Set(files.map(f=>f.name));
- const extra=fs.readdirSync(targetDir).filter(n=>!n.startsWith('.')&&!restored.has(n));
- return {created_at,restored:files.length,untouched_extra_files:extra.length};
+ const restored=new Set(write.map(f=>f.name));
+ const extra=fs.readdirSync(targetDir).filter(n=>!n.startsWith('.')&&!restored.has(n)&&
+  !ACCESS_FILES.includes(n)&&!ledgersKept.includes(n)&&n!=='heartbeat.json');
+ return {created_at,restored:write.length,skipped_access_files:skipped.sort(),
+  current_ledgers_kept:ledgersKept.sort(),owner,members_kept:currentMembers.length,
+  untouched_extra_files:extra.length};
 }
 
 async function main(argv=process.argv.slice(2),env=process.env){
@@ -312,21 +463,27 @@ async function main(argv=process.argv.slice(2),env=process.env){
   process.stdout.write(JSON.stringify({event:'hermes_telegram_backup_verify',...verify(args[0])})+'\n');
   return 0;
  }
- if(command==='restore'&&(args.length===2||(args.length===3&&args[2]==='--force'))){
-  const r=restore(args[0],args[1],{force:args[2]==='--force'});
+ if(command==='restore'&&args.length>=2&&
+  args.slice(2).every(x=>x==='--restore-owner'||x==='--no-docker-check')){
+  const flags=args.slice(2);
+  const r=await restore(args[0],args[1],{restoreOwner:flags.includes('--restore-owner'),
+   dockerCheck:!flags.includes('--no-docker-check'),containerPrefix:cfg.containerPrefix});
   process.stdout.write(JSON.stringify({event:'hermes_telegram_restore',...r})+'\n');
   return 0;
  }
- process.stderr.write('uso: watchdog | backup | verify ARQUIVO | restore ARQUIVO PASTA [--force]\n');
+ process.stderr.write('uso: watchdog | backup | verify ARQUIVO | '+
+  'restore ARQUIVO PASTA [--restore-owner] [--no-docker-check]\n');
  return 2;
 }
 if(require.main===module){
  main().then(code=>{process.exitCode=code;},error=>{
   // Error codes only: never paths, tokens or file contents.
   process.stderr.write(JSON.stringify({event:'hermes_telegram_ops_failed',
-   code:/^[a-z_]{3,60}$/.test(error?.message||'')?error.message:'unexpected'})+'\n');
+   code:/^[a-z_]{3,60}$/.test(error?.message||'')?error.message:'unexpected',
+   ...(Array.isArray(error?.files)?{files:error.files}:{})})+'\n');
   process.exitCode=1;
  });
 }
-module.exports={BACKUP_PREFIX,BACKUP_SUFFIX,BACKUP_FORMAT,REALERT_MS,config,runChecks,
- transition,alertText,watchdog,readStateFiles,decodeBundle,verify,prune,backup,restore,main};
+module.exports={BACKUP_PREFIX,BACKUP_SUFFIX,BACKUP_FORMAT,REALERT_MS,RESTORE_QUIET_MS,
+ ACCESS_FILES,LEDGER_FILES,config,runChecks,briefOutcome,transition,alertText,watchdog,readStateFiles,
+ snapshotState,validateSnapshot,decodeBundle,verify,prune,backup,assertBotStopped,restore,main};
