@@ -7,6 +7,8 @@ const {createHash,timingSafeEqual,randomBytes}=require('node:crypto');
 const MAX_MEMBERS=3,INVITE_TTL_MS=10*60*1000;
 const {parseSalesCommand,historicalLiveReply}=require('./hermes-softcom-live-channel');
 const analyst=require('./hermes-analyst-templates');
+const credit=require('./hermes-receivables-templates');
+const sellers=require('./hermes-seller-templates');
 const governed=require('./hermes-governed-agent');
 const ownerDecisions=require('./hermes-owner-decision-memory');
 const finops=require('./hermes-inference-finops');
@@ -29,6 +31,8 @@ const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
  'Memória de decisões: /decisao (propor, confirmar, cancelar) e /decisoes.\n'+
  'Segundo cérebro central: /cerebro TERMO (somente quando conexão RLS autorizada).\n'+
  'Métricas privadas de IA: /economia. Diagnóstico: /diagnostico, /diagnostico lojas, /diagnostico cruzamento. Alertas: /alertas historicos.\n'+
+ 'Somente o dono: inadimplência e carteira vencida ("qual a inadimplência?", "concentração por loja", "recuperação em maio de 2026") e ranking de vendedores ("melhores vendedores de maio de 2026"), quando as fontes forem liberadas.\n'+
+ 'Ticket médio: "qual o ticket médio em março de 2026?".\n'+
  'Acesso de outras pessoas (somente o dono): /convidar, /membros, /remover ID.\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
@@ -338,7 +342,11 @@ async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,cloc
  readDecisions=async()=>null,writeDecisions=async()=>{},
  readFinops=async()=>null,readAutocurated=async()=>null,readGovernedFallback=async()=>null,
  readBrain=async()=>{throw Error('brain_machine_reader_not_activated')},
- historyCoverage=null}){
+ historyCoverage=null,
+ // Credit and seller views stay off until a reviewed view is configured.
+ creditSources=null,sellerSource=null,
+ readCredit=async()=>{throw Error('credit_source_awaiting_audit')},
+ readSellers=async()=>{throw Error('seller_source_awaiting_audit')}}){
  const msg=privateMessage(update);
  if(!msg)return {kind:'ignored'};
  if(typeof send!=='function'||typeof query!=='function')
@@ -531,6 +539,39 @@ async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,cloc
   }
   await send(msg.userId,reply);
   return {kind:'answered',intent:'owner_decision',source:'human_confirmation_only'};
+ }
+ // Credit (inadimplência) and seller rankings: deterministic, aggregate
+ // only, owner only (credit position and employees' sales are not shared
+ // with members), and refused while their audited views are not configured.
+ // They run before the AI agent so "analise a inadimplência" never reaches
+ // a model without credit evidence.
+ const creditPlan=credit.planQuestion(msg.text,historyCoverage||undefined);
+ const sellerPlan=creditPlan?null:sellers.planQuestion(msg.text,historyCoverage||undefined);
+ if(creditPlan||sellerPlan){
+  const intent=creditPlan?'business_credit':'business_sellers';
+  if(!isOwner){
+   await send(msg.userId,'Indicadores de crédito e de vendedores são visíveis somente ao dono.');
+   return {kind:'answered',intent:'access_owner_only'};
+  }
+  const source=creditPlan?(creditPlan.template==='recovery'?creditSources?.recovery:creditSources?.position):sellerSource;
+  let response;
+  if(!source){
+   response=(creditPlan?'Inadimplência e recuperação de crédito':'Ranking de vendedores')+
+    ' ainda não liberado: a fonte aguarda a auditoria do banco das lojas e uma view revisada. Nenhum número foi estimado.';
+   await send(msg.userId,response);
+   return {kind:'answered',intent:intent+'_awaiting_source',source:'none'};
+  }
+  try{
+   const data=await (creditPlan?readCredit(creditPlan):readSellers(sellerPlan));
+   response=data?.denied_status==='history_budget_exhausted'?
+    'Limite diário de consultas históricas atingido. Não consultei dados novos nem estimei valores.':
+    creditPlan?credit.reply(data,creditPlan,{sources:creditSources}):
+     sellers.reply(data,sellerPlan,{relation:sellerSource,coverage:historyCoverage||undefined});
+  }catch{
+   response='Não consegui validar essa consulta no banco. Não vou apresentar números presumidos.';
+  }
+  await send(msg.userId,response);
+  return {kind:'answered',intent,source:'approved_history_aggregate'};
  }
  // Explicit matched-year cancellation rates are a deterministic read path.
  // This is not a backdoor to LLM quota: no model call, no write, one bounded

@@ -371,4 +371,6 @@ function reply(data,requested,c=coverage.BASELINE){
  return lines.join('\n');
 }
 module.exports={TENANT,SOURCE,PRODUCT_SOURCE,STORES,METRICS,normalize,isPeriod,isPeriodFormat,periodsOf,
- safeContext,planQuestion,validateShape,validate,compareWindow,SQL,execute,readCoverage,reply};
+ safeContext,planQuestion,validateShape,validate,compareWindow,SQL,execute,readCoverage,reply,
+ // Shared with templates that reuse the same metrics (seller ranking).
+ metric:Object.freeze({ticketOf,measure,format:f,label,coverageNotes})};

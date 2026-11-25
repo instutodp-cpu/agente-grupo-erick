@@ -8,6 +8,8 @@ const {processUpdate,ROUTES}=require('../src/runtime/hermes-telegram-private-cha
 const {readHistoricalSales}=require('../src/runtime/hermes-softcom-live-reader');
 const analyst=require('../src/runtime/hermes-analyst-templates');
 const coverageModel=require('../src/runtime/hermes-history-coverage');
+const receivables=require('../src/runtime/hermes-receivables-templates');
+const sellerTemplates=require('../src/runtime/hermes-seller-templates');
 const governed=require('../src/runtime/hermes-governed-agent');
 const businessMemory=require('../src/runtime/hermes-business-evidence-memory');
 const autoMemory=require('../src/runtime/hermes-automemory-curator');
@@ -216,6 +218,9 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
  // The shared session-pooler cluster index is project-specific: never guess it.
  if(typeof host!=='string'||!/^aws-[0-9]+-sa-east-1\.pooler\.supabase\.com$/.test(host))
   throw Error('history_pooler_host_unverified');
+ // Credit and seller views: allow-listed names from configuration, or off.
+ const creditSources=receivables.sourcesFromEnv(environment);
+ const sellerSource=sellerTemplates.sourceFromEnv(environment);
  const password=readSecret(environment.HERMES_HISTORY_PASSWORD_FILE);
  const ca=readSecret(environment.HERMES_HISTORY_CA_FILE);
  if(!ca.startsWith('-----BEGIN CERTIFICATE-----')||
@@ -239,6 +244,10 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
    return params?.shape==='analyst'?
     await analyst.execute(client,params.plan,undefined,params.coverage||undefined):
     params?.shape==='coverage'?await analyst.readCoverage(client):
+    params?.shape==='credit'?await receivables.execute(client,params.plan,
+     {sources:creditSources,coverage:params.coverage||undefined}):
+    params?.shape==='sellers'?await sellerTemplates.execute(client,params.plan,
+     {relation:sellerSource,coverage:params.coverage||undefined}):
     await readHistoricalSales(client,params);
   }finally{await client.end().catch(()=>{});}
  };
@@ -363,7 +372,8 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
  readLive=async()=>{throw Error('history_live_disabled')},liveEnabled=false,
  agentModel=null,autoMemoryEnabled=false,secondaryProvider=null,
  brainLive=brainReader.createReader({HERMES_BRAIN_LIVE_ENABLED:'false'}),
- limits=DEFAULT_LIMITS,morningBriefConfig=null,historyCoverage=coverageModel.BASELINE}){
+ limits=DEFAULT_LIMITS,morningBriefConfig=null,historyCoverage=coverageModel.BASELINE,
+ creditSources=null,sellerSource=null}){
  checkStateDirectory(stateDir);
  const offsetRecord=loadState(stateDir,'offset.json');
  const offset=offsetRecord?.offset??0;
@@ -422,8 +432,16 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
   // a repeated provider read on restart.
   current=item.update_id+1;
   saveState(stateDir,'offset.json',{offset:current});
+  // Credit and seller reads share the history quota; one claim per answer.
+  const budgetedRead=shape=>async plan=>{
+   if(!liveEnabled)throw Error('history_live_disabled');
+   if(!claimHistoryQuery(stateDir,clock(),limits.history_queries))
+    return {denied_status:'history_budget_exhausted'};
+   return readLive({shape,tenant_id:'grupo_erick',plan,coverage});
+  };
   const result=await processUpdate({
    update:item,ownerId,memberIds,pairing,historyCoverage:coverage,
+   creditSources,sellerSource,readCredit:budgetedRead('credit'),readSellers:budgetedRead('sellers'),
    clock,query,agentDailyTurns:limits.agent_turns,
    saveMember:id=>addMember(stateDir,ownerId,id,clock),
    removeMember:id=>dropMember(stateDir,ownerId,id,clock),
@@ -645,7 +663,7 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
   if(result.kind==='answered'&&result.intent!=='governed_agent'&&
      result.intent!=='inference_finops'){
    const kind=result.intent;
-   const route=['business_cancel_rate','business_analyst','historico_live',
+   const route=['business_cancel_rate','business_analyst','business_credit','business_sellers','historico_live',
     'historico','historico_lojas','historico_meses','business_diagnostic','business_diagnostic_store','business_diagnostic_matrix','business_history_alerts'].includes(kind)?
      'direct_history':
      ['compras','lotoia'].includes(kind)?'direct_domain':
@@ -783,11 +801,15 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
   stage:'staging',writes_enabled:false});
  const liveEnabled=environment.HERMES_HISTORY_LIVE_ENABLED==='true';
  const coverageKeeper=createCoverageKeeper({stateDir:dir,readLive,liveEnabled,clock});
+ // Same allow-listed configuration the live query uses; off when unset.
+ const creditSources=receivables.sourcesFromEnv(environment);
+ const sellerSource=sellerTemplates.sourceFromEnv(environment);
  await resilientTelegramPolling({
   poll:async()=>pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,secondaryProvider,
    liveEnabled,brainLive,
    autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true',limits,
-   morningBriefConfig:briefConfig,historyCoverage:await coverageKeeper.current()}),
+   morningBriefConfig:briefConfig,historyCoverage:await coverageKeeper.current(),
+   creditSources:creditSources.position||creditSources.recovery?creditSources:null,sellerSource}),
   onRecovery:({code,consecutive_failures,delay_ms})=>audit(dir,{
    at:new Date(clock()).toISOString(),event:'telegram_poll_retry',
    code,consecutive_failures,delay_ms
