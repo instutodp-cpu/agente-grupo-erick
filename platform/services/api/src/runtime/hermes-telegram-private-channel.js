@@ -409,6 +409,14 @@ async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,cloc
   await send(msg.userId,'Somente o dono registra ou consulta decisões.');
   return {kind:'answered',intent:'access_owner_only'};
  }
+ // Personal memory stays with the owner: the brain reader returns only
+ // visibility='owner_only' items, and AutoMemory is curated from owner
+ // decisions. Sharing with others belongs to Hermes Brain memberships
+ // (tenant_shared/scoped), not to this bot.
+ if(!isOwner&&(/^\/cerebro(?:\s|$)/i.test(msg.text)||msg.text==='/memorias')){
+  await send(msg.userId,'Memórias do dono não são compartilhadas com membros. Pergunte sobre vendas, compras ou LotoIA.');
+  return {kind:'answered',intent:'access_owner_only'};
+ }
  if(msg.text==='/cerebro'){
   await send(msg.userId,'🧠 Consulte o segundo cérebro central com /cerebro TERMO. Exemplo: /cerebro conciliação. Somente fontes aprovadas e ainda válidas.');
   return {kind:'answered',intent:'brain_help',source:'local_instruction'};
@@ -453,7 +461,8 @@ async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,cloc
     answer='Limite privado de consultas históricas atingido; alertas não gerados nem estimados.';
    }else{
     answer=alerts.render({
-     snapshot:await readHistory(),aggregate:raw,decisions:await readDecisions(),
+     snapshot:await readHistory(),aggregate:raw,
+     decisions:isOwner?await readDecisions():null,showDecisions:isOwner,
      now:clock(),validSnapshot:safeHistorySnapshot
     });
    }
@@ -491,7 +500,8 @@ async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,cloc
  if(msg.text==='/diagnostico'){
   let answer;
   try{answer=diagnostic.build({
-   snapshot:await readHistory(),decisions:await readDecisions(),
+   snapshot:await readHistory(),
+   decisions:isOwner?await readDecisions():null,showDecisions:isOwner,
    now:clock(),validSnapshot:safeHistorySnapshot
   });}
   catch{answer='Diagnóstico indisponível: não consegui validar o histórico e a memória financeira. Nenhum indicador foi presumido.';}
@@ -557,7 +567,8 @@ async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,cloc
   }
   let response,modelAccounting=null,cache='miss',failureCode=null;
   try{
-   const result=await readAgent(msg.text);
+   // The runner only adds owner memory (decisions, AutoMemory, brain) for the owner.
+   const result=await readAgent(msg.text,{audience:isOwner?'owner':'member'});
    if(typeof result?.answer!=='string'||result.answer.length>3150||
       !result.answer.startsWith('🧠 Hermes — análise orientada por evidências'))
     throw Error('agent_output_invalid');
@@ -570,6 +581,8 @@ async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,cloc
    const code=typeof error?.message==='string'?error.message:'unknown';
    if(fallback.permitted(code)){
     try{
+     // The fallback is composed from AutoMemory (owner decisions): owner only.
+     if(!isOwner)throw Error('fallback_owner_only');
      response=await readGovernedFallback(msg.text,code);
      if(typeof response!=='string'||response.length>1800||
       !response.startsWith('🧠 Hermes — leitura histórica disponível'))

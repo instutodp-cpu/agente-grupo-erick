@@ -9,7 +9,7 @@ const count=new Intl.NumberFormat('pt-BR');
 const pp=new Intl.NumberFormat('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const MIN_COMPARABLE=100,MIN_DELTA_PP=2,MIN_CANCEL_DELTA=10;
 const LOW_COVERAGE=20;
-function render({snapshot,aggregate,validSnapshot,decisions:rawDecisions=null,now=Date.now()}){
+function render({snapshot,aggregate,validSnapshot,decisions:rawDecisions=null,now=Date.now(),showDecisions=true}){
  // Existing source reconciler must succeed before emitting ANY signal.
  matrix.render({snapshot,aggregate,validSnapshot,now});
  const ledger=decisions.validateStore(rawDecisions,now);
@@ -48,7 +48,7 @@ function render({snapshot,aggregate,validSnapshot,decisions:rawDecisions=null,no
   ...(rateChanges.length?rateChanges:['• Nenhum atingiu os critérios nesta comparação.']),
   'Mudanças de cobertura (um mês com menos de 20 registros e outro com ≥100):',
   ...(coverage.length?coverage:['• Nenhuma atingiu os critérios.']),
-  'Decisão financeira confirmada: '+(confirmed?
+  'Decisão financeira confirmada: '+(!showDecisions?'visível somente ao dono':confirmed?
    confirmed.id+' | '+confirmed.decision:'nenhuma registrada'),
   'Próximas conferências humanas, não executadas:',
   '1. Comparar documentos e estornos dos códigos com maior variação.',

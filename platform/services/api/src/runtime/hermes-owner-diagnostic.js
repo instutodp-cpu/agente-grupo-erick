@@ -10,7 +10,7 @@ function formatRate(n,denom){
  const x=rate(n,denom);
  return x===null?'sem base':percent.format(x)+'%';
 }
-function build({snapshot,decisions,now=Date.now(),validSnapshot}){
+function build({snapshot,decisions,now=Date.now(),validSnapshot,showDecisions=true}){
  if(!Number.isSafeInteger(now)||typeof validSnapshot!=='function'||
   !validSnapshot(snapshot,now))throw Error('diagnostic_snapshot_denied');
  const store=decisionsMemory.validateStore(decisions,now);
@@ -44,9 +44,9 @@ function build({snapshot,decisions,now=Date.now(),validSnapshot}){
   'Diferença observada: '+percent.format(
    rate(highest.marked_cancelled,highest.registered)-
    rate(lowest.marked_cancelled,lowest.registered))+' pontos percentuais.',
-  'Decisão humana financeira confirmada: '+
-   (confirmed?confirmed.id+' | '+confirmed.decision:
-    'nenhuma registrada'),
+  // Members never see owner decisions, and are not told "none" either.
+  'Decisão humana financeira confirmada: '+(!showDecisions?'visível somente ao dono':
+   confirmed?confirmed.id+' | '+confirmed.decision:'nenhuma registrada'),
   'Ações sugeridas para revisão humana (não executadas):',
   '1. Conferir amostra de cancelamentos de '+highest.month+' por loja e motivo.',
   '2. Comparar lançamentos, estornos e duplicidades com fontes oficiais.',

@@ -342,7 +342,9 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     return codexFallback.compose({
      store:loadState(stateDir,'auto-memory.json'),question,code,now:clock()});
    },
-   readAgent:async goal=>{
+   readAgent:async(goal,options)=>{
+    // Fail closed: anything but an explicit owner request runs without owner memory.
+    const ownerAudience=options?.audience==='owner';
     if(!agentModel||!liveEnabled)throw Error('agent_not_enabled');
     const today=new Date(clock()).toISOString().slice(0,10);
     const budget=loadState(stateDir,'agent-llm-budget.json');
@@ -418,11 +420,12 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
      },
      readBusinessContext:question=>businessMemory.context(
       loadState(stateDir,'business-evidence-memory.json'),question,clock()),
-     readDecisionContext:question=>ownerDecisions.context(
-      loadState(stateDir,'owner-decisions.json'),question,clock()),
-     readAutoMemoryContext:question=>autoMemoryEnabled?
+     readDecisionContext:question=>ownerAudience?ownerDecisions.context(
+      loadState(stateDir,'owner-decisions.json'),question,clock()):'[]',
+     readAutoMemoryContext:question=>ownerAudience&&autoMemoryEnabled?
       autoMemory.context(loadState(stateDir,'auto-memory.json'),question,clock()):'[]',
      readCentralBrainContext:async question=>{
+      if(!ownerAudience)return []; // owner_only (personal) brain items never reach members
       if(!brainLive.enabled)return []; // legacy non-brain staging pilot remains operable
       const terms=brainReader.relevantTerms(question);
       if(terms.length===0)return [];
