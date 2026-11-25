@@ -1,5 +1,6 @@
 'use strict';
 // Governed, reusable business query templates. Text never reaches SQL.
+const freshness=require('./hermes-data-freshness');
 const TENANT='grupo_erick';
 const SOURCE='hermes_history.monthly_commercial_2025_2026_v1';
 const PRODUCT_SOURCE='hermes_history.monthly_product_activity_v1';
@@ -91,8 +92,11 @@ function validate(p){
  return p;
 }
 const matchPeriod='(month=$1::text OR (length($1::text)=4 AND LEFT(month,4)=$1::text))';
+// source_last_day is the freshness of the WHOLE view (same view, read-only),
+// not of the filtered period: "março/2026" ends on 31/03, the source may not.
 const agg='SUM(registered)::bigint AS records,SUM(cancelled)::bigint AS cancelled,'+
- 'SUM(noncancelled)::bigint AS noncancelled,SUM(valor_pago_noncancelled_sum)::numeric(18,2) AS amount,MAX(last_day) AS last_day';
+ 'SUM(noncancelled)::bigint AS noncancelled,SUM(valor_pago_noncancelled_sum)::numeric(18,2) AS amount,MAX(last_day) AS last_day,'+
+ '(SELECT MAX(last_day) FROM '+SOURCE+') AS source_last_day';
 const SQL=Object.freeze({
  period:'SELECT '+agg+' FROM '+SOURCE+' WHERE '+matchPeriod+' AND ($2::text IS NULL OR raw_store=$2::text)',
  compare:'SELECT CASE WHEN length($1::text)=4 THEN LEFT(month,4) ELSE month END AS label,'+agg+
@@ -135,6 +139,11 @@ function row(r,template){
  if(template!=='period'){
   if(template==='stores'?!STORES.includes(r.label):!isPeriod(r.label))throw Error('analyst_label_invalid');
   o.label=r.label;
+ }
+ if(r.source_last_day!==undefined){
+  if(r.source_last_day!==null&&!freshness.validDay(r.source_last_day))
+   throw Error('analyst_source_day_invalid');
+  o.source_last_day=r.source_last_day;
  }
  return o;
 }
@@ -192,12 +201,19 @@ function reply(data,requested){
      !Number.isSafeInteger(r.cancelled)||r.cancelled<0||
      r.cancelled>r.records||typeof r.amount!=='number'||
      !Number.isFinite(r.amount)||r.amount<0||
-     r.last_day!==null&&!validImportedDay(r.last_day))
+     r.last_day!==null&&!validImportedDay(r.last_day)||
+     r.source_last_day!==undefined&&r.source_last_day!==null&&
+     !freshness.validDay(r.source_last_day))
    throw Error('analyst_reply_denied');
  }
  const lines=['📊 Hermes — análise histórica Grupo Erick',
   'Fonte: Supabase / '+data.source,
   'Consultado em: '+new Date(data.at).toLocaleString('pt-BR',{timeZone:'America/Recife',hour12:false})];
+ if(p.template!=='products'){
+  const fresh=freshness.describe(
+   freshness.latestDay(data.rows.map(r=>r.source_last_day)),Date.parse(data.at));
+  lines.push(fresh?fresh.text:'Atualidade da fonte: não informada nesta consulta');
+ }
  if(p.template==='products'){
   lines.push('Produtos por registros de itens não cancelados — '+p.period+':');
   for(const r of data.rows)lines.push('• '+r.name+' (cód. '+r.code+'): '+nf.format(r.items));
