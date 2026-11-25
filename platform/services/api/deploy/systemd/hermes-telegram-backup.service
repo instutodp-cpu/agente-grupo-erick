@@ -1,0 +1,17 @@
+[Unit]
+Description=Hermes Telegram bot state backup (read-only on the bot state)
+
+[Service]
+Type=oneshot
+User=hermesadmin
+Group=hermesadmin
+WorkingDirectory=/home/hermesadmin/hermes-ops/platform/services/api
+EnvironmentFile=/home/hermesadmin/.hermes-telegram/ops.env
+ExecStart=/usr/bin/node scripts/hermes-telegram-ops.js backup
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+# Add the optional HERMES_BACKUP_COPY_DIR here as well when it is configured.
+ReadWritePaths=/home/hermesadmin/.hermes-telegram/backups
+TimeoutStartSec=300

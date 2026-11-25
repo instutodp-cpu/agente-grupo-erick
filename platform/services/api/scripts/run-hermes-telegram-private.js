@@ -17,6 +17,7 @@ const ownerDecisions=require('../src/runtime/hermes-owner-decision-memory');
 const answerCache=require('../src/runtime/hermes-verified-answer-cache');
 const finops=require('../src/runtime/hermes-inference-finops');
 const {hermesReply}=require('../src/runtime/hermes-telegram-private-channel');
+const morningBrief=require('../src/runtime/hermes-morning-brief');
 const STATE='/var/lib/hermes-telegram';
 // Daily limits per UTC day. Defaults keep the original pilot behaviour; an
 // operator raises them through environment variables, never above `max`.
@@ -240,11 +241,89 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
   }finally{await client.end().catch(()=>{});}
  };
 }
+// Claims one history query from the shared daily budget, or returns false.
+function claimHistoryQuery(stateDir,now,limit){
+ const today=new Date(now).toISOString().slice(0,10);
+ const record=loadState(stateDir,'history-live-budget.json');
+ if(record&&(!/^20\d{2}-\d{2}-\d{2}$/.test(record.date)||
+   !Number.isInteger(record.count)||record.count<0||record.count>COUNTER_MAX.history_queries))
+  throw Error('history_live_budget_invalid');
+ const count=record?.date===today?record.count:0;
+ if(count>=limit)return false;
+ saveState(stateDir,'history-live-budget.json',{date:today,count:count+1});
+ return true;
+}
+// Morning brief. The day is claimed before any read or send and each
+// recipient is recorded before and after its send, so a crash or restart
+// never sends twice; anything but "sent" for today is what the watchdog
+// reports. Same quotas as interactive use; no LLM call.
+async function runMorningBrief({stateDir,api,query,readLive,liveEnabled,clock,cfg,limits}){
+ const now=clock();
+ const state=loadState(stateDir,'morning-brief.json');
+ const check=morningBrief.due({now,cfg,state});
+ if(check.reason==='missed_window'){
+  saveState(stateDir,'morning-brief.json',{day:check.day,status:'missed',at:now});
+  audit(stateDir,{at:new Date(now).toISOString(),event:'morning_brief',status:'missed'});
+  return 'missed';
+ }
+ if(!check.due)return check.reason;
+ const ownerId=loadState(stateDir,'owner.json')?.owner_id??null;
+ if(!Number.isSafeInteger(ownerId))return 'no_owner';
+ saveState(stateDir,'morning-brief.json',{day:check.day,status:'claimed',at:now});
+ const sections={};
+ let ok=0;
+ if(cfg.sections.includes('freshness')&&liveEnabled){
+  try{
+   const plan=morningBrief.freshnessPlan(now,analyst.isPeriod);
+   if(plan&&claimHistoryQuery(stateDir,now,limits.history_queries)){
+    const data=await readLive({shape:'analyst',tenant_id:'grupo_erick',plan});
+    analyst.reply(data,plan); // same validation as an interactive answer
+    const fresh=morningBrief.freshness.describe(
+     morningBrief.freshness.latestDay(data.rows.map(r=>r.source_last_day)),now);
+    if(fresh){sections.freshness=fresh;ok++;}
+   }
+  }catch{} // the section says "não verificada" instead of guessing
+ }
+ for(const intent of ['prioridades','lotoia']){
+  if(!cfg.sections.includes(intent))continue;
+  try{
+   const data=await query(intent,ROUTES[intent]);
+   if(!data?.denied_status){sections[intent]=hermesReply(intent,data);ok++;}
+  }catch{}
+ }
+ const text=morningBrief.compose({day:check.day,cfg,sections});
+ const recipients=[ownerId,...(cfg.recipients==='owner_and_members'?
+  loadMembers(stateDir,ownerId):[])];
+ // One ledger entry per recipient, written before and after each send. Each
+ // recipient gets at most one attempt per day: a timeout ("unknown") may
+ // have been delivered, so nothing is ever resent automatically.
+ const deliveries=Object.fromEntries(recipients.map(id=>[String(id),'pending']));
+ const record=()=>({day:check.day,status:morningBrief.deliveryStatus(deliveries),at:clock(),
+  deliveries:{...deliveries},sections_ok:ok});
+ saveState(stateDir,'morning-brief.json',{...record(),status:'sending'});
+ for(const id of recipients){
+  deliveries[String(id)]='attempted';
+  saveState(stateDir,'morning-brief.json',{...record(),status:'sending'});
+  try{
+   await api('sendMessage',{chat_id:id,text,disable_web_page_preview:true});
+   deliveries[String(id)]='sent';
+  }catch(error){
+   deliveries[String(id)]=error?.message==='telegram_provider_transport_unavailable'?
+    'unknown':'failed';
+  }
+ }
+ const final=record();
+ saveState(stateDir,'morning-brief.json',final);
+ const counts=morningBrief.deliveryCounts(deliveries);
+ audit(stateDir,{at:new Date(clock()).toISOString(),event:'morning_brief',
+  status:final.status,...counts,sections_ok:ok});
+ return final.status;
+}
 async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
  readLive=async()=>{throw Error('history_live_disabled')},liveEnabled=false,
  agentModel=null,autoMemoryEnabled=false,secondaryProvider=null,
  brainLive=brainReader.createReader({HERMES_BRAIN_LIVE_ENABLED:'false'}),
- limits=DEFAULT_LIMITS}){
+ limits=DEFAULT_LIMITS,morningBriefConfig=null}){
  checkStateDirectory(stateDir);
  const offsetRecord=loadState(stateDir,'offset.json');
  const offset=offsetRecord?.offset??0;
@@ -342,7 +421,9 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     return codexFallback.compose({
      store:loadState(stateDir,'auto-memory.json'),question,code,now:clock()});
    },
-   readAgent:async goal=>{
+   readAgent:async(goal,options)=>{
+    // Fail closed: anything but an explicit owner request runs without owner memory.
+    const ownerAudience=options?.audience==='owner';
     if(!agentModel||!liveEnabled)throw Error('agent_not_enabled');
     const today=new Date(clock()).toISOString().slice(0,10);
     const budget=loadState(stateDir,'agent-llm-budget.json');
@@ -418,11 +499,12 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
      },
      readBusinessContext:question=>businessMemory.context(
       loadState(stateDir,'business-evidence-memory.json'),question,clock()),
-     readDecisionContext:question=>ownerDecisions.context(
-      loadState(stateDir,'owner-decisions.json'),question,clock()),
-     readAutoMemoryContext:question=>autoMemoryEnabled?
+     readDecisionContext:question=>ownerAudience?ownerDecisions.context(
+      loadState(stateDir,'owner-decisions.json'),question,clock()):'[]',
+     readAutoMemoryContext:question=>ownerAudience&&autoMemoryEnabled?
       autoMemory.context(loadState(stateDir,'auto-memory.json'),question,clock()):'[]',
      readCentralBrainContext:async question=>{
+      if(!ownerAudience)return []; // owner_only (personal) brain items never reach members
       if(!brainLive.enabled)return []; // legacy non-brain staging pilot remains operable
       const terms=brainReader.relevantTerms(question);
       if(terms.length===0)return [];
@@ -555,6 +637,26 @@ async function pollOnce({stateDir,api,query,clock=()=>Date.now(),
     {llm_calls:result.llm_calls,planning_policy:result.planning_policy}: {})});
   handled++;
  }
+ if(morningBriefConfig?.enabled){
+  try{
+   await runMorningBrief({stateDir,api,query,readLive,liveEnabled,clock,
+    cfg:morningBriefConfig,limits});
+  }catch{
+   // Never let the brief stop polling; record the failure for the watchdog.
+   // A send cut short stays "unknown": it is reported, never retried.
+   try{
+    const s=loadState(stateDir,'morning-brief.json');
+    if(s?.status==='claimed'||s?.status==='sending'){
+     const deliveries=Object.fromEntries(Object.entries(s.deliveries||{})
+      .map(([id,v])=>[id,v==='attempted'?'unknown':v]));
+     const status=s.status==='claimed'?'failed':morningBrief.deliveryStatus(deliveries);
+     saveState(stateDir,'morning-brief.json',{...s,status,deliveries});
+     audit(stateDir,{at:new Date(clock()).toISOString(),event:'morning_brief',status,
+      ...morningBrief.deliveryCounts(deliveries)});
+    }
+   }catch{}
+  }
+ }
  return {handled,next_offset:current};
 }
 // Retry only recoverable Telegram transport failures. A claimed update offset
@@ -593,6 +695,7 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
   environment.HERMES_MISSION_INGRESS_ENABLED!=='false')
   throw Error('telegram_channel_disabled');
  const limits=dailyLimits(environment);
+ const briefConfig=morningBrief.config(environment);
  const dir=environment.HERMES_TELEGRAM_STATE_DIR||STATE;
  checkStateDirectory(dir);
  const botToken=readSecret(environment.HERMES_TELEGRAM_TOKEN_FILE);
@@ -636,7 +739,8 @@ async function runForever({environment=process.env,fetchImpl=globalThis.fetch,
  await resilientTelegramPolling({
   poll:()=>pollOnce({stateDir:dir,api,query,clock,readLive,agentModel,secondaryProvider,
    liveEnabled:environment.HERMES_HISTORY_LIVE_ENABLED==='true',brainLive,
-   autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true',limits}),
+   autoMemoryEnabled:environment.HERMES_AUTOMEMORY_ENABLED==='true',limits,
+   morningBriefConfig:briefConfig}),
   onRecovery:({code,consecutive_failures,delay_ms})=>audit(dir,{
    at:new Date(clock()).toISOString(),event:'telegram_poll_retry',
    code,consecutive_failures,delay_ms
@@ -647,6 +751,6 @@ if(require.main===module){
  runForever().catch(()=>{console.error('hermes_telegram_channel_stopped_fail_closed');
   process.exitCode=1;});
 }
-module.exports={LIMIT_SPECS,dailyLimits,loadMembers,addMember,dropMember,analystContextFile,checkStateDirectory,readSecret,loadState,saveState,audit,
+module.exports={LIMIT_SPECS,dailyLimits,runMorningBrief,claimHistoryQuery,loadMembers,addMember,dropMember,analystContextFile,checkStateDirectory,readSecret,loadState,saveState,audit,
  smallJSON,telegramClient,hermesClient,createLiveQuery,pollOnce,runForever,
  isRecoverableTelegramError,resilientTelegramPolling};
