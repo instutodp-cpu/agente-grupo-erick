@@ -46,10 +46,10 @@ cotas maiores, o deploy precisa incluir as variáveis novas (ver
 
 | Frente | Entrega |
 | --- | --- |
-| Resumo matinal | No próprio bot, 07:30 Recife, configurável, uma vez por dia, sem IA (G6) |
-| Monitoramento | Vigia no host a cada 5 min com alertas ao dono e ping externo opcional (G10) |
-| Backup | Diário, verificado, retenção de 14 dias, restauração documentada (G8) |
-| Atualidade | "Dados até …" em toda resposta de histórico, derivado da própria fonte |
+| Resumo matinal | No próprio bot, 07:30 Recife, configurável, uma vez por dia, sem IA, entrega controlada por destinatário (enviado, parcial, falha), sem duplicar (G6) |
+| Monitoramento | Vigia no host a cada 2 min, alerta ao dono em até 7 min no pior caso, ping externo com URL secreta em arquivo (G10) |
+| Backup | Diário, consistente com o bot ligado, verificado, retenção de 14 dias; restauração sem reativar membros nem repor cotas, só com o bot comprovadamente parado; cópia externa só cifrada (G8) |
+| Atualidade | "Dados até …" em toda resposta de histórico, derivado da própria fonte, e a data da própria loja quando a pergunta cita uma |
 | Membros | Achado e corrigido: na semana 2, membros podiam usar `/cerebro` (memória pessoal `owner_only`) e viam decisões do dono em `/diagnostico`, `/alertas` e no agente |
 | Linx | Transporte por arquivo do adaptador `seta_read_v1` existente, plano incremental sem gravação (G1, preparação) |
 

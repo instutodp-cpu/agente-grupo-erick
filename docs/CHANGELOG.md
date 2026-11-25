@@ -20,6 +20,33 @@
 - Membros do bot deixam de acessar `/cerebro`, `/memorias` e qualquer memória
   do dono (decisões, memória automática, cérebro) nas respostas e no agente.
 
+### Endurecimento (revisão da PR #585)
+
+- Restauração devolve dados, nunca acesso: `members.json` e `pairing.json`
+  nunca voltam; `owner.json` só numa pasta sem dono e com `--restore-owner`;
+  contexto de quem deixou de ser membro é ignorado; contadores diários,
+  cursor e controle do resumo mantêm a versão atual (cota não é reposta,
+  resumo não é reenviado).
+- Restauração só com o bot comprovadamente parado: `docker ps` sem contêiner
+  do bot (sem shell; Docker mudo = recusa) **e** heartbeat imóvel por 150 s.
+  `--force` removido; `--no-docker-check` mantém a espera.
+- Backup com o bot ligado: leitura dupla idêntica (até 3 tentativas),
+  `audit.jsonl` cortado na última linha completa e validação dos arquivos
+  críticos antes de gravar.
+- Resumo matinal com controle por destinatário (`pending`, `attempted`,
+  `sent`, `failed`, `unknown`) e status do dia `sent`, `partial` ou `failed`;
+  uma tentativa por pessoa por dia, sem reenvio.
+- Vigia a cada 2 min (folga 15 s) e heartbeat de 150 s: pior caso de alerta
+  7 min (antes ~13,5 min), verificado por teste.
+- URL do monitor externo só em arquivo secreto 0600
+  (`HERMES_WATCHDOG_PING_URL_FILE`); `HERMES_WATCHDOG_PING_URL` no ambiente é
+  recusado; arquivo inválido vira a falha `external_ping_config`.
+- Atualidade por loja: com loja na pergunta, a resposta mostra a data da fonte
+  e a da loja (`scope_last_day`); no ranking, lojas atrasadas levam a própria
+  data; o agente e o `/vendas` antigo também.
+- Runbook: backup externo cifrado com `age` (chave privada offline), conta do
+  alerta em 10 min, restauração sem reativar membros.
+
 ## 2026-11-24 — Aposentadoria do chat web v1
 
 ### Removido
