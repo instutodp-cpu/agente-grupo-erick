@@ -1,5 +1,32 @@
 # CHANGELOG.md
 
+## 2026-11-25 — Semana 4: inteligência empresarial (preparação)
+
+### Adicionado
+
+- Cobertura do histórico lida da própria fonte (`hermes-history-coverage.js`):
+  qualquer período que a view tenha é aceito, inclusive desde 2011 quando a
+  view existir; sem leitura válida vale a cobertura verificada (falha fechada).
+- Ano contra ano só nos meses completos dos dois anos, com a janela passada
+  como parâmetro e dita na resposta; avisos de período parcial derivados do
+  último dia da fonte.
+- Ticket médio nos templates existentes (período, comparação, lojas).
+- Inadimplência determinística (carteira por faixa de atraso, concentração por
+  loja, recuperação) e ranking de vendedores, só agregados e só para o dono,
+  desligados até as views auditadas serem configuradas
+  (`HERMES_HISTORY_RECEIVABLES_*_VIEW`, `HERMES_HISTORY_SELLER_VIEW`).
+- Adaptador Seta: plano incremental compartilhado (`seta-sync-plan.js`) e
+  transporte `API` pronto e desligado (`seta-api-transport.js`), com o mesmo
+  manifesto do transporte por arquivo.
+- `platform/docs/HERMES_BUSINESS_INTELLIGENCE_SOURCES.md`: contratos das views
+  e o que a auditoria do Supabase precisa confirmar.
+
+### Alterado
+
+- A rota de taxa de cancelamento aceita quaisquer dois anos da fonte, desde que
+  o intervalo de meses citado seja o comparável.
+- Comparações por ano carregam a janela comparada (`window`) no resultado.
+
 ## 2026-11-25 — Semana 3: operação diária do bot e preparação do Linx
 
 ### Adicionado

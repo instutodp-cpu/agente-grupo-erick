@@ -105,6 +105,12 @@ Ver `HERMES_TELEGRAM_OPERATIONS_RUNBOOK.md`: resumo diário às 07:30 de Recife
 (desligado até `HERMES_MORNING_BRIEF_ENABLED=true`), linha "Dados até" nas
 respostas, vigia com alertas e ping externo, backup diário com restauração.
 
+### Períodos, ticket, inadimplência e vendedores
+
+Ver `HERMES_BUSINESS_INTELLIGENCE_SOURCES.md`: períodos pela cobertura lida da
+fonte (sem anos fixos), ticket médio, e inadimplência/ranking de vendedores
+somente para o dono, desligados até as views auditadas.
+
 ## Segundo cérebro — próximo marco, não presumir implementado
 
 O contrato `SECOND_BRAIN_INBOX_CONTRACT.md` atualmente é declarativo. ChatGPT e Claude requerem importação autorizada de exportações; histórico pessoal de WhatsApp não pode ser tratado como automaticamente acessível pela API do WhatsApp Business. Ingestão real precisa de armazenamento e busca, segregação de contexto pessoal/empresarial, controle por pessoa, retenção, revogação de consentimento e origem citável. **Não confundir o canal conversável com segundo cérebro pronto.**
