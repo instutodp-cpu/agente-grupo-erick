@@ -6,7 +6,7 @@ const TENANT='grupo_erick';
 const SOURCE='hermes_history.monthly_commercial_2025_2026_v1';
 const PRODUCT_SOURCE='hermes_history.monthly_product_activity_v1';
 const COMMERCIAL_V2_SOURCE='hermes_history.monthly_commercial_v2';
-const RELATION=/^hermes_history\\.[a-z][a-z0-9_]{2,62}$/;
+const RELATION=/^hermes_history\.[a-z][a-z0-9_]{2,62}$/;
 const COMMERCIAL_SOURCES=Object.freeze([SOURCE,COMMERCIAL_V2_SOURCE]);
 const PRODUCT_SOURCES=Object.freeze([PRODUCT_SOURCE]);
 
