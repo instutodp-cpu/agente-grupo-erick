@@ -110,7 +110,9 @@ function planApiPage({ config, page, mapping, previousManifest = null, receivedA
   const manifest = syncPlan.validateManifest(previousManifest, mapping);
   const pageSha256 = sha256(serialized);
   const provenance = Object.freeze({ pageSha256, records: page.records.length, receivedAt,
-    nextCursor: page.nextCursor, kind: mapping.kind, tenantId: mapping.tenantId, companyId: mapping.companyId });
+    nextCursor: page.nextCursor, kind: mapping.kind, tenantId: mapping.tenantId, companyId: mapping.companyId,
+    transport: 'API',
+    ...syncPlan.planIdentity({ transport: 'API', inputSha256: pageSha256, mapping, previousManifest }) });
   if (page.records.length === 0) {
     return { policy: API_TRANSPORT_POLICY, status: 'EMPTY_PAGE', provenance,
       summary: { create: 0, unchanged: 0, rejected: 0 }, records: [], rejected: [],
@@ -127,6 +129,7 @@ function planApiPage({ config, page, mapping, previousManifest = null, receivedA
   const records = [];
   const rejected = [];
   const seen = new Set();
+  const totals = syncPlan.createTotals(mapping);
   let unchanged = 0;
   page.records.forEach((r, index) => {
     try {
@@ -150,18 +153,31 @@ function planApiPage({ config, page, mapping, previousManifest = null, receivedA
         identity: mapping, sourceId, establishmentId: mapping.stores[storeCode], occurredAt,
         sourceUpdatedAt: updated, receivedAt, evidenceId: `api:${pageSha256}#${index}`, payload
       });
+      syncPlan.addValid(totals, { establishmentId: mapping.stores[storeCode], occurredAt, payload,
+        created: Boolean(planned) });
       if (!planned) { unchanged++; return; }
       records.push(planned);
     } catch (err) {
       // Position and reason only: never the record content.
-      rejected.push({ index, reason: /^[a-z_]{3,40}$/.test(err.message) ? err.message : 'invalid_record' });
+      const reason = /^[a-z_]{3,40}$/.test(err.message) ? err.message : 'invalid_record';
+      rejected.push({ index, reason });
+      syncPlan.addRejected(totals, reason);
     }
   });
+  const finished = syncPlan.finishTotals(totals);
+  const status = syncPlan.qualityStatus(finished, mapping);
+  // A blocked page keeps the previous manifest and cursor: it will be read again.
+  if (status !== 'PLANNED') {
+    return { policy: API_TRANSPORT_POLICY, status, provenance,
+      summary: { create: records.length, unchanged, rejected: rejected.length },
+      totals: finished, records: [], rejected, manifest };
+  }
   return {
     policy: API_TRANSPORT_POLICY,
-    status: 'PLANNED',
+    status,
     provenance,
     summary: { create: records.length, unchanged, rejected: rejected.length },
+    totals: finished,
     records,
     rejected,
     manifest: { ...manifest, entries, apiPages: syncPlan.remember(manifest.apiPages, pageSha256),
