@@ -1,5 +1,26 @@
 # CHANGELOG.md
 
+## 2026-11-26 — Semana 5: integração Linx em Simulation First
+
+### Adicionado
+
+- Adaptador `seta_read_v1`: validação de layout antes da importação, totais
+  por entrada (linhas, valores, estabelecimento, dias), proveniência com
+  `planId` determinístico, bloqueio por registros inválidos acima da
+  tolerância revisada (padrão: nenhuma).
+- Reconciliação com os totais do relatório oficial do Linx e carga simulada
+  contra um razão de destino: só plano reconciliado, idempotente por `planId`,
+  atômica em conflito de versão, isolada por tenant/empresa/tipo.
+- CLI `scripts/seta-file-import-plan.js`: `--validate`, `--controls`,
+  `--simulate`.
+
+### Corrigido
+
+- Sem leitura por loja, a cobertura do grupo não é mais presumida para a loja
+  (auditoria: VARIEDADES sem registros em 12/2024 e 01/2025).
+- "Meses completos" passou a "meses com dados contínuos": meses seguidos não
+  provam exportação completa.
+
 ## 2026-11-25 — Semana 4: inteligência empresarial (preparação)
 
 ### Adicionado
