@@ -3,38 +3,102 @@
 Escopo: o bot privado (Hermes, plano de execução) lendo agregados do banco das
 lojas (`hermes_history`, papel `hermes_history_reader`, somente leitura).
 Maestro continua sendo o plano de controle. Nada aqui altera banco, cria
-tabela ou faz deploy: este documento diz **o que o Hermes já sabe consultar** e
-**o que o banco precisa expor**, para a auditoria do Supabase (ChatGPT)
-confirmar ou criar.
+tabela ou faz deploy: este documento diz **o que o Hermes já sabe consultar**,
+**o que o banco precisa expor** e **o que a auditoria do Supabase já mostrou**.
 
-## 1. Períodos: a cobertura vem da fonte
+## 0. Evidências da auditoria do Supabase (25/11, somente leitura)
 
-O Hermes não tem mais calendário fixo (2025/2026). A cobertura é lida da
-própria fonte, no loop principal do bot, uma vez por dia (nova tentativa em
-6 h se falhar), fora da cota de perguntas:
+Auditoria feita pela frente do ChatGPT no Supabase de produção, em modo
+leitura. Números reais, usados para corrigir os contratos abaixo.
+
+**Vendas — `softcom_import.cadastro_de_vendas`** (439.724 registros):
+
+| Ano | Registros | Observação |
+| --- | --- | --- |
+| 2011 | 8 | todos em 12/04 |
+| 2012–2018 | 0 | **lacuna**: sem dados (não é venda zero) |
+| 2019 | 29.719 | de 08/07 a 31/12 (julho parcial) |
+| 2020 | 59.017 | |
+| 2021 | 61.964 | |
+| 2022 | 64.482 | |
+| 2023 | 68.279 | |
+| 2024 | 65.615 | |
+| 2025 | 65.156 | |
+| 2026 | 25.482 | até 08/06 (junho parcial) |
+| — | 2 | sem data |
+
+Colunas confirmadas para vendedores: `vendedor`, `codigo_da_venda`,
+`lojaorigem`, `data_da_venda`, `valor_pago`, `cancelado`. A estabilidade da
+identidade do vendedor entre lojas e períodos **ainda não foi validada**.
+
+**Contas a receber — `softcom_import.contas_a_receber`** (709.290 registros).
+Colunas: `registro`, `lojaorigem`, `data_da_venda`, `vencimento`,
+`valor_da_parcela`, `datapag`, `valor_pago`, `pago`, `excluido`, `juros`,
+`multa`, `desconto`, `valordesconto`, `registropendencia`, `tipobaixa`,
+`movimentacaoid`.
+
+- 229.227 candidatos a parcelas abertas;
+- 459.695 não excluídos com `pago = False` **e** `datapag` preenchido
+  (`pago` sozinho não decide nada);
+- 145.046 baixas após o vencimento, não excluídas;
+- 17 sem vencimento; 28 com vencimento depois de 2036 (até o ano 5022);
+- último pagamento registrado: 08/06/2026.
+
+**Segurança:** `GRANT SELECT` para `anon` e `authenticated` nas views antigas
+`public.vw_contas_a_receber`, `public.vw_faturamento_mensal`,
+`public.vw_inadimplencia_por_faixa` e `public.vw_itens_vendidos`. A frente do
+ChatGPT investiga dependências e exposição pela API antes de qualquer
+revogação. **O Hermes não as usa nem aceita como fonte** (teste
+automatizado): só `hermes_history.<nome>`, pelo papel restrito.
+
+## 1. Períodos: a cobertura vem da fonte, com lacunas e meses parciais
+
+MIN/MAX não basta (de 2011 a 2019 há uma lacuna de oito anos). O Hermes lê,
+no loop principal do bot, uma vez por dia (nova tentativa em 6 h se falhar),
+fora da cota de perguntas, **cada loja e mês com dados**:
 
 ```sql
-SELECT 'commercial' AS scope, MIN(month), MAX(month), MAX(last_day) FROM hermes_history.monthly_commercial_2025_2026_v1
+SELECT 'commercial' AS scope, raw_store, month, MAX(last_day) AS last_day
+FROM hermes_history.monthly_commercial_2025_2026_v1 WHERE month IS NOT NULL GROUP BY raw_store, month
 UNION ALL
-SELECT 'products', MIN(month), MAX(month), NULL FROM hermes_history.monthly_product_activity_v1
+SELECT 'products', NULL, month, NULL FROM hermes_history.monthly_product_activity_v1 WHERE month IS NOT NULL GROUP BY month
+ORDER BY 1, 3, 2 LIMIT 5000
 ```
 
-- Fica em `history-coverage.json` (validada, com a hora da leitura). Se a
-  leitura falhar, vale a guardada por até 7 dias; depois, a cobertura
-  **verificada antes da semana 4** (vendas 2025-01 a 2026-06, até 08/06/2026;
-  produtos 2026). Período fora dela é recusado, nunca adivinhado.
-- Qualquer período dentro da cobertura é aceito (de 2000 em diante). "março"
-  sem ano = o março mais recente na fonte.
-- Ano contra ano compara só os **meses completos nos dois anos**, passados como
-  parâmetros (`$4`, `$5`); a resposta diz quais. Mês parcial nunca é comparado
-  como completo; período parcial é avisado a partir do último dia da própria
-  fonte.
+Isso vira **trechos contínuos** (ex.: `abril/2011` e `julho/2019 a
+junho/2026`), para o grupo e para cada loja, guardados em
+`history-coverage.json` com a hora da leitura. Se a leitura falhar, vale a
+guardada por até 7 dias; depois, a cobertura **verificada antes da semana 4**
+(vendas 2025-01 a 2026-06, até 08/06/2026; produtos 2026). Período fora dela é
+recusado sem consulta.
 
-**Para liberar o histórico desde 2011:** basta a view comercial cobrir esses
-anos com as mesmas colunas (`month`, `raw_store`, `registered`, `cancelled`,
-`noncancelled`, `valor_pago_noncancelled_sum`, `last_day`). Se for uma view
-nova, troca-se uma linha (`SOURCE` em `hermes-analyst-templates.js`) num PR
-revisado; nada mais muda.
+Regras de completude (só com evidência):
+
+| Mês | Completo? |
+| --- | --- |
+| dentro de um trecho (há dados antes e depois) | sim |
+| primeiro mês de um trecho | **não** (ex.: 04/2011, 07/2019, loja que abriu no meio do mês), salvo se a view começa por corte de dados contínuos (`CUT_STARTS`: 2025-01 da view atual, pois 2024 existe na tabela) |
+| último mês de um trecho | só se o último dia com venda for o fim do mês (06/2026 até 08/06 não é) |
+| mês numa lacuna | sem dados: **recusado, nunca zero** |
+
+- **Loja**: pergunta com loja usa a cobertura da própria loja (uma loja
+  aberta em 2021 não responde por 2020, mesmo que o grupo tenha 2020). No
+  ranking de lojas, loja com cobertura parcial no período é marcada: total
+  menor não significa venda menor.
+- **Ano contra ano**: só os meses **completos nos dois anos**, mesmo que pule
+  meses (ex.: MAGAZINE 2022 × 2023 = janeiro a fevereiro e maio a dezembro),
+  passados como lista (`RIGHT(month,2) = ANY($4::text[])`) e ditos na resposta.
+  2019 × 2020 compara agosto a dezembro. Sem mês comum completo: recusado.
+- **Mês contra mês**: os dois precisam estar completos.
+- **Período parcial ou com lacunas** sempre avisa: "2019: dados só de julho a
+  dezembro; meses sem dados não significam venda zero", "julho parcial".
+
+**Para liberar o histórico desde 2011:** a view comercial precisa cobrir
+esses anos com as mesmas colunas (`month`, `raw_store`, `registered`,
+`cancelled`, `noncancelled`, `valor_pago_noncancelled_sum`, `last_day`) e
+**não** inventar linhas para meses sem vendas. Se for uma view nova, troca-se
+`SOURCE` (e `CUT_STARTS`, se ela começar por corte) em
+`hermes-analyst-templates.js` num PR revisado.
 
 ## 2. Ticket médio (já disponível)
 
@@ -57,8 +121,9 @@ consulta e sem número.
 | "recuperação de crédito em maio de 2026" | `recovery` | recuperação | `HERMES_HISTORY_RECEIVABLES_RECOVERY_VIEW` |
 | "melhores vendedores de maio de 2026", "por ticket médio" | `sellers` | vendas por vendedor | `HERMES_HISTORY_SELLER_VIEW` |
 
-O valor da variável precisa ser `hermes_history.<nome>`; outro formato impede
-o bot de iniciar. As leituras usam a mesma cota diária de histórico.
+O valor da variável precisa ser `hermes_history.<nome>`; outro formato
+(inclusive `public.vw_*` e `softcom_import.*`) impede o bot de iniciar. As
+leituras usam a mesma cota diária de histórico.
 
 ### Contrato das views (o que o Hermes lê)
 
@@ -66,47 +131,61 @@ o bot de iniciar. As leituras usam a mesma cota diária de histórico.
 
 | Coluna | Tipo | Significado |
 | --- | --- | --- |
-| `as_of_day` | text `AAAA-MM-DD` | dia da posição (o Hermes usa só a mais recente) |
+| `as_of_day` | text `AAAA-MM-DD` | dia da posição, **definido pela view a partir dos dados** (nunca `CURRENT_DATE`: a base é histórica, último pagamento em 08/06/2026); o Hermes usa só a mais recente |
 | `raw_store` | text | mesmos códigos de loja da view comercial |
 | `aging_bucket` | text | `a_vencer`, `1_30`, `31_60`, `61_90`, `91_180`, `181_360`, `360_mais` |
-| `installments` | bigint | parcelas em aberto |
-| `open_amount` | numeric(18,2) | saldo em aberto (R$) |
+| `installments` | bigint | parcelas em aberto na data da posição |
+| `open_amount` | numeric(18,2) | saldo em aberto na data da posição (R$) |
 
-**Recuperação** — grão `month × raw_store`: `month` (text `AAAA-MM`),
-`raw_store`, `recovered_installments` (bigint), `recovered_amount`
-(numeric(18,2)), `last_day` (text `AAAA-MM-DD`).
+A resposta diz "saldo na data da posição (histórico da fonte, não saldo
+atual)" e "atraso não é perda contábil".
+
+**Recuperação** — grão `month × raw_store`, **uma linha para todo mês e loja
+com qualquer recebimento registrado**, mesmo com recuperação 0:
+
+| Coluna | Tipo | Significado |
+| --- | --- | --- |
+| `month` | text `AAAA-MM` | mês do recebimento |
+| `raw_store` | text | loja |
+| `recovered_installments` | bigint | parcelas **já vencidas** recebidas no mês (pode ser 0) |
+| `recovered_amount` | numeric(18,2) | valor recebido dessas parcelas (pode ser 0) |
+| `last_day` | text ou NULL | último dia com recuperação no mês |
+| `receipts_last_day` | text `AAAA-MM-DD` | último dia com **qualquer** recebimento no mês: a cobertura de recebimentos |
+
+A cobertura de recebimentos é **independente** da de vendas. Sem linha no
+período = "sem cobertura de recebimentos: isso não significa recuperação
+zero" (nenhum valor mostrado). Linha com 0 = recuperação zero de verdade. Ano
+com recebimentos só em alguns meses: a resposta lista os meses. Mês parcial
+só quando os próprios recebimentos terminam no meio dele.
 
 **Vendas por vendedor** — grão `month × raw_store × seller_code`: `month`,
-`raw_store`, `seller_code` (text), `seller_label` (text, nome de exibição),
+`raw_store`, `seller_code` (identificador estável **dentro da loja**,
+derivado de `cadastro_de_vendas.vendedor`), `seller_label` (nome de exibição),
 `registered`, `cancelled`, `noncancelled` (bigint),
-`valor_pago_noncancelled_sum` (numeric(18,2)), `last_day`.
+`valor_pago_noncancelled_sum` (numeric(18,2)), `last_day`. Enquanto a
+identidade entre lojas não for validada, o ranking é **por loja**: a mesma
+pessoa em duas lojas aparece duas vezes, nunca somada. Até 10 nomes, só ao
+dono; por ticket, só quem tem ao menos 10 vendas não canceladas.
 
-Nenhuma coluna de cliente, documento, contato ou parcela individual. O ranking
-de vendedores mostra até 10 nomes, só ao dono; por ticket, só quem tem ao
-menos 10 vendas não canceladas.
+Nenhuma coluna de cliente, documento, contato ou parcela individual.
 
-## 4. O que a auditoria do Supabase precisa confirmar
+## 4. O que a auditoria ainda precisa entregar
 
-1. **Histórico desde 2011:** em que tabela estão as vendas de 2011–2024; se
-   `monthly_commercial_2025_2026_v1` pode ser estendida ou se haverá view nova
-   (nome); se o **primeiro mês** de cada view começa no dia 1 (o Hermes assume
-   que sim; se não, informar o primeiro dia).
-2. **Inadimplência:** tabela real de parcelas/títulos a receber (crediário),
-   colunas de vencimento, pagamento e saldo; **definição de "vencido"** (data
-   de vencimento < dia da posição? tolerância?), se saldo inclui juros/multas,
-   como tratar renegociação e parcela cancelada; se as faixas acima servem.
-   A view antiga `public.vw_inadimplencia_por_faixa` (citada nos templates da
-   v1) **nunca foi validada no banco real**: confirmar se existe e o que contém.
-3. **Recuperação:** como identificar pagamento de parcela já vencida e em que
-   data; se há base da carteira vencida no início de cada mês (permitiria
-   taxa de recuperação; hoje não é calculada).
-4. **Vendedores:** de onde vem o vendedor da venda (`vw_itens_vendidos.vendedor`
-   da v1 também não foi validada), se há código estável, e se o cancelamento é
-   por venda.
+1. **Histórico desde 2011:** view comercial cobrindo 2011-04 e 2019-07 em
+   diante, sem linhas para meses vazios; dizer se 2011-04 deve aparecer (8
+   registros num dia) e o que fazer com os 2 registros sem data.
+2. **Inadimplência:** a regra validada de "parcela aberta" (não usar `pago`
+   sozinho: há 459.695 com `pago = False` e `datapag` preenchido),
+   `excluido`, renegociação (`registropendencia`, `tipobaixa`), juros, multa e
+   desconto no saldo; o tratamento dos 17 sem vencimento e dos 28 com
+   vencimento depois de 2036; a regra do dia da posição.
+3. **Recuperação:** como reconhecer pagamento de parcela já vencida
+   (`datapag` > `vencimento`?), e a cobertura mensal de recebimentos por loja.
+4. **Vendedores:** se `vendedor` é código ou nome, e se é estável por loja.
 5. **Permissões:** `GRANT SELECT` das views novas só para
-   `hermes_history_reader`; nenhuma tabela de origem exposta.
-6. **Evidência:** a definição SQL (`pg_get_viewdef`) de cada view criada,
-   versionada em `platform/migrations/` no mesmo PR que liga a variável.
+   `hermes_history_reader`; decisão sobre as `public.vw_*` expostas.
+6. **Evidência:** `pg_get_viewdef` de cada view criada, versionada em
+   `platform/migrations/` no mesmo PR que liga a variável.
 
 ## 5. Linx pelo adaptador Seta
 
@@ -123,19 +202,20 @@ mapeamento revisado do layout.
    `require("/app/src/runtime/hermes-seller-templates")`.
 2. Nenhuma variável nova é obrigatória: sem elas, a cobertura é lida da view
    atual (igual à verificada) e inadimplência/vendedores ficam desligados.
-3. Depois da auditoria e das views criadas e versionadas: acrescentar ao
-   `docker run` as variáveis da seção 3 com os nomes confirmados, reiniciar e
-   validar com uma pergunta de cada tipo. Rollback: remover a variável.
-4. O `audit.jsonl` registra `history_coverage` (meses, nunca valores) uma vez
-   por dia.
+3. Depois das views criadas e versionadas: acrescentar ao `docker run` as
+   variáveis da seção 3 com os nomes confirmados, reiniciar e validar com uma
+   pergunta de cada tipo. Rollback: remover a variável.
+4. O `audit.jsonl` registra `history_coverage` (primeiro e último mês e número
+   de trechos, nunca valores) uma vez por dia.
 
 ## 7. Critérios de aceite
 
-- [ ] Com a view cobrindo 2011+, "quanto vendemos em março de 2015?" responde
-      com fonte e "Dados até …"; antes disso, é recusado sem consulta.
-- [ ] "compare as vendas de 2011 e 2012" diz quais meses foram comparados.
+- [ ] Com a view cobrindo 2011+, "quanto vendemos em março de 2015?" é
+      recusado sem consulta (lacuna), e "quanto vendemos em 2019?" responde
+      avisando "dados só de julho a dezembro" e "julho parcial".
+- [ ] "compare as vendas de 2019 e 2020" compara agosto a dezembro e diz isso.
 - [ ] "qual o ticket médio em março de 2026?" mostra o ticket e suas limitações.
 - [ ] Sem as variáveis, "qual a inadimplência?" responde que a fonte aguarda a
       auditoria; um membro recebe "visíveis somente ao dono".
-- [ ] Com as views auditadas e as variáveis, a resposta mostra posição,
-      faixas, risco acima de 90 dias e concentração por loja, sem cliente.
+- [ ] Com as views, recuperação num mês sem recebimentos diz "sem cobertura",
+      nunca R$ 0,00; a carteira mostra a data da posição e "não saldo atual".

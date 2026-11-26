@@ -25,7 +25,23 @@
 
 - A rota de taxa de cancelamento aceita quaisquer dois anos da fonte, desde que
   o intervalo de meses citado seja o comparável.
-- Comparações por ano carregam a janela comparada (`window`) no resultado.
+- Comparações por ano carregam os meses comparados (`window.months`) no resultado.
+
+### Corrigido após a auditoria real do Supabase (25/11)
+
+- Cobertura deixou de ser MIN/MAX: o Hermes lê cada loja e mês com dados e
+  guarda trechos contínuos (lacuna 2011-05 a 2019-06 reconhecida). Primeiro mês
+  de cada trecho e último mês aberto são parciais; mês em lacuna é recusado,
+  nunca zero; pergunta com loja usa a cobertura da loja.
+- Ano contra ano usa só meses completos nos dois anos, mesmo não contíguos
+  (`= ANY($4::text[])`).
+- Recuperação tem cobertura própria de recebimentos (`receipts_last_day`,
+  linha por mês com recebimento): sem cobertura não é recuperação zero.
+- Carteira: "saldo na data da posição (histórico, não saldo atual)" e "atraso
+  não é perda contábil"; posição nunca por `CURRENT_DATE`.
+- Ranking de vendedores por loja até a identidade ser validada.
+- Teste garante que as views `public.vw_*` expostas a `anon`/`authenticated`
+  nunca são fonte do Hermes.
 
 ## 2026-11-25 — Semana 3: operação diária do bot e preparação do Linx
 
