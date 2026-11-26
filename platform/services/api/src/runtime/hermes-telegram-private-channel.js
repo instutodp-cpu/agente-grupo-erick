@@ -7,6 +7,8 @@ const {createHash,timingSafeEqual,randomBytes}=require('node:crypto');
 const MAX_MEMBERS=3,INVITE_TTL_MS=10*60*1000;
 const {parseSalesCommand,historicalLiveReply}=require('./hermes-softcom-live-channel');
 const analyst=require('./hermes-analyst-templates');
+const credit=require('./hermes-receivables-templates');
+const sellers=require('./hermes-seller-templates');
 const governed=require('./hermes-governed-agent');
 const ownerDecisions=require('./hermes-owner-decision-memory');
 const finops=require('./hermes-inference-finops');
@@ -29,11 +31,13 @@ const HELP='Hermes Grupo Erick — piloto privado de leitura.\n\n'+
  'Memória de decisões: /decisao (propor, confirmar, cancelar) e /decisoes.\n'+
  'Segundo cérebro central: /cerebro TERMO (somente quando conexão RLS autorizada).\n'+
  'Métricas privadas de IA: /economia. Diagnóstico: /diagnostico, /diagnostico lojas, /diagnostico cruzamento. Alertas: /alertas historicos.\n'+
+ 'Somente o dono: inadimplência e carteira vencida ("qual a inadimplência?", "concentração por loja", "recuperação em maio de 2026") e ranking de vendedores ("melhores vendedores de maio de 2026"), quando as fontes forem liberadas.\n'+
+ 'Ticket médio: "qual o ticket médio em março de 2026?".\n'+
  'Acesso de outras pessoas (somente o dono): /convidar, /membros, /remover ID.\n'+
  'Não faço pagamentos, apostas, publicações ou envio a terceiros.';
 const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 const num=new Intl.NumberFormat('pt-BR');
-function intentFor(text){
+function intentFor(text,historyCoverage){
  if(typeof text!=='string'||text.length>600)return 'unknown';
  const t=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
  if(/^\/(?:start|ajuda|help)(?:@\w+)?$/.test(t)||t==='ajuda')return 'help';
@@ -45,7 +49,7 @@ function intentFor(text){
  if(/^\/historico(?:@\w+)?$/.test(t)||t==='historico de vendas'||
     t==='resumo historico de vendas')return 'historico';
  if(parseSalesCommand(text))return 'historico_live';
- if(analyst.planQuestion(text))return 'business_analyst';
+ if(analyst.planQuestion(text,null,historyCoverage||undefined))return 'business_analyst';
  if(/^\/prioridades(?:@\w+)?$/.test(t))return 'prioridades';
  if(/^\/(?:compras|pendencias)(?:@\w+)?$/.test(t)||
   (/\b(compras|duplicatas)\b/.test(t)&&
@@ -68,21 +72,32 @@ function advisoryRequest(text){
 }
 // Fixed, source-verified historic comparison, not a governed LLM turn.
 // Strict grammar prevents unrelated advisory questions being silently demoted.
-function cancellationRateRequest(text){
- if(typeof text!=='string'||text.length>600)return false;
+// Two years held by the source and the month range named in the text must
+// be exactly the months complete in both years (from the source coverage).
+const MONTH_TOKEN=/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro|jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)\b/g;
+const MONTH_NUMBER=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function cancellationRatePlan(text,historyCoverage){
+ if(typeof text!=='string'||text.length>600)return null;
  const q=analyst.normalize(text);
  if(q.startsWith('/')||!/\b(?:taxas?|percentuais?)\b/.test(q)||
-  !/\bcancelament(?:o|os)\b|\bcancelad(?:os|as)\b/.test(q)||
-  !/\b(?:janeiro a maio|jan-mai|jan a maio)\b/.test(q))return false;
- const years=[...q.matchAll(/\b20\d{2}\b/g)].map(m=>m[0]);
- if(years.length!==2||!years.includes('2025')||!years.includes('2026'))return false;
- if(/\b(?:fevereiro|marco|abril|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/.test(q))return false;
+  !/\bcancelament(?:o|os)\b|\bcancelad(?:os|as)\b/.test(q))return null;
  // Hard-denied subjects never fall into an automatic historical lookup.
- if(/\b(?:cpf|cnpj|senha|token|pix|transferencia|pagar|apagar|sql|clientes)\b/.test(q))return false;
- return true;
+ if(/\b(?:cpf|cnpj|senha|token|pix|transferencia|pagar|apagar|sql|clientes)\b/.test(q))return null;
+ const years=[...q.matchAll(/\b20\d{2}\b/g)].map(m=>m[0]);
+ if(years.length!==2||years[0]===years[1])return null;
+ const [period,other]=[...years].sort();
+ const plan=Object.freeze({tenant_id:'grupo_erick',template:'compare',
+  period,other_period:other,metric:'cancelled',store:null});
+ try{analyst.validate(plan,historyCoverage||undefined);}catch{return null}
+ const window=analyst.compareWindow(plan,historyCoverage||undefined);
+ // The asked month range must be named and equal the comparable months.
+ const named=[...q.matchAll(MONTH_TOKEN)].map(m=>MONTH_NUMBER.indexOf(m[1].slice(0,3))+1);
+ const months=window.months.map(Number);
+ const contiguous=months.every((m,i)=>i===0||m===months[i-1]+1);
+ if(named.length!==2||!contiguous||named[0]!==months[0]||named[1]!==months.at(-1))return null;
+ return plan;
 }
-const CANCEL_RATE_PLAN=Object.freeze({tenant_id:'grupo_erick',template:'compare',
- period:'2025',other_period:'2026',metric:'cancelled',store:null});
+const cancellationRateRequest=(text,historyCoverage)=>cancellationRatePlan(text,historyCoverage)!==null;
 function privateMessage(update){
  const m=update?.message;
  if(!Number.isSafeInteger(update?.update_id)||update.update_id<0||
@@ -328,7 +343,12 @@ async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,cloc
  readAnalyst=async()=>null,readAgent=async()=>null,agentEnabled=false,
  readDecisions=async()=>null,writeDecisions=async()=>{},
  readFinops=async()=>null,readAutocurated=async()=>null,readGovernedFallback=async()=>null,
- readBrain=async()=>{throw Error('brain_machine_reader_not_activated')}}){
+ readBrain=async()=>{throw Error('brain_machine_reader_not_activated')},
+ historyCoverage=null,
+ // Credit and seller views stay off until a reviewed view is configured.
+ creditSources=null,sellerSource=null,
+ readCredit=async()=>{throw Error('credit_source_awaiting_audit')},
+ readSellers=async()=>{throw Error('seller_source_awaiting_audit')}}){
  const msg=privateMessage(update);
  if(!msg)return {kind:'ignored'};
  if(typeof send!=='function'||typeof query!=='function')
@@ -522,17 +542,51 @@ async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,cloc
   await send(msg.userId,reply);
   return {kind:'answered',intent:'owner_decision',source:'human_confirmation_only'};
  }
+ // Credit (inadimplência) and seller rankings: deterministic, aggregate
+ // only, owner only (credit position and employees' sales are not shared
+ // with members), and refused while their audited views are not configured.
+ // They run before the AI agent so "analise a inadimplência" never reaches
+ // a model without credit evidence.
+ const creditPlan=credit.planQuestion(msg.text,clock());
+ const sellerPlan=creditPlan?null:sellers.planQuestion(msg.text,historyCoverage||undefined);
+ if(creditPlan||sellerPlan){
+  const intent=creditPlan?'business_credit':'business_sellers';
+  if(!isOwner){
+   await send(msg.userId,'Indicadores de crédito e de vendedores são visíveis somente ao dono.');
+   return {kind:'answered',intent:'access_owner_only'};
+  }
+  const source=creditPlan?(creditPlan.template==='recovery'?creditSources?.recovery:creditSources?.position):sellerSource;
+  let response;
+  if(!source){
+   response=(creditPlan?'Inadimplência e recuperação de crédito':'Ranking de vendedores')+
+    ' ainda não liberado: a fonte aguarda a auditoria do banco das lojas e uma view revisada. Nenhum número foi estimado.';
+   await send(msg.userId,response);
+   return {kind:'answered',intent:intent+'_awaiting_source',source:'none'};
+  }
+  try{
+   const data=await (creditPlan?readCredit(creditPlan):readSellers(sellerPlan));
+   response=data?.denied_status==='history_budget_exhausted'?
+    'Limite diário de consultas históricas atingido. Não consultei dados novos nem estimei valores.':
+    creditPlan?credit.reply(data,creditPlan,{sources:creditSources}):
+     sellers.reply(data,sellerPlan,{relation:sellerSource,coverage:historyCoverage||undefined});
+  }catch{
+   response='Não consegui validar essa consulta no banco. Não vou apresentar números presumidos.';
+  }
+  await send(msg.userId,response);
+  return {kind:'answered',intent,source:'approved_history_aggregate'};
+ }
  // Explicit matched-year cancellation rates are a deterministic read path.
  // This is not a backdoor to LLM quota: no model call, no write, one bounded
  // historical template governed by the existing history budget and owner gate.
- if(cancellationRateRequest(msg.text)){
+ const cancelPlan=cancellationRatePlan(msg.text,historyCoverage);
+ if(cancelPlan){
   let response,cache='miss';
   try{
-   const data=await readAnalyst(CANCEL_RATE_PLAN);
+   const data=await readAnalyst(cancelPlan);
    if(data?.denied_status==='history_budget_exhausted'){
     response='Limite diário de consultas históricas atingido. Não consultei dados novos nem estimei taxas.';
    }else{
-    response=analyst.reply(data,CANCEL_RATE_PLAN);
+    response=analyst.reply(data,cancelPlan,historyCoverage||undefined);
     if(data.cached===true){
      cache='hit';
      response+='\n\n⏱️ Consulta validada reutilizada do cache, com data da fonte acima.';
@@ -557,8 +611,8 @@ async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,cloc
  const useAgent=agentEnabled&&advisoryRequest(msg.text);
  // Follow-up context ("e em fevereiro?") is per person, never shared.
  const previous=useAgent?null:await readAnalystContext(msg.userId);
- const plan=useAgent?null:analyst.planQuestion(msg.text,previous);
- const intent=useAgent?'unknown':plan?'business_analyst':intentFor(msg.text);
+ const plan=useAgent?null:analyst.planQuestion(msg.text,previous,historyCoverage||undefined);
+ const intent=useAgent?'unknown':plan?'business_analyst':intentFor(msg.text,historyCoverage);
  if(intent==='help'){await send(msg.userId,HELP);return {kind:'answered',intent};}
  if(intent==='unknown'){
   if(!agentEnabled){
@@ -611,7 +665,7 @@ async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,cloc
    if(data?.denied_status==='history_budget_exhausted'){
     response='Limite diário de análises históricas alcançado; nenhum dado novo consultado.';
    }else{
-    response=analyst.reply(data,plan);
+    response=analyst.reply(data,plan,historyCoverage||undefined);
     if(data.cached===true){cache='hit';response+='\n\n⏱️ Resposta reutilizada de cache validado ('+new Date(data.at).toLocaleString('pt-BR',{timeZone:'America/Recife'})+').';}
     await writeAnalystContext({tenant_id:'grupo_erick',template:plan.template,metric:plan.metric,period:plan.period,other_period:plan.other_period,store:plan.store},msg.userId);
    }
@@ -679,4 +733,4 @@ async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,cloc
  await send(msg.userId,response);
  return {kind:'answered',intent,cache:cacheStatus};
 }
-module.exports={ROUTES,HELP,intentFor,advisoryRequest,privateMessage,pairValid,hermesReply,verifiedCache,cachedReply,safeHistorySnapshot,historicalReply,cancellationRateRequest,processUpdate};
+module.exports={ROUTES,HELP,intentFor,advisoryRequest,privateMessage,pairValid,hermesReply,verifiedCache,cachedReply,safeHistorySnapshot,historicalReply,cancellationRateRequest,cancellationRatePlan,processUpdate};

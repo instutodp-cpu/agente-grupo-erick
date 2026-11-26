@@ -9,7 +9,8 @@
 // into Supabase is a separate, reviewed step.
 
 const crypto = require('crypto');
-const { ENTITY_MAP, normalizeSetaRecord, decideSyncAction } = require('./seta-read-adapter');
+const { ENTITY_MAP } = require('./seta-read-adapter');
+const syncPlan = require('./seta-sync-plan');
 
 const FILE_TRANSPORT_POLICY = Object.freeze({
   adapterId: 'seta_read_v1',
@@ -20,10 +21,9 @@ const FILE_TRANSPORT_POLICY = Object.freeze({
   failClosed: true
 });
 const MAPPING_VERSION = 1;
-const MANIFEST_VERSION = 1;
+const MANIFEST_VERSION = syncPlan.MANIFEST_VERSION;
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const MAX_ROWS = 200000;
-const MAX_REMEMBERED_FILES = 60;
 const DELIMITERS = Object.freeze([';', ',', '\t']);
 const DATE_FORMATS = Object.freeze(['DD/MM/YYYY', 'YYYY-MM-DD']);
 const FIELD_TYPES = Object.freeze(['text', 'money_brl', 'integer', 'date']);
@@ -154,24 +154,8 @@ function convert(value, type, format) {
   return parseDate(value, format);
 }
 
-function emptyManifest(mapping) {
-  return { version: MANIFEST_VERSION, tenantId: mapping.tenantId, companyId: mapping.companyId,
-    kind: mapping.kind, files: [], entries: {} };
-}
-
-function validateManifest(manifest, mapping) {
-  if (manifest == null) return emptyManifest(mapping);
-  if (manifest.version !== MANIFEST_VERSION || !Array.isArray(manifest.files) ||
-      !manifest.entries || typeof manifest.entries !== 'object' || Array.isArray(manifest.entries)) {
-    throw fail('manifest is invalid');
-  }
-  // Multi-company isolation: a manifest never crosses tenant, company or kind.
-  if (manifest.tenantId !== mapping.tenantId || manifest.companyId !== mapping.companyId ||
-      manifest.kind !== mapping.kind) {
-    throw fail('manifest belongs to another tenant, company or kind');
-  }
-  return manifest;
-}
+// Manifest rules are shared with the API transport (seta-sync-plan).
+const validateManifest = syncPlan.validateManifest;
 
 function planFileImport({ file, fileName, receivedAt, mapping, previousManifest = null } = {}) {
   validateMapping(mapping);
@@ -235,31 +219,17 @@ function planFileImport({ file, fileName, receivedAt, mapping, previousManifest 
         if (value === null) throw fail(`invalid_${spec.type}`);
         payload[name] = value;
       }
-      const record = normalizeSetaRecord({
-        kind: mapping.kind,
-        id: `seta:${mapping.companyId}:${mapping.kind}:${sourceId}`,
-        sourceId,
-        tenantId: mapping.tenantId,
-        companyId: mapping.companyId,
-        establishmentId: mapping.stores[storeCode],
-        occurredAt,
-        sourceUpdatedAt: updated,
-        ingestedAt: receivedAt,
-        evidenceIds: [`file:${fileSha256}#L${line}`],
-        payload
+      const planned = syncPlan.planRecord(entries, {
+        identity: mapping, sourceId, establishmentId: mapping.stores[storeCode], occurredAt,
+        sourceUpdatedAt: updated, receivedAt, evidenceId: `file:${fileSha256}#L${line}`, payload
       });
-      const previous = entries[sourceId];
-      const action = decideSyncAction(previous ? { payload: { payloadHash: previous.payloadHash } } : null, record);
-      if (action === 'IGNORE_IDENTICAL') { unchanged++; continue; }
-      const version = (previous?.version || 0) + 1;
-      entries[sourceId] = { payloadHash: record.payload.payloadHash, version, sourceUpdatedAt: updated };
-      records.push(Object.freeze({ action, version, record }));
+      if (!planned) { unchanged++; continue; }
+      records.push(planned);
     } catch (err) {
       // Line number and reason only: never the row content.
       rejected.push({ line, reason: /^[a-z_]{3,40}$/.test(err.message) ? err.message : 'invalid_row' });
     }
   }
-  const files = [...manifest.files, fileSha256].slice(-MAX_REMEMBERED_FILES);
   return {
     policy: FILE_TRANSPORT_POLICY,
     status: 'PLANNED',
@@ -267,8 +237,8 @@ function planFileImport({ file, fileName, receivedAt, mapping, previousManifest 
     summary: { create: records.length, unchanged, rejected: rejected.length },
     records,
     rejected,
-    manifest: { version: MANIFEST_VERSION, tenantId: mapping.tenantId, companyId: mapping.companyId,
-      kind: mapping.kind, files, entries }
+    // Spread keeps what the API transport remembered (pages, cursor).
+    manifest: { ...manifest, files: syncPlan.remember(manifest.files, fileSha256), entries }
   };
 }
 
@@ -279,6 +249,7 @@ function headerHashOf(file, delimiter) {
 }
 
 module.exports = {
+  convert,
   FILE_TRANSPORT_POLICY,
   MAPPING_VERSION,
   MANIFEST_VERSION,

@@ -1,5 +1,48 @@
 # CHANGELOG.md
 
+## 2026-11-25 — Semana 4: inteligência empresarial (preparação)
+
+### Adicionado
+
+- Cobertura do histórico lida da própria fonte (`hermes-history-coverage.js`):
+  qualquer período que a view tenha é aceito, inclusive desde 2011 quando a
+  view existir; sem leitura válida vale a cobertura verificada (falha fechada).
+- Ano contra ano só nos meses completos dos dois anos, com a janela passada
+  como parâmetro e dita na resposta; avisos de período parcial derivados do
+  último dia da fonte.
+- Ticket médio nos templates existentes (período, comparação, lojas).
+- Inadimplência determinística (carteira por faixa de atraso, concentração por
+  loja, recuperação) e ranking de vendedores, só agregados e só para o dono,
+  desligados até as views auditadas serem configuradas
+  (`HERMES_HISTORY_RECEIVABLES_*_VIEW`, `HERMES_HISTORY_SELLER_VIEW`).
+- Adaptador Seta: plano incremental compartilhado (`seta-sync-plan.js`) e
+  transporte `API` pronto e desligado (`seta-api-transport.js`), com o mesmo
+  manifesto do transporte por arquivo.
+- `platform/docs/HERMES_BUSINESS_INTELLIGENCE_SOURCES.md`: contratos das views
+  e o que a auditoria do Supabase precisa confirmar.
+
+### Alterado
+
+- A rota de taxa de cancelamento aceita quaisquer dois anos da fonte, desde que
+  o intervalo de meses citado seja o comparável.
+- Comparações por ano carregam os meses comparados (`window.months`) no resultado.
+
+### Corrigido após a auditoria real do Supabase (25/11)
+
+- Cobertura deixou de ser MIN/MAX: o Hermes lê cada loja e mês com dados e
+  guarda trechos contínuos (lacuna 2011-05 a 2019-06 reconhecida). Primeiro mês
+  de cada trecho e último mês aberto são parciais; mês em lacuna é recusado,
+  nunca zero; pergunta com loja usa a cobertura da loja.
+- Ano contra ano usa só meses completos nos dois anos, mesmo não contíguos
+  (`= ANY($4::text[])`).
+- Recuperação tem cobertura própria de recebimentos (`receipts_last_day`,
+  linha por mês com recebimento): sem cobertura não é recuperação zero.
+- Carteira: "saldo na data da posição (histórico, não saldo atual)" e "atraso
+  não é perda contábil"; posição nunca por `CURRENT_DATE`.
+- Ranking de vendedores por loja até a identidade ser validada.
+- Teste garante que as views `public.vw_*` expostas a `anon`/`authenticated`
+  nunca são fonte do Hermes.
+
 ## 2026-11-25 — Semana 3: operação diária do bot e preparação do Linx
 
 ### Adicionado

@@ -36,6 +36,7 @@ test('historic summaries keep actual comparison numbers rather than a truncated 
  const at=new Date(now-3600000).toISOString();
  const plan={tenant_id:'grupo_erick',template:'compare',period:'2025',other_period:'2026',metric:'records',store:null};
  const data={tenant_id:'grupo_erick',mode:'online_aggregate',source:analyst.SOURCE,at,plan,
+  window:{months:['01','02','03','04','05']}, // year comparisons carry the months they compared
   rows:[{label:'2025',records:4122,cancelled:120,amount:91000,last_day:null},
         {label:'2026',records:4999,cancelled:125,amount:102000,last_day:null}]};
  const observed=evidence.observe(null,data,plan,now);

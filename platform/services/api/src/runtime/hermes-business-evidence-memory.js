@@ -4,6 +4,7 @@
 // simulation Agent Memory Registry and NOT a personal/conversation memory.
 const crypto=require('node:crypto');
 const analyst=require('./hermes-analyst-templates');
+const coverageModel=require('./hermes-history-coverage');
 const TENANT='grupo_erick',KIND='historical_aggregate_v1';
 const MAX_ENTRIES=12,MAX_AGE_MS=14*86400000,MAX_CONTEXT=1500;
 const SCHEMA=1;
@@ -18,8 +19,9 @@ function shape(o,fields){
   Object.keys(o).sort().join('|')===fields.slice().sort().join('|');
 }
 function normalizeEntry(data,plan,now=Date.now()){
- const p=analyst.validate(plan);
- if(!shape(data,['tenant_id','mode','source','at','plan','rows'])||
+ const p=analyst.validateShape(plan);
+ if(!(shape(data,['tenant_id','mode','source','at','plan','rows'])||
+  shape(data,['tenant_id','mode','source','at','plan','rows','window']))||
  data.tenant_id!==TENANT||data.mode!=='online_aggregate'||!Array.isArray(data.rows))throw Error('memory_data_denied');
  const summary=analyst.reply(data,p);
  if(summary.length>1800||!summary.startsWith('📊 Hermes'))throw Error('memory_summary_denied');
@@ -31,7 +33,9 @@ function normalizeEntry(data,plan,now=Date.now()){
    template:p.template,metric:p.metric,source:data.source,
    summary};
 }
-function validEntry(e,now=Date.now()){
+// Periods are checked against the coverage read from the source (default:
+// the last verified one), like any fresh question.
+function validEntry(e,now=Date.now(),coverage=coverageModel.BASELINE){
  if(!shape(e,['kind','tenant_id','scope','key','at','period','other_period','template','metric','source','summary'])||
  e.kind!==KIND||e.tenant_id!==TENANT||e.scope!=='enterprise'||
  typeof e.key!=='string'||!/^[a-f0-9]{24}$/.test(e.key)||
@@ -40,29 +44,30 @@ function validEntry(e,now=Date.now()){
  typeof e.summary!=='string'||e.summary.length<50||e.summary.length>1800||
  !e.summary.startsWith('📊 Hermes')||
  !['period','compare','stores','products'].includes(e.template)||
- !['money','records','cancelled'].includes(e.metric)||
- !analyst.isPeriod(e.period)||
- e.other_period!==null&&(typeof e.other_period!=='string'||!analyst.isPeriod(e.other_period))||
+ !analyst.METRICS.includes(e.metric)||
+ !(e.template==='products'?coverageModel.accepts(coverageModel.scopeOf(coverage,'products'),e.period):
+  analyst.isPeriod(e.period,coverage))||
+ e.other_period!==null&&(typeof e.other_period!=='string'||!analyst.isPeriod(e.other_period,coverage))||
  (e.template==='compare'&&(e.other_period===null||
   e.other_period===e.period||e.other_period.length!==e.period.length))||
  (e.template!=='compare'&&e.other_period!==null)||
- (e.template==='products'&&!e.period.startsWith('2026'))||
+ (e.template==='products'&&e.metric==='ticket')||
  e.source!==(e.template==='products'?analyst.PRODUCT_SOURCE:analyst.SOURCE))throw Error('memory_entry_denied');
  return e;
 }
-function validStore(store,now=Date.now()){
+function validStore(store,now=Date.now(),coverage){
  if(store==null)return {schema:SCHEMA,tenant_id:TENANT,scope:'enterprise',entries:[]};
  if(!shape(store,['schema','tenant_id','scope','entries'])||
   store.schema!==SCHEMA||store.tenant_id!==TENANT||store.scope!=='enterprise'||
   !Array.isArray(store.entries)||store.entries.length>MAX_ENTRIES)throw Error('memory_store_denied');
  const keys=new Set();
- for(const e of store.entries){validEntry(e,now);if(keys.has(e.key))throw Error('memory_duplicate');keys.add(e.key);}
+ for(const e of store.entries){validEntry(e,now,coverage);if(keys.has(e.key))throw Error('memory_duplicate');keys.add(e.key);}
  // Expired but otherwise valid entries must be evicted, never poison future reads.
  return {...store,entries:store.entries.filter(e=>now-Date.parse(e.at)<=MAX_AGE_MS)
   .sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)||a.key.localeCompare(b.key))};
 }
-function observe(store,data,plan,now=Date.now()){
- const current=validStore(store,now);
+function observe(store,data,plan,now=Date.now(),coverage){
+ const current=validStore(store,now,coverage);
  const next=normalizeEntry(data,plan,now);
  // A delayed provider response must not replace a newer observation of the same query.
  const previous=current.entries.find(e=>e.key===next.key);
@@ -71,10 +76,10 @@ function observe(store,data,plan,now=Date.now()){
  if(previous&&Date.parse(previous.at)>=Date.parse(next.at))return current;
  const entries=current.entries.filter(e=>e.key!==next.key).concat(next)
   .sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)).slice(0,MAX_ENTRIES);
- return validStore({schema:SCHEMA,tenant_id:TENANT,scope:'enterprise',entries},now);
+ return validStore({schema:SCHEMA,tenant_id:TENANT,scope:'enterprise',entries},now,coverage);
 }
-function context(store,goal,now=Date.now()){
- const current=validStore(store,now);
+function context(store,goal,now=Date.now(),coverage){
+ const current=validStore(store,now,coverage);
  if(typeof goal!=='string'||goal.length>600)throw Error('memory_goal_denied');
  const normalized=analyst.normalize(goal);
  const years=[...normalized.matchAll(/\b20[0-9]{2}\b/g)].map(x=>x[0]);

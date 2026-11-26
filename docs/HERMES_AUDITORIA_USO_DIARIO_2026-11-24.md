@@ -56,6 +56,18 @@ cotas maiores, o deploy precisa incluir as variáveis novas (ver
 Detalhes, implantação e critérios de aceite em
 `platform/docs/HERMES_TELEGRAM_OPERATIONS_RUNBOOK.md`.
 
+### Semana 4 preparada (25/11, PR sem merge, sem deploy)
+
+| Frente | Entrega |
+| --- | --- |
+| Anos fixos (G3) | Cobertura lida da fonte; qualquer período que a view tenha, inclusive desde 2011 quando existir; janela ano a ano derivada dos meses completos |
+| Ticket médio (G5) | Nos templates existentes, com limitações explícitas |
+| Inadimplência e vendedores (G5) | Consultas determinísticas prontas, só agregados e só para o dono; desligadas até as views auditadas |
+| Linx | Plano incremental compartilhado; transporte por API pronto e desligado até a descoberta, mesmo manifesto do arquivo |
+
+Contratos e pedido de evidências em
+`platform/docs/HERMES_BUSINESS_INTELLIGENCE_SOURCES.md`.
+
 ### Respostas do proprietário (24/11)
 
 1. **A v1 não está mais no Railway.** *(confirmado)* Os achados S1–S4, todos

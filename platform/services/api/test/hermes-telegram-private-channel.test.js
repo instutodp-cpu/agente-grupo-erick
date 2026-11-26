@@ -720,7 +720,8 @@ test('historical monthly templates query only approved private views with bound 
  const data=await analyst.execute(client,p,()=>new Date('2026-10-22T17:00:00Z'));
  const msg=analyst.reply(data,p);
  assert.match(msg,/4\.226/);assert.match(msg,/4\.902/);assert.match(msg,/676/);
- assert.deepEqual(queries[0].values,['2025-01','2026-01',null]);
+ // Month comparisons pass the full-year window; only year comparisons narrow it.
+ assert.deepEqual(queries[0].values,['2025-01','2026-01',null,['01','02','03','04','05','06','07','08','09','10','11','12']]);
  assert.match(queries[0].text,/hermes_history\.monthly_commercial_2025_2026_v1/);
  assert.doesNotMatch(queries[0].text,/softcom_import|select \*|cadastro_clientes/i);
  assert.equal(queries[0].query_timeout,5000);
@@ -1093,6 +1094,7 @@ test('matched cancellation rate advice uses verified read without consuming LLM 
  const fixture={tenant_id:'grupo_erick',mode:'online_aggregate',
   source:analyst.SOURCE,at:new Date(clock()).toISOString(),
   plan:{tenant_id:'grupo_erick',template:'compare',period:'2025',other_period:'2026',metric:'cancelled',store:null},
+  window:{months:['01','02','03','04','05']},
   rows:[
    {label:'2025',records:21940,cancelled:238,amount:2730133.04,last_day:'2025-05-31'},
    {label:'2026',records:24148,cancelled:623,amount:2956645.04,last_day:'2026-05-31'}]};
@@ -1254,11 +1256,14 @@ test('year-on-year history compares only January through May of both years',asyn
    {label:'2026',records:'24148',cancelled:'623',noncancelled:'23525',
     amount:'2956645.04',last_day:'2026-05-31'}]};
  }},p,()=>new Date('2026-10-22T19:00:00Z'));
- assert.deepEqual(sql.values,['2025','2026',null]);
- assert.match(sql.text,/RIGHT\(month,2\) BETWEEN '01' AND '05'/);
+ // The window (complete months in both years) comes from the coverage,
+ // bound as parameters, not written in the SQL.
+ assert.deepEqual(sql.values,['2025','2026',null,['01','02','03','04','05']]);
+ assert.match(sql.text,/RIGHT\(month,2\)=ANY\(\$4::text\[\]\)/);
+ assert.deepEqual(data.window,{months:['01','02','03','04','05']});
  const txt=analyst.reply(data,p);
  assert.match(txt,/janeiro a maio de cada ano/);
- assert.match(txt,/utiliza apenas janeiro–maio completos nos dois anos/);
+ assert.match(txt,/usa apenas janeiro a maio, meses completos nos dois anos/);
  assert.doesNotMatch(txt,/podem não ter cobertura equivalente/);
  assert.match(txt,/2\.730\.133,04/);
  assert.match(txt,/2\.956\.645,04/);
@@ -2610,6 +2615,7 @@ test('configured history limit is enforced end to end, default limit unchanged',
  const fixture={tenant_id:'grupo_erick',mode:'online_aggregate',
   source:analyst.SOURCE,at:new Date(clock()).toISOString(),
   plan:{tenant_id:'grupo_erick',template:'compare',period:'2025',other_period:'2026',metric:'cancelled',store:null},
+  window:{months:['01','02','03','04','05']},
   rows:[{label:'2025',records:21940,cancelled:238,amount:2730133.04,last_day:'2025-05-31'},
    {label:'2026',records:24148,cancelled:623,amount:2956645.04,last_day:'2026-05-31'}]};
  const run=async limits=>{

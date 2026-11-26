@@ -128,3 +128,51 @@ vêm do primeiro arquivo exportado):
 ```
 
 Testes: `test/seta-file-transport.test.js`.
+
+## C3.2 — Plano incremental compartilhado e transporte por API (pronto, desligado)
+
+O plano incremental saiu do transporte por arquivo para
+`src/hermes/accounting/seta-sync-plan.js` e passou a ser **compartilhado** pelos
+dois transportes do mesmo adaptador `seta_read_v1`:
+
+| Transporte | Módulo | Entrada | Estado |
+| --- | --- | --- | --- |
+| `FILE_EXPORT` | `seta-file-transport.js` | um arquivo exportado do Linx | pronto (C3.1) |
+| `API` | `seta-api-transport.js` | **uma página** de registros já buscada pelo conector | pronto, **desligado** até a descoberta |
+
+```text
+adapter_id = seta_read_v1
+transport = API
+mode = READ_ONLY
+network = false        # o módulo nunca chama a rede; quem busca a página é o conector
+persistence = NONE
+fail_closed = true
+```
+
+O que fica garantido:
+
+- **Mesmo registro, mesmo manifesto.** Os dois transportes geram os mesmos
+  registros canônicos (`seta:<empresa>:<tipo>:<id>`) e as mesmas entradas
+  (`sourceId` → `payloadHash`, versão). Uma empresa pode sair do arquivo para a
+  API sem reimportar nada: o mesmo registro vira "inalterado"; um valor mudado
+  vira nova versão, venha de onde vier. O manifesto guarda também os arquivos
+  já vistos (`files`), as páginas já vistas (`apiPages`) e o cursor (`apiCursor`).
+- **API fechada até ser descoberta.** `planApiPage` exige
+  `assertTransportConfigured` (endpoint oficial, estratégia de autenticação e
+  recibo de descoberta `verified` que batem) **e** um mapeamento revisado cujo
+  `discovery.layoutSha256` é o hash do conjunto de chaves dos registros. Chave
+  nova ou faltando = `SETA_API_LAYOUT_CHANGED`; nada é remapeado por suposição.
+- **Mapeamento da API** (`validateApiMapping`): `fields.id`, `fields.occurredAt`,
+  `fields.establishment` (e opcional `fields.sourceUpdatedAt`) são chaves JSON;
+  `payload` com tipos `text`, `money_brl`, `money_decimal` (`1234.56`),
+  `integer` ou `date`; `stores` como no arquivo.
+- **Página limitada e idempotente.** Até 1.000 registros e 5 MB; página repetida
+  (mesmo `sha256`) vira `IGNORE_DUPLICATE_PAGE`; página vazia só move o cursor;
+  rejeições por **posição e motivo**, nunca o conteúdo; evidência
+  `api:<sha256 da página>#<posição>`.
+- **Isolamento.** Manifesto nunca cruza `tenantId`, `companyId` ou `kind`.
+
+Para ligar a API (passos revisados, fora deste módulo): descoberta oficial da
+Seta (endpoint, autenticação, recibo), credencial guardada pelo gateway (nunca
+no código), conector que busca uma página por vez pelo MCP Gateway e chama
+`planApiPage`, e o mesmo passo revisado de gravação no Supabase do C3.1.
