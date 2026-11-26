@@ -26,11 +26,15 @@ const CONTRACT=Object.freeze({
    raw_store:'text: código de loja (mesmos valores da view comercial)',
    aging_bucket:'text: '+BUCKETS.join('|'),installments:'bigint: parcelas em aberto',
    open_amount:'numeric(18,2): saldo em aberto em reais'})}),
- recovery:Object.freeze({grain:'month × raw_store',
+ // One row per month × store for EVERY month the receipts source covers
+ // (any payment recorded), even when nothing overdue was recovered (0):
+ // a missing row means no receipts coverage, never a recovery of zero.
+ recovery:Object.freeze({grain:'month × raw_store, todo mês com recebimentos registrados',
   columns:Object.freeze({month:'text YYYY-MM',raw_store:'text',
-   recovered_installments:'bigint: parcelas vencidas recebidas no mês',
-   recovered_amount:'numeric(18,2): valor recebido dessas parcelas',
-   last_day:'text YYYY-MM-DD: último dia com recebimento no mês'})})
+   recovered_installments:'bigint: parcelas vencidas recebidas no mês (pode ser 0)',
+   recovered_amount:'numeric(18,2): valor recebido dessas parcelas (pode ser 0)',
+   last_day:'text YYYY-MM-DD ou NULL: último dia com recuperação no mês',
+   receipts_last_day:'text YYYY-MM-DD: último dia com QUALQUER recebimento no mês (cobertura)'})})
 });
 const RELATION=/^hermes_history\.[a-z][a-z0-9_]{2,62}$/;
 // View names from configuration (composition root), never from a message.
@@ -47,7 +51,9 @@ function sourcesFromEnv(env=process.env){
 const MONTHS=['janeiro','fevereiro','marco','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 const normalize=t=>t.normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
 const CREDIT_WORDS=/\b(inadimplencia|inadimplentes?|vencid[ao]s?|atrasad[ao]s?|atraso|carteira|crediario|recuper[a-z]*|cobranca|parcelas?|a receber)\b/;
-function planQuestion(text,coverage=coverageModel.BASELINE){
+// Receipts have their own coverage (not the sales one): a recovery period is
+// planned by date only and its coverage comes back with the answer.
+function planQuestion(text,now=Date.now()){
  if(typeof text!=='string'||text.length>600||text.trim().length<4)return null;
  const q=normalize(text);
  if(q.startsWith('/')||!CREDIT_WORDS.test(q))return null;
@@ -57,12 +63,13 @@ function planQuestion(text,coverage=coverageModel.BASELINE){
  if(/\b(cpf|cnpj|cliente|clientes|nome|nomes|telefone|endereco|quem|devedor|devedores|contrato|senha|token|pix|pagar|cobrar|enviar|mensagem|negativar|protestar)\b/.test(q))return null;
  const store=STORES.find(s=>q.includes(normalize(s)))||null;
  if(/\b(recuper[a-z]*|recebid[ao]s?|cobranca)\b/.test(q)){
-  // One period: "maio de 2026", "2025", or "maio" = the latest May held.
+  // One period: "maio de 2026", "2025", or "maio" = the latest May so far.
   const m=q.match(/\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b/);
   const years=[...new Set([...q.matchAll(/\b20[0-9]{2}\b/g)].map(x=>x[0]))];
-  if(years.length>1)return null;
+  if(years.length>1||!Number.isSafeInteger(now))return null;
   const mm=m?String(MONTHS.indexOf(m[1])+1).padStart(2,'0'):null;
-  const year=years[0]||(mm?coverageModel.yearForMonth(coverageModel.scopeOf(coverage,'commercial'),mm):null);
+  const today=new Date(now).toISOString().slice(0,7);
+  const year=years[0]||(mm?String(Number(today.slice(0,4))-(today.slice(5)<mm?1:0)):null);
   if(!year)return null;
   return Object.freeze({tenant_id:TENANT,template:'recovery',period:mm?year+'-'+mm:year,store});
  }
@@ -79,19 +86,18 @@ function validateShape(p){
  if(p.template==='stores'&&p.store!==null)throw Error('credit_plan_denied');
  return p;
 }
-// A recovery period must be held by the source (same coverage as sales).
-function validate(p,coverage=coverageModel.BASELINE){
- validateShape(p);
- if(p.template==='recovery'&&!coverageModel.accepts(coverageModel.scopeOf(coverage,'commercial'),p.period))
-  throw Error('credit_period_not_covered');
- return p;
-}
+// Recovery coverage is the receipts source's own, read with the answer;
+// the sales coverage says nothing about receipts.
+const validate=p=>validateShape(p);
 function sqlFor(template,sources){
  const pos=sources?.position,rec=sources?.recovery;
  if(template==='recovery'){
   if(!rec||!RELATION.test(rec))throw Error('credit_source_awaiting_audit');
-  return 'SELECT SUM(recovered_installments)::bigint AS installments,SUM(recovered_amount)::numeric(18,2) AS amount,'+
-   'MAX(last_day) AS last_day,(SELECT MAX(last_day) FROM '+rec+') AS source_last_day FROM '+rec+
+  return 'SELECT ARRAY(SELECT DISTINCT r.month FROM '+rec+' r WHERE (r.month=$1::text OR (length($1::text)=4 AND LEFT(r.month,4)=$1::text))'+
+   ' AND ($2::text IS NULL OR r.raw_store=$2::text) ORDER BY r.month) AS covered_months,'+
+   'COALESCE(SUM(recovered_installments),0)::bigint AS installments,COALESCE(SUM(recovered_amount),0)::numeric(18,2) AS amount,'+
+   'MAX(last_day) AS last_day,MAX(receipts_last_day) AS receipts_last_day,'+
+   '(SELECT MAX(receipts_last_day) FROM '+rec+') AS source_last_day FROM '+rec+
    ' WHERE (month=$1::text OR (length($1::text)=4 AND LEFT(month,4)=$1::text)) AND ($2::text IS NULL OR raw_store=$2::text)';
  }
  if(!pos||!RELATION.test(pos))throw Error('credit_source_awaiting_audit');
@@ -118,9 +124,15 @@ function day(d,field){
 function parseRow(r,template){
  if(!r||typeof r!=='object')throw Error('credit_bad_row');
  if(template==='recovery'){
-  if(r.installments===null&&r.amount===null)return {installments:0,amount:0,last_day:null,source_last_day:day(r.source_last_day??null,'day')};
-  return {installments:count(r.installments),amount:money(r.amount),last_day:day(r.last_day,'day'),
+  const months=r.covered_months;
+  if(!Array.isArray(months)||months.length>12||months.some((m,i)=>!coverageModel.validMonth(m)||i&&m<=months[i-1]))
+   throw Error('credit_invalid_coverage');
+  const o={covered_months:[...months],installments:count(r.installments),amount:money(r.amount),
+   last_day:day(r.last_day??null,'day'),receipts_last_day:day(r.receipts_last_day??null,'day'),
    source_last_day:day(r.source_last_day??null,'day')};
+  // No covered month yet something recovered: the view broke its contract.
+  if(!o.covered_months.length&&(o.installments||o.amount))throw Error('credit_totals_inconsistent');
+  return o;
  }
  if(template==='portfolio'){
   if(!BUCKETS.includes(r.aging_bucket))throw Error('credit_bucket_invalid');
@@ -155,13 +167,15 @@ const nf=new Intl.NumberFormat('pt-BR');
 const pf=new Intl.NumberFormat('pt-BR',{style:'percent',minimumFractionDigits:1,maximumFractionDigits:1});
 const share=(a,b)=>b>0?pf.format(a/b):'—';
 const LIMITS=['⚠️ Agregados da fonte importada, sem dados de clientes; não conciliados com o ERP/Linx.',
- '⚠️ Não é provisão para perdas nem previsão de recebimento. Faixas e saldo seguem a definição da view auditada.'];
+ '⚠️ Atraso não é perda contábil: não é provisão para perdas nem previsão de recebimento. Faixas e saldo seguem a definição da view auditada.'];
 // Rows already parsed by execute (or read back from a cache) are checked
 // again before any number is shown.
 function checkRow(r,template){
  const n=v=>Number.isSafeInteger(v)&&v>=0,m=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0;
  const d=v=>v===null||coverageModel.validDay(v);
- const ok=template==='recovery'?n(r.installments)&&m(r.amount)&&d(r.last_day)&&d(r.source_last_day):
+ const ok=template==='recovery'?Array.isArray(r.covered_months)&&r.covered_months.length<=12&&
+   r.covered_months.every(coverageModel.validMonth)&&n(r.installments)&&m(r.amount)&&d(r.last_day)&&
+   d(r.receipts_last_day)&&d(r.source_last_day)&&(r.covered_months.length>0||(!r.installments&&!r.amount)):
   template==='portfolio'?BUCKETS.includes(r.bucket)&&n(r.installments)&&m(r.amount)&&d(r.as_of_day):
   STORES.includes(r.label)&&m(r.overdue)&&m(r.over90)&&n(r.overdue_installments)&&m(r.open)&&d(r.as_of_day)&&
    r.over90<=r.overdue&&r.overdue<=r.open;
@@ -184,10 +198,25 @@ function reply(data,requested,{sources}={}){
  if(p.template==='recovery'){
   const r=data.rows[0];
   const fresh=freshness.describe(r.source_last_day,at);
-  lines.push(fresh?fresh.text:'Atualidade da fonte: não informada nesta consulta',
-   'Período: '+p.period+(p.store?' | loja '+p.store:''),
-   '• Recuperado (parcelas vencidas recebidas): '+mf.format(r.amount)+' em '+nf.format(r.installments)+' parcelas');
-  if(r.last_day)lines.push('• Último recebimento registrado no filtro: '+freshness.shownDay(r.last_day));
+  lines.push(fresh?'Recebimentos: '+fresh.text:'Atualidade dos recebimentos: não informada nesta consulta',
+   'Período: '+p.period+(p.store?' | loja '+p.store:''));
+  if(!r.covered_months.length){
+   // No receipts coverage is not a recovery of zero.
+   lines.push('⚠️ Sem cobertura de recebimentos na fonte para este período'+(p.store?' e loja':'')+
+    ': isso não significa recuperação zero. Nenhum valor foi estimado.');
+  }else{
+   lines.push('• Recuperado (parcelas vencidas recebidas): '+mf.format(r.amount)+' em '+nf.format(r.installments)+' parcelas');
+   if(p.period.length===4&&r.covered_months.length<12)
+    lines.push('⚠️ Recebimentos registrados só em '+coverageModel.monthsText(r.covered_months.map(m=>m.slice(5)))+
+     ' de '+p.period+'; meses sem registro não significam recuperação zero.');
+   // Partial only where the receipts data itself ends mid-month (a past
+   // month whose last receipt fell on the 30th is not partial).
+   const lastMonth=r.covered_months.at(-1);
+   if(r.receipts_last_day&&r.receipts_last_day===r.source_last_day&&r.receipts_last_day.slice(0,7)===lastMonth&&
+    r.receipts_last_day!==coverageModel.monthEnd(lastMonth))
+    lines.push('⚠️ '+coverageModel.label(lastMonth)+' é parcial: recebimentos só até '+freshness.shownDay(r.receipts_last_day)+'.');
+   if(r.last_day)lines.push('• Última recuperação registrada no filtro: '+freshness.shownDay(r.last_day));
+  }
   lines.push('⚠️ Taxa de recuperação não calculada: exige a carteira vencida no início do período, ainda sem fonte.');
  }else{
   const days=[...new Set(data.rows.map(r=>r.as_of_day).filter(Boolean))];
@@ -202,7 +231,7 @@ function reply(data,requested,{sources}={}){
    const by=new Map(data.rows.map(r=>[r.bucket,r]));
    const sum=list=>list.reduce((n,b)=>n+(by.get(b)?.amount||0),0);
    const total=sum(BUCKETS),overdue=sum(OVERDUE),over90=sum(OVER_90);
-   lines.push((p.store?'Loja '+p.store:'Todas as lojas')+':',
+   lines.push((p.store?'Loja '+p.store:'Todas as lojas')+' — saldo na data da posição (histórico da fonte, não saldo atual):',
     '• Carteira em aberto: '+mf.format(total),
     '• A vencer: '+mf.format(by.get('a_vencer')?.amount||0),
     '• Vencida: '+mf.format(overdue)+' ('+share(overdue,total)+' da carteira)');

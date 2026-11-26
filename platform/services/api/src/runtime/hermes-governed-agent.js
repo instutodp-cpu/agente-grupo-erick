@@ -53,16 +53,17 @@ function validateToolPlan(o,coverage=coverageOf.BASELINE){
 // source, never from a calendar written in this prompt.
 function planPrompt(coverage=coverageOf.BASELINE){
  const sales=coverageOf.scopeOf(coverage,'commercial'),products=coverageOf.scopeOf(coverage,'products');
- const first=sales.first_month.slice(0,4),last=sales.last_month.slice(0,4);
+ const last=coverageOf.latestMonth(sales).slice(0,4);
  return [
  'Você é o planejador do Hermes Grupo Erick em STAGING, somente leitura.',
  'Retorne EXCLUSIVAMENTE JSON válido com a chave steps e 1 a 3 objetos {tool,params}.',
  'Ferramenta history: params com as chaves exatas tenant_id,template,period,other_period,metric,store.',
  'tenant_id=grupo_erick; template=period|compare|stores|products; metric=records|cancelled|money|ticket;',
- 'period AAAA-MM de '+sales.first_month+' a '+sales.last_month+' ou ano AAAA de '+first+' a '+last+';',
+ 'period AAAA-MM ou ano AAAA somente dentro dos meses com dados (lacunas não têm dados nem valem zero);',
  'other_period string apenas compare, caso contrário null;',
  'store null ou CALCADOS, SIRINHAEM, MAGAZINE, SPORTS-(DESATIVADO), ERICK SPORTS, VARIEDADES.',
- 'Histórico de vendas: '+coverageOf.describe(sales)+'. Produtos: '+coverageOf.describe(products)+'; ticket não vale para produtos.',
+ 'Meses com dados de vendas: '+coverageOf.describe(sales)+'. Produtos: '+coverageOf.describe(products)+'; ticket não vale para produtos.',
+ 'O primeiro mês de cada trecho e o último mês podem ser parciais; o executor recusa comparar meses parciais.',
  'Ferramenta compras: params objeto vazio {}. Resumo Compras Homologação, NÃO conciliado com Linx.',
  'Nunca solicite SQL, execução, acesso a clientes, Web, Instagram, WhatsApp ou memória pessoal.',
  'Para diagnóstico amplo, priorize comparação histórica + compras, máximo 3 passos.',

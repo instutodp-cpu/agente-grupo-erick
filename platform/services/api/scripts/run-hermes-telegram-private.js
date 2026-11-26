@@ -75,7 +75,7 @@ function loadState(dir,name){
    const st=fs.fstatSync(fd);
    const limit=name==='history-analyst-cache.json'?16384:
     ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json','auto-memory.json'].includes(name)?32768:
-    name==='ai-finops-daily.json'?4096:2048;
+    name==='ai-finops-daily.json'?4096:name==='history-coverage.json'?8192:2048;
    if(!st.isFile()||(st.mode&0o777)!==0o600||st.size>limit)
     throw Error('state_file_unsafe');
    return JSON.parse(fs.readFileSync(fd,'utf8'));
@@ -87,7 +87,7 @@ function saveState(dir,name,data){
  const serialized=JSON.stringify(data)+'\n';
  const limit=name==='history-analyst-cache.json'?16384:
     ['business-evidence-memory.json','owner-decisions.json','agent-answer-cache.json','auto-memory.json'].includes(name)?32768:
-    name==='ai-finops-daily.json'?4096:2048;
+    name==='ai-finops-daily.json'?4096:name==='history-coverage.json'?8192:2048;
  if(Buffer.byteLength(serialized,'utf8')>limit)throw Error('state_file_too_large');
  const fd=fs.openSync(temp,fs.constants.O_WRONLY|fs.constants.O_CREAT|
   fs.constants.O_EXCL|fs.constants.O_NOFOLLOW,0o600);
@@ -290,8 +290,10 @@ function createCoverageKeeper({stateDir,readLive,liveEnabled,clock}){
    try{
     const fresh=coverageModel.validate(await readLive({shape:'coverage',tenant_id:'grupo_erick'}),now);
     saveState(stateDir,'history-coverage.json',fresh);
+    // Months only (first, last, number of runs: gaps), never values.
     audit(stateDir,{at:new Date(now).toISOString(),event:'history_coverage',
-     first_month:fresh.commercial.first_month,last_month:fresh.commercial.last_month});
+     first_month:fresh.commercial.runs[0].first,last_month:fresh.commercial.runs.at(-1).last,
+     runs:fresh.commercial.runs.length});
     nextAttempt=now+COVERAGE_REFRESH_MS;
     return fresh;
    }catch{

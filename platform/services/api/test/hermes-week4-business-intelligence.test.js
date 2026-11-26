@@ -14,123 +14,169 @@ const NOW=Date.parse('2026-11-25T15:00:00Z');
 const dir=()=>{const d=fs.mkdtempSync(path.join(os.tmpdir(),'hermes-week4-'));fs.chmodSync(d,0o700);return d;};
 const update=(id,userId,text)=>({update_id:id,message:{message_id:7,
  chat:{id:userId,type:'private'},from:{id:userId,is_bot:false},text}});
-// A source that holds sales since March 2011 (what the audited view should give).
-const since2011=coverage.fromRows([
- {scope:'commercial',first_month:'2011-03',last_month:'2026-06',last_day:'2026-06-08'},
- {scope:'products',first_month:'2018-01',last_month:'2026-06',last_day:null}],NOW);
+// Coverage shaped like the real history found by the Supabase audit
+// (softcom_import.cadastro_de_vendas): eight records on 12/04/2011, nothing
+// from 2011-05 to 2019-06, then 08/07/2019 to 08/06/2026. Stores differ:
+// MAGAZINE has no data in 2023-03, VARIEDADES opens mid-February 2021,
+// SPORTS-(DESATIVADO) stops on 15/03/2022.
+const monthList=(from,to)=>{const out=[];for(let i=coverage.index(from);i<=coverage.index(to);i++)out.push(coverage.monthAt(i));return out;};
+function realRows(){
+ const rows=[{scope:'commercial',raw_store:'CALCADOS',month:'2011-04',last_day:'2011-04-12'}];
+ const add=(store,from,to,lastOf=m=>m==='2026-06'?'2026-06-08':coverage.monthEnd(m),skip=[])=>{
+  for(const m of monthList(from,to))if(!skip.includes(m))rows.push({scope:'commercial',raw_store:store,month:m,last_day:lastOf(m)});
+ };
+ for(const store of ['CALCADOS','SIRINHAEM','ERICK SPORTS'])add(store,'2019-07','2026-06');
+ add('MAGAZINE','2019-07','2026-06',undefined,['2023-03']);
+ add('VARIEDADES','2021-02','2026-06');
+ add('SPORTS-(DESATIVADO)','2019-07','2022-03',m=>m==='2022-03'?'2022-03-15':coverage.monthEnd(m));
+ for(const m of monthList('2023-01','2026-06'))rows.push({scope:'products',raw_store:null,month:m,last_day:null});
+ return rows;
+}
+const real=coverage.fromRows(realRows(),NOW);
+const since2011=real; // older name kept for the credit and seller tests below
 const evidence=(plan,rows,extra={})=>({tenant_id:'grupo_erick',mode:'online_aggregate',
  source:analyst.SOURCE,at:new Date(NOW).toISOString(),plan,rows,...extra});
 const row=(o)=>({records:100,cancelled:10,amount:9000,last_day:'2026-05-31',source_last_day:'2026-06-08',...o});
+const sales=(store=null)=>coverage.scopeOf(real,'commercial',store);
 
-// ── Coverage: read from the source, validated, fail closed ──────────────
-test('coverage readings are validated; the verified baseline applies otherwise',()=>{
- assert.equal(since2011.origin,'source');
- assert.equal(since2011.commercial.first_month,'2011-03');
- assert.equal(coverage.validate(JSON.parse(JSON.stringify(since2011)),NOW).commercial.last_day,'2026-06-08');
+// ── Coverage: months really held, gaps, partial months, per store ───────
+test('coverage keeps the months really held, with gaps, per store and for the group',()=>{
+ assert.equal(real.origin,'source');
+ assert.deepEqual(real.commercial.runs.map(r=>[r.first,r.last,r.last_day]),
+  [['2011-04','2011-04','2011-04-12'],['2019-07','2026-06','2026-06-08']]);
+ assert.deepEqual(real.commercial.stores.MAGAZINE.map(r=>[r.first,r.last]),
+  [['2019-07','2023-02'],['2023-04','2026-06']]);
+ assert.deepEqual(real.commercial.stores['SPORTS-(DESATIVADO)'].map(r=>[r.first,r.last,r.last_day]),
+  [['2019-07','2022-03','2022-03-15']]);
+ // Stored and read back: re-validated, read time kept.
+ const stored=coverage.validate(JSON.parse(JSON.stringify(real)),NOW+3600000);
+ assert.equal(stored.read_at,real.read_at);
+ const forged=JSON.parse(JSON.stringify(real));
+ forged.commercial.runs=[{first:'2019-07',last:'2026-06',last_day:'2026-06-08',start_complete:false},
+  {first:'2011-04',last:'2011-04',last_day:'2011-04-12',start_complete:false}];          // unsorted
+ assert.throws(()=>coverage.validate(forged,NOW),/coverage_invalid/);
+ forged.commercial.runs=[{first:'2019-07',last:'2020-01',last_day:'2020-01-31',start_complete:false},
+  {first:'2020-02',last:'2026-06',last_day:'2026-06-08',start_complete:false}];          // touching runs
+ assert.throws(()=>coverage.validate(forged,NOW),/coverage_invalid/);
  const bad=[
-  [{scope:'commercial',first_month:'2026-07',last_month:'2026-06',last_day:'2026-06-08'}],          // inverted
-  [{scope:'commercial',first_month:'2011-01',last_month:'2027-01',last_day:'2027-01-02'}],          // future
-  [{scope:'commercial',first_month:'2011-01',last_month:'2026-06',last_day:'2026-07-01'}],          // day outside month
-  [{scope:'commercial',first_month:'2011-01',last_month:'2026-06',last_day:null}],                  // no last day
-  [{scope:'commercial',first_month:'1999-12',last_month:'2026-06',last_day:'2026-06-08'}],          // before 2000
-  [{scope:'commercial',first_month:'2011-1',last_month:'2026-06',last_day:'2026-06-08'}]];          // malformed
- for(const commercial of bad)
-  assert.throws(()=>coverage.fromRows([...commercial,
-   {scope:'products',first_month:'2026-01',last_month:'2026-06',last_day:null}],NOW),/coverage_/);
- assert.throws(()=>coverage.fromRows([{scope:'commercial',first_month:'2011-01',last_month:'2026-06',
-  last_day:'2026-06-08'}],NOW),/coverage_rows_invalid/);
+  {scope:'commercial',raw_store:'LOJA NOVA',month:'2020-01',last_day:'2020-01-31'},     // unknown store
+  {scope:'commercial',raw_store:'CALCADOS',month:'2027-01',last_day:'2027-01-02'},      // future
+  {scope:'commercial',raw_store:'CALCADOS',month:'2020-01',last_day:'2020-02-01'},      // day outside month
+  {scope:'commercial',raw_store:'CALCADOS',month:'1999-12',last_day:'1999-12-31'},      // before 2000
+  {scope:'commercial',raw_store:'CALCADOS',month:'2019-07',last_day:'2019-07-31'}];     // duplicate
+ for(const b of bad)assert.throws(()=>coverage.fromRows([...realRows(),b],NOW),/coverage_/,JSON.stringify(b));
+ assert.throws(()=>coverage.fromRows(realRows().filter(r=>r.scope==='commercial'),NOW),/coverage_rows_invalid/);
+ assert.throws(()=>coverage.fromRows([{scope:'commercial',raw_store:'CALCADOS',month:'2026-06',last_day:null},
+  {scope:'products',raw_store:null,month:'2026-06',last_day:null}],NOW),/coverage_last_day_required/);
  assert.throws(()=>coverage.validate({origin:'forged'},NOW),/coverage_invalid/);
- // Baseline = what was verified before week 4: 2025-01..2026-06, products 2026.
- assert.deepEqual({...coverage.BASELINE.commercial},{first_month:'2025-01',last_month:'2026-06',last_day:'2026-06-08'});
+ assert.deepEqual(coverage.BASELINE.commercial.runs.map(r=>[r.first,r.last,r.last_day]),[['2025-01','2026-06','2026-06-08']]);
 });
-test('complete months and year windows follow the source last day, not a fixed calendar',()=>{
- const c=since2011.commercial;
- assert.deepEqual(coverage.completeMonths(c,'2011'),{from:3,to:12});   // starts in March
- assert.deepEqual(coverage.completeMonths(c,'2026'),{from:1,to:5});    // June has only 8 days
- assert.deepEqual(coverage.yearWindow(c,'2011','2012'),{from:'03',to:'12'});
- assert.deepEqual(coverage.yearWindow(c,'2019','2020'),{from:'01',to:'12'});
- assert.deepEqual(coverage.yearWindow(c,'2025','2026'),{from:'01',to:'05'});
- const closedJune={...c,last_day:'2026-06-30'};
- assert.deepEqual(coverage.yearWindow(closedJune,'2025','2026'),{from:'01',to:'06'});
- assert.equal(coverage.isPartial(c,'2026-06'),true);
- assert.equal(coverage.isPartial(closedJune,'2026-06'),false);
- assert.equal(coverage.yearForMonth(c,'07'),'2025');   // "julho" = the latest July held
- assert.equal(coverage.yearForMonth(c,'03'),'2026');
- assert.equal(coverage.windowText({from:'01',to:'05'}),'janeiro a maio');
+test('a month is complete only with evidence: run starts and an open last month are partial',()=>{
+ const g=sales();
+ assert.equal(coverage.monthComplete(g,'2011-04'),false);   // eight records on one day
+ assert.equal(coverage.monthComplete(g,'2019-07'),false);   // data starts on 08/07
+ assert.equal(coverage.monthComplete(g,'2019-08'),true);
+ assert.equal(coverage.monthComplete(g,'2026-05'),true);
+ assert.equal(coverage.monthComplete(g,'2026-06'),false);   // until 08/06
+ assert.equal(coverage.accepts(g,'2015-03'),false);         // gap: no data, not zero
+ assert.equal(coverage.accepts(g,'2015'),false);
+ assert.deepEqual(coverage.presentMonths(g,'2019'),['07','08','09','10','11','12']);
+ assert.deepEqual(coverage.completeMonths(g,'2019'),['08','09','10','11','12']);
+ assert.deepEqual(coverage.completeMonths(g,'2011'),[]);
+ assert.deepEqual(coverage.yearWindow(g,'2019','2020'),{months:['08','09','10','11','12']});
+ assert.equal(coverage.yearWindow(g,'2020','2021').months.length,12);
+ assert.deepEqual(coverage.yearWindow(g,'2025','2026'),{months:['01','02','03','04','05']});
+ assert.equal(coverage.yearWindow(g,'2011','2019'),null); // nothing complete in common
+ // Per store: MAGAZINE's gap and restart are excluded, so the window skips months.
+ assert.deepEqual(coverage.yearWindow(sales('MAGAZINE'),'2022','2023'),
+  {months:['01','02','05','06','07','08','09','10','11','12']});
+ assert.equal(coverage.windowText(coverage.yearWindow(sales('MAGAZINE'),'2022','2023')),'janeiro a fevereiro e maio a dezembro');
+ assert.equal(coverage.monthComplete(sales('VARIEDADES'),'2021-02'),false);
+ assert.equal(coverage.accepts(sales('VARIEDADES'),'2020'),false);
+ assert.equal(coverage.monthComplete(sales('SPORTS-(DESATIVADO)'),'2022-03'),false);
+ // The verified baseline's first month is a cut of continuous data (2024 exists).
+ assert.equal(coverage.monthComplete(coverage.scopeOf(coverage.BASELINE,'commercial'),'2025-01'),true);
+ assert.equal(coverage.yearForMonth(g,'07'),'2025');
+ assert.equal(coverage.yearForMonth(g,'03'),'2026');
 });
-test('the analyst accepts every period the source holds, since 2011, and nothing else',()=>{
- const p=analyst.planQuestion('quanto vendemos em março de 2015?',null,since2011);
- assert.deepEqual({...p},{tenant_id:'grupo_erick',template:'period',period:'2015-03',other_period:null,metric:'money',store:null});
- assert.equal(analyst.planQuestion('quanto vendemos em março de 2015?'),null); // baseline: not verified yet
- assert.equal(analyst.planQuestion('quanto vendemos em março de 2010?',null,since2011),null);
- assert.equal(analyst.planQuestion('quanto vendemos em fevereiro de 2011?',null,since2011),null); // before first month
- assert.equal(analyst.planQuestion('vendas de julho',null,since2011).period,'2025-07');
- const cmp=analyst.planQuestion('compare as vendas de 2012 e 2011',null,since2011);
- assert.equal(cmp.template,'compare');assert.equal(cmp.period,'2012');assert.equal(cmp.other_period,'2011');
- // compare a single month: the same month one year earlier.
- const one=analyst.planQuestion('compare as vendas de abril de 2014',null,since2011);
- assert.deepEqual([one.period,one.other_period],['2013-04','2014-04']);
- assert.throws(()=>analyst.validate({...p,period:'2010-12'},since2011),/analyst_period_not_covered/);
- assert.throws(()=>analyst.validate({tenant_id:'grupo_erick',template:'compare',period:'2025-06',
-  other_period:'2026-06',metric:'records',store:null},since2011),/analyst_partial_month_comparison_denied/);
- assert.throws(()=>analyst.validate({tenant_id:'grupo_erick',template:'products',period:'2017-05',
-  other_period:null,metric:'records',store:null},since2011),/analyst_products_denied/);
- assert.doesNotThrow(()=>analyst.validate({tenant_id:'grupo_erick',template:'products',period:'2019-05',
-  other_period:null,metric:'records',store:null},since2011));
+test('questions inside a gap are refused, never answered as zero; partial periods are flagged',()=>{
+ assert.equal(analyst.planQuestion('quanto vendemos em março de 2015?',null,real),null);
+ assert.equal(analyst.planQuestion('quanto vendemos em março de 2015?'),null);
+ const jul=analyst.planQuestion('quanto vendemos em julho de 2019?',null,real);
+ assert.equal(jul.period,'2019-07');
+ assert.match(analyst.reply(evidence(jul,[row({last_day:'2019-07-31'})]),jul,real),
+  /⚠️ julho\/2019 é parcial: os dados começam no meio do mês\./);
+ const y2019=analyst.planQuestion('quanto vendemos em 2019?',null,real);
+ const t2019=analyst.reply(evidence(y2019,[row({last_day:'2019-12-31'})]),y2019,real);
+ assert.match(t2019,/⚠️ 2019: dados só de julho a dezembro; meses sem dados não significam venda zero\./);
+ assert.match(t2019,/⚠️ 2019: julho parcial\./);
+ const y2011=analyst.planQuestion('quanto vendemos em 2011?',null,real);
+ assert.match(analyst.reply(evidence(y2011,[row({last_day:'2011-04-12'})]),y2011,real),/2011: dados só de abril/);
+ const june=analyst.planQuestion('quanto vendemos em junho de 2026?',null,real);
+ assert.match(analyst.reply(evidence(june,[row({last_day:'2026-06-08'})]),june,real),/junho\/2026 é parcial: dados só até 08\/06\/2026/);
+ assert.doesNotMatch(analyst.reply(evidence({...june,period:'2026-03'},[row({last_day:'2026-03-31'})]),{...june,period:'2026-03'},real),/parcial/);
+ // Store coverage: VARIEDADES did not exist in 2020 although the group did.
+ const v={tenant_id:'grupo_erick',template:'period',period:'2020-05',other_period:null,metric:'records',store:'VARIEDADES'};
+ assert.throws(()=>analyst.validate(v,real),/analyst_period_not_covered/);
+ assert.doesNotThrow(()=>analyst.validate({...v,store:null},real));
+ // Partial months are never compared as complete.
+ assert.throws(()=>analyst.validate({tenant_id:'grupo_erick',template:'compare',period:'2019-07',
+  other_period:'2020-07',metric:'records',store:null},real),/analyst_partial_month_comparison_denied/);
+ assert.throws(()=>analyst.validate({tenant_id:'grupo_erick',template:'compare',period:'2011',
+  other_period:'2019',metric:'records',store:null},real),/analyst_year_window_empty/);
+ assert.throws(()=>analyst.validate({tenant_id:'grupo_erick',template:'compare',period:'2015',
+  other_period:'2016',metric:'records',store:null},real),/analyst_period_not_covered/);
 });
-test('year comparisons bind the complete-month window and say which months were compared',async()=>{
- const p={tenant_id:'grupo_erick',template:'compare',period:'2011',other_period:'2012',metric:'records',store:null};
+test('year comparisons bind only months complete in both years, even when they skip months',async()=>{
+ const p={tenant_id:'grupo_erick',template:'compare',period:'2022',other_period:'2023',metric:'records',store:'MAGAZINE'};
  let sent;
  const data=await analyst.execute({query:async q=>{sent=q;return {rows:[
-  {label:'2011',records:'900',cancelled:'9',noncancelled:'891',amount:'1000.00',last_day:'2011-12-31',source_last_day:'2026-06-08'},
-  {label:'2012',records:'1000',cancelled:'10',noncancelled:'990',amount:'1100.00',last_day:'2012-12-31',source_last_day:'2026-06-08'}]};}},
-  p,()=>new Date(NOW),since2011);
- assert.deepEqual(sent.values,['2011','2012',null,'03','12']);
- assert.deepEqual(data.window,{from:'03',to:'12'});
- const txt=analyst.reply(data,p,since2011);
- assert.match(txt,/📅 Cobertura equivalente: março a dezembro de cada ano \(meses completos\)/);
- assert.match(txt,/• 2011 \(março a dezembro\): 900/);
- assert.match(txt,/a comparação usa apenas março a dezembro completos nos dois anos/);
- // A year comparison without its window, or a month comparison with one, is refused.
- assert.throws(()=>analyst.reply({...data,window:undefined},p,since2011),/analyst_reply_denied/);
- assert.throws(()=>analyst.reply({...data,window:{from:'05',to:'03'}},p,since2011),/analyst_reply_denied/);
- const month={...p,period:'2019-03',other_period:'2020-03'};
- assert.throws(()=>analyst.reply({...data,plan:month,rows:[{...data.rows[0],label:'2019-03'},
-  {...data.rows[1],label:'2020-03'}]},month,since2011),/analyst_reply_denied/);
- // The SQL holds no calendar: the window is bound as $4/$5.
- assert.match(analyst.SQL.compare,/BETWEEN \$4::text AND \$5::text/);
+  {label:'2022',records:'900',cancelled:'9',noncancelled:'891',amount:'1000.00',last_day:'2022-12-31',source_last_day:'2026-06-08',scope_last_day:'2026-06-08'},
+  {label:'2023',records:'800',cancelled:'8',noncancelled:'792',amount:'900.00',last_day:'2023-12-31',source_last_day:'2026-06-08',scope_last_day:'2026-06-08'}]};}},
+  p,()=>new Date(NOW),real);
+ assert.deepEqual(sent.values,['2022','2023','MAGAZINE',['01','02','05','06','07','08','09','10','11','12']]);
+ assert.match(sent.text,/RIGHT\(month,2\)=ANY\(\$4::text\[\]\)/);
+ const txt=analyst.reply(data,p,real);
+ assert.match(txt,/📅 Cobertura equivalente: janeiro a fevereiro e maio a dezembro de cada ano \(meses completos\)/);
+ assert.match(txt,/A comparação usa apenas janeiro a fevereiro e maio a dezembro, meses completos nos dois anos para a loja MAGAZINE/);
+ const group=await analyst.execute({query:async q=>{sent=q;return {rows:[]};}},{...p,store:null,period:'2019',other_period:'2020'},()=>new Date(NOW),real)
+  .catch(()=>null);
+ assert.deepEqual(sent.values,['2019','2020',null,['08','09','10','11','12']]);
+ assert.equal(group?.window?.months?.length??5,5);
+ for(const bad of [{months:['05','01']},{months:['01','01']},{months:['13']},{months:[]},{months:['01'],from:'01'},{from:'01',to:'05'}])
+  assert.throws(()=>analyst.reply({...data,window:bad},p,real),/analyst_reply_denied/,JSON.stringify(bad));
+ assert.throws(()=>analyst.reply({...data,window:undefined},p,real),/analyst_reply_denied/);
  assert.doesNotMatch(analyst.SQL.compare,/'0[1-9]'|'1[0-2]'/);
 });
-test('partial periods are flagged from the source own last day',()=>{
- const year={tenant_id:'grupo_erick',template:'period',period:'2026',other_period:null,metric:'records',store:null};
- assert.match(analyst.reply(evidence(year,[row({})]),year),/⚠️ 2026 é parcial: dados só até 08\/06\/2026\./);
- const june={...year,period:'2026-06'};
- assert.match(analyst.reply(evidence(june,[row({last_day:'2026-06-08'})]),june),/⚠️ junho\/2026 é parcial: dados só até 08\/06\/2026\./);
- const march={...year,period:'2026-03'};
- assert.doesNotMatch(analyst.reply(evidence(march,[row({last_day:'2026-03-31'})]),march),/parcial/);
- // Without the source day (older evidence), the verified coverage still warns.
- assert.match(analyst.reply(evidence(june,[row({last_day:'2026-06-08',source_last_day:undefined})]),june),/junho\/2026 é parcial/);
+test('a store ranking marks stores whose own coverage misses part of the period',()=>{
+ const rank={tenant_id:'grupo_erick',template:'stores',period:'2021',other_period:null,metric:'records',store:null};
+ const txt=analyst.reply(evidence(rank,[row({label:'CALCADOS',records:500,cancelled:5}),
+  row({label:'VARIEDADES',records:300,cancelled:3})]),rank,real);
+ assert.match(txt,/• VARIEDADES: 300 \(cobertura parcial nesta loja\)/);
+ assert.doesNotMatch(txt,/• CALCADOS: 500 \(/);
+ assert.match(txt,/o total menor não significa venda menor/);
 });
-test('the agent planner is told the coverage read from the source and validates against it',()=>{
- const prompt=agent.planPrompt(since2011);
- assert.match(prompt,/period AAAA-MM de 2011-03 a 2026-06 ou ano AAAA de 2011 a 2026/);
- assert.match(prompt,/Histórico de vendas: março\/2011 a junho\/2026 \(dados até 08\/06\/2026\)/);
+test('the agent planner is told the months held, gaps included, and validates against them',()=>{
+ const prompt=agent.planPrompt(real);
+ assert.match(prompt,/Meses com dados de vendas: abril\/2011; julho\/2019 a junho\/2026 \(dados até 08\/06\/2026\)/);
+ assert.match(prompt,/lacunas não têm dados nem valem zero/);
  assert.doesNotMatch(prompt,/2025-01\.\.2025-12|Produtos só 2026|oito dias/);
- const plan={steps:[{tool:'history',params:{tenant_id:'grupo_erick',template:'compare',period:'2014',
-  other_period:'2015',metric:'records',store:null}}]};
- assert.equal(agent.validateToolPlan(plan,since2011).length,1);
+ const plan={steps:[{tool:'history',params:{tenant_id:'grupo_erick',template:'compare',period:'2020',
+  other_period:'2021',metric:'records',store:null}}]};
+ assert.equal(agent.validateToolPlan(plan,real).length,1);
  assert.throws(()=>agent.validateToolPlan(plan),/analyst_period_not_covered/);
- // Two separate annual totals still cannot replace one window-bound comparison.
- assert.throws(()=>agent.validateToolPlan({steps:[2014,2015].map(y=>({tool:'history',params:{tenant_id:'grupo_erick',
-  template:'period',period:String(y),other_period:null,metric:'records',store:null}}))},since2011),
+ assert.throws(()=>agent.validateToolPlan({steps:[{tool:'history',params:{...plan.steps[0].params,period:'2015',other_period:'2016'}}]},real),
+  /analyst_period_not_covered/);
+ assert.throws(()=>agent.validateToolPlan({steps:[2020,2021].map(y=>({tool:'history',params:{tenant_id:'grupo_erick',
+  template:'period',period:String(y),other_period:null,metric:'records',store:null}}))},real),
   /agent_unmatched_year_coverage_denied/);
 });
-test('the cancellation-rate route follows the coverage and the named month range',()=>{
- const plan=core.cancellationRatePlan('Compare as taxas de cancelamento de janeiro a dezembro de 2019 e 2020',since2011);
- assert.deepEqual({...plan},{tenant_id:'grupo_erick',template:'compare',period:'2019',other_period:'2020',
-  metric:'cancelled',store:null});
- assert.equal(core.cancellationRatePlan('Compare as taxas de cancelamento de janeiro a dezembro de 2019 e 2020'),null);
- assert.equal(core.cancellationRatePlan('Compare as taxas de cancelamento de janeiro a maio de 2019 e 2020',since2011),null);
+test('the cancellation-rate route needs the named months to be the comparable ones',()=>{
+ assert.deepEqual({...core.cancellationRatePlan('Compare as taxas de cancelamento de janeiro a dezembro de 2020 e 2021',real)},
+  {tenant_id:'grupo_erick',template:'compare',period:'2020',other_period:'2021',metric:'cancelled',store:null});
+ assert.equal(core.cancellationRatePlan('Compare as taxas de cancelamento de janeiro a dezembro de 2019 e 2020',real),null);
+ assert.ok(core.cancellationRatePlan('Compare as taxas de cancelamento de agosto a dezembro de 2019 e 2020',real));
+ assert.equal(core.cancellationRatePlan('Compare as taxas de cancelamento de janeiro a dezembro de 2020 e 2021'),null);
  assert.ok(core.cancellationRatePlan('Compare as taxas de cancelamento de janeiro a maio de 2025 e 2026'));
 });
 
@@ -169,66 +215,65 @@ test('ticket médio = valor_pago importado ÷ registros não cancelados, with it
 test('the coverage keeper reads once a day, keeps a stored reading, then falls back to the baseline',async()=>{
  const state=dir();
  let clock=NOW,reads=0,fail=false;
- const readLive=async q=>{reads++;assert.equal(q.shape,'coverage');
-  if(fail)throw Error('db_down');return [
-   {scope:'commercial',first_month:'2011-03',last_month:'2026-06',last_day:'2026-06-08'},
-   {scope:'products',first_month:'2018-01',last_month:'2026-06',last_day:null}];};
  const keeper=runner.createCoverageKeeper({stateDir:state,liveEnabled:true,clock:()=>clock,
-  readLive:async q=>coverage.fromRows(await readLive(q),clock)});
+  readLive:async q=>{reads++;assert.equal(q.shape,'coverage');if(fail)throw Error('db_down');
+   return coverage.fromRows(realRows(),clock);}});
  try{
-  assert.equal((await keeper.current()).commercial.first_month,'2011-03');
+  assert.equal((await keeper.current()).commercial.runs[0].first,'2011-04');
   assert.equal(reads,1);
+  assert.ok(fs.statSync(path.join(state,'history-coverage.json')).size<8192);
   clock+=3600000;await keeper.current();assert.equal(reads,1);     // same day: stored reading
   assert.equal(runner.loadState(state,'history-live-budget.json'),null); // never the question quota
   fail=true;clock+=24*3600000;
-  assert.equal((await keeper.current()).commercial.first_month,'2011-03'); // failed refresh keeps it
+  assert.equal((await keeper.current()).commercial.runs[1].first,'2019-07'); // failed refresh keeps it
   assert.equal(reads,2);
   clock+=3600000;await keeper.current();assert.equal(reads,2);     // retry only after 6 h
   clock+=6*3600000;await keeper.current();assert.equal(reads,3);
   clock=NOW+8*24*3600000;                                           // stored reading too old
   assert.equal(await keeper.current(),coverage.BASELINE);
   const audit=fs.readFileSync(path.join(state,'audit.jsonl'),'utf8');
-  assert.match(audit,/"event":"history_coverage","first_month":"2011-03","last_month":"2026-06"/);
+  assert.match(audit,/"event":"history_coverage","first_month":"2011-04","last_month":"2026-06","runs":2/);
   assert.match(audit,/"event":"history_coverage","status":"failed"/);
-  // Disabled live history never reads.
   const off=runner.createCoverageKeeper({stateDir:dir(),liveEnabled:false,clock:()=>NOW,
    readLive:async()=>{throw Error('MUST_NOT_READ')}});
   assert.equal(await off.current(),coverage.BASELINE);
  }finally{fs.rmSync(state,{recursive:true,force:true})}
 });
-test('a question about 2015 is answered once the source coverage includes it',async()=>{
+test('a question about 2020 is answered once the source coverage holds it; 2015 never is',async()=>{
  const state=dir();
  runner.saveState(state,'owner.json',{owner_id:700});
  const sent=[],reads=[];
- const poll=historyCoverage=>runner.pollOnce({stateDir:state,clock:()=>NOW,liveEnabled:true,historyCoverage,
+ let id=700000;
+ const poll=(historyCoverage,text)=>runner.pollOnce({stateDir:state,clock:()=>NOW,liveEnabled:true,historyCoverage,
   query:async()=>{throw Error('OTHER_DOMAIN')},
-  readLive:async arg=>{reads.push(arg);return evidence(arg.plan,[row({last_day:'2015-03-31'})]);},
-  api:async(m,p)=>{if(m==='getUpdates')return [update(700000+reads.length+sent.length,700,'quanto vendemos em março de 2015?')];
-   if(m==='sendMessage')sent.push(p.text);}});
+  readLive:async arg=>{reads.push(arg);return evidence(arg.plan,[row({last_day:'2020-03-31'})]);},
+  api:async(m,p)=>{if(m==='getUpdates')return [update(id++,700,text)];if(m==='sendMessage')sent.push(p.text);}});
  try{
-  await poll(coverage.BASELINE);
+  await poll(coverage.BASELINE,'quanto vendemos em março de 2020?');
   assert.equal(reads.length,0);                 // not verified: no query, no number
-  assert.doesNotMatch(sent[0],/R\$/);
-  await poll(JSON.parse(JSON.stringify(since2011)));
+  await poll(JSON.parse(JSON.stringify(real)),'quanto vendemos em março de 2015?');
+  assert.equal(reads.length,0);                 // a gap: no query, no zero
+  assert.doesNotMatch(sent.join('\n'),/R\$|: 0\b/);
+  await poll(JSON.parse(JSON.stringify(real)),'quanto vendemos em março de 2020?');
   assert.equal(reads.length,1);
-  assert.equal(reads[0].plan.period,'2015-03');
-  assert.equal(reads[0].coverage.commercial.first_month,'2011-03');
-  assert.match(sent[1],/Período: 2015-03/);
+  assert.equal(reads[0].plan.period,'2020-03');
+  assert.equal(reads[0].coverage.commercial.runs[0].first,'2011-04');
+  assert.match(sent.at(-1),/Período: 2020-03/);
   await assert.rejects(runner.pollOnce({stateDir:state,clock:()=>NOW,liveEnabled:true,query:async()=>{},
-   historyCoverage:{origin:'source',commercial:{first_month:'1990-01'}},api:async()=>[]}),/coverage_/);
+   historyCoverage:{origin:'source',read_at:new Date(NOW).toISOString(),commercial:{runs:[]}},api:async()=>[]}),/coverage_/);
  }finally{fs.rmSync(state,{recursive:true,force:true})}
 });
-test('the coverage query reads only MIN/MAX of the approved views',()=>{
- assert.match(analyst.SQL.coverage,/^SELECT 'commercial' AS scope,MIN\(month\) AS first_month,MAX\(month\) AS last_month,MAX\(last_day\) AS last_day FROM hermes_history\.monthly_commercial_2025_2026_v1 UNION ALL SELECT 'products',MIN\(month\),MAX\(month\),NULL FROM hermes_history\.monthly_product_activity_v1$/);
+test('the coverage query lists every store and month held, not MIN/MAX',()=>{
+ assert.match(analyst.SQL.coverage,/^SELECT 'commercial' AS scope,raw_store,month,MAX\(last_day\) AS last_day FROM hermes_history\.monthly_commercial_2025_2026_v1 WHERE month IS NOT NULL GROUP BY raw_store,month UNION ALL SELECT 'products',NULL,month,NULL FROM hermes_history\.monthly_product_activity_v1 WHERE month IS NOT NULL GROUP BY month ORDER BY 1,3,2 LIMIT 5000$/);
+ assert.doesNotMatch(analyst.SQL.coverage,/MIN\(/);
 });
-
 // ── Credit (inadimplência): contract, templates, owner only, awaiting audit ─
 const credit=require('../src/runtime/hermes-receivables-templates');
 const sellers=require('../src/runtime/hermes-seller-templates');
 const creditSources={position:'hermes_history.receivables_position_v1',recovery:'hermes_history.receivables_recovery_v1'};
 const sellerView='hermes_history.monthly_seller_activity_v1';
 test('credit questions plan deterministic templates and never reach a person',()=>{
- const plan=q=>credit.planQuestion(q,since2011);
+ const plan=q=>credit.planQuestion(q,NOW);
  assert.deepEqual({...plan('qual a inadimplência?')},{tenant_id:'grupo_erick',template:'portfolio',period:null,store:null});
  assert.equal(plan('carteira vencida da loja MAGAZINE').store,'MAGAZINE');
  assert.equal(plan('faixas de atraso da carteira').template,'portfolio');
@@ -236,12 +281,14 @@ test('credit questions plan deterministic templates and never reach a person',()
  assert.deepEqual({...plan('recuperação de crédito em maio de 2019')},{tenant_id:'grupo_erick',template:'recovery',period:'2019-05',store:null});
  assert.equal(plan('quanto recuperamos em 2025?').period,'2025');
  assert.equal(plan('recuperação em maio').period,'2026-05');
+ assert.equal(credit.planQuestion('recuperação em dezembro',Date.parse('2026-06-10T12:00:00Z')).period,'2025-12');
  for(const q of ['quais clientes estão inadimplentes?','CPF dos devedores vencidos','telefone de quem está em atraso',
   'mande mensagem de cobrança para os atrasados','duplicatas vencidas das compras','situação do LotoIA vencida',
   'recuperação em 2019 e 2020','/inadimplencia'])
   assert.equal(plan(q),null,q);
- assert.throws(()=>credit.validate({tenant_id:'grupo_erick',template:'recovery',period:'2010-05',store:null},since2011),
-  /credit_period_not_covered/);
+ // Receipts coverage is not the sales coverage: a recovery period is only
+ // checked for shape here; its coverage comes back with the answer.
+ assert.doesNotThrow(()=>credit.validate({tenant_id:'grupo_erick',template:'recovery',period:'2015-05',store:null}));
  assert.throws(()=>credit.validate({tenant_id:'grupo_erick',template:'stores',period:null,store:'MAGAZINE'}),/credit_plan_denied/);
  assert.throws(()=>credit.validate({tenant_id:'outro',template:'portfolio',period:null,store:null}),/credit_plan_denied/);
 });
@@ -280,7 +327,8 @@ test('credit answers show source, position date, bands, risk, concentration and 
  assert.match(txt,/– 1 a 30 dias: R\$\s?200,00 \(4 parcelas; 40,0% da vencida\)/);
  assert.match(txt,/• Risco: vencida há mais de 90 dias R\$\s?300,00 \(60,0% da vencida\)/);
  assert.match(txt,/sem dados de clientes; não conciliados com o ERP\/Linx/);
- assert.match(txt,/Não é provisão para perdas nem previsão de recebimento/);
+ assert.match(txt,/Atraso não é perda contábil: não é provisão para perdas nem previsão de recebimento/);
+ assert.match(txt,/saldo na data da posição \(histórico da fonte, não saldo atual\)/);
  // Concentration by store.
  const stores=credit.planQuestion('concentração da inadimplência por loja');
  const ranked=credit.reply({tenant_id:'grupo_erick',mode:'online_aggregate',domain:'credit',source:creditSources.position,
@@ -290,18 +338,42 @@ test('credit answers show source, position date, bands, risk, concentration and 
  assert.ok(ranked.indexOf('• MAGAZINE')<ranked.indexOf('• CALCADOS'));
  assert.match(ranked,/• MAGAZINE: R\$\s?500,00 vencido \(86,2% do grupo; 60,0% há mais de 90 dias\)/);
  assert.match(ranked,/Maior concentração: MAGAZINE com 86,2% da carteira vencida/);
- // Recovery, with its limitation, and an empty period read as zero.
+ // Recovery, with its own receipts coverage.
  const rec=credit.planQuestion('recuperação de crédito em maio de 2026');
  const recovered=await credit.execute({query:async q=>{assert.deepEqual(q.values,['2026-05',null]);
-  return {rows:[{installments:'4',amount:'170.00',last_day:'2026-05-30',source_last_day:'2026-11-24'}]};}},
-  rec,{sources:creditSources,now:at});
+  return {rows:[{covered_months:['2026-05'],installments:'4',amount:'170.00',last_day:'2026-05-30',
+   receipts_last_day:'2026-05-30',source_last_day:'2026-05-30'}]};}},rec,{sources:creditSources,now:at});
  const rtxt=credit.reply(recovered,rec,{sources:creditSources});
  assert.match(rtxt,/Fonte: Supabase \/ hermes_history\.receivables_recovery_v1/);
+ assert.match(rtxt,/Recebimentos: ⚠️ Dados até 30\/05\/2026/);
  assert.match(rtxt,/• Recuperado \(parcelas vencidas recebidas\): R\$\s?170,00 em 4 parcelas/);
+ assert.match(rtxt,/maio\/2026 é parcial: recebimentos só até 30\/05\/2026/);
  assert.match(rtxt,/Taxa de recuperação não calculada/);
- const empty=await credit.execute({query:async()=>({rows:[{installments:null,amount:null,last_day:null,source_last_day:'2026-11-24'}]})},
-  rec,{sources:creditSources,now:at});
- assert.match(credit.reply(empty,rec,{sources:creditSources}),/R\$\s?0,00 em 0 parcelas/);
+ // A covered month with nothing recovered is a real zero...
+ const zero=await credit.execute({query:async()=>({rows:[{covered_months:['2026-05'],installments:'0',amount:'0.00',
+  last_day:null,receipts_last_day:'2026-05-31',source_last_day:'2026-06-08'}]})},rec,{sources:creditSources,now:at});
+ assert.match(credit.reply(zero,rec,{sources:creditSources}),/R\$\s?0,00 em 0 parcelas/);
+ // ...but no receipts coverage is never reported as zero.
+ const uncovered=await credit.execute({query:async()=>({rows:[{covered_months:[],installments:'0',amount:'0.00',
+  last_day:null,receipts_last_day:null,source_last_day:'2026-06-08'}]})},
+  credit.planQuestion('recuperação de crédito em março de 2015',NOW),{sources:creditSources,now:at});
+ const utxt=credit.reply(uncovered,credit.planQuestion('recuperação de crédito em março de 2015',NOW),{sources:creditSources});
+ assert.match(utxt,/Sem cobertura de recebimentos na fonte para este período: isso não significa recuperação zero/);
+ assert.doesNotMatch(utxt,/R\$\s?0,00/);
+ // A year with receipts only in some months says so.
+ const yr=credit.planQuestion('quanto recuperamos em 2019?',NOW);
+ const partYear=await credit.execute({query:async()=>({rows:[{covered_months:['2019-07','2019-08','2019-09','2019-10','2019-11','2019-12'],
+  installments:'40',amount:'4000.00',last_day:'2019-12-30',receipts_last_day:'2019-12-30',source_last_day:'2026-06-08'}]})},
+  yr,{sources:creditSources,now:at});
+ // A past month whose last receipt is the 30th is not partial: the data goes on.
+ assert.doesNotMatch(credit.reply(partYear,yr,{sources:creditSources}),/dezembro\/2019 é parcial/);
+ assert.match(credit.reply(partYear,yr,{sources:creditSources}),
+  /Recebimentos registrados só em julho a dezembro de 2019; meses sem registro não significam recuperação zero/);
+ // A view that reports money without any covered month broke its contract.
+ await assert.rejects(credit.execute({query:async()=>({rows:[{covered_months:[],installments:'1',amount:'10.00',last_day:null,
+  receipts_last_day:null,source_last_day:'2026-06-08'}]})},rec,{sources:creditSources,now:at}),/credit_totals_inconsistent/);
+ assert.match(credit.sqlFor('recovery',creditSources),/^SELECT ARRAY\(SELECT DISTINCT r\.month FROM hermes_history\.receivables_recovery_v1 r WHERE .* AS covered_months,/);
+ assert.match(credit.sqlFor('recovery',creditSources),/\(SELECT MAX\(receipts_last_day\) FROM hermes_history\.receivables_recovery_v1\) AS source_last_day/);
  // A store missing from the position is never shown as a clean portfolio.
  const none=credit.reply({...data,rows:[]},plan,{sources:creditSources});
  assert.match(none,/confirme se a loja está incluída antes de concluir que não há inadimplência/);
@@ -326,21 +398,30 @@ test('seller rankings reuse periods and metrics, rank by the asked metric and ne
  assert.equal(sellers.sourceFromEnv({}),null);
  assert.throws(()=>sellers.sourceFromEnv({HERMES_HISTORY_SELLER_VIEW:'public.vw_itens_vendidos'}),/seller_source_config_invalid/);
  await assert.rejects(sellers.execute({query:async()=>{throw Error('MUST_NOT_QUERY')}},plan,{relation:null}),/seller_source_awaiting_audit/);
- assert.match(sellers.sqlFor('ticket',sellerView),/HAVING SUM\(noncancelled\)>=10 ORDER BY SUM\(valor_pago_noncancelled_sum\)\/NULLIF\(SUM\(noncancelled\),0\) DESC NULLS LAST,seller_code ASC LIMIT 10$/);
- assert.match(sellers.sqlFor('records',sellerView),/ORDER BY SUM\(noncancelled\) DESC,seller_code ASC LIMIT 10$/);
+ // Seller identity is per store until validated: never merged across stores.
+ assert.match(sellers.sqlFor('ticket',sellerView),/GROUP BY raw_store,seller_code HAVING SUM\(noncancelled\)>=10 ORDER BY SUM\(valor_pago_noncancelled_sum\)\/NULLIF\(SUM\(noncancelled\),0\) DESC NULLS LAST,raw_store ASC,seller_code ASC LIMIT 10$/);
+ assert.match(sellers.sqlFor('records',sellerView),/GROUP BY raw_store,seller_code ORDER BY SUM\(noncancelled\) DESC,raw_store ASC,seller_code ASC LIMIT 10$/);
  const money=sellers.planQuestion('quais vendedores faturaram mais em maio de 2026?');
  const data=await sellers.execute({query:async q=>{assert.deepEqual(q.values,['2026-05',null]);return {rows:[
-  {seller_code:'V1',seller_label:'ANA',records:'35',cancelled:'2',noncancelled:'33',amount:'3500.00',last_day:'2026-05-31',source_last_day:'2026-06-08'},
-  {seller_code:'V2',seller_label:'BIA',records:'12',cancelled:'0',noncancelled:'12',amount:'2400.00',last_day:'2026-05-31',source_last_day:'2026-06-08'}]};}},
+  {raw_store:'MAGAZINE',seller_code:'V1',seller_label:'ANA',records:'30',cancelled:'2',noncancelled:'28',amount:'2800.00',last_day:'2026-05-31',source_last_day:'2026-06-08'},
+  {raw_store:'MAGAZINE',seller_code:'V2',seller_label:'BIA',records:'12',cancelled:'0',noncancelled:'12',amount:'2400.00',last_day:'2026-05-31',source_last_day:'2026-06-08'},
+  {raw_store:'CALCADOS',seller_code:'V1',seller_label:'ANA',records:'5',cancelled:'0',noncancelled:'5',amount:'700.00',last_day:'2026-05-30',source_last_day:'2026-06-08'}]};}},
   money,{relation:sellerView,now:()=>new Date(NOW)});
  const txt=sellers.reply(data,money,{relation:sellerView});
  assert.match(txt,/^🏅 Hermes — ranking de vendedores Grupo Erick\nFonte: Supabase \/ hermes_history\.monthly_seller_activity_v1/);
  assert.match(txt,/⚠️ Dados até 08\/06\/2026/);
- assert.match(txt,/1\. ANA \(cód\. V1\): R\$\s?3\.500,00 em 33 vendas não canceladas/);
+ assert.match(txt,/1\. ANA \(cód\. V1, MAGAZINE\): R\$\s?2\.800,00 em 28 vendas não canceladas/);
+ // The same code in another store is another line, not a merged seller.
+ assert.match(txt,/3\. ANA \(cód\. V1, CALCADOS\): R\$\s?700,00 em 5 vendas não canceladas/);
+ assert.match(txt,/Vendedor identificado por loja/);
+ assert.throws(()=>sellers.reply({...data,rows:[...data.rows,data.rows[0]]},money,{relation:sellerView}),/seller_reply_denied/);
+ // A store-filtered ranking only shows that store.
+ const one=sellers.planQuestion('melhores vendedores da loja MAGAZINE em maio de 2026');
+ assert.throws(()=>sellers.reply({...data,plan:one},one,{relation:sellerView}),/seller_reply_denied/);
  assert.match(txt,/não é faturamento líquido nem base de comissão/);
  assert.match(txt,/Dados de vendedores visíveis só ao dono/);
  assert.throws(()=>sellers.reply({...data,source:'public.vw_itens_vendidos'},money,{relation:sellerView}),/seller_reply_denied/);
- await assert.rejects(sellers.execute({query:async()=>({rows:[{seller_code:'V1;drop',seller_label:'ANA',records:'1',
+ await assert.rejects(sellers.execute({query:async()=>({rows:[{raw_store:'MAGAZINE',seller_code:'V1;drop',seller_label:'ANA',records:'1',
   cancelled:'0',noncancelled:'1',amount:'1',last_day:null}]})},money,{relation:sellerView}),/seller_row_denied/);
 });
 
@@ -391,4 +472,29 @@ test('runner reads credit through the history quota with the configured views on
   const audit=fs.readFileSync(path.join(state,'audit.jsonl'),'utf8');
   assert.doesNotMatch(audit,/inadimpl|50,00/);
  }finally{fs.rmSync(state,{recursive:true,force:true})}
+});
+
+// ── Security: the old public views are never a Hermes source ────────────
+test('public views exposed to anon/authenticated are refused as sources and unused by the bot',()=>{
+ // Confirmed by the Supabase audit: GRANT SELECT to anon and authenticated.
+ const exposed=['public.vw_contas_a_receber','public.vw_faturamento_mensal',
+  'public.vw_inadimplencia_por_faixa','public.vw_itens_vendidos'];
+ for(const view of exposed){
+  for(const name of ['HERMES_HISTORY_RECEIVABLES_POSITION_VIEW','HERMES_HISTORY_RECEIVABLES_RECOVERY_VIEW'])
+   assert.throws(()=>credit.sourcesFromEnv({[name]:view}),/credit_source_config_invalid/,view);
+  assert.throws(()=>sellers.sourceFromEnv({HERMES_HISTORY_SELLER_VIEW:view}),/seller_source_config_invalid/,view);
+  // Source tables are not sources either: only the private hermes_history schema.
+  assert.throws(()=>sellers.sourceFromEnv({HERMES_HISTORY_SELLER_VIEW:'softcom_import.cadastro_de_vendas'}),/seller_source_config_invalid/);
+ }
+ const roots=[path.join(__dirname,'..','src','runtime'),path.join(__dirname,'..','scripts')];
+ const offenders=[];
+ for(const root of roots)for(const name of fs.readdirSync(root)){
+  if(!name.endsWith('.js'))continue;
+  const text=fs.readFileSync(path.join(root,name),'utf8');
+  if(/public\.vw_|vw_(contas_a_receber|faturamento_mensal|inadimplencia_por_faixa|itens_vendidos)/.test(text))offenders.push(name);
+ }
+ assert.deepEqual(offenders,[]);
+ // Every SQL the bot runs reads hermes_history only.
+ for(const t of ['period','compare','stores','products','coverage'])
+  assert.doesNotMatch(analyst.SQL[t],/\b(public|softcom_import)\./);
 });

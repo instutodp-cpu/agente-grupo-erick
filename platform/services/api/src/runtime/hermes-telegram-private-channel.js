@@ -92,7 +92,9 @@ function cancellationRatePlan(text,historyCoverage){
  const window=analyst.compareWindow(plan,historyCoverage||undefined);
  // The asked month range must be named and equal the comparable months.
  const named=[...q.matchAll(MONTH_TOKEN)].map(m=>MONTH_NUMBER.indexOf(m[1].slice(0,3))+1);
- if(named.length!==2||named[0]!==Number(window.from)||named[1]!==Number(window.to))return null;
+ const months=window.months.map(Number);
+ const contiguous=months.every((m,i)=>i===0||m===months[i-1]+1);
+ if(named.length!==2||!contiguous||named[0]!==months[0]||named[1]!==months.at(-1))return null;
  return plan;
 }
 const cancellationRateRequest=(text,historyCoverage)=>cancellationRatePlan(text,historyCoverage)!==null;
@@ -545,7 +547,7 @@ async function processUpdate({update,ownerId=null,memberIds=[],pairing=null,cloc
  // with members), and refused while their audited views are not configured.
  // They run before the AI agent so "analise a inadimplência" never reaches
  // a model without credit evidence.
- const creditPlan=credit.planQuestion(msg.text,historyCoverage||undefined);
+ const creditPlan=credit.planQuestion(msg.text,clock());
  const sellerPlan=creditPlan?null:sellers.planQuestion(msg.text,historyCoverage||undefined);
  if(creditPlan||sellerPlan){
   const intent=creditPlan?'business_credit':'business_sellers';

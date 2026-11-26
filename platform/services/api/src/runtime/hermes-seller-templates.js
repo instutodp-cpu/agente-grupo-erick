@@ -5,6 +5,9 @@
 // from its real sales tables after the Supabase audit. Until a reviewed view
 // name is configured, the template refuses with seller_source_awaiting_audit.
 // Seller names are employees' personal data: owner only, top 10, no contacts.
+// Per the Supabase audit the seller is a column of cadastro_de_vendas and its
+// identity across stores and periods is not validated yet: a seller is
+// ranked per store (raw_store + seller_code), never merged across stores.
 const analyst=require('./hermes-analyst-templates');
 const coverageModel=require('./hermes-history-coverage');
 const freshness=require('./hermes-data-freshness');
@@ -15,7 +18,8 @@ const LIMIT=10;
 const TICKET_MIN_SALES=10;
 const CONTRACT=Object.freeze({grain:'month × raw_store × seller_code',
  columns:Object.freeze({month:'text YYYY-MM',raw_store:'text: mesmos códigos da view comercial',
-  seller_code:'text: código do vendedor no ERP',seller_label:'text: nome de exibição do vendedor',
+  seller_code:'text: identificador estável do vendedor DENTRO da loja (derivado de cadastro_de_vendas.vendedor)',
+  seller_label:'text: nome de exibição do vendedor',
   registered:'bigint',cancelled:'bigint',noncancelled:'bigint',
   valor_pago_noncancelled_sum:'numeric(18,2)',last_day:'text YYYY-MM-DD'})});
 const METRICS=['records','money','ticket'];
@@ -52,22 +56,22 @@ const ORDER=Object.freeze({records:'SUM(noncancelled) DESC',money:'SUM(valor_pag
 function sqlFor(metric,relation){
  if(!relation||!RELATION.test(relation))throw Error('seller_source_awaiting_audit');
  if(!Object.hasOwn(ORDER,metric))throw Error('seller_plan_denied');
- return 'SELECT seller_code,MIN(seller_label) AS seller_label,SUM(registered)::bigint AS records,'+
+ return 'SELECT raw_store,seller_code,MIN(seller_label) AS seller_label,SUM(registered)::bigint AS records,'+
   'SUM(cancelled)::bigint AS cancelled,SUM(noncancelled)::bigint AS noncancelled,'+
   'SUM(valor_pago_noncancelled_sum)::numeric(18,2) AS amount,MAX(last_day) AS last_day,'+
   '(SELECT MAX(last_day) FROM '+relation+') AS source_last_day FROM '+relation+
   ' WHERE (month=$1::text OR (length($1::text)=4 AND LEFT(month,4)=$1::text)) AND ($2::text IS NULL OR raw_store=$2::text)'+
-  ' GROUP BY seller_code'+(metric==='ticket'?' HAVING SUM(noncancelled)>='+TICKET_MIN_SALES:'')+
-  ' ORDER BY '+ORDER[metric]+',seller_code ASC LIMIT '+LIMIT;
+  ' GROUP BY raw_store,seller_code'+(metric==='ticket'?' HAVING SUM(noncancelled)>='+TICKET_MIN_SALES:'')+
+  ' ORDER BY '+ORDER[metric]+',raw_store ASC,seller_code ASC LIMIT '+LIMIT;
 }
 const LABEL=/^[\p{L}\p{N} .'()\-]{1,60}$/u;
 const CODE=/^[A-Za-z0-9._-]{1,32}$/;
 const int=n=>{if(!/^(0|[1-9][0-9]{0,9})$/.test(String(n)))throw Error('seller_invalid_count');return Number(n);};
 const money=n=>{if(!/^[0-9]{1,13}(\.[0-9]{1,2})?$/.test(String(n)))throw Error('seller_invalid_amount');return Number(n);};
 function parseRow(r){
- if(!r||typeof r!=='object'||!CODE.test(r.seller_code||'')||typeof r.seller_label!=='string'||
-  !LABEL.test(r.seller_label))throw Error('seller_row_denied');
- const o={code:r.seller_code,name:r.seller_label.trim(),records:int(r.records),cancelled:int(r.cancelled),
+ if(!r||typeof r!=='object'||!analyst.STORES.includes(r.raw_store)||!CODE.test(r.seller_code||'')||
+  typeof r.seller_label!=='string'||!LABEL.test(r.seller_label))throw Error('seller_row_denied');
+ const o={store:r.raw_store,code:r.seller_code,name:r.seller_label.trim(),records:int(r.records),cancelled:int(r.cancelled),
   amount:money(r.amount),last_day:r.last_day??null,source_last_day:r.source_last_day??null};
  if(o.cancelled>o.records||int(r.noncancelled)!==o.records-o.cancelled)throw Error('seller_counts_invalid');
  for(const d of [o.last_day,o.source_last_day])if(d!==null&&!coverageModel.validDay(d))throw Error('seller_day_invalid');
@@ -80,7 +84,7 @@ async function execute(client,params,{relation,now=()=>new Date(),coverage}={}){
  const res=await client.query({text,values:[p.period,p.store],query_timeout:5000});
  if(!Array.isArray(res?.rows)||res.rows.length>LIMIT)throw Error('seller_cardinality_denied');
  const rows=res.rows.map(parseRow);
- if(new Set(rows.map(r=>r.code)).size!==rows.length)throw Error('seller_duplicate');
+ if(new Set(rows.map(r=>r.store+'|'+r.code)).size!==rows.length)throw Error('seller_duplicate');
  const at=now();
  if(!(at instanceof Date)||!Number.isFinite(at.getTime()))throw Error('seller_time_invalid');
  return {tenant_id:TENANT,mode:'online_aggregate',domain:'sellers',source:relation,at:at.toISOString(),plan:p,rows};
@@ -93,10 +97,11 @@ function reply(data,requested,{relation,coverage}={}){
   throw Error('seller_reply_denied');
  const codes=new Set();
  for(const r of data.rows){
-  if(!r||!CODE.test(r.code||'')||typeof r.name!=='string'||!LABEL.test(r.name)||codes.has(r.code)||
+  if(!r||!analyst.STORES.includes(r.store)||!CODE.test(r.code||'')||typeof r.name!=='string'||
+   !LABEL.test(r.name)||codes.has(r.store+'|'+r.code)||p.store&&r.store!==p.store||
    !Number.isSafeInteger(r.records)||!Number.isSafeInteger(r.cancelled)||r.cancelled<0||r.cancelled>r.records||
    typeof r.amount!=='number'||!Number.isFinite(r.amount)||r.amount<0)throw Error('seller_reply_denied');
-  codes.add(r.code);
+  codes.add(r.store+'|'+r.code);
  }
  const m=analyst.metric,at=Date.parse(data.at);
  const sourceDay=freshness.latestDay(data.rows.map(r=>r.source_last_day));
@@ -106,13 +111,14 @@ function reply(data,requested,{relation,coverage}={}){
   fresh?fresh.text:'Atualidade da fonte: não informada nesta consulta',
   'Período: '+p.period+(p.store?' | loja '+p.store:'')+' — por '+m.label(p.metric)+':'];
  if(!data.rows.length)lines.push('Nenhum vendedor com vendas registradas neste filtro.');
- data.rows.forEach((r,i)=>lines.push((i+1)+'. '+r.name+' (cód. '+r.code+'): '+m.format(m.measure(r,p.metric),p.metric)+
+ data.rows.forEach((r,i)=>lines.push((i+1)+'. '+r.name+' (cód. '+r.code+', '+r.store+'): '+m.format(m.measure(r,p.metric),p.metric)+
   (p.metric==='records'?'':' em '+(r.records-r.cancelled)+' vendas não canceladas')));
  if(p.metric==='ticket')lines.push('Somente vendedores com ao menos '+TICKET_MIN_SALES+' vendas não canceladas no período.');
  if(p.metric!=='records')
   lines.push('⚠️ valor_pago é um campo importado do Softcom; não é faturamento líquido nem base de comissão.');
- lines.push(...m.coverageNotes({template:'period',period:p.period,other_period:null},data,sourceDay,coverage));
- lines.push('⚠️ Registros importados por código de vendedor, sem conciliação com folha ou ERP/Linx.',
+ lines.push(...m.coverageNotes({template:'period',period:p.period,other_period:null,store:p.store},data,sourceDay,coverage));
+ lines.push('⚠️ Vendedor identificado por loja (a mesma pessoa em duas lojas aparece duas vezes até a identidade ser validada).',
+  '⚠️ Registros importados por código de vendedor, sem conciliação com folha ou ERP/Linx.',
   'Somente leitura. Dados de vendedores visíveis só ao dono.');
  return lines.join('\n');
 }
