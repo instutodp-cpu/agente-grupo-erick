@@ -61,16 +61,24 @@ test('a layout must be discovered by a person before any row is read', () => {
 });
 
 test('rows become canonical READ records; bad rows are rejected by line and reason only', () => {
-  const plan = transport.planFileImport({ file: csv(ROWS), fileName: 'vendas.csv',
+  // Invalid rows never load; past the reviewed tolerance (default none) the
+  // whole file is blocked and its manifest is not advanced.
+  const blocked = transport.planFileImport({ file: csv(ROWS), fileName: 'vendas.csv',
     receivedAt: '2026-11-25T09:00:00Z', mapping: mapping() });
-  assert.equal(plan.status, 'PLANNED');
-  assert.deepEqual(plan.summary, { create: 2, unchanged: 0, rejected: 3 });
-  assert.deepEqual(plan.rejected, [
+  assert.equal(blocked.status, 'BLOCKED_INVALID_RECORDS');
+  assert.deepEqual(blocked.summary, { create: 2, unchanged: 0, rejected: 3 });
+  assert.deepEqual(blocked.rejected, [
     { line: 4, reason: 'invalid_date' },
     { line: 5, reason: 'unknown_store' },
     { line: 6, reason: 'duplicate_in_file' }
   ]);
-  assert.doesNotMatch(JSON.stringify(plan.rejected), /DUPLICADA|999/);
+  assert.deepEqual(blocked.records, []);
+  assert.deepEqual(blocked.manifest.files, []);
+  assert.deepEqual(blocked.totals.rejectedByReason, { invalid_date: 1, unknown_store: 1, duplicate_in_file: 1 });
+  assert.doesNotMatch(JSON.stringify(blocked.rejected), /DUPLICADA|999/);
+  const plan = transport.planFileImport({ file: csv(ROWS.slice(0, 2)), fileName: 'vendas.csv',
+    receivedAt: '2026-11-25T09:00:00Z', mapping: mapping() });
+  assert.equal(plan.status, 'PLANNED');
   const [v1, v2] = plan.records.map(x => x.record);
   assert.equal(v1.entityType, 'Sale');
   assert.equal(v1.sourceSystem, 'seta');
@@ -85,7 +93,8 @@ test('rows become canonical READ records; bad rows are rejected by line and reas
   assert.equal(v2.payload.total_cents, 8990);
   assert.equal(v2.payload.status, 'CANCELADA; estorno');
   assert.equal(plan.provenance.headerSha256, headerSha);
-  assert.equal(plan.provenance.rows, 5);
+  assert.equal(plan.provenance.rows, 2);
+  assert.equal(blocked.provenance.rows, 5);
 });
 
 test('imports are incremental: same file is ignored, a changed row creates a new version', () => {

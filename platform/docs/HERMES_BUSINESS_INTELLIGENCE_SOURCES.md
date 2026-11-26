@@ -44,6 +44,25 @@ Colunas: `registro`, `lojaorigem`, `data_da_venda`, `vencimento`,
 - 17 sem vencimento; 28 com vencimento depois de 2036 (até o ano 5022);
 - último pagamento registrado: 08/06/2026.
 
+**Auditoria complementar (26/11):**
+
+- continuidade dez/2024 → jan/2025 confirmada para CALCADOS, MAGAZINE,
+  SIRINHAEM, ERICK SPORTS e SPORTS-(DESATIVADO); **VARIEDADES sem registros**
+  nesses meses (por isso, sem leitura por loja, a cobertura do grupo não vale
+  para a loja: ver §1);
+- `vendedor` é numérico em todos os 439.724 registros: 148 códigos, **100 em
+  mais de uma loja**; identidade separada por loja até a conciliação com o
+  cadastro oficial;
+- entre os 229.227 candidatos a parcela aberta: 14 sem vencimento, 1 com
+  valor original inválido, 10 com juros positivos, 10 com multa positiva, 13
+  com `registropendencia` preenchido, nenhum vencimento depois de 2036;
+- `tipobaixa = 0` nos 709.290 registros: não identifica renegociação sozinho;
+- das 145.046 baixas não excluídas após o vencimento, 145.043 têm valor pago
+  positivo;
+- as seis lojas têm pagamentos até 08/06/2026: referência histórica
+  candidata, **não** prova de carteira atual;
+- `public.vw_inadimplencia_por_faixa` depende de `public.vw_contas_a_receber`.
+
 **Segurança:** `GRANT SELECT` para `anon` e `authenticated` nas views antigas
 `public.vw_contas_a_receber`, `public.vw_faturamento_mensal`,
 `public.vw_inadimplencia_por_faixa` e `public.vw_itens_vendidos`. A frente do
@@ -92,6 +111,12 @@ Regras de completude (só com evidência):
 - **Mês contra mês**: os dois precisam estar completos.
 - **Período parcial ou com lacunas** sempre avisa: "2019: dados só de julho a
   dezembro; meses sem dados não significam venda zero", "julho parcial".
+
+**Sem leitura por loja** (cobertura verificada de base), os meses do grupo só
+**localizam** o período de uma loja: nenhum mês dela conta como comparável, a
+resposta diz que a cobertura própria da loja não foi verificada e não há
+comparação por loja. "Comparável" quer dizer dados contínuos, não exportação
+completa: só a reconciliação com totais oficiais prova completude.
 
 **Para liberar o histórico desde 2011:** a view comercial precisa cobrir
 esses anos com as mesmas colunas (`month`, `raw_store`, `registered`,
@@ -181,7 +206,8 @@ Nenhuma coluna de cliente, documento, contato ou parcela individual.
    vencimento depois de 2036; a regra do dia da posição.
 3. **Recuperação:** como reconhecer pagamento de parcela já vencida
    (`datapag` > `vencimento`?), e a cobertura mensal de recebimentos por loja.
-4. **Vendedores:** se `vendedor` é código ou nome, e se é estável por loja.
+4. **Vendedores:** código numérico confirmado (148 códigos, 100 em mais de uma
+   loja); falta a conciliação com o cadastro oficial antes de juntar lojas.
 5. **Permissões:** `GRANT SELECT` das views novas só para
    `hermes_history_reader`; decisão sobre as `public.vw_*` expostas.
 6. **Evidência:** `pg_get_viewdef` de cada view criada, versionada em

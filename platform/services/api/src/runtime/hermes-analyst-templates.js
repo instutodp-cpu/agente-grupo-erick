@@ -247,7 +247,7 @@ function coverageNotes(p,data,sourceDay,c){
  const scope=sales(c,p.store),who=p.store?'a loja '+p.store:'';
  if(data.window){
   return data.window.months.length===12?[]:['⚠️ A comparação usa apenas '+coverage.windowText(data.window)+
-   ', meses completos nos dois anos'+(who?' para '+who:'')+'; os demais estão parciais ou sem dados.'];
+   ', meses com dados contínuos nos dois anos'+(who?' para '+who:'')+'; os demais estão parciais ou sem dados.'];
  }
  return [p.period,p.other_period].filter(Boolean).flatMap(x=>coverage.periodNotes(scope,x,who));
 }
@@ -327,7 +327,8 @@ function reply(data,requested,c=coverage.BASELINE){
   const pct=delta===null||x===0?'indefinida':new Intl.NumberFormat('pt-BR',{style:'percent',maximumFractionDigits:1}).format(delta/x);
   const span=yearCompare?' ('+coverage.windowText(data.window)+')':'';
   if(yearCompare)
-   lines.push('📅 Cobertura equivalente: '+coverage.windowText(data.window)+' de cada ano (meses completos).');
+   lines.push('📅 Cobertura equivalente: '+coverage.windowText(data.window)+' de cada ano (meses com dados contínuos;'+
+    ' a completude da exportação não está comprovada).');
   lines.push('Comparação — '+label(p.metric)+':',
    '• '+p.period+span+': '+f(x,p.metric),
    '• '+p.other_period+span+': '+f(y,p.metric),
@@ -356,13 +357,18 @@ function reply(data,requested,c=coverage.BASELINE){
   lines.push('Ranking das lojas por '+label(p.metric)+' — '+p.period+':');
   // A store whose own coverage misses part of the period is marked: its
   // smaller total is missing data, not lower sales.
-  const gap=r=>coverage.periodNotes(sales(c,r.label),p.period).length&&
+  // Without a per-store reading, stores are not marked one by one: one
+  // line says their own coverage was not verified.
+  const unverified=sorted.some(r=>sales(c,r.label).unverified);
+  const gap=r=>!unverified&&coverage.periodNotes(sales(c,r.label),p.period).length&&
    !coverage.periodNotes(sales(c),p.period).length?' (cobertura parcial nesta loja)':'';
   for(const r of sorted)lines.push('• '+r.label+': '+f(measure(r,p.metric),p.metric)+behindNote(r)+gap(r));
   if(sorted.some(r=>behindNote(r)))
    lines.push('⚠️ Lojas marcadas com data própria têm dados mais antigos que a fonte.');
   if(sorted.some(r=>gap(r)))
    lines.push('⚠️ Lojas com cobertura parcial não têm dados em todo o período; o total menor não significa venda menor.');
+  if(unverified)
+   lines.push('⚠️ Cobertura de cada loja não verificada nesta leitura: um total menor pode ser falta de dados, não venda menor.');
   lines.push('Códigos de lojas ainda não conciliados; ERICK SPORTS e SPORTS-(DESATIVADO) são distintos.');
  }else{
   const r=data.rows[0];if(!r)throw Error('analyst_total_missing');

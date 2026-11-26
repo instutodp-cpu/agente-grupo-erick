@@ -1263,7 +1263,7 @@ test('year-on-year history compares only January through May of both years',asyn
  assert.deepEqual(data.window,{months:['01','02','03','04','05']});
  const txt=analyst.reply(data,p);
  assert.match(txt,/janeiro a maio de cada ano/);
- assert.match(txt,/usa apenas janeiro a maio, meses completos nos dois anos/);
+ assert.match(txt,/usa apenas janeiro a maio, meses com dados contínuos nos dois anos/);
  assert.doesNotMatch(txt,/podem não ter cobertura equivalente/);
  assert.match(txt,/2\.730\.133,04/);
  assert.match(txt,/2\.956\.645,04/);

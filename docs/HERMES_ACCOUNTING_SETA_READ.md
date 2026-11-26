@@ -176,3 +176,55 @@ Para ligar a API (passos revisados, fora deste módulo): descoberta oficial da
 Seta (endpoint, autenticação, recibo), credencial guardada pelo gateway (nunca
 no código), conector que busca uma página por vez pelo MCP Gateway e chama
 `planApiPage`, e o mesmo passo revisado de gravação no Supabase do C3.1.
+
+## C3.3 — Simulation First: layout, totais, reconciliação e carga simulada
+
+Ainda o mesmo adaptador `seta_read_v1` e o mesmo manifesto; nada aqui chama a
+rede, grava em banco ou escreve no Linx. A cadeia, por exportação:
+
+```text
+descoberta (hashes) → validação de layout → plano incremental (+ totais)
+  → reconciliação com os totais do relatório oficial do Linx → carga SIMULADA
+```
+
+| Etapa | Função / CLI | Garante |
+| --- | --- | --- |
+| Validação de layout | `validateLayout` · `--validate` | Antes de importar: colunas faltando/sobrando, cabeçalho × `discovery`, por campo preenchido/vazio/inválido, linhas inválidas por motivo, códigos de loja desconhecidos, primeiro e último dia. Só contagens, nomes de coluna e códigos de loja; nunca o conteúdo de uma linha |
+| Totais | `plan.totals` | Linhas, válidas, rejeitadas por motivo, novas/inalteradas, campos de valor em centavos, por estabelecimento, primeiro e último dia |
+| Registros inválidos | `mapping.limits.maxRejectedRatio` | Nunca entram. Acima da tolerância revisada (padrão: **nenhuma**; máximo 5%), a entrada inteira fica `BLOCKED_INVALID_RECORDS` e o manifesto não avança |
+| Proveniência | `plan.provenance` | Transporte, hash do mapeamento, hash do manifesto anterior e `planId` determinístico (mesma entrada, mapeamento e manifesto → mesmo id) |
+| Reconciliação | `reconcile` · `--controls totais.json` | Linhas, valores e totais por estabelecimento e o período batem **exatamente** com os do relatório oficial do Linx; estabelecimento fora do relatório ou campo desconhecido = `MISMATCH`. Só `RECONCILED` pode ser carregado |
+| Carga simulada | `simulateLoad` · `--simulate` | Contra um razão (ledger) que representa o destino: recusada sem reconciliação **deste** plano; idempotente por `planId` (`ALREADY_APPLIED`); atômica em conflito de versão (plano feito de manifesto velho não muda nada); nunca cruza tenant/empresa/tipo. Saída: as gravações que seriam feitas e o próximo razão |
+
+**Completude.** Registros em dias ou meses seguidos **não provam** que a
+exportação está completa: totais e relatório de layout trazem
+`completeness: NOT_PROVEN_WITHOUT_RECONCILIATION`. Só a reconciliação com os
+totais oficiais do relatório do Linx sustenta "completo".
+
+Totais de controle (o operador copia do relatório do Linx da mesma exportação):
+
+```json
+{
+  "version": 1,
+  "source": "relatorio_linx_vendas",
+  "rows": 3,
+  "money": { "total_cents": 133446 },
+  "byEstablishment": {
+    "calcados_barreiros": { "rows": 2, "money": { "total_cents": 124456 } },
+    "calcados_sirinhaem": { "rows": 1, "money": { "total_cents": 8990 } }
+  },
+  "period": { "from": "2026-11-24", "to": "2026-11-25" }
+}
+```
+
+```bash
+node scripts/seta-file-import-plan.js --validate --file vendas.csv --mapping mapping.json
+node scripts/seta-file-import-plan.js --file vendas.csv --mapping mapping.json \
+  --out ./plano --manifest ./manifest.json --controls ./totais-linx.json
+node scripts/seta-file-import-plan.js --simulate --plan ./plano/plan.json \
+  --reconciliation ./plano/reconciliation.json --ledger ./ledger.json --out ./simulacao
+```
+
+A carga real no Supabase continua sendo um passo separado e revisado: usará a
+mesma regra (só plano `RECONCILED`, idempotente por `planId`, atômica por
+versão) contra a tabela de destino definida pela frente do Supabase.

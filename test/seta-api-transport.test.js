@@ -55,16 +55,24 @@ test('records become the same canonical READ records; bad ones are rejected by p
     record({ codigo: 'V1', total: '1.00' }),
     record({ codigo: 'V5', total: 'mil reais' })
   ], 'c2') });
-  assert.equal(plan.status, 'PLANNED');
+  // Four of six invalid: the page is blocked (default tolerance none) and its
+  // cursor is not advanced; the rejections still say where and why.
+  assert.equal(plan.status, 'BLOCKED_INVALID_RECORDS');
+  assert.deepEqual(plan.records, []);
+  assert.equal(plan.manifest.apiCursor, undefined);
   assert.deepEqual(plan.summary, { create: 2, unchanged: 0, rejected: 4 });
   assert.deepEqual(plan.rejected, [{ index: 2, reason: 'invalid_date' }, { index: 3, reason: 'unknown_store' },
     { index: 4, reason: 'duplicate_in_page' }, { index: 5, reason: 'invalid_money_decimal' }]);
-  const first = plan.records[0].record;
+  const ok = api.planApiPage({ config, mapping: mapping(), receivedAt: at, page: page([record(),
+    record({ codigo: 'V2', loja: '002', total: '89.9' })], 'c2') });
+  assert.equal(ok.status, 'PLANNED');
+  const first = ok.records[0].record;
   assert.equal(first.id, 'seta:erick_calcados:sale:V1');
   assert.equal(first.payload.total_cents, 123456);
   assert.equal(first.establishmentId, 'calcados_barreiros');
   assert.match(first.evidenceIds[0], /^api:[0-9a-f]{64}#0$/);
-  assert.equal(plan.manifest.apiCursor, 'c2');
+  assert.equal(ok.manifest.apiCursor, 'c2');
+  assert.deepEqual(ok.totals.money, { total_cents: 123456 + 8990 });
   assert.doesNotMatch(JSON.stringify(plan.rejected), /mil reais|999/);
 });
 
