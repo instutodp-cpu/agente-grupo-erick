@@ -245,3 +245,16 @@ mapeamento revisado do layout.
       auditoria; um membro recebe "visíveis somente ao dono".
 - [ ] Com as views, recuperação num mês sem recebimentos diz "sem cobertura",
       nunca R$ 0,00; a carteira mostra a data da posição e "não saldo atual".
+
+
+## 8. PR de views agregadas V2 (revisável, sem aplicação automática)
+
+Esta frente adiciona migrations versionadas, sem substituir a fonte antiga:
+
+- `hermes_history.monthly_commercial_v2`: agregação mensal por código original de loja, com as seis lojas allowlisted, datas reais válidas, `registered`, `cancelled`, `noncancelled`, soma de `valor_pago` somente nos registros não cancelados e `last_day`.
+- `hermes_history.monthly_seller_activity_v1`: agregação mensal por loja e código numérico de vendedor. O label é literalmente `Código <código>`; nenhuma identidade ou nome é inventado e códigos não são unidos entre lojas.
+- A view comercial V1 permanece intacta para rollback. A troca para V2 é allowlisted por `HERMES_HISTORY_COMMERCIAL_VIEW`; o cut start de V2 é nulo (o primeiro trecho histórico é tratado como parcial), e qualquer override incompatível falha fechado.
+- O ranking de vendedores exige simultaneamente `HERMES_HISTORY_SELLER_ENABLED=true` e `HERMES_HISTORY_SELLER_VIEW=hermes_history.monthly_seller_activity_v1`. Sem ambos, a feature permanece desligada.
+- As migrations concedem somente `SELECT` ao papel `hermes_history_reader`, revogam acesso das roles `anon`/ `authenticated` e não concedem acesso às tabelas brutas. O rollback é manual, versionado e limitado às views novas.
+
+A validação desta PR é isolada e estática/unitária; não aplica migrations, não consulta o Supabase produtivo e não altera VPS, Linx, crediário ou views públicas.

@@ -242,8 +242,8 @@ function createLiveQuery(environment,driverLoader=()=>require('pg')){
   try{
    await client.connect();
    return params?.shape==='analyst'?
-    await analyst.execute(client,params.plan,undefined,params.coverage||undefined):
-    params?.shape==='coverage'?await analyst.readCoverage(client):
+    await analyst.execute(client,params.plan,undefined,params.coverage||undefined,environment):
+    params?.shape==='coverage'?await analyst.readCoverage(client,undefined,environment):
     params?.shape==='credit'?await receivables.execute(client,params.plan,
      {sources:creditSources,coverage:params.coverage||undefined}):
     params?.shape==='sellers'?await sellerTemplates.execute(client,params.plan,

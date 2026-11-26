@@ -5,6 +5,32 @@ const coverage=require('./hermes-history-coverage');
 const TENANT='grupo_erick';
 const SOURCE='hermes_history.monthly_commercial_2025_2026_v1';
 const PRODUCT_SOURCE='hermes_history.monthly_product_activity_v1';
+const COMMERCIAL_V2_SOURCE='hermes_history.monthly_commercial_v2';
+const RELATION=/^hermes_history\\.[a-z][a-z0-9_]{2,62}$/;
+const COMMERCIAL_SOURCES=Object.freeze([SOURCE,COMMERCIAL_V2_SOURCE]);
+const PRODUCT_SOURCES=Object.freeze([PRODUCT_SOURCE]);
+
+// Source switches are reviewed, exact allowlisted relations. A commercial
+// source switch also switches its evidence-derived cut start; an override
+// must match that contract or startup fails closed.
+function sourceConfigFromEnv(env=process.env){
+ if(!env||typeof env!=='object')throw Error('history_source_config_invalid');
+ const commercial=env.HERMES_HISTORY_COMMERCIAL_VIEW==null||env.HERMES_HISTORY_COMMERCIAL_VIEW===''?
+  SOURCE:env.HERMES_HISTORY_COMMERCIAL_VIEW;
+ const products=env.HERMES_HISTORY_PRODUCT_VIEW==null||env.HERMES_HISTORY_PRODUCT_VIEW===''?
+  PRODUCT_SOURCE:env.HERMES_HISTORY_PRODUCT_VIEW;
+ if(!RELATION.test(commercial)||!COMMERCIAL_SOURCES.includes(commercial))
+  throw Error('history_commercial_source_invalid');
+ if(!RELATION.test(products)||!PRODUCT_SOURCES.includes(products))
+  throw Error('history_product_source_invalid');
+ const commercialCut=commercial===COMMERCIAL_V2_SOURCE?null:'2025-01';
+ const requestedCut=env.HERMES_HISTORY_COMMERCIAL_CUT_START;
+ if(requestedCut!==undefined&&((requestedCut===''?null:requestedCut)!==commercialCut))
+  throw Error('history_cut_start_mismatch');
+ return Object.freeze({commercial,products,cutStarts:Object.freeze({
+  commercial:commercialCut,products:'2026-01'
+ })});
+}
 const STORES=['CALCADOS','SIRINHAEM','MAGAZINE','SPORTS-(DESATIVADO)','ERICK SPORTS','VARIEDADES'];
 const MONTHS={janeiro:1,fevereiro:2,marco:3,abril:4,maio:5,junho:6,julho:7,agosto:8,setembro:9,outubro:10,novembro:11,dezembro:12};
 const normalize=t=>t.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
@@ -140,33 +166,29 @@ function compareWindow(p,c){
 const matchPeriod='(month=$1::text OR (length($1::text)=4 AND LEFT(month,4)=$1::text))';
 // source_last_day is the freshness of the WHOLE view (same view, read-only),
 // not of the filtered period: "março/2026" ends on 31/03, the source may not.
-const agg='SUM(registered)::bigint AS records,SUM(cancelled)::bigint AS cancelled,'+
- 'SUM(noncancelled)::bigint AS noncancelled,SUM(valor_pago_noncancelled_sum)::numeric(18,2) AS amount,MAX(last_day) AS last_day,'+
- '(SELECT MAX(last_day) FROM '+SOURCE+') AS source_last_day';
-// scope_last_day is the queried store's own last day in the whole view (NULL
-// when no store was asked or the store has no rows): it is shown next to the
-// source's, so a store that stopped sending never looks current.
-const scopeDay=ref=>'(SELECT MAX(s.last_day) FROM '+SOURCE+' s WHERE s.raw_store='+ref+') AS scope_last_day';
-const SQL=Object.freeze({
- period:'SELECT '+agg+','+scopeDay('$2::text')+' FROM '+SOURCE+' WHERE '+matchPeriod+' AND ($2::text IS NULL OR raw_store=$2::text)',
- compare:'SELECT CASE WHEN length($1::text)=4 THEN LEFT(month,4) ELSE month END AS label,'+agg+','+scopeDay('$3::text')+
-   ' FROM '+SOURCE+' WHERE (month IN ($1::text,$2::text) OR (length($1::text)=4 AND LEFT(month,4) IN ($1::text,$2::text)))'+
+function sqlFor(config=sourceConfigFromEnv()){
+ const source=config.commercial,productSource=config.products;
+ const agg='SUM(registered)::bigint AS records,SUM(cancelled)::bigint AS cancelled,'+
+  'SUM(noncancelled)::bigint AS noncancelled,SUM(valor_pago_noncancelled_sum)::numeric(18,2) AS amount,MAX(last_day) AS last_day,'+
+  '(SELECT MAX(last_day) FROM '+source+') AS source_last_day';
+ const scopeDay=ref=>'(SELECT MAX(s.last_day) FROM '+source+' s WHERE s.raw_store='+ref+') AS scope_last_day';
+ return {
+  period:'SELECT '+agg+','+scopeDay('$2::text')+' FROM '+source+' WHERE '+matchPeriod+' AND ($2::text IS NULL OR raw_store=$2::text)',
+  compare:'SELECT CASE WHEN length($1::text)=4 THEN LEFT(month,4) ELSE month END AS label,'+agg+','+scopeDay('$3::text')+
+   ' FROM '+source+' WHERE (month IN ($1::text,$2::text) OR (length($1::text)=4 AND LEFT(month,4) IN ($1::text,$2::text)))'+
    ' AND ($3::text IS NULL OR raw_store=$3::text)'+
-   // Year against year: only the months complete in BOTH years ($4, from
-   // the source coverage; may skip months), never a misleading annual total.
    ' AND (length($1::text)<>4 OR RIGHT(month,2)=ANY($4::text[]))'+
    ' GROUP BY 1 ORDER BY 1 LIMIT 2',
- stores:'SELECT o.raw_store AS label,'+agg+','+scopeDay('o.raw_store')+' FROM '+SOURCE+' o WHERE '+matchPeriod+' GROUP BY o.raw_store ORDER BY o.raw_store LIMIT 6',
- products:'SELECT product_code,MIN(product_label) AS product_label,SUM(not_marked_cancelled)::bigint AS item_records'+
-   ' FROM '+PRODUCT_SOURCE+' WHERE '+matchPeriod+' GROUP BY product_code ORDER BY item_records DESC,product_code ASC LIMIT 5',
- // What the sources hold: first/last month and the last day with sales.
- // Every store and month that holds data (gaps stay visible: MIN/MAX would
- // hide them), with the last day with sales of each.
- coverage:"SELECT 'commercial' AS scope,raw_store,month,MAX(last_day) AS last_day FROM "+SOURCE+
+  stores:'SELECT o.raw_store AS label,'+agg+','+scopeDay('o.raw_store')+' FROM '+source+' o WHERE '+matchPeriod+' GROUP BY o.raw_store ORDER BY o.raw_store LIMIT 6',
+  products:'SELECT product_code,MIN(product_label) AS product_label,SUM(not_marked_cancelled)::bigint AS item_records'+
+   ' FROM '+productSource+' WHERE '+matchPeriod+' GROUP BY product_code ORDER BY item_records DESC,product_code ASC LIMIT 5',
+  coverage:"SELECT 'commercial' AS scope,raw_store,month,MAX(last_day) AS last_day FROM "+source+
    " WHERE month IS NOT NULL GROUP BY raw_store,month"+
-   " UNION ALL SELECT 'products',NULL,month,NULL FROM "+PRODUCT_SOURCE+" WHERE month IS NOT NULL GROUP BY month"+
+   " UNION ALL SELECT 'products',NULL,month,NULL FROM "+productSource+" WHERE month IS NOT NULL GROUP BY month"+
    " ORDER BY 1,3,2 LIMIT 5000"
-});
+ };
+}
+const SQL=Object.freeze(sqlFor());
 function integer(n){
  if(!/^(0|[1-9][0-9]{0,8})$/.test(String(n)))throw Error('analyst_invalid_integer');
  return Number(n);
@@ -199,13 +221,14 @@ function row(r,template){
  }
  return o;
 }
-async function execute(client,params,now=()=>new Date(),c=coverage.BASELINE){
+async function execute(client,params,now=()=>new Date(),c=coverage.BASELINE,env=process.env){
+ const cfg=sourceConfigFromEnv(env);
  const p=validate(params,c);
  if(typeof client?.query!=='function')throw Error('analyst_no_client');
  const window=compareWindow(p,c);
  const values=p.template==='compare'?[p.period,p.other_period,p.store,window?[...window.months]:[...ALL_MONTHS]]:
   p.template==='period'?[p.period,p.store]:[p.period];
- const res=await client.query({text:SQL[p.template],values,query_timeout:5000});
+ const res=await client.query({text:sqlFor(cfg)[p.template],values,query_timeout:5000});
  const max=p.template==='compare'?2:p.template==='stores'?6:p.template==='products'?5:1;
  if(!Array.isArray(res?.rows)||res.rows.length>max||p.template==='period'&&res.rows.length!==1)throw Error('analyst_cardinality_denied');
  const rows=res.rows.map(r=>row(r,p.template));
@@ -216,14 +239,15 @@ async function execute(client,params,now=()=>new Date(),c=coverage.BASELINE){
  }
  if(p.template==='compare'&&rows.some(r=>r.label!==p.period&&r.label!==p.other_period))throw Error('analyst_extra_period');
  const at=now();if(!(at instanceof Date)||!Number.isFinite(at.getTime()))throw Error('analyst_time_invalid');
- return {tenant_id:TENANT,mode:'online_aggregate',source:p.template==='products'?PRODUCT_SOURCE:SOURCE,
+ return {tenant_id:TENANT,mode:'online_aggregate',source:p.template==='products'?cfg.products:cfg.commercial,
   at:at.toISOString(),plan:p,rows,...(window?{window}:{})};
 }
 // Reads what the sources hold. One bounded query, no parameters.
-async function readCoverage(client,now=()=>Date.now()){
+async function readCoverage(client,now=()=>Date.now(),env=process.env){
  if(typeof client?.query!=='function')throw Error('analyst_no_client');
- const res=await client.query({text:SQL.coverage,values:[],query_timeout:5000});
- return coverage.fromRows(res?.rows,now(),{cutStarts:CUT_STARTS});
+ const cfg=sourceConfigFromEnv(env);
+ const res=await client.query({text:sqlFor(cfg).coverage,values:[],query_timeout:5000});
+ return coverage.fromRows(res?.rows,now(),{cutStarts:cfg.cutStarts});
 }
 const nf=new Intl.NumberFormat('pt-BR');
 const mf=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
@@ -251,10 +275,11 @@ function coverageNotes(p,data,sourceDay,c){
  }
  return [p.period,p.other_period].filter(Boolean).flatMap(x=>coverage.periodNotes(scope,x,who));
 }
-function reply(data,requested,c=coverage.BASELINE){
+function reply(data,requested,c=coverage.BASELINE,env=process.env){
+ const cfg=sourceConfigFromEnv(env);
  const p=validateShape(requested);
  if(!data||data.tenant_id!==TENANT||data.mode!=='online_aggregate'||
- data.source!==(p.template==='products'?PRODUCT_SOURCE:SOURCE)||
+ data.source!==(p.template==='products'?cfg.products:cfg.commercial)||
  !data.plan||data.plan.tenant_id!==TENANT||
  data.plan.template!==p.template||data.plan.period!==p.period||
  data.plan.other_period!==p.other_period||data.plan.metric!==p.metric||
@@ -386,7 +411,7 @@ function reply(data,requested,c=coverage.BASELINE){
  lines.push('Somente leitura. Sem dados pessoais.');
  return lines.join('\n');
 }
-module.exports={TENANT,SOURCE,PRODUCT_SOURCE,STORES,METRICS,CUT_STARTS,normalize,isPeriod,isPeriodFormat,periodsOf,
+module.exports={TENANT,SOURCE,PRODUCT_SOURCE,COMMERCIAL_V2_SOURCE,STORES,METRICS,CUT_STARTS,sourceConfigFromEnv,sqlFor,normalize,isPeriod,isPeriodFormat,periodsOf,
  safeContext,planQuestion,validateShape,validate,compareWindow,SQL,execute,readCoverage,reply,
  // Shared with templates that reuse the same metrics (seller ranking).
  metric:Object.freeze({ticketOf,measure,format:f,label,coverageNotes})};
