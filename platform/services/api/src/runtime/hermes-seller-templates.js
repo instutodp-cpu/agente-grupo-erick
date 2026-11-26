@@ -25,12 +25,15 @@ const CONTRACT=Object.freeze({grain:'month × raw_store × seller_code',
   valor_pago_noncancelled_sum:'numeric(18,2)',last_day:'text YYYY-MM-DD'})});
 const METRICS=['records','money','ticket'];
 function sourceFromEnv(env=process.env){
+ // Validate a supplied relation even while the feature is disabled: a public
+ // or raw relation must never become an accepted Hermes source by omission.
+ const v=env.HERMES_HISTORY_SELLER_VIEW;
+ if(v!==undefined&&v!==''&&(v!==SELLER_SOURCE||!RELATION.test(v)))
+  throw Error('seller_source_config_invalid');
  // Seller rankings require an explicit opt-in in addition to the reviewed
  // relation name. A relation alone never activates employee analytics.
  if(env.HERMES_HISTORY_SELLER_ENABLED!=='true')return null;
- const v=env.HERMES_HISTORY_SELLER_VIEW;
  if(v===undefined||v==='')throw Error('seller_source_config_invalid');
- if(v!==SELLER_SOURCE||!RELATION.test(v))throw Error('seller_source_config_invalid');
  return v;
 }
 function planQuestion(text,coverage=coverageModel.BASELINE){
