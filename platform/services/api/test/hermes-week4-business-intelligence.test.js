@@ -99,6 +99,25 @@ test('a month is complete only with evidence: run starts and an open last month 
  assert.equal(coverage.yearForMonth(g,'07'),'2025');
  assert.equal(coverage.yearForMonth(g,'03'),'2026');
 });
+test('without per-store coverage the group months only locate the period: nothing is presumed for the store',()=>{
+ // Baseline: no per-store reading. VARIEDADES had no records in 12/2024 and
+ // 01/2025 (audit), so the group's coverage must not be read as the store's.
+ const scope=coverage.scopeOf(coverage.BASELINE,'commercial','VARIEDADES');
+ assert.equal(scope.unverified,true);
+ assert.equal(coverage.accepts(scope,'2025-01'),true);            // located...
+ assert.equal(coverage.monthComplete(scope,'2025-01'),false);     // ...never comparable
+ assert.equal(coverage.yearWindow(scope,'2025','2026'),null);
+ assert.match(coverage.periodNotes(scope,'2025-01','a loja VARIEDADES')[0],
+  /Cobertura própria para a loja VARIEDADES não verificada: os meses do grupo só localizam o período/);
+ const plan={tenant_id:'grupo_erick',template:'compare',period:'2025-03',other_period:'2026-03',metric:'records',store:'VARIEDADES'};
+ assert.throws(()=>analyst.validate(plan),/analyst_partial_month_comparison_denied/);
+ assert.doesNotThrow(()=>analyst.validate({...plan,store:null}));
+ const total={tenant_id:'grupo_erick',template:'period',period:'2025-03',other_period:null,metric:'records',store:'VARIEDADES'};
+ assert.match(analyst.reply(evidence(total,[row({last_day:'2025-03-31',scope_last_day:'2026-06-08'})]),total),
+  /Cobertura própria para a loja VARIEDADES não verificada/);
+ // A real per-store reading replaces the fallback.
+ assert.equal(coverage.scopeOf(real,'commercial','VARIEDADES').unverified,undefined);
+});
 test('questions inside a gap are refused, never answered as zero; partial periods are flagged',()=>{
  assert.equal(analyst.planQuestion('quanto vendemos em março de 2015?',null,real),null);
  assert.equal(analyst.planQuestion('quanto vendemos em março de 2015?'),null);
@@ -137,8 +156,8 @@ test('year comparisons bind only months complete in both years, even when they s
  assert.deepEqual(sent.values,['2022','2023','MAGAZINE',['01','02','05','06','07','08','09','10','11','12']]);
  assert.match(sent.text,/RIGHT\(month,2\)=ANY\(\$4::text\[\]\)/);
  const txt=analyst.reply(data,p,real);
- assert.match(txt,/📅 Cobertura equivalente: janeiro a fevereiro e maio a dezembro de cada ano \(meses completos\)/);
- assert.match(txt,/A comparação usa apenas janeiro a fevereiro e maio a dezembro, meses completos nos dois anos para a loja MAGAZINE/);
+ assert.match(txt,/📅 Cobertura equivalente: janeiro a fevereiro e maio a dezembro de cada ano \(meses com dados contínuos; a completude da exportação não está comprovada\)/);
+ assert.match(txt,/A comparação usa apenas janeiro a fevereiro e maio a dezembro, meses com dados contínuos nos dois anos para a loja MAGAZINE/);
  const group=await analyst.execute({query:async q=>{sent=q;return {rows:[]};}},{...p,store:null,period:'2019',other_period:'2020'},()=>new Date(NOW),real)
   .catch(()=>null);
  assert.deepEqual(sent.values,['2019','2020',null,['08','09','10','11','12']]);

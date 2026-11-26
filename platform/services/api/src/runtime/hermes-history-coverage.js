@@ -8,8 +8,11 @@
 // Until a reading is validated, the last VERIFIED coverage applies (fail
 // closed): a period outside it is refused, never guessed.
 //
-// Completeness, from evidence only:
-//  - a month inside a run (data before and after it) is complete;
+// "Complete" below means COMPARABLE on the evidence available, never proof
+// that the export holds every sale: records in consecutive months do not
+// prove a complete export (only a reconciliation with official totals can).
+// From evidence only:
+//  - a month inside a run (data before and after it) is comparable;
 //  - the first month of a run is partial (data may start mid-month), unless
 //    the source declares that its view starts at a cut of continuous data;
 //  - the last month of a run is complete only if its last day with sales is
@@ -137,17 +140,19 @@ function validate(c,now){
   products:freezeScope(c.products)});
 }
 // The group's scope, or one store's. A store absent from a source reading
-// holds nothing (fail closed); unknown per-store coverage (baseline) falls
-// back to the group's.
+// holds nothing (fail closed). Without per-store coverage (baseline) the
+// group's months only LOCATE the period for the store: the store's own
+// coverage is unverified, so none of its months counts as comparable.
 function scopeOf(coverage,name,store=null){
  const c=coverage||BASELINE;
  const s=c[name]||BASELINE[name];
  if(!store)return {runs:s.runs};
- if(s.stores===null)return {runs:s.runs};
+ if(s.stores===null)return {runs:s.runs,unverified:true};
  return {runs:s.stores[store]||[]};
 }
 const runOf=(scope,m)=>scope.runs.find(r=>m>=r.first&&m<=r.last)||null;
 function monthComplete(scope,m){
+ if(scope.unverified)return false;
  const r=runOf(scope,m);
  if(!r)return false;
  if(m===r.first&&!r.start_complete)return false;
@@ -210,6 +215,8 @@ function periodNotes(scope,p,who=''){
  const notes=[],of=who?' para '+who:'';
  if(!accepts(scope,p))return ['⚠️ Sem dados na fonte para '+(p.length===4?p:label(p))+of+
   ': ausência de dados não significa venda zero.'];
+ if(scope.unverified)return ['⚠️ Cobertura própria'+of+' não verificada: os meses do grupo só localizam o período,'+
+  ' sem presumir que '+(who||'a loja')+' tenha dados em todos eles.'];
  if(p.length===7){
   if(!monthComplete(scope,p)){
    const r=runOf(scope,p);
