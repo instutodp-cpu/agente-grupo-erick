@@ -4,6 +4,16 @@
 BEGIN;
 
 CREATE SCHEMA IF NOT EXISTS hermes_history;
+DO $role$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hermes_history_reader') THEN
+    CREATE ROLE hermes_history_reader NOLOGIN NOINHERIT NOBYPASSRLS;
+  END IF;
+  ALTER ROLE hermes_history_reader
+    NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE
+    NOREPLICATION NOBYPASSRLS;
+END
+$role$;
 REVOKE ALL ON SCHEMA hermes_history FROM PUBLIC;
 
 CREATE VIEW hermes_history.monthly_seller_activity_v1 AS
@@ -76,6 +86,8 @@ COMMENT ON VIEW hermes_history.monthly_seller_activity_v1 IS
   'Hermes contract: month x raw_store x seller_code; seller_label is exactly Código + code; no names or cross-store identity inferred.';
 
 REVOKE ALL ON hermes_history.monthly_seller_activity_v1 FROM PUBLIC;
+REVOKE ALL ON SCHEMA softcom_import FROM hermes_history_reader;
+REVOKE ALL ON TABLE softcom_import.cadastro_de_vendas FROM hermes_history_reader;
 DO $grants$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
