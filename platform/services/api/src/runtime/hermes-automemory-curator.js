@@ -4,6 +4,7 @@
 const crypto=require('node:crypto');
 const decision=require('./hermes-owner-decision-memory');
 const evidence=require('./hermes-business-evidence-memory');
+const analyst=require('./hermes-analyst-templates');
 const TENANT='grupo_erick',DAY=86400000;
 const digest=x=>crypto.createHash('sha256').update(x).digest('hex');
 const forbidden=/\b(?:cpf|cnpj|senha|password|token|api.key|pix|telefone|e-?mail)\b/i;
@@ -124,7 +125,7 @@ function context(store,goal,now=Date.now()){
   if(!broad&&!domains[m.domain]?.test(q))continue;
   if(!((m.kind==='confirmed_decision'&&/^owner_confirmed_telegram:[a-f0-9]{12}$/.test(m.source))||
    (m.kind==='verified_aggregate'&&
-    ['hermes_history.monthly_commercial_2025_2026_v1','hermes_history.monthly_product_activity_v1'].includes(m.source))))continue;
+    [...analyst.COMMERCIAL_SOURCES,analyst.PRODUCT_SOURCE].includes(m.source))))continue;
   const item={kind:m.kind,tenant_id:m.tenant_id,visibility:m.visibility,
    domain:m.domain,source:m.source,at:m.at,expires_at:m.expires_at,
    summary:m.text};

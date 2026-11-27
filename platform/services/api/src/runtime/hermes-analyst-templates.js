@@ -411,7 +411,7 @@ function reply(data,requested,c=coverage.BASELINE,env=process.env){
  lines.push('Somente leitura. Sem dados pessoais.');
  return lines.join('\n');
 }
-module.exports={TENANT,SOURCE,PRODUCT_SOURCE,COMMERCIAL_V2_SOURCE,STORES,METRICS,CUT_STARTS,sourceConfigFromEnv,sqlFor,normalize,isPeriod,isPeriodFormat,periodsOf,
+module.exports={TENANT,SOURCE,PRODUCT_SOURCE,COMMERCIAL_V2_SOURCE,COMMERCIAL_SOURCES,STORES,METRICS,CUT_STARTS,sourceConfigFromEnv,sqlFor,normalize,isPeriod,isPeriodFormat,periodsOf,
  safeContext,planQuestion,validateShape,validate,compareWindow,SQL,execute,readCoverage,reply,
  // Shared with templates that reuse the same metrics (seller ranking).
  metric:Object.freeze({ticketOf,measure,format:f,label,coverageNotes})};

@@ -144,7 +144,7 @@ consulta e sem número.
 | "qual a inadimplência?", "carteira vencida da loja X", "faixas de atraso" | `portfolio` | posição da carteira | `HERMES_HISTORY_RECEIVABLES_POSITION_VIEW` |
 | "concentração da inadimplência por loja" | `stores` | posição da carteira | idem |
 | "recuperação de crédito em maio de 2026" | `recovery` | recuperação | `HERMES_HISTORY_RECEIVABLES_RECOVERY_VIEW` |
-| "melhores vendedores de maio de 2026", "por ticket médio" | `sellers` | vendas por vendedor | `HERMES_HISTORY_SELLER_VIEW` |
+| "melhores vendedores de maio de 2026", "por ticket médio" | `sellers` | vendas por vendedor | `HERMES_HISTORY_SELLER_ENABLED=true` + `HERMES_HISTORY_SELLER_VIEW` |
 
 O valor da variável precisa ser `hermes_history.<nome>`; outro formato
 (inclusive `public.vw_*` e `softcom_import.*`) impede o bot de iniciar. As
@@ -230,7 +230,9 @@ mapeamento revisado do layout.
    atual (igual à verificada) e inadimplência/vendedores ficam desligados.
 3. Depois das views criadas e versionadas: acrescentar ao `docker run` as
    variáveis da seção 3 com os nomes confirmados, reiniciar e validar com uma
-   pergunta de cada tipo. Rollback: remover a variável.
+   pergunta de cada tipo. Rollback: remover `HERMES_HISTORY_COMMERCIAL_VIEW`,
+   `HERMES_HISTORY_COMMERCIAL_CUT_START`, `HERMES_HISTORY_SELLER_ENABLED` e
+   `HERMES_HISTORY_SELLER_VIEW`, reiniciar o Hermes e só depois remover as views novas.
 4. O `audit.jsonl` registra `history_coverage` (primeiro e último mês e número
    de trechos, nunca valores) uma vez por dia.
 
@@ -255,6 +257,8 @@ Esta frente adiciona migrations versionadas, sem substituir a fonte antiga:
 - `hermes_history.monthly_seller_activity_v1`: agregação mensal por loja e código numérico de vendedor. O label é literalmente `Código <código>`; nenhuma identidade ou nome é inventado e códigos não são unidos entre lojas.
 - A view comercial V1 permanece intacta para rollback. A troca para V2 é allowlisted por `HERMES_HISTORY_COMMERCIAL_VIEW`; o cut start de V2 é nulo (o primeiro trecho histórico é tratado como parcial), e qualquer override incompatível falha fechado.
 - O ranking de vendedores exige simultaneamente `HERMES_HISTORY_SELLER_ENABLED=true` e `HERMES_HISTORY_SELLER_VIEW=hermes_history.monthly_seller_activity_v1`. Sem ambos, a feature permanece desligada.
-- As migrations concedem somente `SELECT` ao papel `hermes_history_reader`, revogam acesso das roles `anon`/ `authenticated` e não concedem acesso às tabelas brutas. O rollback é manual, versionado e limitado às views novas.
+- As migrations concedem somente `SELECT` ao papel `hermes_history_reader`, revogam acesso das roles `anon`/ `authenticated` e não concedem acesso às tabelas brutas. O papel existente não tem seus atributos alterados; a migration falha fechado se ele tiver atributos inesperados.
+- `cancelado` só é cancelado para `true`, `1`, `sim` ou `s`; valores nulos, vazios e desconhecidos contam como não cancelados. Datas impossíveis, anteriores a 2000 ou futuras não entram na view. Registros com `valor_pago` inválido permanecem nas contagens e não entram na soma.
+- O rollback é manual, versionado e limitado às views novas.
 
-A validação desta PR é isolada e estática/unitária; não aplica migrations, não consulta o Supabase produtivo e não altera VPS, Linx, crediário ou views públicas.
+A validação desta PR aplica as migrations somente no PostgreSQL descartável do CI, com papel de migração não superusuário equivalente ao ambiente Supabase; não consulta o Supabase produtivo e não altera VPS, Linx, crediário ou views públicas.

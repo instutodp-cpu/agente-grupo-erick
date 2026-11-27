@@ -207,7 +207,7 @@ async function runTurn({goal,model,readHistory,readCommercial,readBusinessContex
    Date.parse(x.at)>clock()+60000||Date.parse(x.expires_at)<=clock()||
    (x.kind==='confirmed_decision'&&!/^owner_confirmed_telegram:[a-f0-9]{12}$/.test(x.source))||
    (x.kind==='verified_aggregate'&&![
-    analyst.SOURCE,analyst.PRODUCT_SOURCE].includes(x.source)))return true;
+    ...analyst.COMMERCIAL_SOURCES,analyst.PRODUCT_SOURCE].includes(x.source)))return true;
   return false;
  }))throw Error('agent_auto_memory_context_unsafe');
  const memoryFootnote=curations.length?

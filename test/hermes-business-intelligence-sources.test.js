@@ -61,7 +61,12 @@ test('commercial migration preserves the old view and restricts the new aggregat
   assert.match(sql,/REVOKE ALL ON hermes_history\.monthly_commercial_v2 FROM PUBLIC/);
   assert.match(sql,/REVOKE ALL ON hermes_history\.monthly_commercial_v2 FROM anon/);
   assert.match(sql,/REVOKE ALL ON hermes_history\.monthly_commercial_v2 FROM authenticated/);
-  assert.match(sql,/CREATE ROLE hermes_history_reader NOLOGIN NOINHERIT NOBYPASSRLS/);
+  assert.match(sql,/CREATE ROLE hermes_history_reader NOLOGIN NOINHERIT/);
+  assert.match(sql,/hermes_history_reader com atributos inesperados/);
+  assert.match(sql,/make_date/);
+  assert.doesNotMatch(sql,/to_date\(/);
+  assert.match(sql,/coalesce\(cancelled_text IN/);
+  assert.doesNotMatch(sql,/AND paid_amount IS NOT NULL/);
   assert.match(sql,/REVOKE ALL ON TABLE softcom_import\.cadastro_de_vendas FROM hermes_history_reader/);
   assert.doesNotMatch(sql,/DROP VIEW IF EXISTS hermes_history\.monthly_commercial_2025_2026_v1/);
   assert.match(sql,/Rollback \(manual, reviewed/);
@@ -78,4 +83,31 @@ test('seller migration keeps codes per store and never invents names',()=>{
   assert.match(sql,/REVOKE ALL ON hermes_history\.monthly_seller_activity_v1 FROM anon/);
   assert.match(sql,/REVOKE ALL ON hermes_history\.monthly_seller_activity_v1 FROM authenticated/);
   assert.doesNotMatch(sql,/JOIN .*cadastro|nome.*vendedor/i);
+  assert.match(sql,/make_date/);
+  assert.doesNotMatch(sql,/to_date\(/);
+  assert.match(sql,/coalesce\(cancelled_text IN/);
+  assert.doesNotMatch(sql,/AND paid_amount IS NOT NULL/);
+});
+
+test('isolated migration test exercises malformed data and non-superuser application',()=>{
+  const sql=fs.readFileSync(path.join(__dirname,'..','platform','scripts','hermes-business-intelligence-postgres.integration.js'),'utf8');
+  assert.match(sql,/hermes_migration_runner/);
+  assert.match(sql,/2026-02-31/);
+  assert.match(sql,/31\/02\/2019/);
+  assert.match(sql,/2099-01-01/);
+  assert.match(sql,/cancelled.*noncancelled/s);
+  assert.match(sql,/can_select/);
+  assert.match(sql,/can_insert/);
+});
+
+test('all aggregate consumers accept the reviewed commercial source allowlist',()=>{
+  for(const file of [
+    'platform/services/api/src/runtime/hermes-business-evidence-memory.js',
+    'platform/services/api/src/runtime/hermes-automemory-curator.js',
+    'platform/services/api/src/runtime/hermes-brain-automemory-publication.js',
+    'platform/services/api/src/runtime/hermes-governed-agent.js'
+  ]){
+    const source=fs.readFileSync(path.join(__dirname,'..',file),'utf8');
+    assert.match(source,/COMMERCIAL_SOURCES/);
+  }
 });
