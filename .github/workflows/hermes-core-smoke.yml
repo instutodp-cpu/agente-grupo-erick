@@ -390,6 +390,11 @@ jobs:
           HERMES_POSTGRES_TEST_DATABASE_URL: postgresql://hermes_test:hermes_test@127.0.0.1:5432/hermes_test
         run: npm run test:ci:group -- --group=postgres-persistence
 
+      - name: Hermes BI migration isolation test
+        env:
+          HERMES_POSTGRES_TEST_DATABASE_URL: postgresql://hermes_test:hermes_test@127.0.0.1:5432/hermes_test
+        run: node scripts/hermes-business-intelligence-postgres.integration.js
+
   # Every discovered file not named in GROUPS is assigned to exactly one deterministic
   # residual shard by scripts/ci-test-groups.js. Local `npm test` remains undivided.
   residual-shards:

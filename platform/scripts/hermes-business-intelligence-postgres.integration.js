@@ -1,16 +1,16 @@
 'use strict';
-// Executes only against the disposable PostgreSQL service provided by CI.
-// No Supabase, production database, VPS, or real business data is used.
-const test=require('node:test');
+// Runs only against the disposable PostgreSQL service in the CI job.
+// It never connects to Supabase, production, a VPS, or a real business database.
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
+const {Pool}=require('pg');
 
 const DATABASE_URL=process.env.HERMES_POSTGRES_TEST_DATABASE_URL;
 const SAFE_DB=/^postgres(?:ql)?:\/\/(?:[^@/]+(?::[^@/]*)?@)?(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?\/hermes_test(?:_[a-z0-9_-]+)?(?:\?.*)?$/i;
-
+if(!SAFE_DB.test(DATABASE_URL||'')) throw new Error('hermes_bi_isolated_database_required');
 const migration=name=>fs.readFileSync(
- path.resolve(__dirname,'../../../migrations/hermes',name),'utf8'
+ path.resolve(__dirname,'../migrations/hermes',name),'utf8'
 );
 const createRoles=async pool=>pool.query(`DO $roles$
 BEGIN
@@ -30,12 +30,7 @@ const asRole=async(pool,role,work)=>{
   throw error;
  }finally{client.release()}
 };
-
-test('business intelligence migrations isolate aggregate views in disposable PostgreSQL', {
- skip:!SAFE_DB.test(DATABASE_URL||''),
- timeout:75000
-},async()=>{
- const {Pool}=require('pg');
+async function main(){
  const pool=new Pool({connectionString:DATABASE_URL,max:2,connectionTimeoutMillis:5000});
  try{
   await pool.query('DROP VIEW IF EXISTS hermes_history.monthly_seller_activity_v1');
@@ -97,6 +92,7 @@ test('business intelligence migrations isolate aggregate views in disposable Pos
     c=>c.query('SELECT count(*) FROM hermes_history.monthly_commercial_v2')),
    error=>error.code==='42501'
   );
+  console.log('Hermes BI migration isolation: PASS');
  }finally{
   await pool.query('DROP VIEW IF EXISTS hermes_history.monthly_seller_activity_v1');
   await pool.query('DROP VIEW IF EXISTS hermes_history.monthly_commercial_v2');
@@ -105,4 +101,5 @@ test('business intelligence migrations isolate aggregate views in disposable Pos
   await pool.query('DROP ROLE IF EXISTS hermes_history_reader');
   await pool.end();
  }
-});
+}
+main().catch(error=>{console.error(error);process.exitCode=1});
