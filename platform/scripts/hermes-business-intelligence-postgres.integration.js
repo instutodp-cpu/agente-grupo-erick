@@ -148,6 +148,7 @@ async function main(){
   await pool.query('DROP VIEW IF EXISTS hermes_history.monthly_commercial_v2');
   await pool.query('DROP SCHEMA IF EXISTS hermes_history CASCADE');
   await pool.query('DROP SCHEMA IF EXISTS softcom_import CASCADE');
+  await pool.query('REVOKE CREATE ON DATABASE hermes_test FROM hermes_migration_runner');
   await pool.query('DROP ROLE IF EXISTS hermes_migration_runner');
   await pool.query('DROP ROLE IF EXISTS hermes_history_reader');
   await pool.end();
