@@ -46,7 +46,7 @@ async function main(){
     (data_da_venda,lojaorigem,vendedor,cancelado,valor_pago) VALUES
     ('2026-01-15','CALCADOS','7','false','10.50'),
     ('15/01/2026','CALCADOS','7','sim','20,00'),
-    ('2026-02-31','CALCADOS','8','false','4.00'),
+    ('invalid-date','CALCADOS','8','false','4.00'),
     ('2026-01-20','OUTRA LOJA','9','false','9.00'),
     ('2026-01-21','MAGAZINE','codigo-invalido','false','8.00')`);
   await createRoles(pool);
