@@ -29,6 +29,7 @@ test('commercial source switch is exact, fail-closed, and carries the v2 cut-sta
   const sql=analyst.sqlFor(v2);
   assert.match(sql.period,/hermes_history\.monthly_commercial_v2/);
   assert.doesNotMatch(sql.period,/public\.vw_/);
+  assert.match(analyst.sqlFor(v2).stores,/MATERIALIZED/);
 });
 
 test('seller source is opt-in and only the versioned view is accepted',()=>{

@@ -179,7 +179,16 @@ function sqlFor(config=sourceConfigFromEnv()){
    ' AND ($3::text IS NULL OR raw_store=$3::text)'+
    ' AND (length($1::text)<>4 OR RIGHT(month,2)=ANY($4::text[]))'+
    ' GROUP BY 1 ORDER BY 1 LIMIT 2',
-  stores:'SELECT o.raw_store AS label,'+agg+','+scopeDay('o.raw_store')+' FROM '+source+' o WHERE '+matchPeriod+' GROUP BY o.raw_store ORDER BY o.raw_store LIMIT 6',
+  stores:'WITH source_rows AS MATERIALIZED (SELECT month,raw_store,registered,cancelled,noncancelled,valor_pago_noncancelled_sum,last_day FROM '+source+'),'+
+   'filtered AS (SELECT * FROM source_rows WHERE '+matchPeriod+'),'+
+   'source_meta AS (SELECT MAX(last_day) AS source_last_day FROM source_rows),'+
+   'scope_meta AS (SELECT raw_store,MAX(last_day) AS scope_last_day FROM source_rows GROUP BY raw_store)'+
+   ' SELECT f.raw_store AS label,SUM(f.registered)::bigint AS records,SUM(f.cancelled)::bigint AS cancelled,'+
+   'SUM(f.noncancelled)::bigint AS noncancelled,SUM(f.valor_pago_noncancelled_sum)::numeric(18,2) AS amount,'+
+   'MAX(f.last_day) AS last_day,source_meta.source_last_day,scope_meta.scope_last_day'+
+   ' FROM filtered f JOIN scope_meta USING (raw_store) CROSS JOIN source_meta'+
+   ' GROUP BY f.raw_store,source_meta.source_last_day,scope_meta.scope_last_day'+
+   ' ORDER BY f.raw_store LIMIT 6',
   products:'SELECT product_code,MIN(product_label) AS product_label,SUM(not_marked_cancelled)::bigint AS item_records'+
    ' FROM '+productSource+' WHERE '+matchPeriod+' GROUP BY product_code ORDER BY item_records DESC,product_code ASC LIMIT 5',
   coverage:"SELECT 'commercial' AS scope,raw_store,month,MAX(last_day) AS last_day FROM "+source+
