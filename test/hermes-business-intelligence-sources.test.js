@@ -62,7 +62,7 @@ test('commercial migration preserves the old view and restricts the new aggregat
   assert.match(sql,/REVOKE ALL ON hermes_history\.monthly_commercial_v2 FROM anon/);
   assert.match(sql,/REVOKE ALL ON hermes_history\.monthly_commercial_v2 FROM authenticated/);
   assert.match(sql,/CREATE ROLE hermes_history_reader NOLOGIN NOINHERIT NOBYPASSRLS/);
-  assert.match(sql,/REVOKE ALL ON TABLE softcom_import\\.cadastro_de_vendas FROM hermes_history_reader/);
+  assert.match(sql,/REVOKE ALL ON TABLE softcom_import\.cadastro_de_vendas FROM hermes_history_reader/);
   assert.doesNotMatch(sql,/DROP VIEW IF EXISTS hermes_history\.monthly_commercial_2025_2026_v1/);
   assert.match(sql,/Rollback \(manual, reviewed/);
 });
