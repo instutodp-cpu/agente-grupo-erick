@@ -53,7 +53,7 @@ test('commercial migration preserves the old view and restricts the new aggregat
   const sql=migration('055_create_monthly_commercial_v2.sql');
   assert.match(sql,/CREATE VIEW hermes_history\.monthly_commercial_v2/);
   assert.match(sql,/softcom_import\.cadastro_de_vendas/);
-  for(const store of ['CALCADOS','SIRINHAEM','MAGAZINE','SPORTS-\(DESATIVADO\)','ERICK SPORTS','VARIEDADES'])
+  for(const store of ['CALCADOS','SIRINHAEM','MAGAZINE',String.raw`SPORTS-\(DESATIVADO\)`,'ERICK SPORTS','VARIEDADES'])
     assert.match(sql,new RegExp(store));
   for(const column of ['data_da_venda','lojaorigem','valor_pago','cancelado','registered','cancelled','noncancelled','last_day'])
     assert.match(sql,new RegExp(column));
