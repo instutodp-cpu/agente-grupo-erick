@@ -4,7 +4,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
-const {Pool}=require('pg');
+const {Pool}=require(require.resolve('pg',{paths:[path.resolve(__dirname,'../services/api')]}));
 
 const DATABASE_URL=process.env.HERMES_POSTGRES_TEST_DATABASE_URL;
 const SAFE_DB=/^postgres(?:ql)?:\/\/(?:[^@/]+(?::[^@/]*)?@)?(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?\/hermes_test(?:_[a-z0-9_-]+)?(?:\?.*)?$/i;
