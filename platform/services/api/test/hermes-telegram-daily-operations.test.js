@@ -54,8 +54,9 @@ test('freshness is derived from the source last day, in Recife time, and flags s
  assert.equal(freshness.latestDay(['2026-05-31',null,'x','2026-06-08']),'2026-06-08');
 });
 test('analyst answers state the whole source freshness, not the queried period end',()=>{
- for(const template of ['period','compare','stores'])
+ for(const template of ['period','compare'])
   assert.match(analyst.SQL[template],/\(SELECT MAX\(last_day\) FROM hermes_history\.monthly_commercial_2025_2026_v1\) AS source_last_day/);
+ assert.match(analyst.SQL.stores,/source_meta AS \(SELECT MAX\(last_day\) AS source_last_day FROM source_rows\)/);
  const plan=analyst.planQuestion('quanto vendemos em março de 2026?');
  const data={...periodEvidence(plan),rows:[{records:4000,cancelled:40,amount:2500.5,
   last_day:'2026-03-31',source_last_day:'2026-06-08'}]};
@@ -90,7 +91,7 @@ test('a queried store shows its own last day next to the source, never borrowing
  // SQL: the store's own last day over the whole view, per template.
  assert.match(analyst.SQL.period,/\(SELECT MAX\(s\.last_day\) FROM hermes_history\.monthly_commercial_2025_2026_v1 s WHERE s\.raw_store=\$2::text\) AS scope_last_day/);
  assert.match(analyst.SQL.compare,/WHERE s\.raw_store=\$3::text\) AS scope_last_day/);
- assert.match(analyst.SQL.stores,/WHERE s\.raw_store=o\.raw_store\) AS scope_last_day FROM hermes_history\.monthly_commercial_2025_2026_v1 o /);
+ assert.match(analyst.SQL.stores,/scope_meta AS \(SELECT raw_store,MAX\(last_day\) AS scope_last_day FROM source_rows GROUP BY raw_store\)/);
  const plan=analyst.planQuestion('quanto a loja CALCADOS vendeu em março de 2026?');
  assert.equal(plan.store,'CALCADOS');
  const at=Date.parse('2026-06-09T12:00:00Z');
