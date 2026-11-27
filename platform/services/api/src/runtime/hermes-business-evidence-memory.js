@@ -8,6 +8,8 @@ const coverageModel=require('./hermes-history-coverage');
 const TENANT='grupo_erick',KIND='historical_aggregate_v1';
 const MAX_ENTRIES=12,MAX_AGE_MS=14*86400000,MAX_CONTEXT=1500;
 const SCHEMA=1;
+const isAggregateSource=(template,source)=>
+ (template==='products'?[analyst.PRODUCT_SOURCE]:analyst.COMMERCIAL_SOURCES).includes(source);
 function validTimestamp(at){
  if(typeof at!=='string'||!/^20\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(at))return false;
  const time=Date.parse(at);
@@ -52,7 +54,7 @@ function validEntry(e,now=Date.now(),coverage=coverageModel.BASELINE){
   e.other_period===e.period||e.other_period.length!==e.period.length))||
  (e.template!=='compare'&&e.other_period!==null)||
  (e.template==='products'&&e.metric==='ticket')||
- e.source!==(e.template==='products'?analyst.PRODUCT_SOURCE:analyst.SOURCE))throw Error('memory_entry_denied');
+ !isAggregateSource(e.template,e.source))throw Error('memory_entry_denied');
  return e;
 }
 function validStore(store,now=Date.now(),coverage){

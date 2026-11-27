@@ -4,6 +4,7 @@
 // authenticated Supabase session, not Telegram IDs, prompts or LLM outputs.
 const crypto=require('node:crypto');
 const curator=require('./hermes-automemory-curator');
+const analyst=require('./hermes-analyst-templates');
 const {withAuthenticatedTransaction}=require('./hermes-brain-authenticated-transaction');
 const ID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const DIGEST=/^sha256:[a-f0-9]{64}$/;
@@ -14,8 +15,7 @@ function sourceFor(m){
  if(m.kind==='confirmed_decision'&&/^owner_confirmed_telegram:[a-f0-9]{12}$/.test(m.source))
   return 'telegram_owner_confirmed';
  if(m.kind==='verified_aggregate'&&
-  ['hermes_history.monthly_commercial_2025_2026_v1',
-   'hermes_history.monthly_product_activity_v1'].includes(m.source))
+  [...analyst.COMMERCIAL_SOURCES,analyst.PRODUCT_SOURCE].includes(m.source))
   return 'supabase_history';
  throw Error('brain_source_not_authorized');
 }

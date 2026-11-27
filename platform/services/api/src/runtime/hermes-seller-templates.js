@@ -13,6 +13,7 @@ const coverageModel=require('./hermes-history-coverage');
 const freshness=require('./hermes-data-freshness');
 const TENANT=analyst.TENANT;
 const RELATION=/^hermes_history\.[a-z][a-z0-9_]{2,62}$/;
+const SELLER_SOURCE='hermes_history.monthly_seller_activity_v1';
 const LIMIT=10;
 // A ticket ranking ignores sellers with too few sales to mean anything.
 const TICKET_MIN_SALES=10;
@@ -24,9 +25,15 @@ const CONTRACT=Object.freeze({grain:'month × raw_store × seller_code',
   valor_pago_noncancelled_sum:'numeric(18,2)',last_day:'text YYYY-MM-DD'})});
 const METRICS=['records','money','ticket'];
 function sourceFromEnv(env=process.env){
+ // Validate a supplied relation even while the feature is disabled: a public
+ // or raw relation must never become an accepted Hermes source by omission.
  const v=env.HERMES_HISTORY_SELLER_VIEW;
- if(v===undefined||v==='')return null;
- if(!RELATION.test(v))throw Error('seller_source_config_invalid');
+ if(v!==undefined&&v!==''&&(v!==SELLER_SOURCE||!RELATION.test(v)))
+  throw Error('seller_source_config_invalid');
+ // Seller rankings require an explicit opt-in in addition to the reviewed
+ // relation name. A relation alone never activates employee analytics.
+ if(env.HERMES_HISTORY_SELLER_ENABLED!=='true')return null;
+ if(v===undefined||v==='')throw Error('seller_source_config_invalid');
  return v;
 }
 function planQuestion(text,coverage=coverageModel.BASELINE){
@@ -122,5 +129,5 @@ function reply(data,requested,{relation,coverage}={}){
   'Somente leitura. Dados de vendedores visíveis só ao dono.');
  return lines.join('\n');
 }
-module.exports={TENANT,CONTRACT,RELATION,LIMIT,TICKET_MIN_SALES,sourceFromEnv,planQuestion,validateShape,
+module.exports={TENANT,CONTRACT,RELATION,SELLER_SOURCE,LIMIT,TICKET_MIN_SALES,sourceFromEnv,planQuestion,validateShape,
  validate,sqlFor,execute,reply};
